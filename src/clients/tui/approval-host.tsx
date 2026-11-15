@@ -134,7 +134,6 @@ function approveDecision(answer: string | undefined): WireDecision {
 
 type HostProps = {
   /** Set when `n` was pressed during the review: the prompt opens straight into the reason entry. */
-  readonly rejectOnOpen: MutableRefObject<{ readonly requestId: string; readonly reason: string } | null>;
   readonly request: PromptRequest;
   /** The foreground turn a stop cancels; a background child's request may outlive it. */
   readonly activeTurnId: string | null;
@@ -164,11 +163,10 @@ export function ApprovalHost({
   request,
   reviewing,
   ...props
-}: Omit<HostProps, 'request' | 'rejectOnOpen'> & {
+}: Omit<HostProps, 'request'> & {
   readonly request: PromptRequest | undefined;
   readonly reviewing?: readonly WireReviewingApproval[];
 }): React.ReactElement | null {
-  const rejectOnOpen = useRef<{ readonly requestId: string; readonly reason: string } | null>(null);
   const settled = useRef(new Set<string>());
   const ids = (reviewing ?? []).map((item) => item.requestId).join('\n');
   useEffect(() => {
@@ -180,7 +178,7 @@ export function ApprovalHost({
       }
     for (const requestId of live) settled.current.add(requestId);
   }, [ids]);
-  if (request) return <Host key={request.interaction.id} request={request} rejectOnOpen={rejectOnOpen} {...props} />;
+  if (request) return <Host key={request.interaction.id} request={request} {...props} />;
   const review = reviewing?.[0];
   if (review)
     return (
@@ -192,7 +190,7 @@ export function ApprovalHost({
         interrupt={props.interrupt}
         setNotice={props.setNotice}
         editorValue={props.editorValue}
-        rejectOnOpen={rejectOnOpen}
+        replaceInput={props.replaceInput}
         panel={props.panel}
       />
     );
@@ -206,22 +204,21 @@ function ReviewingHost({
   interrupt,
   setNotice,
   editorValue,
-  rejectOnOpen,
+  replaceInput,
   panel,
 }: Pick<
   HostProps,
-  'connection' | 'inputHandler' | 'interrupt' | 'setNotice' | 'editorValue' | 'rejectOnOpen' | 'panel'
+  'connection' | 'inputHandler' | 'interrupt' | 'setNotice' | 'editorValue' | 'replaceInput' | 'panel'
 > & {
   readonly review: WireReviewingApproval;
 }): React.ReactElement {
   const theme = useTheme();
   const sent = useRef(false);
-  const takeOver = (reject?: string) => {
+  const dispatch = (command: Parameters<TuiConnection['send']>[0]) => {
     if (sent.current) return;
     sent.current = true;
-    if (reject !== undefined) rejectOnOpen.current = { requestId: review.requestId, reason: reject };
     connection
-      .send({ type: 'take_over_review', requestId: review.requestId })
+      .send(command)
       .then((receipt) => {
         // Stale means the review settled first; its prompt (or approval) is already on its way.
         if (!receipt.ok && receipt.code !== 'stale_interaction')
@@ -232,6 +229,7 @@ function ReviewingHost({
         setNotice(error instanceof Error ? error.message : String(error));
       });
   };
+  const takeOver = () => dispatch({ type: 'take_over_review', requestId: review.requestId });
   // Ctrl+C during a review hands it to the person, like Esc; the prompt then owns stopping the turn.
   interrupt.current = () => {
     takeOver();
@@ -240,8 +238,18 @@ function ReviewingHost({
   useInteractionInput(inputHandler, (input, key) => {
     if (input === '\x1b[I' || input === '[I' || input === '\x1b[O' || input === '[O') return;
     if (key.escape) return takeOver();
-    // The draft plus whatever followed `n` in the same chunk becomes the reason.
-    if (input[0] === 'n') takeOver(editorValue + input.slice(1));
+    if (input[0] !== 'n') return;
+    // A deny during the review is atomic in the session: it stops the review and records the person's
+    // decision, so a review that would have approved cannot win. The draft plus whatever followed `n`
+    // in the same chunk becomes the reason.
+    const reason = (editorValue + input.slice(1)).trim();
+    replaceInput('');
+    dispatch({
+      type: 'answer',
+      requestId: review.requestId,
+      decision: { kind: 'deny', ...(reason ? { reason } : {}) },
+      provenance: { source: 'user' },
+    });
   });
   return (
     <Box flexDirection="column">
@@ -257,7 +265,6 @@ function ReviewingHost({
 
 function Host({
   request,
-  rejectOnOpen,
   activeTurnId,
   connection,
   inputHandler,
@@ -279,20 +286,13 @@ function Host({
   const isAskUser = approval.toolName === 'ask_user';
   // The session's review, recorded before this request reached a person.
   const reviewResult = interaction.review;
-  const rejected = rejectOnOpen.current?.requestId === interaction.id ? rejectOnOpen.current : null;
-  const [entry, setEntry] = useState<'reason' | 'answer' | null>(() => (rejected ? 'reason' : null));
+  const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
-  const consumed = useRef(rejected !== null);
+  const consumed = useRef(false);
   const pending = useRef(false);
   const promptInput = useRef<InteractionInputHandler | null>(null);
   const isNetworkApproval = approval.toolName === 'sandbox_network_access';
-  useEffect(() => {
-    // `n` during the review: the reason entry opens with the text typed after it.
-    if (!rejected) return;
-    rejectOnOpen.current = null;
-    replaceInput(rejected.reason);
-  }, [rejected, rejectOnOpen, replaceInput]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {

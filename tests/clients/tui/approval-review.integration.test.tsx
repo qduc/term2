@@ -66,7 +66,7 @@ it('shows a session review without options, ignores focus events, and takes it o
   }
 });
 
-it('takes a review over on n and opens the reason entry with the text typed after it', async () => {
+it('denies during a review on n, atomically in the session, with the text typed after it as the reason', async () => {
   const send = vi.fn(async () => ({ ok: true as const }));
   const connection = { sessionId: 'session', send } as unknown as TuiConnection;
   const inputHandler = { current: null as InteractionInputHandler | null };
@@ -76,11 +76,16 @@ it('takes a review over on n and opens the reason entry with the text typed afte
   try {
     await vi.waitFor(() => expect(inputHandler.current).not.toBeNull());
     inputHandler.current?.('n not now', {} as Key);
-    await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: 'take_over_review', requestId: 'req' }));
-    // The session opens the request for a person once the review stops.
-    screen.rerender(<ApprovalHost {...base} request={request({ kind: 'not_reviewed', approved: false })} />);
-    await vi.waitFor(() => expect(replaceInput).toHaveBeenCalledWith(' not now'));
-    expect(screen.lastFrame()).toContain('Esc to cancel');
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith({
+        type: 'answer',
+        requestId: 'req',
+        decision: { kind: 'deny', reason: 'not now' },
+        provenance: { source: 'user' },
+      }),
+    );
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'take_over_review' }));
+    expect(replaceInput).toHaveBeenCalledWith('');
   } finally {
     screen.unmount();
   }

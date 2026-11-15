@@ -6,6 +6,7 @@ import fc from 'fast-check';
 import { canonicalPath, expandHome, lexicalPath } from '../../src/tools/workspace/path-identity.ts';
 import { SessionAccessState } from '../../src/session/session/session-access-state.ts';
 import { decideApproval, describeApproval, routeApproval } from '../../src/session/approval/approval-route.ts';
+import { ApprovalReviews } from '../../src/session/approval/approval-arbiter.ts';
 
 // Contract (src/tools/workspace/path-identity.ts, SessionAccessState): a session grant is
 // stored and matched under one identity, so any spelling of a granted folder
@@ -22,6 +23,8 @@ const fixture = (() => {
   fs.writeFileSync(path.join(root, 'secret', 'key'), 'x');
   fs.symlinkSync(path.join(root, 'data'), path.join(root, 'alias'));
   fs.symlinkSync(path.join(root, 'secret'), path.join(root, 'data', 'deep', 'escape'));
+  // Dangling: a write through it would create the file outside the grant.
+  fs.symlinkSync(path.join(root, 'secret', 'not-yet'), path.join(root, 'data', 'deep', 'dangle'));
   process.on('exit', () => fs.rmSync(root, { recursive: true, force: true }));
   return { root, base: path.join(root, 'ws') };
 })();
@@ -63,6 +66,11 @@ export const approvalProperties = [
           allows(path.join(fixture.root, 'data', 'deep', 'escape', 'key')),
           false,
           'a symlink inside the grant escaped it',
+        );
+        assert.equal(
+          allows(path.join(fixture.root, 'data', 'deep', 'dangle', 'new.txt')),
+          false,
+          'a dangling symlink inside the grant escaped it',
         );
       },
     ),
@@ -175,6 +183,61 @@ export const approvalProperties = [
         );
         const oneTime = ['unsandboxed-once', 'network-allow-once'].find((g) => shape.grants.includes(g));
         assert.equal(result.grant, oneTime, "auto-answer grant differs from the request's one-time grant");
+      },
+    ),
+  },
+  {
+    // ApprovalReviews: the first of review result and a person's stop wins; an approval
+    // stands only if the current generation still routes the request to review.
+    name: 'approval.arbiter-settle',
+    property: fc.asyncProperty(
+      fc.record({
+        routedAtOpen: fc.boolean(),
+        routedAtSettle: fc.boolean(),
+        outcome: fc.constantFrom('approved', 'rejected', 'throws'),
+        stopBeforeResult: fc.boolean(),
+      }),
+      async ({ routedAtOpen, routedAtSettle, outcome, stopBeforeResult }) => {
+        let routed = routedAtOpen;
+        let release;
+        const gate = new Promise((resolve) => (release = resolve));
+        const settles = [];
+        const events = [];
+        const reviews = new ApprovalReviews(
+          {
+            willReview: () => routed,
+            review: async () => {
+              await gate;
+              if (outcome === 'throws') throw new Error('model down');
+              return outcome === 'approved'
+                ? { kind: 'reviewed', approved: true, advisory: { approved: true, reasoning: '', model: 'm' } }
+                : { kind: 'reviewed', approved: false, advisory: { approved: false, reasoning: '', model: 'm' } };
+            },
+          },
+          () => [],
+          (event) => events.push(event.phase),
+        );
+        const request = { requestId: 'r', turnId: 't', kind: 'approval', toolName: 'shell', input: {}, summary: 's' };
+        const began = reviews.begin(request, { settle: (_request, review) => settles.push(review) });
+        assert.equal(began, routedAtOpen, 'began a review the route did not ask for');
+        if (!began) return assert.equal(settles.length, 0);
+        assert.equal(reviews.has('r'), true);
+        if (stopBeforeResult) assert.ok(reviews.stop('r'), 'stop did not return the held request');
+        routed = routedAtSettle;
+        release();
+        for (let i = 0; i < 5; i += 1) await Promise.resolve();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(reviews.has('r'), false, 'request still held after settle or stop');
+        assert.deepEqual(events, ['started', 'settled'], 'review transient not started then settled exactly once');
+        if (stopBeforeResult) return assert.equal(settles.length, 0, 'settled after a person stopped the review');
+        assert.equal(settles.length, 1, 'settled other than exactly once');
+        const approved = settles[0].approved;
+        assert.equal(
+          approved,
+          outcome === 'approved' && routedAtSettle,
+          'approval did not follow result and current route',
+        );
+        if (outcome === 'throws') assert.equal(settles[0].kind, 'unavailable');
       },
     ),
   },

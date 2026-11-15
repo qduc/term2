@@ -84,7 +84,7 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   folder grant (`SessionAccessState`) given in a generated spelling — absolute
   or relative, through a symlinked alias, with `./` or `er/../` noise — covers
   generated spellings of files, folders and missing paths beneath it, and never
-  covers a sibling outside it or a symlink inside it that leads outside.
+  covers a sibling outside it or a symlink inside it (resolving or dangling) that leads outside.
 - `approval.remote-stays-lexical`: `canonicalPath` with `remote: true` equals the
   lexical path for generated segment lists, so SSH paths never consult this
   host's filesystem.
@@ -96,6 +96,12 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   review happens outside `auto`/`advisory`; an approval only follows a usable
   verdict that clears the one threshold (approved, `llm` source, low or medium risk, explicit or implied authorization, high confidence) in `auto` with the mode unchanged and no
   abort, and answers with the request's one-time grant when it offers one.
+- `approval.arbiter-settle`: `ApprovalReviews` with a generated route at open and
+  at settle, review outcome (approved, rejected, throws) and a person's stop
+  before the result. It starts a review only when routed, settles at most once
+  and never after a stop, announces `started` then `settled` exactly once, and
+  passes an approval only when the review approved and the current generation
+  still routes the request to review.
 - `approval.expand-home`: `expandHome` expands `~` and `~/…` only; `~user/…` stays
   literal.
 
@@ -120,6 +126,6 @@ are tracked in [PLAN.md](PLAN.md).
 
 The ledger rollout evidence and limits are in [LEDGER-PLAN.md](LEDGER-PLAN.md).
 The remaining hotspot rollout is tracked in [HOTSPOTS-PLAN.md](HOTSPOTS-PLAN.md).
-The default now samples fifteen properties (15,000 cases total); `--target history`
+The default now samples sixteen properties (16,000 cases total); `--target history`
 samples the three history properties. A recorded replay can report fewer cases
 because it continues from a shrunk path, not a fresh full seed run.

@@ -453,9 +453,7 @@ export function TuiSession({
           interrupt={approvalInterrupt}
           onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
           hide={setAnsweredId}
-          panel={
-            <TasksPanel {...{ state, connection }} manager={[taskOpen, setTaskOpen]} gap={!shown && !reviewingShown} />
-          }
+          panel={<TasksPanel {...{ state, connection }} manager={[taskOpen, setTaskOpen]} gap={!interactionActive} />}
         />
         <Box flexDirection="column" display={foregroundInteraction || taskOpen ? 'none' : 'flex'}>
           {/* Legacy keeps the queue list in the input surface, which a menu or the paused prompt replaces. */}

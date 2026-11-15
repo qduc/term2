@@ -25,28 +25,34 @@ export function lexicalPath(raw: string, baseDir: string): string {
  *
  * Local paths resolve symlinks through the longest existing ancestor and keep
  * the missing tail, so a file that does not exist yet still has a stable
- * identity. A dangling symlink or an unreadable ancestor falls back to the
- * lexical path. Remote (SSH) paths are never resolved against this host's
- * filesystem and stay lexical.
+ * identity. A dangling symlink is followed to the path it names (a write through
+ * it lands there), up to a bounded number of hops. An unreadable ancestor or a
+ * symlink cycle falls back to the lexical path. Remote (SSH) paths are never
+ * resolved against this host's filesystem and stay lexical.
  */
 export function canonicalPath(raw: string, baseDir: string, options: { remote?: boolean } = {}): string {
   const lexical = lexicalPath(raw, baseDir);
   if (options.remote) return lexical;
-  const missing: string[] = [];
+  let missing: string[] = [];
   let candidate = lexical;
-  while (true) {
+  for (let hops = 0; hops < 40; ) {
     try {
-      return path.join(fs.realpathSync(candidate), ...missing.reverse());
+      return path.join(fs.realpathSync(candidate), ...[...missing].reverse());
     } catch (error: unknown) {
       const code = (error as { code?: string } | null)?.code;
       if (code !== 'ENOENT' && code !== 'ENOTDIR') return lexical;
-      if (fs.lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink()) return lexical;
+      if (fs.lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink()) {
+        hops += 1;
+        candidate = path.resolve(path.dirname(candidate), fs.readlinkSync(candidate));
+        continue;
+      }
       const parent = path.dirname(candidate);
       if (parent === candidate) return lexical;
-      missing.push(path.basename(candidate));
+      missing = [...missing, path.basename(candidate)];
       candidate = parent;
     }
   }
+  return lexical;
 }
 
 /** `target` equals `folder` or lies beneath it. Both must already be in the same form. */

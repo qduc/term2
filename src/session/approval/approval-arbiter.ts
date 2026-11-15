@@ -73,9 +73,24 @@ export class ApprovalReviews {
         if (controller.signal.aborted || this.#reviews.get(request.requestId)?.controller !== controller) return;
         this.#reviews.delete(request.requestId);
         this.#announce(request, 'settled');
-        owner.settle(request, review);
-      });
+        owner.settle(request, review.approved && !this.#stillRouted(request) ? { ...review, approved: false } : review);
+      })
+      // A settle that cannot commit has already failed its owner; never leave an unhandled rejection.
+      .catch(() => undefined);
     return true;
+  }
+
+  /**
+   * An approval stands only if the session's current generation would still review this request:
+   * a rebuild that switched the mode while the review ran (an older generation's settings are a
+   * frozen snapshot) must not record an automatic approval.
+   */
+  #stillRouted(request: InteractionRequest | DirectTaskInteraction): boolean {
+    try {
+      return this.port?.willReview(request) === true;
+    } catch {
+      return false;
+    }
   }
 
   has(requestId: InteractionRequestId): boolean {
@@ -90,14 +105,6 @@ export class ApprovalReviews {
     entry.controller.abort();
     this.#announce(entry.request, 'settled');
     return entry.request;
-  }
-
-  /** Cancellation: abandon every review without opening anything. */
-  abandon(filter: (request: InteractionRequest | DirectTaskInteraction) => boolean = () => true): void {
-    for (const [requestId, entry] of [...this.#reviews]) {
-      if (!filter(entry.request)) continue;
-      this.stop(requestId);
-    }
   }
 
   #announce(request: InteractionRequest | DirectTaskInteraction, phase: 'started' | 'settled'): void {

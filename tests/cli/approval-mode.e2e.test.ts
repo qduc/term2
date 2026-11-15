@@ -397,15 +397,13 @@ it.each([
         await vi.waitFor(() => expect(providerBodies.length).toBeGreaterThanOrEqual(2), { timeout: 30_000 });
       expect(fs.existsSync(marker)).toBe(false);
       if (delayedDenial) {
-        session.write('n');
-        await session.waitForOutput('Why?', 30_000);
-        releaseReview();
+        // `n` during the review is a deny the session records at once (approval-arbiter.ts): the
+        // approving review released afterwards finds the request settled and cannot run it.
+        session.write('n not allowed');
+        await session.waitForOutput('DENIED', 30_000);
         await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
-        expect(session.getVisibleOutput()).toContain('Why?');
+        releaseReview();
         expect(fs.existsSync(marker)).toBe(false);
-        session.write('not allowed');
-        await waitForHarnessComposerValue(idlePath, 'not allowed', { timeoutMs: 30_000 });
-        session.write('\r');
       } else {
         if (reviewExpected)
           await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });

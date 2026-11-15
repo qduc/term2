@@ -49,7 +49,9 @@ export function describeApproval(
       ? 'explicit-user'
       : request.presentation?.deniedRead
       ? 'denied-read'
-      : context.isDockerHostControl(request.toolName, request.input)
+      : request.presentation?.dockerHostControl === true ||
+        request.grants?.some((grant) => grant.startsWith('docker-')) ||
+        context.isDockerHostControl(request.toolName, request.input)
       ? 'docker-host'
       : undefined;
   return {

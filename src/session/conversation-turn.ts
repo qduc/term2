@@ -167,7 +167,13 @@ export function ownConversationTurn(
         resolutionSource: 'policy',
         automaticApproval: true,
       });
-    if (!journal.commit(facts)) {
+    let committed = false;
+    try {
+      committed = journal.commit(facts);
+    } catch {
+      committed = false;
+    }
+    if (!committed) {
       cancel();
       return;
     }

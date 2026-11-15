@@ -9,7 +9,7 @@ coverage (`src/clients/tui/projection.ts`). The **Resume here** notes below desc
 pre-implementation state and are retained for their design constraints, not as a
 description of current behavior.
 
-Subscription requests also have a separate, explicitly hypothetical reference value in
+Subscription requests also have a separate, explicitly hypothetical reference estimate in
 the footer and `/usage`: `subscriptionReferenceCost` uses the current catalog and
 recorded request usage, not subscription bills or quota. It is not added to spend or
 budgets. Missing or ambiguous rates and usage remain unavailable or partial; because
@@ -72,8 +72,8 @@ created. It is not the hypothetical cost of the currently retained transcript.
 - Rewind, undo, compaction, and message deletion do not subtract already incurred cost.
 - Clearing the conversation or starting a genuinely new session resets it.
 - Resuming a session restores cost records written by the version that created them.
-- Old log entries without cost records are not repriced using today's catalog. A resumed
-  legacy session is partial until a new session is started.
+- Old log entries without cost records are not repriced as incurred spend using today's
+  catalog. A resumed legacy session is partial until a new session is started.
 - Tool execution, local shell work, and network charges outside model inference are out
   of scope.
 
@@ -298,8 +298,8 @@ Pin semantics with conversation persistence/replay tests for mixed models, foreg
 plus subagent totals, old logs, rewind/undo, clear/new-session reset, interrupted turns,
 and duplicate event replay.
 
-Acceptance: live and resumed summaries match byte-for-byte, and rewind does not reduce
-incurred cost.
+Acceptance: live and resumed incurred-cost summaries match byte-for-byte, and rewind does
+not reduce incurred cost. The separate reference comparison can change with the catalog.
 
 ## Step 5 — Render the session summary
 
@@ -381,7 +381,8 @@ or shared-checkout failures separately from failures introduced by this branch.
 - Fetching mutable prices at runtime.
 - Claiming correspondence with invoices, subscription quotas, taxes, credits, or
   negotiated enterprise pricing.
-- Repricing legacy sessions or historical records after catalog updates.
+- Repricing legacy sessions or stored incurred-cost records after catalog updates. The
+  separate subscription reference comparison does use current rates for recorded usage.
 - Charging tools, shell commands, web searches, or other non-model services.
 - Replacing the last-turn token/context display with cumulative session tokens.
 
@@ -396,4 +397,5 @@ or shared-checkout failures separately from failures introduced by this branch.
   total double-counts.
 - Persisting only totals prevents audit, duplicate detection, and future mixed-model
   explanations. Persist request records.
-- Catalog prices drift. Version every estimate and never reprice stored records.
+- Catalog prices drift. Version incurred-cost estimates and never reprice stored cost
+  records; the separate subscription reference comparison uses current catalog rates.

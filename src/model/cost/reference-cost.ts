@@ -27,8 +27,27 @@ export function subscriptionReferenceCost(records: readonly ModelRequestCost[]) 
             )
             .map(([id]) => ({ provider, id })),
         );
-        // A bare model name shared by different vendors is not enough to pick a price.
-        matches.set(model, new Set(candidates.map(({ id }) => id)).size === 1 ? candidates[0]! : null);
+        if (model.includes('/')) {
+          matches.set(model, candidates[0] ?? null);
+        } else {
+          const prefixed = candidates.filter(({ id }) => id !== model);
+          const vendors = new Set(prefixed.map(({ id }) => id.slice(0, -model.length - 1)));
+          const vendor = vendors.size === 1 ? [...vendors][0] : undefined;
+          const direct = candidates.filter(({ id, provider }) => id === model && !isSubscriptionProvider(provider));
+          // An explicit vendor namespace identifies its matching direct catalog entry,
+          // but a second namespace or unrelated direct provider is ambiguous.
+          const match =
+            vendors.size > 1 || (vendor && direct.some(({ provider }) => provider !== vendor))
+              ? null
+              : vendor
+              ? direct.find(({ provider }) => provider === vendor) ?? prefixed[0] ?? null
+              : direct.length === 1
+              ? direct[0]!
+              : direct.length === 0 && candidates.length === 1
+              ? candidates[0]!
+              : null;
+          matches.set(model, match);
+        }
       }
       const match = matches.get(model);
       return computeModelCost({

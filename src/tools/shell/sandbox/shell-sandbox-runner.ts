@@ -99,7 +99,16 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       await this.#initialize(options.cwd, options.config);
       const SandboxManager = await sandboxManager();
       const wrapped = await withRuntimeTempDir(() =>
-        SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal),
+        SandboxManager.wrapWithSandbox(
+          // Route self-hosted and private-address services through the same approval proxy.
+          // Only explicitly enabled local listeners use direct loopback.
+          `export NO_PROXY=${options.config?.network.allowLocalBinding ? 'localhost,127.0.0.1,::1' : "''"} no_proxy=${
+            options.config?.network.allowLocalBinding ? 'localhost,127.0.0.1,::1' : "''"
+          }; ${command}`,
+          undefined,
+          undefined,
+          options.signal,
+        ),
       );
       const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
       return { command: wrapped, diagnostics };
@@ -107,13 +116,32 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     return this.#heldLease ? operation() : this.#withManagerLock(operation);
   }
 
-  async acquire(): Promise<() => void> {
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    signal?.throwIfAborted();
     const previous = AnthropicShellSandboxRunner.#managerOperation;
     let release!: () => void;
     AnthropicShellSandboxRunner.#managerOperation = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await previous;
+    try {
+      if (signal) {
+        await new Promise<void>((resolve, reject) => {
+          const abort = () => reject(signal.reason);
+          signal.addEventListener('abort', abort, { once: true });
+          void previous.then(() => {
+            signal.removeEventListener('abort', abort);
+            resolve();
+          });
+        });
+        signal.throwIfAborted();
+      } else {
+        await previous;
+      }
+    } catch (error) {
+      // Leave the queue intact until the preceding execution has settled.
+      void previous.then(release);
+      throw error;
+    }
     this.#heldLease = true;
     let released = false;
     return () => {
@@ -124,8 +152,14 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     };
   }
 
-  cleanupAfterCommand(): void {
-    loadedManager?.cleanupAfterCommand();
+  async cleanupAfterCommand(): Promise<void> {
+    try {
+      loadedManager?.cleanupAfterCommand();
+      // Revoke this command's proxy credential even if a descendant survived.
+      if (AnthropicShellSandboxRunner.#initializedForKey) await loadedManager?.reset();
+    } finally {
+      AnthropicShellSandboxRunner.#initializedForKey = undefined;
+    }
   }
 
   annotateFailure(command: string, stderr: string): string {
@@ -147,7 +181,7 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
         await SandboxManager.reset();
       }
       const sandboxAskCallback = async ({ host, port }: { host: string; port?: number }): Promise<boolean> => {
-        return requestSandboxNetworkApproval({ host, port });
+        return requestSandboxNetworkApproval({ host, port }, cwd);
       };
       await SandboxManager.initialize(config, sandboxAskCallback);
       AnthropicShellSandboxRunner.#initializedForKey = initializationKey;

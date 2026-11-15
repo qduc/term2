@@ -338,7 +338,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Additional paths allowed for sandbox file reads (comma-separated)',
   [SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]:
     'Projects you allowed to control Docker on the host; remove a path to revoke its access (JSON array)',
-  [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Allow sandboxed commands to access the network (true|false)',
+  [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Offer approval for new sandbox network destinations (true|false)',
   [SETTING_KEYS.MEMORY_ENABLED]: 'Enable persistent memory across sessions (true|false)',
   [SETTING_KEYS.MEMORY_DIRECTORY]: 'Directory where memory files are stored (path)',
   [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Character budget for the injected memory index (number)',

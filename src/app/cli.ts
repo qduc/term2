@@ -29,6 +29,8 @@ import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
 import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
+import { setProjectListenerApproval, setProjectNetworkApproval } from '../tools/shell/sandbox/sandbox-network-store.js';
+import { isSandboxNetworkHost, isSandboxNetworkPort } from '../tools/shell/sandbox/sandbox-network-validation.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
 import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './cli-conversations.js';
 import {
@@ -428,6 +430,34 @@ async function main(argv: readonly string[]): Promise<number> {
     case 'version':
       stdout.write(`${installationVersion}\n`);
       return 0;
+    case 'sandbox-network': {
+      const [action, host, portText] = command.argv;
+      if (action === 'listen' && command.argv.length === 2 && (host === 'allow' || host === 'revoke')) {
+        setProjectListenerApproval(process.cwd(), host === 'allow');
+        stdout.write(
+          host === 'allow'
+            ? 'Sandbox listener approval granted for this project. Wildcard binds may expose services to your LAN.\n'
+            : 'Sandbox listener approval revoked for this project.\n',
+        );
+        return 0;
+      }
+      const port = Number(portText);
+      if (
+        command.argv.length !== 3 ||
+        (action !== 'allow' && action !== 'revoke') ||
+        !isSandboxNetworkHost(host) ||
+        !/^\d+$/.test(portText ?? '') ||
+        !isSandboxNetworkPort(port)
+      )
+        throw new UsageError(
+          'Usage: term2 sandbox-network <allow|revoke> <host> <port> or term2 sandbox-network listen <allow|revoke>',
+        );
+      setProjectNetworkApproval(process.cwd(), host, port, action === 'allow');
+      stdout.write(
+        `Sandbox network approval ${action === 'allow' ? 'granted' : 'revoked'} for ${host}:${port} in this project.\n`,
+      );
+      return 0;
+    }
     case 'discord-help':
       stdout.write(DISCORD_HELP);
       return 0;

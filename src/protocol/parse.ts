@@ -14,6 +14,8 @@ import type {
 import { DirectProtocolError } from './errors.js';
 
 const WIRE_GRANTS: readonly WireGrant[] = [
+  'network-allow-once',
+  'allow-project',
   'allow-remember',
   'unsandboxed-once',
   'allow-folder-session',

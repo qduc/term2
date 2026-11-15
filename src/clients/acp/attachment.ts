@@ -355,7 +355,7 @@ export class AcpAttachment {
     this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
       const { requestId } = interaction;
       const review =
-        interaction.kind !== 'approval'
+        interaction.kind !== 'approval' || interaction.toolName === 'sandbox_network_access'
           ? undefined
           : interaction.supportedGrants.includes('unsandboxed-once') || !this.reviewApproval
           ? ({ kind: 'not_reviewed', approved: false } as const)

@@ -21,6 +21,13 @@ import {
 } from '../format-helpers.js';
 import { ExecutionContext } from '../execution-context.js';
 import { HarnessInvariantError } from '../../shared/lib/harness-invariant-error.js';
+import {
+  registerSandboxNetworkApprovalHandler,
+  SANDBOX_NETWORK_INTERACT,
+} from '../shell/sandbox/sandbox-network-approval.js';
+import type { ToolContext } from '../index.js';
+import { isProjectListenerAllowed } from '../shell/sandbox/sandbox-network-store.js';
+import { prepareSandboxProjectCache } from '../shell/sandbox/sandbox-project.js';
 import { createSandboxEnvironment } from '../shell/sandbox/sandbox-env.js';
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import {
@@ -896,6 +903,8 @@ export function createShellToolDefinition(deps: {
       const correlationId = randomUUID();
       const startedAt = Date.now();
       let sandboxed = false;
+      let unregisterNetworkApproval: (() => void) | undefined;
+      let cacheDirectory: string | undefined;
       let sandboxLeaseRelease: (() => void) | undefined;
       let dockerHostControl: DockerHostControl | undefined;
       let backgroundCleanupDeferred = false;
@@ -1028,7 +1037,7 @@ export function createShellToolDefinition(deps: {
           }
         }
         if (!sshService && sandbox === 'default' && sandboxEnabled) {
-          if (shellSandboxRunner.acquire) sandboxLeaseRelease = await shellSandboxRunner.acquire();
+          if (shellSandboxRunner.acquire) sandboxLeaseRelease = await shellSandboxRunner.acquire(toolSignal);
           sandboxAvailability = await shellSandboxRunner.availability();
           if (dockerHostControlRequested && sandboxAvailability.type !== 'available') {
             return 'Error: Docker host control requires an available local sandbox.';
@@ -1036,12 +1045,15 @@ export function createShellToolDefinition(deps: {
           if (sandboxAvailability.type === 'available') {
             try {
               const projectAllowRead = getProjectAllowReadStore(cwd).load();
+              if (!readOnly) cacheDirectory = prepareSandboxProjectCache(cwd);
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
                 tmpDir: SANDBOX_TEMP_DIR,
                 allowWrite: !readOnly,
                 readPolicy: settingsService.get('sandbox.readPolicy'),
                 allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
+                allowLocalBinding: !readOnly && isProjectListenerAllowed(cwd),
+                cacheDirectory,
                 dockerSocketPath: dockerHostControl?.socketPath,
                 allowReadExtra: [
                   ...(settingsService.get('sandbox.allowReadExtra') ?? []),
@@ -1115,6 +1127,7 @@ export function createShellToolDefinition(deps: {
             env: sandboxed
               ? createSandboxEnvironment(undefined, {
                   cwd,
+                  cacheDirectory,
                   readPolicy: settingsService.get('sandbox.readPolicy'),
                   dockerHostControl,
                   tmpDir: SANDBOX_TEMP_DIR,
@@ -1306,6 +1319,7 @@ export function createShellToolDefinition(deps: {
         };
 
         const cleanupAfterExecution = async () => {
+          unregisterNetworkApproval?.();
           try {
             if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.();
           } finally {
@@ -1386,6 +1400,33 @@ export function createShellToolDefinition(deps: {
           }
         }
 
+        const interact = (_context as { [SANDBOX_NETWORK_INTERACT]?: ToolContext['interact'] } | undefined)?.[
+          SANDBOX_NETWORK_INTERACT
+        ];
+        let deniedDestination: string | undefined;
+        unregisterNetworkApproval =
+          sandboxed && !background && interact
+            ? registerSandboxNetworkApprovalHandler(async ({ host, port }) => {
+                const target = port === undefined ? host : `${host}:${port}`;
+                const decision = await interact({
+                  kind: 'approval',
+                  toolName: 'sandbox_network_access',
+                  input: { host, port },
+                  summary: `Allow network access to ${target}?`,
+                  grants: ['network-allow-once', 'allow-project'],
+                });
+                if (toolSignal?.aborted) return 'deny';
+                if (decision.kind === 'allow' && decision.grant === 'allow-project') return 'allow-project';
+                if (decision.kind === 'allow' && decision.grant === 'network-allow-once') return 'allow-once';
+                deniedDestination = target;
+                return 'deny';
+              })
+            : undefined;
+        const foregroundOutput = (result: BackgroundShellExecutionResult): string =>
+          result.status === 'failed' && deniedDestination
+            ? `${result.output}\nSandbox network permission was not granted for ${deniedDestination}. Retry in a foreground session to approve this destination.`
+            : result.output;
+
         if (backgroundShellRegistry && !sshService && typeof toolCallId === 'string') {
           const lease = backgroundShellRegistry.startForeground({
             callId: toolCallId,
@@ -1399,6 +1440,7 @@ export function createShellToolDefinition(deps: {
             resultToStatus: (result) => result.status,
             onAdopted: () => {
               transferred = true;
+              unregisterNetworkApproval?.();
               restoreForegroundCorrelation();
             },
           });
@@ -1411,11 +1453,12 @@ export function createShellToolDefinition(deps: {
             restoreForegroundCorrelation();
             return JSON.stringify(result);
           }
-          return result.output;
+          return foregroundOutput(result);
         }
 
-        return (await executePreparedCommand(toolSignal)).output;
+        return foregroundOutput(await executePreparedCommand(toolSignal));
       } finally {
+        unregisterNetworkApproval?.();
         if (!backgroundCleanupDeferred) {
           try {
             if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.();

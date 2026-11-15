@@ -14,6 +14,8 @@ const OPTIONS: readonly acp.PermissionOption[] = [
 ];
 
 const GRANTS: Partial<Record<WireGrant, { name: string; kind: acp.PermissionOptionKind }>> = {
+  'network-allow-once': { name: 'Allow network access once', kind: 'allow_once' },
+  'allow-project': { name: 'Allow this destination for the project', kind: 'allow_always' },
   'allow-remember': { name: 'Allow with the offered remembered scope', kind: 'allow_always' },
   'allow-folder-session': { name: 'Allow this folder for the session', kind: 'allow_always' },
   'allow-edit-file-session': { name: 'Allow editing this file for the session', kind: 'allow_always' },
@@ -38,6 +40,7 @@ export async function requestPermission(input: {
   const interaction = input.interaction;
   if (interaction.kind === 'question') return await requestQuestion(input);
   // A shell escape needs its own grant. A plain Allow once never grants it.
+  const network = interaction.toolName === 'sandbox_network_access';
   const escape =
     input.client.supportsShellEscape === true &&
     interaction.toolName === 'shell' &&
@@ -52,7 +55,7 @@ export async function requestPermission(input: {
   const grants = escape ? ['unsandboxed-once' as const] : interaction.supportedGrants.filter((grant) => GRANTS[grant]);
   const options: acp.PermissionOption[] = escape
     ? [{ optionId: 'unsandboxed-once', name: 'Run outside sandbox once', kind: 'allow_once' }, OPTIONS[1]!]
-    : [...OPTIONS, ...grants.map((grant) => ({ optionId: grant, ...GRANTS[grant]! }))];
+    : [...(network ? [OPTIONS[1]!] : OPTIONS), ...grants.map((grant) => ({ optionId: grant, ...GRANTS[grant]! }))];
   try {
     const response = await input.client.permission(
       {
@@ -98,9 +101,9 @@ export async function requestPermission(input: {
     switch (optionId) {
       case 'approve':
       case 'allow-once':
-        return escape
+        return escape || network
           ? {
-              decision: { kind: 'deny', reason: 'An explicit outside-sandbox grant is required.' },
+              decision: { kind: 'deny', reason: 'An explicit grant is required.' },
               provenance: { source: 'system' },
             }
           : { decision: { kind: 'allow' }, provenance: { source: 'user' } };

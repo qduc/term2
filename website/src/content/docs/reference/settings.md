@@ -107,7 +107,7 @@ This page is generated from `src/config/settings/` by `pnpm --dir website build`
 | `sandbox.readPolicy` | `standard \\| strict` | `"standard"` | ✓ Yes | — | File read policy for sandbox (standard\|strict) |
 | `sandbox.allowReadExtra` | `array` | `[]` | ✓ Yes | — | Additional paths allowed for sandbox file reads (comma-separated) |
 | `sandbox.dockerHostControlProjects` | `array` | `[]` | ✓ Yes | — | Projects you allowed to control Docker on the host; remove a path to revoke its access (JSON array) |
-| `sandbox.allowNetworking` | `boolean` | `false` | ✓ Yes | — | Allow sandboxed commands to access the network (true\|false) |
+| `sandbox.allowNetworking` | `boolean` | `true` | ✓ Yes | — | Offer approval for new sandbox network destinations (true\|false) |
 
 ## Context & Compaction
 

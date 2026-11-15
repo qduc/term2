@@ -22,6 +22,8 @@ import { useTerminalSize } from './terminal.js';
 
 type AskUserAnswer = string | string[];
 const GRANTS: readonly WireGrant[] = [
+  'network-allow-once',
+  'allow-project',
   'allow-remember',
   'unsandboxed-once',
   'allow-folder-session',
@@ -225,7 +227,8 @@ function Host({
     reviewed.current.add(interaction.id);
     reviewController.current?.abort();
   };
-  const reviewEligible = request.owner === 'turn' && interaction.kind === 'approval';
+  const isNetworkApproval = approval.toolName === 'sandbox_network_access';
+  const reviewEligible = request.owner === 'turn' && interaction.kind === 'approval' && !isNetworkApproval;
   const reviewing = Boolean(
     reviewEligible && reviewApproval && !reviewResult && !reviewStopped && !approval.llmAdvisory,
   );
@@ -385,7 +388,7 @@ function Host({
     if (!entry && shortcuts && !consumed.current) {
       if (input[0] === 'y') {
         consumed.current = true;
-        onApprove(approval.deniedRead ? 'allow-once' : undefined);
+        onApprove(isNetworkApproval ? 'network-allow-once' : approval.deniedRead ? 'allow-once' : undefined);
         return;
       }
       if (input[0] === 'n') {

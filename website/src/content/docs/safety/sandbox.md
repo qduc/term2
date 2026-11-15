@@ -31,9 +31,19 @@ You can toggle the sandbox at any time with `/sandbox`, or configure policies vi
 
 ## Network Access (`sandbox.allowNetworking`)
 
-By default, networking is denied (`deniedDomains: ['*']`) except for the built-in package-registry allowlist, which does not prompt. Approval prompts exist only when `sandbox.allowNetworking` is enabled:
+With the default setting, a new destination reached through the sandbox proxy
+requires a host-and-port approval. Approve it once for the current command or
+remember it for the project. Linked Git worktrees reuse the same approval.
 
-- Toggle network permission via `/settings sandbox.allowNetworking true`.
+For CI and other headless runs, provision an approval in the project directory
+with `term2 sandbox-network allow <host> <port>`. Use
+`term2 sandbox-network revoke <host> <port>` to remove it. Set
+`sandbox.allowNetworking` to `false` to disable external network access.
+
+On macOS, `term2 sandbox-network listen allow` separately permits local listeners
+and direct loopback connections for the project. Bind development servers to a
+loopback address to keep them local. While a background sandboxed command is
+running, use a host browser or terminal to reach its listener.
 
 ## Custom Path Allowances (`sandbox.allowReadExtra`)
 

@@ -6,6 +6,7 @@ import { normalizeToolInput, runToolInputDiagnostics } from '../tools/tool-invok
 import { isCancellationError, isHarnessInvariantError } from '../shared/lib/harness-invariant-error.js';
 import type { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../session/approval/nested-approval-owner.js';
+import { SANDBOX_NETWORK_INTERACT } from '../tools/shell/sandbox/sandbox-network-approval.js';
 import { APPROVED_SHELL_ESCAPE } from '../tools/system/shell.js';
 import { isDockerHostControlShellApproval } from '../session/approval/shell-sandbox-approval.js';
 import type { SessionAccessState } from '../session/session/session-access-state.js';
@@ -407,6 +408,7 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
       const callId = `direct:${randomUUID()}`;
       const invocation = {
         ...invocationFor(context, options.sessionId),
+        ...(context.interact ? { [SANDBOX_NETWORK_INTERACT]: context.interact } : {}),
         ...(escapeCwd === undefined ? {} : { [APPROVED_SHELL_ESCAPE]: escapeCwd }),
       };
       let result: unknown;

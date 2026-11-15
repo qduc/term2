@@ -46,6 +46,7 @@ export type Command =
   | { readonly kind: 'help' }
   | { readonly kind: 'version' }
   | { readonly kind: 'discord-help' }
+  | { readonly kind: 'sandbox-network'; readonly argv: readonly string[] }
   | { readonly kind: 'login'; readonly provider: 'grok' | 'codex' }
   | { readonly kind: 'list-models'; readonly search: string | null; readonly refresh: boolean }
   | { readonly kind: 'list-conversations'; readonly options: SessionOptions }
@@ -132,7 +133,7 @@ const FLAGS: readonly Flag[] = [
 const FLAG_BY_NAME = new Map(FLAGS.flatMap((flag) => flag.names.map((name) => [name, flag] as const)));
 const longName = (flag: Flag): string => flag.names.find((name) => name.startsWith('--')) ?? flag.names[0]!;
 
-const SUBCOMMANDS = new Set(['serve', 'acp', 'control', 'discord']);
+const SUBCOMMANDS = new Set(['serve', 'acp', 'control', 'discord', 'sandbox-network']);
 const CONTROL_COMMANDS = new Set(['list', 'status', 'get', 'submit', 'steer', 'interrupt', 'wait-turn']);
 
 export const CONTROL_USAGE =
@@ -218,6 +219,11 @@ export const helpText = (): string => `
     interactive picker in a TTY session with no prompt; the same picker also opens for an
     ambiguous or unmatched pattern. Elsewhere (no TTY, --json, or a prompt on the line) it is a
     no-op. If no model is selected, term2 starts with the configured default.
+
+  Sandbox network approvals for the current project
+    $ term2 sandbox-network allow <host> <port>
+    $ term2 sandbox-network revoke <host> <port>
+    $ term2 sandbox-network listen <allow|revoke>
 
   Gateway launcher (term2 serve)
     Runs the local web gateway until SIGINT/SIGTERM.
@@ -352,6 +358,7 @@ function parseSubcommand(name: string, rest: readonly string[], globalFlagsSeen:
     if (!parsed.ok) throw new Error(`term2 acp: ${parsed.error}`);
     return { kind: 'acp', args: parsed.args };
   }
+  if (name === 'sandbox-network') return { kind: 'sandbox-network', argv: rest };
   if (name === 'control') return { kind: 'control', valid: CONTROL_COMMANDS.has(rest[0] ?? ''), argv: rest };
   if (rest.length === 1 && (rest[0] === '--help' || rest[0] === '-h')) return { kind: 'discord-help' };
   return { kind: 'discord', argv: rest };

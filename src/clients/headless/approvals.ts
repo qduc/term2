@@ -23,6 +23,12 @@ export function decideHeadlessApproval(interaction: WireInteraction, autoApprove
       reportRejection: false,
     };
   }
+  if (interaction.toolName === 'sandbox_network_access') {
+    return {
+      decision: { kind: 'deny', reason: 'Sandbox network access requires an existing project approval.' },
+      reportRejection: true,
+    };
+  }
   if (!autoApprove) {
     return { decision: { kind: 'deny', reason: NON_INTERACTIVE_REJECTION_REASON }, reportRejection: false };
   }

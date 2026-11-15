@@ -18,8 +18,8 @@ The \`shell\` tool runs commands inside a sandbox. The sandbox imposes these con
 
 **Network access:**
 
-- Outbound network calls go through a proxy (\`127.0.0.1:3128\`) that enforces an allowlist.
-- Connections to non-allowlisted hosts will be blocked with a \`403 Forbidden\` / \`blocked-by-allowlist\` response.
+- Supported outbound traffic goes through the sandbox proxy. The session may ask for a host and port on first contact.
+- For a denied connection, retry in the foreground when the user wants to approve that destination.
 - If you need unrestricted network access, use \`sandbox="unsandboxed"\` (requires user approval).
 
 **Untracked dotfiles:**

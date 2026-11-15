@@ -1,13 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { resolveGlobSearchTarget } from '../../tools/file/glob-target.js';
-
-const expandHome = (target: string): string => {
-  if (target === '~') return os.homedir();
-  if (target.startsWith('~/') || target.startsWith('~\\')) return path.join(os.homedir(), target.slice(2));
-  return target;
-};
+import { expandHome } from '../../tools/path-identity.js';
 
 /**
  * The folder a "allow for this session" answer should grant, or null when the

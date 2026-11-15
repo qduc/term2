@@ -71,7 +71,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   skillsService?.discoverSkills();
   const policies = new ToolApprovalPolicyRegistry();
   const readOnly = remote?.sourcePolicy.readOnly ?? workspace.access === 'read';
-  const sessionAccess = new SessionAccessState(settings, { allowEdit: remote?.sourcePolicy.allowEdit ?? !readOnly });
+  const sessionAccess = new SessionAccessState(settings, {
+    allowEdit: remote?.sourcePolicy.allowEdit ?? !readOnly,
+    isRemote: () => executionContext.isRemote(),
+  });
   const shellChildren = new InvalidatableShellChildRegistry();
   const sessionId = randomUUID();
   const advisoryAbort = new AbortController();

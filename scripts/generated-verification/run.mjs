@@ -6,11 +6,13 @@ import fc from 'fast-check';
 import { historyProperties } from './history.mjs';
 import { opaqueProperties } from './opaque.mjs';
 import { nativeLogProperties } from './native-log.mjs';
+import { approvalProperties } from './approvals.mjs';
 
 const targets = {
   history: historyProperties,
   opaque: opaqueProperties,
   native: nativeLogProperties,
+  approvals: approvalProperties,
 };
 
 // No provider, credential, model, or network dependency: only production APIs
@@ -29,7 +31,7 @@ try {
   });
   if (values.help) {
     console.log(
-      'pnpm verify:generated [--target all|history|opaque|native] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
+      'pnpm verify:generated [--target all|history|opaque|native|approvals] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
     );
   } else {
     const runs = Number(values.runs);

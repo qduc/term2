@@ -87,8 +87,10 @@ Workflow notices from old profiles are not reapplied on retry because their
 recorded mode differs from Bare. Same-mode notices and the original user input
 remain intact.
 
-The shared profile definitions and historical schemas remain compatibility data,
-not selectable runtime workflows. Bare retains goal checks, delegation and its
+Their profile definitions, workflow prompts, mode notices and the model-family
+base prompts (`gpt.md`, `anthropic.md`, `kimi.md`, `simple_v4.md`) were deleted
+once nothing could reach them; the main prompt is always Bare's `bare.md`. Their
+IDs remain only as compatibility data in saved settings and historical facts. Bare retains goal checks, delegation and its
 normal permissions. It does not offer the dropped workflows' `propose_goal` tool.
 
 ## Bare profile and unattended runs

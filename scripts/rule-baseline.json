@@ -992,10 +992,6 @@
       "reason": "Internal session helper function \"summarizeReceivedTraffic\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "session/prompts/prompt-profiles.ts PROMPT_PROFILES",
-      "reason": "Internal session constant or variable \"PROMPT_PROFILES\" in session/prompts/prompt-profiles.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "session/replay-fold.ts replayProjection",
       "reason": "Internal session helper function \"replayProjection\" in session/replay-fold.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
@@ -2042,14 +2038,6 @@
     {
       "file": "clients/tui/presentation/skins/zen/width.ts",
       "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
-    },
-    {
-      "file": "session/prompts/subagents/worktree-hygiene.md",
-      "reason": "Prompt instructions guiding background subagent roles on git worktree isolation."
-    },
-    {
-      "file": "session/prompts/worktree-hygiene.md",
-      "reason": "General system prompt fragment detailing worktree hygiene and baseline checks."
     }
   ],
   "engineCallbackWrites": [

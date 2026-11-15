@@ -249,30 +249,4 @@ describe('project personal context through filesystem and normal prompt assembly
       s.builder.build({ kind: 'main' }, { ...options, personalContextOptIn: false }).resolvePersonalContext,
     ).toBeUndefined();
   });
-
-  it('explicit full-context agent assembly refreshes and bare/tool-disabled profiles exclude it', async () => {
-    const s = await setup();
-    s.settings.set('app.activeProfileId', 'builtin:pair');
-    await s.create();
-    const build = () =>
-      getAgentDefinition(
-        {
-          settingsService: s.settings,
-          loggingService: logger,
-          executionContext: ExecutionContext.pin(s.projectPath),
-        },
-        'gpt-5.4',
-      );
-    const agent = build();
-    expect(agent.resolvePersonalContext?.()).toContain('The human said “Yay!”');
-    await s.project.update('moment', { summary: 'New corrected moment' });
-    expect(agent.resolvePersonalContext?.()).toContain('New corrected moment');
-    expect(agent.resolvePersonalContext?.()).not.toContain('Yay');
-    s.settings.set('tools.memory.enabled', false);
-    expect(build().resolvePersonalContext?.() ?? '').not.toContain('New corrected moment');
-    s.settings.set('tools.memory.enabled', true);
-    s.settings.set('app.activeProfileId', 'builtin:bare');
-    const bare = build();
-    expect(bare.resolveInstructionsForRequest?.() ?? bare.instructions).not.toContain('New corrected moment');
-  });
 });

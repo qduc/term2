@@ -10,10 +10,9 @@
 // tokenizer count. This is a reporting tool: it asserts nothing and belongs to no gate.
 //
 // The interactive TUI selects the Bare profile for every model id, as headless runs do. The
-// model-family base prompts (gpt.md, anthropic.md, kimi.md, simple_v4.md) are selected only by
-// profiles whose identity is `model-family-base`: plan, pair, mentor and orchestrator, which
-// isDroppedProfile() refuses (#149). Those launches are kept as expected refusals, so the report
-// notices when one becomes reachable again and needs a real scenario.
+// plan, pair, mentor and orchestrator profiles, and the model-family base prompts they used,
+// were removed; isDroppedProfile() refuses those ids (#149). Those launches are kept as expected
+// refusals, so the report notices when one becomes reachable again and needs a real scenario.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -28,8 +27,8 @@ const PROMPT = 'say hi';
 const CHILD_TASK = 'PREFIX_REPORT_CHILD_TASK: reply with the single word done.';
 
 const DEFAULT_MODEL = 'mock-alpha';
-// Model ids chosen to select each model-family branch: selectPromptProfile for a root that uses a
-// model-family prompt, selectSubagentBasePromptFile for subagents, and model-keyed tool selection.
+// Model ids chosen to select each model-family branch: selectSubagentBasePromptFile for subagents
+// and model-keyed tool selection. The root prompt is Bare's for every model.
 const FAMILY_MODELS = { gpt: 'gpt-5.5', codex: 'gpt-5.3-codex', anthropic: 'claude-sonnet-4-5', kimi: 'kimi-k2' };
 
 const headless = (id, description, model, args = []) => ({

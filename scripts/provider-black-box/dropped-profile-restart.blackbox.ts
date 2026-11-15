@@ -2,8 +2,6 @@ import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { getProfileMetadata } from '../../src/config/profiles/active-profile.js';
-import { profileEnterNotice } from '../../src/session/mode-notices.js';
 import type { FactLine } from '../../src/session/facts.js';
 import { createIsolatedWorkspaceLease, exitInteractive, writePtyTextAndSubmit } from './provider-test-harness.js';
 
@@ -115,14 +113,11 @@ it
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line) as FactLine);
-      const metadata = getProfileMetadata(`builtin:${profile}`);
-      const historicalProfile = {
-        id: metadata.activeProfileId,
-        version: metadata.activeProfileVersion,
-        digest: metadata.activeProfileDigest,
-      };
-      const oldNotice = profileEnterNotice(`builtin:${profile}`)!;
-      expect(oldNotice).toBeTruthy();
+      // The dropped profiles and their notices no longer exist in source, so the
+      // historical identity and notice are fixed literals in the recorded shape.
+      const historicalProfile = { id: `builtin:${profile}`, version: '1.0.0', digest: `historical-${profile}` };
+      const modeName = profile[0]!.toUpperCase() + profile.slice(1);
+      const oldNotice = `<system-notice>\n${modeName} Mode is ON. HISTORICAL_${profile.toUpperCase()}_WORKFLOW\n</system-notice>`;
       const rows = originalRows.map((row): FactLine => {
         if (row.fact.type === 'session_started') {
           // Pair specifically covers the latest configuration_changed profile rather than only the header.

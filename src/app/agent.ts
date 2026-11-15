@@ -65,7 +65,6 @@ import path from 'path';
 import type { ISettingsService, ILoggingService } from '../shared/service-interfaces.js';
 import { ExecutionContext } from '../tools/execution-context.js';
 import { buildPromptSpec } from '../session/prompts/prompt-constructor.js';
-import { DIRECT_MEMORY_GUIDANCE_MARKER } from '../session/prompts/memory-prompt-marker.js';
 import { ProfileResolutionError, resolveActiveProfile } from '../config/profiles/index.js';
 import { shouldPreferPatchEditingModel } from '../model/tool-selection-policy.js';
 import { SkillsService } from '../tools/skills/skills-service.js';
@@ -302,10 +301,6 @@ export const getAgentDefinition = (
     Boolean(getSubagentStatus) &&
     Boolean(sendSubagentMessage) &&
     Boolean(cancelSubagentRun);
-  // Beside a complete async capability, foreground stays selectable only for
-  // the roles that write no files (run_subagent enforces which); background
-  // keeps workers, mentors, reviewers and agent_spec launches.
-  const runSubagentForegroundEnabled = Boolean(runSubagent);
   let profile: ReturnType<typeof resolveActiveProfile>;
   try {
     profile = resolveActiveProfile(settingsService, {
@@ -352,7 +347,6 @@ export const getAgentDefinition = (
   const projectInstructionsEnabled = isContextSourceEnabled('project-instructions');
   const skillsCatalogEnabled = isContextSourceEnabled('skills-catalog');
   const memoryContextEnabled = isContextSourceEnabled('memory');
-  const sessionBrowserContextEnabled = isContextSourceEnabled('session-browser');
   const memoryCapability: ReturnType<MemoryCapabilityBuilder['build']> =
     deps.includeMemory === false
       ? { access: 'none', tools: [], guidance: '', context: '' }
@@ -367,28 +361,6 @@ export const getAgentDefinition = (
             snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
           },
         );
-  // Session owns the actual memory tools/context. Build a description-only view
-  // from the same source builder so the prompt states real capability without
-  // registering a duplicate tool or taking a second context snapshot.
-  const promptMemoryCapability: ReturnType<MemoryCapabilityBuilder['build']> =
-    deps.includeMemory === false && deps.promptMemoryEnabled === true
-      ? new MemoryCapabilityBuilder(settingsService, {
-          onWarning: (message) => loggingService.warn(message),
-        }).build(
-          { kind: 'main' },
-          {
-            projectPath: executionContext?.getCwd() ?? process.cwd(),
-            includeContext: false,
-            personalContextOptIn: false,
-          },
-        )
-      : memoryCapability;
-  // This description-only view is resolved against Session's actual accepted
-  // snapshot at request planning; it must not assert index presence/absence yet.
-  const promptGuidance =
-    deps.includeMemory === false && deps.promptMemoryEnabled === true
-      ? DIRECT_MEMORY_GUIDANCE_MARKER
-      : promptMemoryCapability.guidance;
   const discordSendEnabled =
     Boolean(deps.discordSend) &&
     !readOnly &&
@@ -397,35 +369,14 @@ export const getAgentDefinition = (
     !profile.enforcement.denials.has('filesystem-mutation');
   const webSearchEnabled = isWebSearchAvailable(settingsService);
   const promptSpec = buildPromptSpec({
-    model: resolvedModel,
     profile,
-    searchViaShell,
-    runSubagentEnabled: hasCapability('subagents') && (Boolean(runSubagent) || asyncSubagentEnabled),
-    runSubagentForegroundEnabled: hasCapability('subagents') && runSubagentForegroundEnabled,
-    runSubagentAsyncEnabled: hasCapability('subagents') && asyncSubagentEnabled,
-    asyncSubagentControlsEnabled: hasCapability('subagents') && asyncSubagentEnabled,
-    backgroundShellEnabled: backgroundTasksEnabled && allowBackgroundShell && Boolean(backgroundShellRegistry),
     sandboxEnabled,
-    memoryEnabled: hasCapability('memory') && memoryContextEnabled && promptMemoryCapability.access !== 'none',
-    memoryGuidance: hasCapability('memory') ? promptGuidance : '',
-    memoryContext: promptMemoryCapability.context,
-    sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
     runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
     fileReadEnabled: filesystemReadEnabled,
-    webSearchEnabled,
   });
-  let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
-
-  for (const fragmentFile of promptSpec.fragmentFiles) {
-    try {
-      prompt = `${prompt}\n\n${resolvePrompt(path.join(BASE_PROMPT_PATH, fragmentFile))}`;
-    } catch (e) {
-      loggingService.error(`Failed to load prompt fragment ${fragmentFile}: ${e}`);
-    }
-  }
-
+  let prompt = promptSpec.basePromptContent;
   for (const inlineSection of promptSpec.inlineSections) {
     prompt = `${prompt}\n\n${inlineSection}`;
   }

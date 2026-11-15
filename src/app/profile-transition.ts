@@ -1,19 +1,15 @@
 import type { ISettingsService } from '../shared/service-interfaces.js';
 import { isBareProfile } from '../session/prompts/prompt-constructor.js';
-import { profileEnterNotice, profileExitNotice } from '../session/mode-notices.js';
 import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import { BUILTIN_INTEGRATIONS } from '../config/profiles/registry.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
 import type { ResolvedProfile } from '../config/profiles/types.js';
 
-export type ProfileTransitionClass = 'noop' | 'structural' | 'notice-only' | 'agent-rebuild';
+export type ProfileTransitionClass = 'noop' | 'structural' | 'agent-rebuild';
 
 export type ProfileTransitionPlan = {
   targetId: string;
   class: ProfileTransitionClass;
-  exitNotice: string | null;
-  enterNotice: string | null;
-  composedNotice: string | null;
 };
 
 export type ProfileTransitionPlanningDeps = {
@@ -23,8 +19,6 @@ export type ProfileTransitionPlanningDeps = {
 export type ProfileTransitionDeps = ProfileTransitionPlanningDeps & {
   /** Rebuild the active agent using the currently selected model. */
   rebuildAgent?: () => void;
-  /** Queue the one notice produced by this transition. */
-  queueModeNotice?: (text: string) => void;
   /** Whether this structural transition has existing history to protect. */
   requiresHistoryConfirmation?: boolean | (() => boolean);
   /** Clear the conversation when a structural transition is confirmed. */
@@ -40,39 +34,21 @@ const resolveOptions = (deps: ProfileTransitionPlanningDeps) => ({
   availableIntegrations: deps.availableIntegrations ?? DEFAULT_AVAILABLE_INTEGRATIONS,
 });
 
-const isProfile = (profile: ResolvedProfile, id: string): boolean => profile.identity.id === id;
-
 /**
  * Classify the runtime impact of changing between two resolved Profiles.
- * Identity equality intentionally wins: re-selecting a Profile has no effects,
- * even when that Profile itself carries a workflow notice.
+ * Identity equality intentionally wins: re-selecting a Profile has no effects.
  */
 export function classifyProfileTransition(current: ResolvedProfile, target: ResolvedProfile): ProfileTransitionClass {
   if (current.identity.id === target.identity.id) return 'noop';
 
   if (isBareProfile(current) !== isBareProfile(target)) return 'structural';
 
-  const agentWorkflowInvolved =
-    isProfile(current, 'builtin:mentor') ||
-    isProfile(target, 'builtin:mentor') ||
-    isProfile(current, 'builtin:orchestrator') ||
-    isProfile(target, 'builtin:orchestrator');
-  if (agentWorkflowInvolved) return 'agent-rebuild';
-
-  const planInvolved = isProfile(current, 'builtin:plan') || isProfile(target, 'builtin:plan');
-  if (planInvolved) return 'notice-only';
-
   // A non-built-in Profile cannot be assumed to have a stable prompt/tool
   // shape. Rebuild it conservatively rather than allowing stale composition.
   return 'agent-rebuild';
 }
 
-const composeNotice = (exitNotice: string | null, enterNotice: string | null): string | null => {
-  if (exitNotice && enterNotice) return `${exitNotice}\n\n${enterNotice}`;
-  return exitNotice ?? enterNotice;
-};
-
-export function planProfileTransition(
+function planProfileTransition(
   settingsService: ISettingsService,
   targetId: string,
   deps: ProfileTransitionPlanningDeps = {},
@@ -82,17 +58,7 @@ export function planProfileTransition(
   // write activeProfileId before an unavailable required integration fails.
   const current = resolveActiveProfile(settingsService, options);
   const target = resolveProfile(targetId, options);
-  const transitionClass = classifyProfileTransition(current, target);
-  const exitNotice = transitionClass === 'noop' ? null : profileExitNotice(current);
-  const enterNotice = transitionClass === 'noop' ? null : profileEnterNotice(target);
-
-  return {
-    targetId: target.identity.id,
-    class: transitionClass,
-    exitNotice,
-    enterNotice,
-    composedNotice: composeNotice(exitNotice, enterNotice),
-  };
+  return { targetId: target.identity.id, class: classifyProfileTransition(current, target) };
 }
 
 /** Owns Profile activation effects after pure resolution and classification. */
@@ -153,6 +119,5 @@ export class ProfileTransitionService {
     if (plan.class === 'structural' || plan.class === 'agent-rebuild') {
       this.#deps.rebuildAgent?.();
     }
-    if (plan.composedNotice) this.#deps.queueModeNotice?.(plan.composedNotice);
   }
 }

@@ -1,3 +1,19 @@
+## [Unreleased]
+
+### Features
+- Show Codex five-hour quota usage in the terminal footer alongside the existing seven-day window (#291).
+- Show subscription reference cost separately from spend when catalog pricing is available; it is a comparison, not a billed charge.
+
+### Improvements
+- Use a shared assisted-approval review path across terminal, ACP and non-interactive sessions, including review of outside-workspace edits (#294).
+- Show session cost in the composer footer.
+
+### Bug Fixes
+- Correct `apply_patch` approval previews.
+- Fix session path grants for symlinked and home-relative paths (#294).
+- Keep completed tasks visible for their intended grace period.
+- Fix the development watcher with TypeScript 7.
+
 ## [1.2.0] - 2026-11-15
 
 ### Features

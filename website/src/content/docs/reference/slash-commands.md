@@ -21,7 +21,7 @@ Type `/` at the start of a prompt to open the command menu.
 | **`/retry-turn`** | — | Regenerate the latest user turn from its original prompt. |
 | **`/retry-tool`** | — | Retry the last tool call by rewinding to it. |
 | **`/copy`** | `[N]` | Copy the latest assistant response (or $N$-th prior response) to clipboard. |
-| **`/usage`** | — | Show token usage and model cost metrics for the current session. |
+| **`/usage`** | — | Show token usage and model cost metrics for the current session. Subscription reference cost, when available, is a catalog comparison, not a billed charge. |
 | **`/resume`** | `[conversation-id\|ls]` | Resume a saved conversation or browse conversations. |
 | **`/handoff`** | — | Hand off the last assistant response to another model. |
 | **`/providers`** | — | Open interactive provider manager (list, add, edit, remove providers or switch OAuth accounts). |

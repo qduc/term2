@@ -7,6 +7,12 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## Changes on main since 1.2.0
+
+- The composer footer shows session cost and, when reported, Codex five-hour and seven-day quota usage.
+- Subscription reference cost is shown separately from spend; it is a catalog comparison, not a billed charge.
+- Assisted approval reviews use a shared decision path across terminal, ACP and non-interactive sessions.
+
 ## 1.2.0 - November 12, 2026
 
 - Bare offers the native file tools directly alongside `run_code`, with a prompt that matches the tools available.
@@ -176,4 +182,4 @@ This documentation site builds from `main`, so it can describe work ahead of the
 
 The `web-client/` application is separate from this documentation site and connects through the private `term2 serve` gateway. Follow [gateway setup](/term2/remote/web-gateway/) for integration requirements.
 
-For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 1.1.0, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v1.1.0...main).
+For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 1.2.0, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v1.2.0...main).

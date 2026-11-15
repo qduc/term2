@@ -38,11 +38,11 @@ Both `config/` (pure schemas and profile definitions) and `shared/` (pure helper
 
 ### Known exceptions
 
-The scheduled architecture cleanup (#181) reduced allowlisted crossing edges from 116 down to 7, #197 removed two obsolete runtime edges, and `1b618d5bc` removed the obsolete `Banner.tsx -> engine/agent-runtime/model-resolver.ts` edge. The 4 remaining edges correspond to
-[Phase 3 of the architecture cleanup plan](../plans/engineering/architecture-cleanup.md#phase-3-the-seven-real-design-problems-ports-when-touched),
-addressed pay-as-you-go when those components are next touched. Each edge and its reason, which names its
-Phase 3 row and what removes it, live in `scripts/layer-allowlist.json` rather than here, so the reason sits
-next to the entry it justifies. `node scripts/gate-exceptions.mjs layer-direction` prints them.
+The scheduled architecture cleanup (#181) reduced allowlisted crossing edges from 116 down to 7, #197 removed two obsolete runtime edges, `1b618d5bc` removed the obsolete `Banner.tsx -> engine/agent-runtime/model-resolver.ts` edge, and #299 removed the three `clients/tui` edges (rows 3.1 and 3.2). The one remaining edge is
+[Phase 3 of the architecture cleanup plan](../plans/engineering/architecture-cleanup.md#phase-3-the-seven-real-design-problems-ports-when-touched)
+row 3.5, addressed pay-as-you-go when those components are next touched. Its reason, which names the
+Phase 3 row and what removes it, lives in `scripts/layer-allowlist.json` rather than here, so the reason sits
+next to the entry it justifies. `node scripts/gate-exceptions.mjs layer-direction` prints it.
 `check-layers.mjs` fails on any unlisted edge and prints listed edges that no longer exist.
 
 The portable harness owns turn mechanics and imports only its own contracts,

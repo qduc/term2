@@ -9,7 +9,7 @@ import type {
 } from '../../protocol/wire.js';
 import { historyReplacedMessage } from '../../protocol/reducer-nested.js';
 import { formatReferenceCost, formatSessionCost, summarizeCost } from '../../shared/cost/model-cost.js';
-import { subscriptionReferenceCost } from '../../protocol/reference-cost.js';
+import { subscriptionReferenceCost } from '../../protocol/costs.js';
 import { type InteractionView, type Message, type TaskView, type ToolView, type TuiState } from './state.js';
 
 const SILENT_HISTORY_EDITS = new Set(['rewind', 'retry_turn', 'retry_tool', 'compaction'].map(historyReplacedMessage));

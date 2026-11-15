@@ -9,7 +9,7 @@ import {
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import { TOOL_NAME_ASK_USER, TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
-import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
+import { extractPatchPaths } from '../../shared/utils/upstream-apply-patch.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
 

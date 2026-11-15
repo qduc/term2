@@ -38,7 +38,7 @@ import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js
 import type { ShellChildRegistry } from '../../tools/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../../session/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../../shared/contracts/session-rollover.js';
-import { UPSTREAM_APPLY_PATCH_GRAMMAR, freeformApplyPatchArguments } from '../../tools/file/upstream-apply-patch.js';
+import { UPSTREAM_APPLY_PATCH_GRAMMAR, freeformApplyPatchArguments } from '../../shared/utils/upstream-apply-patch.js';
 import type { McpToolSource } from '../../tools/mcp/mcp-tool-source.js';
 import type { DurableGoal } from '../../session/logging/conversation-log-events.js';
 import { ModelSelectionSchema, type ModelSelection } from '../../config/settings/model-selection.js';

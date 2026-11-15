@@ -1,5 +1,5 @@
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from './tool-names.js';
-import { parseUpstreamApplyPatch } from './file/upstream-apply-patch.js';
+import { parseUpstreamApplyPatch } from '../shared/utils/upstream-apply-patch.js';
 
 /**
  * Pure utility functions extracted from use-conversation.ts for testability.

@@ -2,6 +2,7 @@
  * App-only advisory projection over the owning Session's native request snapshot.
  * No log reads, mirrored history, writes, provider calls or admission authority.
  */
+import { isEffortUpdateItem } from '../model/effort-updates.js';
 import type { StreamedModelTurnInput } from '../model/streamed-model-turn.js';
 import { InputSurgeGuard } from '../session/input-surge-guard.js';
 import { getSerializedInputBytes, LargeUncachedInputGuard } from '../session/large-uncached-input-guard.js';
@@ -64,7 +65,13 @@ export function inspectDirectInputPreview(
   if (snapshot.rewoundSinceSuccess) large.markUndoOrRewind();
   return {
     inputSurge,
-    largeUncachedInput: large.inspect({ input: outgoing, now, ...snapshot.configuration }),
+    largeUncachedInput: large.inspect({
+      input: outgoing,
+      now,
+      ...snapshot.configuration,
+      // A marker means the request carries the effort change as cache-preserving input.
+      reasoningEffortCachePreserved: snapshot.input.some(isEffortUpdateItem),
+    }),
   };
 }
 

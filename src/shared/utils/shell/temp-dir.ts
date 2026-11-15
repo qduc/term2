@@ -46,6 +46,43 @@ function resolveTempDir(): string {
 
 export const SANDBOX_TEMP_DIR = resolveTempDir();
 
+let sandboxTempDirReady: boolean | undefined;
+
+/**
+ * Creates `SANDBOX_TEMP_DIR` (0700) on first use and reports whether it exists.
+ * Callers that would hand it to a child as `TMPDIR` must check this first: a
+ * `TMPDIR` that does not exist breaks `mktemp`, `go build` and similar tools.
+ * The outcome is latched so a read-only tmpdir is not retried per command.
+ */
+function ensureSandboxTempDir(): boolean {
+  if (sandboxTempDirReady === undefined) {
+    try {
+      mkdirSync(SANDBOX_TEMP_DIR, { recursive: true, mode: 0o700 });
+      sandboxTempDirReady = true;
+    } catch {
+      sandboxTempDirReady = false;
+    }
+  }
+  return sandboxTempDirReady;
+}
+
+/**
+ * The `TMPDIR` override for a local shell child, or nothing. A gateway or
+ * caller-supplied value is kept as given; otherwise the per-user directory is
+ * used only once it exists, so a failed creation leaves the inherited TMPDIR.
+ */
+export function resolveChildTmpDir(
+  env: NodeJS.ProcessEnv | undefined,
+  gatewayMode: boolean,
+): { TMPDIR?: string | undefined } {
+  if (gatewayMode) return { TMPDIR: env!.TMPDIR };
+  if (env?.TMPDIR !== undefined) {
+    if (env.TMPDIR === SANDBOX_TEMP_DIR) ensureSandboxTempDir();
+    return { TMPDIR: env.TMPDIR };
+  }
+  return ensureSandboxTempDir() ? { TMPDIR: SANDBOX_TEMP_DIR } : {};
+}
+
 export interface SandboxXdgLayout {
   root: string;
   config: string;

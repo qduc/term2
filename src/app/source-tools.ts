@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { withTrimConfig } from '../shared/utils/output/output-trim.js';
 import { normalizeToolInput, runToolInputDiagnostics } from '../tools/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../shared/lib/harness-invariant-error.js';
+import { modelToolJsonSchema } from '../shared/lib/model-tool-json-schema.js';
 import type { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../session/approval/nested-approval-owner.js';
 import { SANDBOX_NETWORK_INTERACT } from '../tools/shell/sandbox/sandbox-network-approval.js';
@@ -52,6 +53,7 @@ type SourceToolOptions = {
   readonly shellEscapeCwd?: () => string;
   readonly confirmSandboxedShell?: (command: string) => boolean;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
+  readonly offered?: readonly AnyToolDefinition[];
 };
 
 /** Gate only scripted physical bodies. The source wrapper retains its raw return value. */
@@ -81,13 +83,13 @@ export function sourceToolSpec(definition: AnyToolDefinition): ToolSpec {
     inputSchema: definition.modelTool
       ? {}
       : isZodToolParameterSchema(definition.parameters)
-      ? z.toJSONSchema(definition.parameters)
+      ? modelToolJsonSchema(definition.parameters)
       : definition.parameters,
     ...(definition.modelTool ? { modelTool: definition.modelTool } : {}),
   };
 }
 
-function parseInput(definition: AnyToolDefinition, raw: unknown): unknown {
+function parseInput(definition: AnyToolDefinition, raw: unknown, offered?: readonly AnyToolDefinition[]): unknown {
   const schema =
     definition.canonicalParameters ??
     (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
@@ -102,7 +104,7 @@ function parseInput(definition: AnyToolDefinition, raw: unknown): unknown {
     if (!schema || !(error instanceof z.ZodError || error instanceof SyntaxError)) throw error;
     // Legacy wrapToolInvoke: invalid input never asks for approval; execute returns the schema diagnostic,
     // which the tool's own formatter draws as a failed row. Keep the arguments for that row.
-    const diagnostic = runToolInputDiagnostics(definition.name, schema, parsed);
+    const diagnostic = runToolInputDiagnostics(definition.name, schema, parsed, offered);
     const input = parsed && typeof parsed === 'object' ? parsed : { input: parsed };
     invalidInputs.set(input, diagnostic);
     return input;
@@ -196,9 +198,16 @@ async function approvalFor(
     ((!docker || !options.shellEscapeCwd) &&
       shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode')))
   ) {
-    // Legacy stages every call whose definition needs approval, even when policy then approves it.
+    // Legacy stages every call whose definition needs approval (with a policy registry, every valid call) even
+    // when policy approves it; the engine never groups a staged call, so a parallel-safe one leaves the batch.
     const invocation = invocationFor(context, options.sessionId);
-    return (await definition.needsApproval(input, invocation)) ? { kind: 'none', batched: true } : { kind: 'none' };
+    if (!(await definition.needsApproval(input, invocation))) return { kind: 'none' };
+    // Read as the engine reads it: only a literal true is parallel-safe, and a throw means serial.
+    const safe = definition.parallelSafe as boolean | ((p: unknown, c: unknown) => unknown) | undefined;
+    const parallel = await Promise.resolve()
+      .then(() => (typeof safe === 'function' ? safe(input, invocation) : safe))
+      .catch(() => false);
+    return parallel === true ? { kind: 'none' } : { kind: 'none', batched: true };
   }
   return {
     kind: 'ask',
@@ -366,7 +375,7 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
               invocationFor(context, options.sessionId),
             )
         : definition.parallelSafe,
-    parse: (raw) => parseInput(definition, raw),
+    parse: (raw) => parseInput(definition, raw, options.offered),
     approval: (input, context) =>
       invalidInput(input) !== undefined
         ? Promise.resolve({ kind: 'none' })
@@ -458,10 +467,11 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
 /** Adapt only the directly offered definitions. run_code already retains the complete wrapped graph. */
 export function createSourceToolRegistry(
   definitions: readonly AnyToolDefinition[],
-  options: SourceToolOptions,
+  base: Omit<SourceToolOptions, 'offered'>,
 ): ToolRegistry & { adaptTool(definition: AnyToolDefinition): Tool; dispose(): void } {
   const owners = new Set<NestedApprovalOwner>();
   const tools = new Map<string, Tool>();
+  const options: SourceToolOptions = { ...base, offered: definitions };
   for (const definition of definitions) {
     if (tools.has(definition.name)) throw new Error(`Duplicate offered tool: ${definition.name}`);
     tools.set(definition.name, adaptTool(definition, options, owners));

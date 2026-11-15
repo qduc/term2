@@ -70,7 +70,7 @@ timeline with call/start-only slots. No new event, sequence or journal is needed
 | tool_started | tool_started: physical-start fact, not argument streaming |
 | tool_finished / item tool_result | tool_finished upsert, rich accepted display/content where available |
 | interaction_opened / interaction_closed | interaction_opened / interaction_resolved |
-| usage | usage (root accepted token delta, not fabricated cost) |
+| usage | usage (root accepted token delta, not fabricated cost; `reasoningTokens` only when the provider reported it) |
 | turn_ended | turn_ended, preserving supplied outcome/error/cause/notice and nullable correlated finalText; retained turnResults |
 | budget_opened / budget_closed / budget_observed | one matching typed budget frame per accepted fact; no tool interaction or settled cost invented |
 | history_replaced | public reason only, no private provider history |
@@ -519,6 +519,8 @@ terminal when no cost settlement follows. Provider history, private/opaque items
 approval descriptors, `retry_exhausted`, context-compaction source event semantics,
 memory-injection and subagent/background event families remain unavailable or
 need a real producer contract. This is not complete --json parity.
+The new `run_summary` record is not a legacy record: headless builds it from the
+same accepted cost/usage/tool/subagent events (see `clients/headless/INTEGRATION.md`).
 
 ## Accepted branch hydration at one logical Session cut
 

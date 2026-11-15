@@ -118,10 +118,6 @@ export function createReplayFold(): ReplayFold {
   /** Facts consumed so far, and each cancelled turn with the index of its end. */
   let consumed = 0;
   const cancelledTurns: { readonly turn: ActiveTurn; readonly index: number }[] = [];
-  /** The fact index of each tool call and mode notice, so a later process can tell those it resumed (openedAt). */
-  const itemFacts = new Map<Item['id'], number>();
-  /** Background notice messages (a silent turn's input or one delivered into a running turn); legacy saves none. */
-  const noticeMessages = new Map<string, number>();
   const consume = (fact: Fact): void => {
     consumed++;
     // Display observations never enter provider slots, admission or lifecycle state.
@@ -132,10 +128,10 @@ export function createReplayFold(): ReplayFold {
       return;
     }
     if (fact.type === 'background_notices_delivered' && fact.injected) {
-      // Delivered into the running turn at a request boundary: its message joins that turn's history.
-      requireActive(fact.turnId, fact.type);
+      // Delivered into the running turn at a request boundary: its message joins that turn's history. With no
+      // turn open it precedes the turn that is about to start (an earlier process's notices, ahead of the new message).
+      if (active !== null || startedTurns.has(fact.turnId)) requireActive(fact.turnId, fact.type);
       notifications = foldFact({ notifications }, fact).notifications;
-      noticeMessages.set(fact.injected.messageId, consumed - 1);
       slots.push({
         item: {
           type: 'user_message',
@@ -248,10 +244,7 @@ export function createReplayFold(): ReplayFold {
           }
           if (fact.input.length === 0) throw new Error('replay: silent turn has no planning input');
           // Planning input is provider context, not a human admission, so it does not anchor memory.
-          for (const item of fact.input) {
-            slots.push({ item });
-            noticeMessages.set(item.id, consumed - 1);
-          }
+          for (const item of fact.input) slots.push({ item });
           silentTurns.add(fact.turnId);
         } else {
           let lastHuman: Slot | undefined;
@@ -279,7 +272,6 @@ export function createReplayFold(): ReplayFold {
         break;
       }
       case 'item':
-        if (fact.item.type === 'tool_call' || isModeNotice(fact.item)) itemFacts.set(fact.item.id, consumed - 1);
         appendReplayItem(requireActive(fact.turnId, fact.type), fact, slots);
         break;
       case 'tool_started':
@@ -461,9 +453,7 @@ export function createReplayFold(): ReplayFold {
     recoveryFacts.push(...background.recoveryFacts);
     return {
       status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
-      history: slots.flatMap(({ item }) =>
-        item === null ? [] : resumedItem(item, itemFacts, noticeMessages, options.openedAt ?? 0),
-      ),
+      history: slots.flatMap(({ item }) => (item === null ? [] : [item])),
       nextTurn: queue.nextTurn,
       recoveryFacts,
       queue: queue.state,
@@ -477,27 +467,4 @@ export function createReplayFold(): ReplayFold {
     };
   };
   return { consume, finish };
-}
-
-function isModeNotice(item: Item): boolean {
-  return item.type === 'summary' && item.text.startsWith('[Mode Notice]');
-}
-
-/**
- * An item from before this process opened the session, as legacy reloads it: a saved conversation keeps no
- * harness "[Mode Notice]" reminders or background notice messages, and a call's arguments are
- * re-serialized as compact JSON.
- */
-function resumedItem(
-  item: Item,
-  itemFacts: ReadonlyMap<Item['id'], number>,
-  noticeMessages: ReadonlyMap<string, number>,
-  openedAt: number,
-): Item[] {
-  if ((noticeMessages.get(item.id) ?? openedAt) < openedAt) return [];
-  if ((itemFacts.get(item.id) ?? openedAt) >= openedAt) return [item];
-  if (isModeNotice(item)) return [];
-  if (item.type !== 'tool_call' || item.rawArguments === undefined) return [item];
-  const { rawArguments: _raw, argumentsSnapshot: _snapshot, ...call } = item;
-  return [call];
 }

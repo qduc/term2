@@ -29,6 +29,8 @@ import {
   validateScriptedReturn,
 } from '../../tools/scripted-return-contract.js';
 import type { AgentSpecAuthoritySnapshot } from '../../session/agent-runtime/permission-boundary.js';
+import { trackNestedCalls } from './run-code-call-context.js';
+import { createUnknownToolHints, unknownToolMessage } from './run-code-unknown-tool-hints.js';
 import {
   createRunCodeAgentCapability,
   isRunCodeAgentBridgeActive,
@@ -52,7 +54,6 @@ export type {
 } from '../../tools/system/run-code/run-code-runtime-contract.js';
 
 import {
-  TOOL_NAME_RUN_CODE,
   TOOL_NAME_DESCRIBE,
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
@@ -109,35 +110,6 @@ const parseActionPayload = (raw: unknown): unknown => {
 const MAX_RECEIPT_REASON_CHARS = 280;
 export const clipReason = (reason: string): string =>
   reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
-
-function createUnknownToolHints(
-  allTools: ToolRegistry,
-  directToolNames: readonly string[],
-): Readonly<Record<string, string>> {
-  const names = new Set(allTools.map((tool) => tool.name));
-  const hints = Object.create(null) as Record<string, string>;
-  for (const name of directToolNames) {
-    if (name !== TOOL_NAME_RUN_CODE && RUN_CODE_PROHIBITED_TOOLS.has(name))
-      hints[name] = 'This is a direct tool; call it outside run_code instead.';
-  }
-  if (names.has('apply_patch')) {
-    for (const name of ['create_file', 'search_replace']) {
-      if (!names.has(name)) hints[name] = 'Use apply_patch instead (use *** Add File: to create a file).';
-    }
-  }
-  if (!names.has('apply_patch') && (names.has('create_file') || names.has('search_replace'))) {
-    hints.apply_patch = `This tool is unavailable; use ${['create_file', 'search_replace']
-      .filter((name) => names.has(name))
-      .join(' or ')} instead.`;
-  }
-  return hints;
-}
-
-function unknownToolMessage(name: string, registry: ToolRegistry, hints: Readonly<Record<string, string>>): string {
-  const available = registry.map((entry) => entry.name).join(', ');
-  const hint = Object.hasOwn(hints, name) ? ` ${hints[name]}` : '';
-  return `Unknown tool "${name}". Available: ${available}.${hint}`;
-}
 
 export function describeTool(tool: AnyToolDefinition): JsonValue {
   let parameters: JsonValue;
@@ -288,7 +260,7 @@ export const serializeResult = async (
     const callUnit = callsCompleted === 1 ? 'call' : 'calls';
     return {
       ok: false,
-      error: `Tool "${toolName}" result exceeded ${limit} characters and could not be delivered to script. ${retrieval}${callsCompleted} nested tool ${callUnit} completed — inspect state before retrying; tool effects have already completed.`,
+      error: `Tool "${toolName}" result exceeded ${limit} characters and could not be delivered to script. ${retrieval}${callsCompleted} nested tool ${callUnit} completed — inspect state before retrying; tool effects have already completed. Narrow the call (line range, include, max_results) or read the saved file.`,
     };
   } catch {
     return { ok: true, result: truncate(String(result), limit) };
@@ -1003,9 +975,9 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           );
           const message =
             decision.kind === 'unknown'
-              ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script.`
+              ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script. Skip it in this script.`
               : decision.kind === 'interceptor_denied'
-              ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
+              ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script. Skip it in this script.`
               : decision.kind === 'error'
               ? `"${
                   prepared.tool.name
@@ -1013,7 +985,11 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
                   /[.!?]+$/,
                   '',
                 )}. Nothing was executed; correct the arguments and call it again.`
-              : `"${prepared.tool.name}" requires approval and is unavailable from inside a script.`;
+              : `"${prepared.tool.name}" requires approval and is unavailable from inside a script.${
+                  isDirectlyCallable(prepared.tool)
+                    ? ' Call it directly outside run_code, where the user can be asked to approve it.'
+                    : ' Skip it in this script.'
+                }`;
           if (isActionTool(prepared.tool.name)) recordReceipt(callId, prepared.tool.name, 'not_applied', message);
           return failed(message);
         }
@@ -1028,6 +1004,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
       },
     };
 
+    const nestedCalls = trackNestedCalls(tools, bridgeRunId);
     const capabilities: Record<string, CapabilityHandler<any>> = { tools };
     if (options.agentBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentBridge)) {
       capabilities.agent = createRunCodeAgentCapability(
@@ -1084,7 +1061,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
             kind: 'fail',
             code: 'invalid_output',
             detail: 'invalid_tool_output',
-            message: `Tool "${prepared.tool.name}" returned a value that violates its scripted output contract: ${contract.message}`,
+            message: `Tool "${prepared.tool.name}" returned a value that violates its scripted output contract: ${contract.message}. This is a tool defect; call the tool directly outside run_code.`,
           };
         }
         if (!abortedCallIds.has(callId)) {
@@ -1141,7 +1118,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     const attachments: RunCodeAttachment[] = [];
     const execution = createRunCodeExecution(
       resolvedResult,
-      calls,
+      nestedCalls.annotate(calls),
       receipts,
       consoleValues,
       attachments,

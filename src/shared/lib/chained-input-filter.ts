@@ -8,6 +8,11 @@ export const isUserInputMessage = (item: unknown): boolean => {
   return record?.role === 'user';
 };
 
+const isEffortChangeItem = (item: unknown): boolean => {
+  const type = asRecord(item)?.type;
+  return type === 'effort_update' || type === 'configuration_update';
+};
+
 export const isToolResultItem = (item: unknown): boolean => {
   return normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result');
 };
@@ -113,7 +118,10 @@ export const findChainedDeltaStart = (input: unknown[]): number => {
   let endUserIndex = input.length;
   while (
     endUserIndex > 0 &&
-    (isUserInputMessage(input[endUserIndex - 1]) || asRecord(input[endUserIndex - 1])?.role === 'system')
+    (isUserInputMessage(input[endUserIndex - 1]) ||
+      asRecord(input[endUserIndex - 1])?.role === 'system' ||
+      // A turn's effort change (model/effort-updates.ts) belongs to the new block it precedes.
+      isEffortChangeItem(input[endUserIndex - 1]))
   ) {
     endUserIndex--;
   }

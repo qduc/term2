@@ -38,7 +38,11 @@ export type DirectContextFact =
   | DirectVerificationFact
   | DirectMemoryFact
   | DirectRolloverFact
-  | DirectSessionRotationFact;
+  | DirectSessionRotationFact
+  | DirectEffortUpdatesRejectedFact;
+
+/** Recorded when the marker-carrying request is refused, before its single retry, whatever the retry's outcome. */
+export type DirectEffortUpdatesRejectedFact = { readonly type: 'effort_updates_rejected' };
 export type DirectContextState = {
   readonly goal: DirectGoalState;
   /** Latest admitted human receipt, retained across provider-context rotation. */
@@ -46,6 +50,8 @@ export type DirectContextState = {
   readonly memory: DirectMemoryState;
   readonly verification: readonly DirectVerificationAttempt[];
   readonly goalReminders: readonly DirectGoalReminderFact[];
+  /** An endpoint refused a request carrying a cache-preserving effort change: no more markers this session. */
+  readonly effortUpdatesRejected: boolean;
 };
 
 /** Fresh projection only; the owning Session folds accepted facts over it on open. */
@@ -55,6 +61,7 @@ export function initialDirectContextState(): DirectContextState {
     memory: { automaticRecorded: false, automaticStopped: false },
     verification: [],
     goalReminders: [],
+    effortUpdatesRejected: false,
   };
 }
 
@@ -74,6 +81,7 @@ const receiptSchema = z.object({
   undo: z.string(),
 });
 const contextFactSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('effort_updates_rejected') }),
   directRolloverFactSchema,
   directSessionRotationSchema,
   z.object({
@@ -161,6 +169,8 @@ export function reduceDirectContext(
         latestHumanInputAt: planDirectTiming(state.latestHumanInputAt, queueRecords, input).latestHumanInputAt,
       };
     }
+    case 'effort_updates_rejected':
+      return { ...state, effortUpdatesRejected: true };
     case 'goal_changed':
     case 'goal_proposed':
       return { ...state, goal: reduceDirectGoal(state.goal, fact) };
@@ -201,9 +211,20 @@ export function planDirectInstructions(
     ? base.replace(DIRECT_MEMORY_GUIDANCE_MARKER, () => suffix)
     : base + (suffix ? `\n\n${suffix}` : '');
   return {
-    instructions: instructions + renderDurableGoalContext(goal.goal),
+    // A session that never had a goal carries neither goal_check nor its notice.
+    instructions: goalEverSet(goal) ? instructions + renderDurableGoalContext(goal.goal) : instructions,
     requestGoal: goal,
   };
+}
+
+/**
+ * Whether this session has had a goal at any point. One predicate decides both
+ * the goal notice and `goal_check` visibility, so a request never carries one
+ * without the other. It stays true after a goal is cleared: history may then
+ * hold `goal_check` calls, and the notice says why they no longer apply.
+ */
+export function goalEverSet(state: Pick<DirectGoalState, 'generation' | 'goal'>): boolean {
+  return state.goal !== undefined || state.generation > 0;
 }
 
 /**

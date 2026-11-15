@@ -6,6 +6,10 @@ import { directPreviewConfiguration, directPreviewOccurrences } from './preview.
 import type { Conversation } from './types.js';
 import type { Fact } from './facts.js';
 import { replay } from './replay.js';
+import { effortTimelineForTurn } from './effort-timeline.js';
+import { effortUpdateLevels } from '../model/effort-updates.js';
+import { isDeepStrictEqual } from 'node:util';
+import type { TurnId } from '../engine/index.js';
 /** Accepted configuration generations: validate before durable acceptance, then install once. */
 import { DirectContinuity, type DirectContinuityBinding } from '../engine/recovery-continuity.js';
 import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './configuration.js';
@@ -122,10 +126,11 @@ export class ConversationGeneration {
     replace: Parameters<typeof installConversationGeneration>[3],
     installed: (request: PreparedConversationGeneration['nextRequest']) => void,
   ): void {
+    const carried = this.carryAnchor(prepared);
     installConversationGeneration(
       candidate,
-      prepared,
-      this.continuity,
+      carried ?? prepared,
+      carried ? undefined : this.continuity,
       replace,
       (generation) => {
         this.runtime = generation.nextDeps;
@@ -138,6 +143,43 @@ export class ConversationGeneration {
         if (notice) this.profileNotice = [this.profileNotice, notice].filter(Boolean).join('\n\n');
       },
     );
+  }
+  /**
+   * An effort-only change on a model with a cache-preserving effort item keeps the live
+   * response chain: the same model objects (whose continuation tokens and WebSocket
+   * sessions the anchor belongs to) and the same continuity checkpoint. The turn then
+   * carries the change as an `effort_update` marker under an unchanged envelope
+   * (effort-timeline.ts). Any other configuration change retires the anchor as before.
+   */
+  private carryAnchor(prepared: PreparedConversationGeneration): PreparedConversationGeneration | undefined {
+    const previous = this.request;
+    const next = prepared.nextRequest;
+    const live = this.continuity?.state
+      ? { binding: this.continuity.binding, state: this.continuity.state }
+      : undefined;
+    if (!previous || !live || !prepared.nextContinuity) return undefined;
+    if (
+      previous.model.provider !== next.model.provider ||
+      previous.model.model !== next.model.model ||
+      previous.temperature !== next.temperature ||
+      previous.reasoning === next.reasoning ||
+      !previous.reasoning ||
+      !next.reasoning ||
+      !isDeepStrictEqual(live.binding, prepared.nextContinuity.binding)
+    )
+      return undefined;
+    let levels: readonly string[] | undefined;
+    try {
+      levels = effortUpdateLevels(this.runtime.models.resolve(previous.model));
+    } catch {
+      return undefined;
+    }
+    if (!levels?.includes(previous.reasoning) || !levels.includes(next.reasoning)) return undefined;
+    return {
+      ...prepared,
+      nextDeps: { ...prepared.nextDeps, models: this.runtime.models, continuity: live },
+      nextContinuity: live,
+    };
   }
   notice(requestNotice: string | undefined, consume = false, includeProfile = true): string | undefined {
     const notice =
@@ -163,13 +205,22 @@ export class ConversationGeneration {
     // deliberately NOT accepted. No memory/notice/goal state is consumed.
     const human = capabilities.humanPlan('preview', request.input);
     const notice = this.notice(request.notice);
-    const modelInput = notice ? withNotice(human.modelInput, notice) : human.modelInput;
+    const noticed = notice ? withNotice(human.modelInput, notice) : human.modelInput;
+    // As the turn would start: its admission (and effort) recorded after the log's facts.
+    const preview = { type: 'turn_started', turnId: 'preview' as TurnId, input: request.input } as const;
+    const timeline = effortTimelineForTurn(
+      [...facts, { ...preview, requestConfiguration: configuration }],
+      this.runtime.models,
+      request,
+      { modelHistory: history, sentInput: noticed },
+    );
+    const modelInput = timeline.sentInput;
     const canonical: ModelRequest = {
       model: request.model,
       instructions: request.instructions,
-      input: [...history, ...modelInput],
+      input: [...timeline.modelHistory, ...modelInput],
       tools: request.tools,
-      ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+      ...(timeline.reasoning !== undefined ? { reasoning: timeline.reasoning } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
       ...(request.maxOutputTokens !== undefined ? { maxOutputTokens: request.maxOutputTokens } : {}),
       ...(request.providerOptions !== undefined ? { providerOptions: request.providerOptions } : {}),

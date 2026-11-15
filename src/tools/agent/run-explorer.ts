@@ -7,13 +7,13 @@ import { isAbortLike, formatSubagentResult } from '../subagents/utils.js';
 /** Runs one fresh explorer subagent for a reviewer and returns its settled result. */
 export type ExplorerRunner = (task: string, signal?: AbortSignal) => Promise<SubagentResult>;
 
+// Only the reviewer is offered run_explorer, always beside reviewer.md, which already says what an
+// explorer is and returns, that it sees none of the reviewer's context, that each request is one bounded,
+// self-contained question naming what to inspect and report, that independent requests can run in
+// parallel, and to choose breadth or depth per request; none of that is repeated here.
 const runExplorerSchema = z
   .object({
-    task: z
-      .string()
-      .describe(
-        'Self-contained evidence request for one bounded question: the files, symbols, or commands to inspect and the facts to report. Choose breadth or depth, never both.',
-      ),
+    task: z.string().describe('Self-contained evidence request.'),
   })
   .strict();
 
@@ -39,8 +39,7 @@ const formatRunExplorerCommandMessage: FormatCommandMessage = (item, index, tool
 export function createRunExplorerToolDefinition(runExplorer: ExplorerRunner): ScriptedToolDefinition {
   return {
     name: 'run_explorer',
-    description:
-      'Start a read-only explorer subagent to collect evidence for one bounded question. The explorer sees none of your context and returns an evidence report, not conclusions. Independent calls may run in parallel.',
+    description: 'Start a read-only explorer subagent.',
     scriptedReturnSchema: z.string(),
     parameters: runExplorerSchema,
     parallelSafe: () => true,

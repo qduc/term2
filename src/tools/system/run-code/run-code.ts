@@ -14,11 +14,16 @@ import {
   normalizeToolArguments,
 } from '../../format-helpers.js';
 import { renderToolsHeader } from './tools-header.js';
+import { renderFailureSections } from './run-code-failure-report.js';
 import { createMcpCatalog, isMcpToolDefinition, renderMcpCatalog } from './mcp-script-surface.js';
 import type { McpToolSource } from '../../mcp/mcp-tool-source.js';
 import type { RunCodeRuntimePort, RunCodeRuntimeGraph } from './runtime-port.js';
 import { RUN_CODE_EXECUTION_RESULT, type RunCodeExecution } from './run-code-execution.js';
-import { formatFullOutputSavedNote, saveOutputArtifact } from '../../../shared/utils/shell/shell-output.js';
+import {
+  countFileLines,
+  formatFullOutputSavedNote,
+  saveOutputArtifact,
+} from '../../../shared/utils/shell/shell-output.js';
 import {
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
@@ -38,33 +43,37 @@ export type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } fr
 
 const MAX_OUTPUT_CHARS = 30_000;
 
+// Model-facing contract. Several sentences exist because of observed failures
+// (docs/research/tool-real-world-log-audit-2026-09-05.md,
+// docs/plans/tools/run-code/run-code-authoring-friction.md): patch text embedded
+// in JavaScript broke on backticks, one rejected Promise.all lost successful
+// sibling reads, and oversized returns were clipped or re-read. Rewording is
+// fine; dropping one of those instructions is a regression.
 const RUN_CODE_DESCRIPTION =
-  'Write a JavaScript program and execute it. Return the value you want the model to receive; that completion value is ' +
-  'the result of the run. Most tools you already have are available inside the script as ' +
-  "`tools.<tool_name>(params)`, returning a promise that resolves to that tool's normal result and rejecting when " +
-  'the call fails, so you can try/catch it. Parameters are exactly the parameters documented for that tool; they are ' +
-  'validated against the real schema before the tool runs. Prefer this over many separate tool calls when the work ' +
-  'is a loop, a fan-out over many files, or a multi-step computation whose intermediate values you do not need to ' +
-  'see. `console.log` is a debugging trace: it is suppressed on successful runs unless you set `include_console: true`, ' +
-  'but it is included when the script fails or times out. The code runs in an isolated ' +
-  'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
-  'run immediately. Tools that require user approval present the existing approval prompt and resume this script after ' +
-  'a decision; denial is catchable. The catalogue below is the complete set of tools a script can call: a name that is ' +
-  'absent from it is not available inside the script, even when the direct tool surface offers it.\n\n' +
-  `Each script may admit at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls. Track progress and split large work into chunks; catch individual ` +
-  'failures or use Promise.allSettled so you can return partial results. When the call budget is exhausted, the error ' +
-  'reports calls admitted and calls remaining: return the partial results and start another run_code call only for ' +
-  'unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you need: ' +
-  'model-visible output is limited to 30,000 characters, ' +
-  'and larger host results can fail before rendering. For independent reads, preserve successful siblings with ' +
-  '`Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. ' +
-  'If the final result says `Full output saved to`, read that exact path with `read_file` rather than repeating completed calls; ' +
-  'for a large artifact, read line ranges or the fields you need instead of transferring the whole value. A scripted ' +
-  '`read_file` result may itself have ' +
-  '`truncated: true` and a `fullOutputPath`; follow that path or narrow the projection before returning it. ' +
-  'Use `tools.describe` before guessing parameters or returned fields. If a patch or file body contains JavaScript ' +
-  'syntax such as backticks or `${...}`, pass it through the `inputs` parameter and read it from the global `inputs` ' +
-  'object instead of embedding it in code. Code and serialized inputs share the 65,536-byte admission limit. ' +
+  'Run a JavaScript program. Return the value you want the model to receive. Most of your tools are callable in ' +
+  'the script as `tools.<tool_name>(params)` with exactly their documented parameters, validated against the real ' +
+  "schema before the tool runs. Each call returns a promise of the tool's normal result; a failed call, including " +
+  'an approval denial, rejects and can be caught. The catalogue below is complete: a name absent from it is not ' +
+  'available in the script, even if you can call that tool directly. Prefer one script over many tool calls for a ' +
+  'loop, a fan-out over many files, or multi-step work whose intermediate values you do not need to see. The ' +
+  'script is isolated, with no filesystem, network, timers, require, or eval; `tools.*` is the only way out. ' +
+  'Auto-approved tools run immediately; tools that need approval show the usual approval prompt and the script ' +
+  'resumes after the decision. `console.log` is a debugging trace, shown only when the script fails or times out, or with ' +
+  '`include_console: true`.\n\n' +
+  `Each script may make at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls; split large work into chunks and track ` +
+  'progress. Catch individual failures or use `Promise.allSettled` to keep partial results; for independent reads, ' +
+  'use `Promise.allSettled` and map rejections to `{error: r.reason.message}` so successful siblings survive. When the call budget is exhausted, ' +
+  'the error reports calls admitted and remaining: return the partial results and start another run_code call only ' +
+  'for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you ' +
+  'need: model-visible output is limited to 30,000 characters, and larger host results can fail before rendering. ' +
+  "If the run's result says `Full output saved to`, read that exact path with `read_file` instead of repeating " +
+  'completed calls; for any large artifact, take line ranges or only the fields you need instead of transferring ' +
+  'the whole value. In the ' +
+  'script, a `read_file` result may have `truncated: true` and a `fullOutputPath`: follow that path or narrow the ' +
+  'projection before returning it. Use `tools.describe(name)` for the full schema and description of a tool rather ' +
+  'than guessing parameters or returned fields. Pass patch or file text that contains JavaScript syntax such as ' +
+  'backticks or `${...}` through the `inputs` parameter and read it from the global `inputs` object; do not embed it ' +
+  'in code. Code and serialized inputs share the 65,536-byte admission limit. ' +
   'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
   'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`';
 
@@ -141,6 +150,25 @@ const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
   return callSummary;
 };
 
+/**
+ * Says how much was cut and what the script can do about it. A `read_file` result
+ * inside a script is an object ({content, ...}) that carries the whole file, which is
+ * how a script ends up returning far more than it meant to.
+ */
+const clipNote = (text: string): string => {
+  const readFileShaped = text.includes('"content":"') || text.includes('"totalLines":');
+  return (
+    `[truncated: output was ${text.length} characters, ${
+      text.length - MAX_OUTPUT_CHARS
+    } over the ${MAX_OUTPUT_CHARS} limit, so the end was cut. ` +
+    'Have the script return a slice or only the matching lines' +
+    (readFileShaped
+      ? ', e.g. result.content.split("\\n").filter(...).join("\\n"), instead of the whole read_file result'
+      : '') +
+    '.]'
+  );
+};
+
 const clip = async (
   text: string,
   protectedAction?: { prefix: string; full: string; compact: string },
@@ -148,13 +176,16 @@ const clip = async (
   if (text.length <= MAX_OUTPUT_CHARS) return text;
   let retrieval: string;
   try {
-    retrieval = formatFullOutputSavedNote(await saveOutputArtifact(text, { filenamePrefix: 'run-code' }));
+    retrieval = formatFullOutputSavedNote(
+      await saveOutputArtifact(text, { filenamePrefix: 'run-code' }),
+      countFileLines(text),
+    );
   } catch {
     // Effects have already settled. A disk failure must not invite their replay.
     retrieval =
       'Full output could not be saved; the omitted text is unavailable. Do not repeat completed tool effects.';
   }
-  const marker = `\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]\n${retrieval}`;
+  const marker = `\n${clipNote(text)}\n${retrieval}`;
   // Preserve the lifecycle heading as well as host evidence. Script-authored
   // output may consume the entire budget; it must not hide action outcomes.
   const available = MAX_OUTPUT_CHARS - marker.length;
@@ -369,7 +400,7 @@ const renderActionReceipts = (receipts: readonly RunCodeActionReceipt[], include
   ].join('\n');
 };
 
-function renderResult(
+async function renderResult(
   execution: RunCodeExecution,
   output: readonly string[],
   includeConsole: boolean,
@@ -379,36 +410,7 @@ function renderResult(
   const calls = execution.calls;
   const receipts = execution.actions;
   if (execution.script.status === 'failed') {
-    const { code, message } = execution.script.diagnostic;
-    sections.push(
-      code === 'timeout'
-        ? `Script timed out. ${message}`
-        : code === 'deadline'
-        ? `Script exceeded its deadline. ${message}`
-        : code === 'cancellation'
-        ? `Script was cancelled. ${message}`
-        : `Script failed: ${message}`,
-    );
-    if (calls.some((call) => call.recovery)) {
-      sections.push(
-        'Recovered nested results (host-observed):\n' +
-          JSON.stringify(
-            calls
-              .filter((call) => call.outcome !== 'describe')
-              .map((call) => ({
-                callId: call.callId,
-                tool: call.tool,
-                outcome: call.outcome,
-                ...(call.recovery?.truncated ? { truncated: true } : {}),
-                ...(call.recovery?.fullOutputPath ? { fullOutputPath: call.recovery.fullOutputPath } : {}),
-                ...(call.recovery?.unavailable ? { unavailable: true } : {}),
-                ...(call.reason ? { reason: call.reason } : {}),
-                ...(call.recovery ? { result: call.recovery.result } : {}),
-              })),
-          ) +
-          '\nUse these completed results instead of repeating calls. Unknown outcomes are not proof of failure; inspect state before retrying. This is call evidence, not task success.',
-      );
-    }
+    sections.push(...(await renderFailureSections(execution.script.diagnostic, calls)));
   } else if (execution.script.voidOutput) {
     sections.push('Script returned no result. Return a value from the script to send it to the model.');
   } else {
@@ -472,8 +474,6 @@ function renderResult(
         }
       : undefined,
   );
-  if (media.length > 0) {
-    return clipped.then((text) => [{ type: 'text', text }, ...media]);
-  }
+  if (media.length > 0) return [{ type: 'text', text: await clipped }, ...media];
   return clipped;
 }

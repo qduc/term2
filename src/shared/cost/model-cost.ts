@@ -107,10 +107,8 @@ export function formatSessionCost(cost: SessionCostSummary): string | undefined 
 /** Compact hypothetical catalog comparison, never an invoice or subscription charge. */
 export function formatReferenceCost(cost: SessionCostSummary | undefined): string | undefined {
   if (!cost) return undefined;
-  if (cost.state === 'unavailable') return 'Subscription reference estimate (not billed) unavailable';
-  return `Subscription reference estimate (not billed) ${formatUsdMicros(cost.knownUsdMicros)}${
-    cost.state === 'partial' ? '+' : ''
-  }`;
+  if (cost.state === 'unavailable') return 'Subs (est) unavailable';
+  return `Subs (est) ${formatUsdMicros(cost.knownUsdMicros)}${cost.state === 'partial' ? '+' : ''}`;
 }
 
 /** Format token and cost totals for each model in a session. */

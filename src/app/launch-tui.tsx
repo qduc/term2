@@ -12,7 +12,10 @@ import { SettingsThemeProvider } from '../clients/tui/presentation/theme/ThemeCo
 import { getInkRenderOptions } from '../shared/utils/ink-render-options.js';
 import { getProvider } from '../model/providers/registry.js';
 import type { WireSnapshot } from '../protocol/wire.js';
-import { useTerminalFocusNotifier } from '../clients/tui/presentation/hooks/use-terminal-focus-notifier.js';
+import {
+  TuiServicesProvider,
+  useTerminalFocusNotifier,
+} from '../clients/tui/presentation/hooks/use-terminal-focus-notifier.js';
 import { useSetting } from '../clients/tui/presentation/hooks/use-setting.js';
 import type { LoggingService } from '../session/logging/logging-service.js';
 import { Tui, type TuiIntegration } from '../clients/tui/index.js';
@@ -26,7 +29,7 @@ import { createDirectTuiMenus } from './launch-tui-menus.js';
 import { performRestart, type DirectRestartPlan } from './launch-tui-restart.js';
 import type { DirectLaunchRequest } from './launch-types.js';
 import type { TerminalBackground } from './launch-tui-terminal.js';
-import type { ISettingsService } from '../shared/service-interfaces.js';
+import type { ILoggingService, ISettingsService } from '../shared/service-interfaces.js';
 import { INTERACTIVE_TERMINAL_REQUIRED } from './launch.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
@@ -58,16 +61,79 @@ function DirectTui({
   readonly logger: LoggingService;
 }): React.ReactElement {
   const [connection, setConnection] = useState(initial);
-  const [headerHeight, setHeaderHeight] = useState(4);
-  // Holds what this client has folded, for the commands that read it.
-  const latest = useRef(initial.snapshot);
-  const pendingNotices = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   // The notifier already owns terminal focus and all three preference gates.
   // Never use launch defaults: attached sessions own separate mutable settings.
   const settings = app.liveSettings(connection.sessionId);
   if (!settings) throw new Error('The attached session has no live settings.');
+  return (
+    <TuiServicesProvider settingsService={settings} loggingService={logger as ILoggingService}>
+      <DirectTuiSession
+        app={app}
+        persistentSettings={persistentSettings}
+        settings={settings}
+        root={root}
+        remote={remote}
+        mcp={mcp}
+        initial={initial}
+        connection={connection}
+        onConnectionChange={setConnection}
+        bridge={bridge}
+        restart={restart}
+        onExit={onExit}
+        logger={logger}
+      />
+    </TuiServicesProvider>
+  );
+}
+
+function ProviderBanner({
+  settingsService,
+  onHeightChange,
+}: {
+  readonly settingsService: ISettingsService;
+  readonly onHeightChange: (height: number) => void;
+}): React.ReactElement {
+  const selection = useSetting(settingsService, 'agent.modelSelection');
+  const providerLabel = getProvider(selection.provider)?.label || selection.provider;
+  return <Banner settingsService={settingsService} providerLabel={providerLabel} onHeightChange={onHeightChange} />;
+}
+
+function DirectTuiSession({
+  app,
+  persistentSettings,
+  settings,
+  root,
+  remote,
+  mcp,
+  initial,
+  connection,
+  onConnectionChange,
+  bridge,
+  restart,
+  onExit,
+  logger,
+}: {
+  readonly app: DirectApplication;
+  readonly persistentSettings: ISettingsService;
+  readonly settings: ISettingsService;
+  readonly root: string;
+  readonly remote: DirectSessionTarget['restart'];
+  readonly mcp?: DirectMcp;
+  readonly initial: DirectConnection;
+  readonly connection: DirectConnection;
+  readonly onConnectionChange: (next: DirectConnection) => void;
+  readonly bridge: DirectControlBridge;
+  readonly restart: (plan: DirectRestartPlan) => void;
+  readonly onExit: (snapshot: WireSnapshot) => void;
+  readonly logger: LoggingService;
+}): React.ReactElement {
+  const [headerHeight, setHeaderHeight] = useState(4);
+  // Holds what this client has folded, for the commands that read it.
+  const latest = useRef(initial.snapshot);
+  // Approval notifications wait one macrotask (see onLiveEvent); this lets a same-burst close cancel one.
+  const pendingNotices = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const displayMode = useSetting(settings, 'ui.displayMode') ?? 'concise';
-  const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
+  const notifier = useTerminalFocusNotifier({ stdout });
   const integration: TuiIntegration = useMemo(
     () => ({
       menus: createDirectTuiMenus({ app, persistentSettings, logger, root }),
@@ -129,18 +195,22 @@ function DirectTui({
         latest: () => latest.current,
         publish(next) {
           latest.current = next.snapshot;
-          setConnection(next);
+          onConnectionChange(next);
         },
       }),
     }),
-    [app, persistentSettings, root, remote, mcp, bridge, restart, logger],
+    [app, persistentSettings, root, remote, mcp, bridge, restart, logger, onConnectionChange],
   );
   return (
     <Tui
       connection={connection}
       header={
         <Box paddingLeft={2}>
-          <Banner key={`header:${connection.sessionId}`} settingsService={settings} onHeightChange={setHeaderHeight} />
+          <ProviderBanner
+            key={`header:${connection.sessionId}`}
+            settingsService={settings}
+            onHeightChange={setHeaderHeight}
+          />
         </Box>
       }
       headerHeight={headerHeight}

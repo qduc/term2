@@ -100,7 +100,7 @@ function renderAgentCapabilitySection(bridge: RunCodeAgentSpecBridge): string {
   if (members.includes('run')) {
     lines.push(
       '- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result ' +
-        '(status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` and catch per-call ' +
+        '(status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` only for independent runs given the same requirements, and catch per-call ' +
         'rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. ' +
         'When a session approval owner is bound, child tool approval pauses surface to the user and resume ' +
         'the exact child execution; the work clock pauses only while all calls await approval. ' +

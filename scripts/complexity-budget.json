@@ -4,7 +4,7 @@
   "maxFolderFiles": 15,
   "folderCeilings": {
     "src/app": {
-      "files": 77,
+      "files": 76,
       "reason": "Direct CLI application composition root, command dispatch, and setup workflows; to be decomposed into domain submodules in Phase 3."
     },
     "src/clients/control": {
@@ -36,7 +36,7 @@
       "reason": "Cross-client event envelopes, serialization codecs, and projection types; stable schemas shared by TUI, headless, and ACP. review-projection.ts is the one public shape of the session's approval review (its live event, the review on an opened request, the read-model list of requests under review), shared by projection, tasks and reducer; folding it into projection.ts or reducer.ts would push either over the line limit and split one contract across two files."
     },
     "src/session": {
-      "files": 88,
+      "files": 87,
       "reason": "Session lifecycle, queue and stream ownership plus the two application-context/pricing composition files and three existing host policy helpers moved from engine for #224. The engine is now only portable package contract surfaces; further Session root decomposition remains planned in #197 and Phase 3. effort-timeline.ts derives a turn's effort markers from the log, like a recorded notice; it is a distinct host policy, not part of an existing module."
     },
     "src/session/conversation": {
@@ -78,11 +78,11 @@
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission. Two lines hand notices an earlier process left pending to the background owner (ConversationBackground.deliverReopened) before the turn's history snapshot is taken; the delivery has to precede the turn's admission, so it cannot live in the later notice preparation. Fifteen lines connect the approval arbiter (approval/approval-arbiter.ts): one shared reviewer for root and task approvals built where the generation, accepted history and live publisher meet, handed to each turn and to the task owner, and takeOverReview routed root-then-task exactly like answer. The reviewer's logic stays in the arbiter; only the wiring that closes over this driver's state is here."
     },
     "src/app/agent.ts": {
-      "lines": 802,
+      "lines": 753,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Twelve lines since then: the edit tools' nearest-line hint read gate (createHintReadAccess, built beside the tools that take it) and the one web_search availability decision that the prompt wording and the tool list share. Lower the ceiling when the agent assembly is split."
     },
     "src/app/application-runtime.ts": {
-      "lines": 511,
+      "lines": 506,
       "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here. Three lines wire the session's approval reviewer: the import of sessionApprovalReview (lib/approval-model.ts holds it), the approvalReview dependency the Session's arbiter reads per request, and stripping the surface's approvalRoute from the request so it never reaches the session as turn settings."
     },
     "src/app/lib/agent-factory.ts": {
@@ -212,10 +212,6 @@
     "src/tools/agent/run-subagent-async.ts": {
       "lines": 555,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/agent/run-subagent.ts": {
-      "lines": 512,
-      "reason": "Inherited source schema/presentation module; launcher request typing now derives from its own schema rather than importing the engine's policy types. Mixed-shape rewriting and its interpretation line live in run-subagent-shape.ts; the executor keeps only the launch-started flag that gates that line, because only it knows whether a launch happened. Two further lines are comments recording why two schema descriptions keep or drop wording the tool description also states."
     },
     "src/tools/file/apply-patch.ts": {
       "lines": 835,

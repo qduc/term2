@@ -4,7 +4,6 @@ import type {
   ContextBlock,
   EnforcementPolicyDefinition,
   IntegrationDefinition,
-  InstructionsBlock,
   ProfileDefinition,
   ProfileRegistry,
   RegisteredBlock,
@@ -46,7 +45,7 @@ const BUILTIN_TOOL_CAPABILITIES = [
 
 const BUILTIN_ENFORCEMENT_POLICIES = ['builtin:enforcement/normal', 'builtin:enforcement/plan-read-only'] as const;
 
-export const BUILTIN_INTEGRATIONS = [
+const BUILTIN_INTEGRATIONS = [
   'builtin:integration/mentor',
   'builtin:integration/async-subagents',
   'builtin:integration/background-task-control',
@@ -61,29 +60,7 @@ const standardContext: ContextBlock = {
 };
 const standardTools: ToolsBlock = { kind: 'tools', include: [...BUILTIN_TOOL_CAPABILITIES] };
 
-const builtinInstructionBlock = (id: string, entry: InstructionsBlock): RegisteredBlock => ({
-  id,
-  kind: 'instructions',
-  definition: entry,
-});
-
 const builtinBlocks: readonly RegisteredBlock[] = [
-  builtinInstructionBlock('builtin:instructions/plan', {
-    kind: 'instructions',
-    workflow: { content: prompt('plan-mode-info.md') },
-  }),
-  builtinInstructionBlock('builtin:instructions/pair', {
-    kind: 'instructions',
-    workflow: { content: prompt('pair-mode.md') },
-  }),
-  builtinInstructionBlock('builtin:instructions/mentor', {
-    kind: 'instructions',
-    workflow: { content: prompt('mentor-addon.md') },
-  }),
-  builtinInstructionBlock('builtin:instructions/orchestrator', {
-    kind: 'instructions',
-    workflow: { content: prompt('orchestrator.md') },
-  }),
   { id: 'builtin:context/standard', kind: 'context', definition: standardContext },
   { id: 'builtin:tools/standard', kind: 'tools', definition: standardTools },
 ];
@@ -120,14 +97,8 @@ const builtinProfile = (id: string, blocks: ProfileDefinition['blocks'], extends
   ...(extendsId ? { extends: extendsId } : {}),
 });
 
-// The retired Standard composition remains shared blocks, not a selectable
-// Profile. Explicit workflow profiles keep their existing context and tools.
-const workflowBaseBlocks = {
-  context: { use: 'builtin:context/standard', kind: 'context' },
-  tools: { use: 'builtin:tools/standard', kind: 'tools' },
-  enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
-} satisfies ProfileDefinition['blocks'];
-
+// The retired Standard composition remains shared blocks, not a selectable Profile.
+// The plan, pair, mentor and orchestrator workflows were dropped (#149).
 export const builtinProfiles: readonly ProfileDefinition[] = [
   {
     ...builtinProfile('bare', {
@@ -169,45 +140,6 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
     }),
     version: '3.0.0',
   },
-  builtinProfile('plan', {
-    ...workflowBaseBlocks,
-    instructions: {
-      kind: 'instructions',
-      identity: { systemOwned: 'model-family-base' },
-      workflow: { use: 'builtin:instructions/plan' },
-    },
-    enforcement: { kind: 'enforcement', policies: [...BUILTIN_ENFORCEMENT_POLICIES] },
-    presentation: { kind: 'presentation', displayName: 'Plan', label: 'PLAN', color: 'yellow' },
-  }),
-  builtinProfile('pair', {
-    ...workflowBaseBlocks,
-    instructions: {
-      kind: 'instructions',
-      identity: { systemOwned: 'model-family-base' },
-      workflow: { use: 'builtin:instructions/pair' },
-    },
-    presentation: { kind: 'presentation', displayName: 'Pair', label: 'PAIR', color: 'green' },
-  }),
-  builtinProfile('mentor', {
-    ...workflowBaseBlocks,
-    instructions: {
-      kind: 'instructions',
-      identity: { systemOwned: 'model-family-base' },
-      workflow: { use: 'builtin:instructions/mentor' },
-    },
-    integrations: { kind: 'integrations', integrations: [{ use: BUILTIN_INTEGRATIONS[0], required: false }] },
-    presentation: { kind: 'presentation', displayName: 'Mentor', label: 'MENTOR', color: 'magenta' },
-  }),
-  builtinProfile('orchestrator', {
-    ...workflowBaseBlocks,
-    instructions: {
-      kind: 'instructions',
-      identity: { systemOwned: 'model-family-base' },
-      workflow: { use: 'builtin:instructions/orchestrator' },
-    },
-    integrations: { kind: 'integrations', integrations: [{ use: BUILTIN_INTEGRATIONS[1], required: true }] },
-    presentation: { kind: 'presentation', displayName: 'Orchestrator', label: 'ORCH', color: 'blue' },
-  }),
 ];
 
 const mapById = <T extends { id: string }>(values: readonly T[]): ReadonlyMap<string, T> =>

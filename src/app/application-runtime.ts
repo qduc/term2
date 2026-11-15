@@ -7,7 +7,6 @@ import { installationVersion } from '../model/providers/fetch/logging-middleware
 import { BARE_PROFILE_ID } from '../config/profiles/legacy-adapter.js';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
-import { planProfileTransition } from './profile-transition.js';
 import { RUNTIME_MODIFIABLE_SETTINGS } from '../config/settings/settings-schema.js';
 import { buildEnvOverrides } from '../config/settings/settings-env.js';
 import { SettingsService } from './settings-service.js';
@@ -347,11 +346,8 @@ export function createDirectRuntimes(
           memoryBinding,
           authorizeModel: (next, previous) => launchConfiguration.authorize(context.id, next, previous),
         });
-        let profileTransitionNotice: string | undefined;
         try {
           bindCheckIns(generation.surface, bound.port);
-          profileTransitionNotice =
-            planProfileTransition(installed.settings, generation.profile.id).composedNotice ?? undefined;
         } catch (error) {
           await generation.dispose();
           throw error;
@@ -375,7 +371,6 @@ export function createDirectRuntimes(
           configuration: effective,
           intent,
           profile: nextProfile,
-          ...(profileTransitionNotice ? { profileTransitionNotice } : {}),
           request,
           capabilities,
           dispose,

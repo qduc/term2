@@ -36,14 +36,6 @@
       "reason": "Internal app helper function \"isModelPickerHostSupported\" in app/model-picker-host.tsx used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "app/profile-transition.ts ProfileTransitionService",
-      "reason": "Pre-existing unused export \"ProfileTransitionService\" in app/profile-transition.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "app/profile-transition.ts classifyProfileTransition",
-      "reason": "Internal app helper function \"classifyProfileTransition\" in app/profile-transition.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "app/settings-command.ts formatSettingsSummary",
       "reason": "Pre-existing unused export \"formatSettingsSummary\" in app/settings-command.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
@@ -990,10 +982,6 @@
     {
       "export": "session/logging/provider-traffic.ts summarizeReceivedTraffic",
       "reason": "Internal session helper function \"summarizeReceivedTraffic\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/prompts/prompt-profiles.ts PROMPT_PROFILES",
-      "reason": "Internal session constant or variable \"PROMPT_PROFILES\" in session/prompts/prompt-profiles.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "session/replay-fold.ts replayProjection",
@@ -2042,14 +2030,6 @@
     {
       "file": "clients/tui/presentation/skins/zen/width.ts",
       "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
-    },
-    {
-      "file": "session/prompts/subagents/worktree-hygiene.md",
-      "reason": "Prompt instructions guiding background subagent roles on git worktree isolation."
-    },
-    {
-      "file": "session/prompts/worktree-hygiene.md",
-      "reason": "General system prompt fragment detailing worktree hygiene and baseline checks."
     }
   ],
   "engineCallbackWrites": [

@@ -21,8 +21,10 @@ points are:
   consumed here as an exact-pinned npm prerelease: change it there, publish a
   release, then update the pin in `package.json` and `pnpm-lock.yaml`. `src/engine/` contains only compatibility contracts and
   history/continuity helpers.
-- `src/session/prompts/prompt-constructor.ts` assembles prompts; `prompt-profiles.ts`
-  maps models to base profiles. Prompts and tool descriptions are product behavior.
+- `src/session/prompts/prompt-constructor.ts` assembles the main prompt from the
+  Bare profile's `bare.md`; subagent prompts come from `src/session/prompts/subagents/`
+  via `src/delegation/subagents/role-loader.ts`. Prompts and tool descriptions are
+  product behavior.
 
 ## Current constraints and trade-offs
 

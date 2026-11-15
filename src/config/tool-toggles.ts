@@ -69,30 +69,6 @@ export function resolveDisabledCapabilities(settings: SettingsReader): Set<strin
  * design doc identified are listed; anything else is considered intentional.
  */
 const PROFILE_TOGGLE_CONFLICTS: Record<string, { label: string; toggles: readonly string[] }> = {
-  'builtin:orchestrator': {
-    label: 'Orchestrator',
-    toggles: [
-      SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
-      SETTING_KEYS.TOOLS_SHELL_ENABLED,
-      SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
-    ],
-  },
-  'builtin:mentor': {
-    label: 'Mentor',
-    toggles: [
-      SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
-      SETTING_KEYS.TOOLS_SHELL_ENABLED,
-      SETTING_KEYS.TOOLS_MENTOR_ENABLED,
-    ],
-  },
-  'builtin:plan': {
-    label: 'Plan',
-    toggles: [
-      SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
-      SETTING_KEYS.TOOLS_SHELL_ENABLED,
-      SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
-    ],
-  },
   'builtin:bare': {
     label: 'Bare',
     toggles: [SETTING_KEYS.TOOLS_SHELL_ENABLED],

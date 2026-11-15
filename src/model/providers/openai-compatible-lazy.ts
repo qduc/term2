@@ -2,6 +2,7 @@ import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from '
 import type { CustomProviderConfig } from './openai-compatible.provider.js';
 import { neuralwattDefaultReasoningLevel } from './neuralwatt.provider.js';
 import { resolveProviderCredentialValue } from '../provider-credentials.js';
+import { CACHE_SAFE_EFFORT_LEVELS, endpointInScope, supportsPerMessageEffort } from '../effort-updates.js';
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
   const providerId = config.name;
@@ -12,6 +13,12 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     label,
     isRuntimeDefined: true,
     defaultReasoningLevel: neuralwattDefaultReasoningLevel(providerId),
+    effortUpdateLevels: (model, scope) =>
+      config.type === 'anthropic' &&
+      endpointInScope(config.baseUrl, 'api.anthropic.com', scope) &&
+      supportsPerMessageEffort(model)
+        ? CACHE_SAFE_EFFORT_LEVELS
+        : undefined,
     createStreamedModel: async (model, { settingsService, loggingService, sessionContextService, onDispatched }) => {
       const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
       const list = settingsService.getDynamic('providers');

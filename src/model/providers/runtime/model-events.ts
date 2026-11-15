@@ -12,6 +12,8 @@ export type ResponseIdentity = {
   readonly provider: string;
   readonly model: string;
   readonly transport: string;
+  /** Effort set by an earlier `effort_update` marker, for a chained delta that no longer holds it. */
+  readonly effort?: string;
 };
 export type ResponseContinuation = ResponseIdentity & { readonly responseId: string };
 

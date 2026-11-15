@@ -6,7 +6,7 @@ import type { Fact, FactLine } from './facts.js';
 import { isDirectTaskFact } from './facts.js';
 import { initialDirectContextState } from './context.js';
 import { createDirectQueueState } from './queue.js';
-import { recoverDirectBackground } from './background-replay.js';
+import { recoverDirectBackground, recoverDirectBackgroundNotices } from './background-replay.js';
 import { foldFact, type FoldState } from './fold-fact.js';
 import type { DirectTaskState } from './background-types.js';
 import { recoverDirectCommands } from './command-receipts.js';
@@ -42,6 +42,7 @@ export class ConversationJournal {
     },
   ) {
     this.openedAt = this.facts.length;
+    this.reopenedAt = this.openedAt;
     for (const fact of this.facts) {
       this.#folded = foldFact(this.#folded, fact);
       if (changesRootHistory(fact)) ++this.#historyRevision;
@@ -142,6 +143,8 @@ export class ConversationJournal {
   };
   /** How many facts were already accepted when this process opened the Session (zero for a new one). */
   readonly openedAt: number;
+  /** The facts an earlier process wrote plus the recovery this one appended on open; later facts are live. */
+  reopenedAt: number;
   readonly liveReplay = () => replay(this.facts, { recoverQueue: false, openedAt: this.openedAt });
   /** Use only after the sole handle reader has drained all execution cleanup. */
   readonly settledReplay = () =>
@@ -149,9 +152,18 @@ export class ConversationJournal {
   readonly recover = (): boolean => {
     if (this.#recoveryMaterialized) return !this.#failure;
     const recovered = replay(this.facts);
-    const taskRecovery = recoverDirectBackground(this.facts.filter(isDirectTaskFact), Date.now());
-    if (!this.commit([...recovered.recoveryFacts, ...taskRecovery, ...recoverDirectCommands(this.#folded.commands)]))
+    const taskFacts = this.facts.filter(isDirectTaskFact);
+    const taskRecovery = recoverDirectBackground(taskFacts, Date.now());
+    if (
+      !this.commit([
+        ...recovered.recoveryFacts,
+        ...taskRecovery,
+        ...recoverDirectBackgroundNotices(taskFacts, taskRecovery),
+        ...recoverDirectCommands(this.#folded.commands),
+      ])
+    )
       return false;
+    this.reopenedAt = this.facts.length;
     this.#recoveryMaterialized = true;
     return true;
   };

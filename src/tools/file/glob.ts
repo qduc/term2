@@ -15,6 +15,7 @@ import { isSessionReadGranted } from './read-access.js';
 import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import { resolveGlobSearchTarget } from './glob-target.js';
+import { globGlobPathHint, looksLikeGlob } from './glob-path-hint.js';
 
 const execPromise = util.promisify(exec);
 
@@ -261,7 +262,12 @@ export const createFindFilesToolDefinition = (
       });
 
       if (result.exitCode !== 0 && result.exitCode !== null) {
-        throw new Error(`File search failed: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
+        const detail = result.stderr.trim() || `exit code ${result.exitCode}`;
+        const globHint =
+          searchPath && looksLikeGlob(searchPath) && /no such file|not found|cannot find/i.test(detail)
+            ? globGlobPathHint(searchPath, cwd)
+            : '';
+        throw new Error(`File search failed: ${detail}${globHint}`);
       }
 
       const trimmed = result.stdout.trim();

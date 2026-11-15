@@ -128,6 +128,38 @@ than recoverability. Category tests now cover batch failure, later script error,
 mutation non-replay, normalized snapshots, and clipped-result storage failure.
 The call record owns recovery evidence; telemetry continues to emit counts only.
 
+**Failure result format (current).** `renderFailureSections`
+(`src/tools/system/run-code/run-code-failure-report.ts`) replaced the JSON dump
+of recovered results, which reached 30,000 characters in observed runs. A failed
+script now returns, in this order:
+
+1. `Script failed: tools.<name> failed (call N of M, args {...}): <error>`. The
+   position is the call's dispatch order in the script (`trackNestedCalls` numbers
+   calls before argument preparation, so it is not the ledger's admission id);
+   `M` is the number of calls the ledger saw. Arguments are echoed compactly:
+   strings over 60 characters are cut per value and the line is capped at 160.
+   The worker takes the `(call N, args ...)` text from an optional `where` field
+   on the capability's `{ok:false}` envelope. Regex, invalid-parameter (with the
+   compact signature) and syntax (`Line N: excerpt`) text are unchanged, and the
+   failing call's error is shown whole up to 1,500 characters.
+2. When a nested rejection ended a script that made two or more calls, one
+   sentence says the other calls are listed below and that `Promise.allSettled`
+   keeps every result while `Promise.all` drops them. `tools.*` calls still reject.
+3. `Calls the script made before it stopped`: one line per call (position, tool,
+   arguments, status, result size), at most 15 lines. If the completed results
+   total 1,200 characters or less they follow inline; otherwise they are written
+   with `saveOutputArtifact` (prefix `run-code-recovered`, one `=== call N: ...`
+   block per call) and named with the standard `Full output saved to` note and
+   line count. A failed write says so and tells the model to re-run only what it
+   needs. Nothing is shown that the script had not already received.
+
+`grep`, `glob` and `read_file` append a hint when a path that does not exist
+contains `*`, `?` or `[` (`src/tools/file/glob-path-hint.ts`); the same text
+reaches a direct call. The output clip note states the full size, the overshoot
+and that the script can return a slice or matching lines; the `read_file` result
+shape (`{content, ...}`, no line numbers) is deliberately unchanged. Scenarios:
+`scripts/provider-black-box/run-code-failures.blackbox.ts`.
+
 **Problem.** One bad nested argument rejects the whole `Promise.all`, and
 successful sibling reads are re-run in the next script
 (`~/.local/share/term2-nodejs/conversations/57c18684-1b1e-416d-8d46-73c5ce2f7d96.jsonl:250`).
@@ -219,3 +251,34 @@ and were fixed in the `run-code-dx` branch:
 
 The M4 re-measure gate still needs ~≥100 strictly post-M1 scripts across ≥5
 sessions; this scan does not satisfy it.
+
+## Model-facing text compression (2026-11-13)
+
+The `run_code` description, its parameter text, the catalogue (`renderToolsHeader`
+in `src/tools/system/run-code/tools-header.ts`) and the Agent capability section
+(`renderAgentCapabilitySection` in `src/delegation/run-code/run-code-tool.ts`) were
+reworded to cut about 1,000 characters from every root request, with the product
+owner's approval for non-lossless wording. No instruction was dropped; an independent review restored four sentences whose merged wording had shifted meaning. These
+sentences trace to failures recorded in this plan and in
+[the September log audit](../../../research/tool-real-world-log-audit-2026-09-05.md),
+so a later rewrite may shorten them but must keep each one:
+
+- patch or file text with backticks or `${...}` goes through `inputs`, not the code
+  (M5 syntax failures);
+- independent reads use `Promise.allSettled` and map rejections to
+  `{error: r.reason.message}` (M4 batch loss);
+- return only needed fields, with the 30,000-character limit, and follow
+  `Full output saved to` or a scripted `read_file` `fullOutputPath` instead of
+  repeating completed calls (audit section B);
+- the 200-call budget, partial results on exhaustion, and "Do not repeat completed
+  tool effects";
+- "Return the value you want the model to receive", stated in the description and
+  again on the `code` parameter: a script that only logs gets no result
+  (`code-mode-field-test.md`, concern 1).
+
+The catalogue no longer repeats a clipped one-line description for an essential
+tool that `isDirectlyCallable` reports as direct. When `run_code` is offered,
+`buildAgentTools` in `src/app/lib/agent-factory.ts` returns exactly the tools that
+satisfy that predicate, so the full description is already in the same request.
+If a profile ever offers `run_code` with a different direct surface, restore the
+one-liner for the tools it hides.

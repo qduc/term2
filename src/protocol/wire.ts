@@ -30,6 +30,8 @@ export type WireUsage = {
   readonly cacheWrite1hTokens?: number;
   /** An aggregator's upstream provider for this request; legacy's status bar shows it as `OpenRouter (<name>)`. */
   readonly upstreamProvider?: string;
+  /** Hidden reasoning tokens inside outputTokens, only when the provider reported them (absent is unknown, not 0). */
+  readonly reasoningTokens?: number;
 };
 export type WireGrant =
   | 'allow-remember'

@@ -15,11 +15,13 @@ import type { ExecutionContext } from '../../tools/execution-context.js';
 import { resolveActiveEnforcement } from '../../config/profiles/active-profile.js';
 import { SubagentPoolEntrySchema } from '../../config/settings/settings-schema.js';
 import { SkillsService } from '../../tools/skills/skills-service.js';
+import { withoutDeadToolReferences } from '../subagents/dead-tool-references.js';
 import { buildInstructions, loadRoleDefinition, resolveSubagentSearchViaShell } from '../subagents/role-loader.js';
 import { SubagentRolePoolSelector } from '../subagents/subagent-role-pool-selector.js';
 import { SubagentToolFactory, SubagentToolPolicy } from '../subagents/tool-policy.js';
 import type { ValidationCapture } from '../subagents/validation-evidence.js';
 import type { SubagentResult, SubagentDefinition, SubagentRunHandle } from '../subagents/types.js';
+import type { NestedSubagentResult } from '../../tools/subagents/types.js';
 import { SUBAGENT_ROLES } from '../../tools/subagents/types.js';
 import { DirectSubagentSessions } from './subagent-sessions.js';
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../tools/subagents/launch-contract.js';
@@ -259,7 +261,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
             return ask(question);
           }
         : undefined;
-    const definitions = factory
+    const offered = factory
       .buildToolDefinitions(
         definition,
         filesChanged,
@@ -280,37 +282,37 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
             (askOrchestrator && tool.name === 'ask_orchestrator') ||
             (definition.role === 'reviewer' && tool.name === 'run_explorer')) &&
           (!executionContext.isRemote() || !options.remoteUnavailable.has(tool.name)),
-      )
-      .map(
-        (tool): AnyToolDefinition => ({
-          ...tool,
-          parallelSafe:
-            typeof tool.parallelSafe === 'function'
-              ? (input, invocation) =>
-                  withInvocation(tool.name, invocation, async () =>
-                    (tool.parallelSafe as (input: unknown, invocation: unknown) => boolean | Promise<boolean>)(
-                      input,
-                      invocation,
-                    ),
-                  )
-              : tool.parallelSafe,
-          needsApproval: (input, invocation) =>
-            withInvocation(tool.name, invocation, async () => tool.needsApproval(input, invocation)),
-          execute: (input, invocation, details) =>
-            withInvocation(tool.name, invocation, async () => {
-              // Source empty-scope semantics must not turn an explicit denial into
-              // an unrestricted read/write in this native authority snapshot.
-              const write = ['apply_patch', 'search_replace', 'create_file'].includes(tool.name);
-              const read = WORKSPACE_READ_TOOLS.has(tool.name);
-              if (
-                (write && definition.filesystemScope?.write.length === 0) ||
-                (read && definition.filesystemScope?.read.length === 0)
-              )
-                throw new Error(`No filesystem ${write ? 'write' : 'read'} scope for ${tool.name}`);
-              return tool.execute(input, invocation, details);
-            }),
-        }),
       );
+    const definitions = withoutDeadToolReferences(offered).map(
+      (tool): AnyToolDefinition => ({
+        ...tool,
+        parallelSafe:
+          typeof tool.parallelSafe === 'function'
+            ? (input, invocation) =>
+                withInvocation(tool.name, invocation, async () =>
+                  (tool.parallelSafe as (input: unknown, invocation: unknown) => boolean | Promise<boolean>)(
+                    input,
+                    invocation,
+                  ),
+                )
+            : tool.parallelSafe,
+        needsApproval: (input, invocation) =>
+          withInvocation(tool.name, invocation, async () => tool.needsApproval(input, invocation)),
+        execute: (input, invocation, details) =>
+          withInvocation(tool.name, invocation, async () => {
+            // Source empty-scope semantics must not turn an explicit denial into
+            // an unrestricted read/write in this native authority snapshot.
+            const write = ['apply_patch', 'search_replace', 'create_file'].includes(tool.name);
+            const read = WORKSPACE_READ_TOOLS.has(tool.name);
+            if (
+              (write && definition.filesystemScope?.write.length === 0) ||
+              (read && definition.filesystemScope?.read.length === 0)
+            )
+              throw new Error(`No filesystem ${write ? 'write' : 'read'} scope for ${tool.name}`);
+            return tool.execute(input, invocation, details);
+          }),
+      }),
+    );
     const wrapped = factory.buildAgentTools(definitions, {
       providerId: definition.provider,
       approvalPolicyRegistry: policies,
@@ -402,14 +404,27 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     preparedSessions.set(request, { key: prior?.key, definition });
     return request;
   };
-  const run = async (params: Launch): Promise<SubagentResult> => {
+  /** A foreground run, or `running` when the user moved the same live child to the background. */
+  const runOrTransfer = async (params: Launch): Promise<NestedSubagentResult> => {
     const context = current();
     const request = await prepare(params, 'foreground');
     const result = await context.runNested(request);
     const evidence = preparedEvidence.get(request)!;
     const runId = result.runId ?? (result.outcome.kind === 'background' ? result.outcome.runId : undefined);
     if (runId) executionEvidence.set(runId, evidence);
-    return projectResult(result, request.role ?? 'agent', evidence);
+    const role = request.role ?? 'agent';
+    if (result.outcome.kind !== 'background') return projectResult(result, role, evidence);
+    return { agentId: result.outcome.runId, role, status: 'running', finalText: '', filesChanged: [], toolsUsed: [] };
+  };
+  // Explorer runner, mentor and agent.run cannot return a running handle; name where the result goes.
+  const run = async (params: Launch): Promise<SubagentResult> => {
+    const result = await runOrTransfer(params);
+    if (result.status !== 'running') return result as SubagentResult;
+    return {
+      ...result,
+      status: 'failed',
+      error: `Moved to the background by the user as run ${result.agentId}; its result arrives as a background notification.`,
+    };
   };
   const start = async (params: Launch): Promise<SubagentRunHandle> => {
     const context = current();
@@ -434,7 +449,11 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       task: request.input,
     };
   };
-  const callbacks = createDirectDelegationCallbacks(settings, { current, run, start }, executionEvidence);
+  const callbacks = createDirectDelegationCallbacks(
+    settings,
+    { current, run, runOrTransfer, start },
+    executionEvidence,
+  );
   return {
     callbacks,
     withInvocation,

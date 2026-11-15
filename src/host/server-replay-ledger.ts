@@ -1,5 +1,5 @@
 /** Assertion replay protection only. App must supply a new direct-only database path. */
-import { DatabaseSync } from 'node:sqlite';
+import Database from 'better-sqlite3';
 
 export type ReplayKey = {
   iss: string;
@@ -19,12 +19,12 @@ export interface ReplayLedger {
 
 /** Durable replay authority. The database, not the process cache, is authoritative. */
 export class SqliteReplayLedger implements ReplayLedger {
-  readonly #db: DatabaseSync;
-  readonly #insert: ReturnType<DatabaseSync['prepare']>;
-  readonly #purge: ReturnType<DatabaseSync['prepare']>;
+  readonly #db: Database.Database;
+  readonly #insert: Database.Statement;
+  readonly #purge: Database.Statement;
 
   constructor(filename: string) {
-    this.#db = new DatabaseSync(filename);
+    this.#db = new Database(filename);
     this.#db.exec(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS gateway_assertion_replay_v2 (

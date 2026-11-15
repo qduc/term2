@@ -136,7 +136,7 @@ export function createAssistedApprovalReview({
       approved:
         !signal.aborted &&
         (!unsandboxedOnly ||
-          (request.toolName === 'shell' &&
+          ((request.toolName === 'shell' || request.toolName === 'bash') &&
             !backgroundShell &&
             (unsandboxed || settings.get('sandbox.enabled') === false))) &&
         (unsandboxedOnly || advisory.riskLevel === 'low') &&

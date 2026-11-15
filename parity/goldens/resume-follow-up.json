@@ -43,11 +43,11 @@
             },
             {
               "name": "run_subagent",
-              "schema": "4cef1617d086dfa6"
+              "schema": "a2bcefd8f12b6824"
             },
             {
               "name": "run_code",
-              "schema": "f11755bd6b191368"
+              "schema": "5c2cf82775acfc86"
             }
           ],
           "other": {
@@ -119,11 +119,11 @@
             },
             {
               "name": "run_subagent",
-              "schema": "4cef1617d086dfa6"
+              "schema": "a2bcefd8f12b6824"
             },
             {
               "name": "run_code",
-              "schema": "f11755bd6b191368"
+              "schema": "5c2cf82775acfc86"
             }
           ],
           "other": {

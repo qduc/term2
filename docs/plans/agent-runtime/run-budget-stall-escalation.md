@@ -130,6 +130,11 @@ Decisions already taken, so they are not re-litigated:
 - **Turn count survives as a backstop only.** Set it high enough that it never
   fires in normal operation (100–200). It is the infinite-loop tripwire, not the
   operating limit, and it should emit the same evidence rather than throwing.
+  (2026-11-13: that backstop is `agent.runBudget.turnBackstop`, default 150.
+  `agent.maxTurns` no longer reaches the root loop: `src/app/agent.ts` passes
+  it only into the run_code AgentSpec authority, where it clamps a script
+  agent's `budget.maxTurns`. A benchmark that set `agent.maxTurns: 80` saw
+  root runs of 141 and 150 requests; the setting description now says so.)
 - **Anomaly detection does not replace a cost ceiling.** It catches an agent
   doing the *same* thing forever; it is blind to an agent doing *different*
   things forever. Those are independent failure modes and both need coverage.

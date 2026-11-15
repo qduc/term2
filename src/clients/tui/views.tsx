@@ -295,11 +295,7 @@ export function Activity({
       {state.activeTurnId && !dialogInteractionId ? (
         <StreamingStatus key={state.activeTurnId} state={state} liveTps={liveTps} />
       ) : null}
-      {(!state.activeTurnId && state.status !== 'idle') || state.cost ? (
-        <Text color={theme.textSubtle}>
-          {[!state.activeTurnId && state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}
-        </Text>
-      ) : null}
+      {!state.activeTurnId && state.status !== 'idle' ? <Text color={theme.textSubtle}>{state.status}</Text> : null}
       {/* Legacy draws no queue-state line: a paused queue shows only its held messages. */}
       {state.commands
         .filter(

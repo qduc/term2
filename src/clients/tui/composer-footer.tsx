@@ -163,6 +163,7 @@ export function directStatusView(
       separator: 'metric',
       tier: 3,
     },
+    { id: 'cost', text: state.cost ?? '', tone: 'textSubtle', separator: 'metric' },
   ];
   return {
     columns,

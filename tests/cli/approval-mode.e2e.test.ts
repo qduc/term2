@@ -308,8 +308,9 @@ it.each([
   { risk: 'low', automatic: false, delayedDenial: true, mode: 'auto', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'off', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'advisory', sandbox: true },
-  { risk: 'low', automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
+  { risk: 'low', automatic: true, delayedDenial: false, mode: 'auto', sandbox: false },
   { risk: 'high', regular: true, automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
+  { risk: 'low', regular: true, automatic: true, delayedDenial: false, mode: 'auto', sandbox: false },
 ])(
   'handles root unsandboxed review (mode=$mode sandbox=$sandbox risk=$risk denial=$delayedDenial)',
   { timeout: TIMEOUT_MS },
@@ -334,7 +335,7 @@ it.each([
     const reviewGate = new Promise<void>((resolve) => {
       releaseReview = resolve;
     });
-    const reviewExpected = (mode === 'auto' || mode === 'advisory') && (sandbox || regular);
+    const reviewExpected = mode === 'auto' || mode === 'advisory';
     const baseUrl = await startProvider(
       [
         { call: { id: 'unsandboxed-call', args: regular ? { command } : { command, sandbox: 'unsandboxed' } } },
@@ -388,7 +389,10 @@ it.each([
     await waitForHarnessComposerValue(idlePath, 'Write the approved marker outside the sandbox', { timeoutMs: 60_000 });
     session.write('\r');
     if (!automatic) {
-      await session.waitForOutput(regular ? 'Agent wants to run: shell' : 'wants to run in unsandboxed mode', 60_000);
+      await session.waitForOutput(
+        delayedDenial ? 'Reviewing shell' : regular ? 'Agent wants to run: shell' : 'wants to run in unsandboxed mode',
+        60_000,
+      );
       if (reviewExpected)
         await vi.waitFor(() => expect(providerBodies.length).toBeGreaterThanOrEqual(2), { timeout: 30_000 });
       expect(fs.existsSync(marker)).toBe(false);

@@ -45,7 +45,7 @@ const BUILTIN_TOOL_CAPABILITIES = [
 
 const BUILTIN_ENFORCEMENT_POLICIES = ['builtin:enforcement/normal', 'builtin:enforcement/plan-read-only'] as const;
 
-export const BUILTIN_INTEGRATIONS = [
+const BUILTIN_INTEGRATIONS = [
   'builtin:integration/mentor',
   'builtin:integration/async-subagents',
   'builtin:integration/background-task-control',

@@ -36,14 +36,6 @@
       "reason": "Internal app helper function \"isModelPickerHostSupported\" in app/model-picker-host.tsx used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "app/profile-transition.ts ProfileTransitionService",
-      "reason": "Pre-existing unused export \"ProfileTransitionService\" in app/profile-transition.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "app/profile-transition.ts classifyProfileTransition",
-      "reason": "Internal app helper function \"classifyProfileTransition\" in app/profile-transition.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "app/settings-command.ts formatSettingsSummary",
       "reason": "Pre-existing unused export \"formatSettingsSummary\" in app/settings-command.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },

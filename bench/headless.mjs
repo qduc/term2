@@ -27,7 +27,6 @@ const dynamic = (rel) => import(pathToFileURL(path.join(dist, rel)).href);
 const { createLog, openLog, readFacts } = await dynamic('session/log.js');
 const { replay } = await dynamic('session/replay.js');
 const { createConversation, openConversation } = await dynamic('session/conversation.js');
-const { profileEnterNotice } = await dynamic('session/mode-notices.js');
 
 const MODEL = { provider: 'mockprov', model: 'mock-alpha' };
 const SYSTEM = 'You are a test assistant.';
@@ -358,10 +357,10 @@ row('R2', 'follow-up after success: prior user is raw, notice only on the live r
     const prompt = 'say hello';
     assert.doesNotMatch(wire, /Mode is ON/, 'Bare sends no workflow notice');
     assert.equal(wire, prompt, 'Bare sends the raw user message without a notice');
-    // Historical sessions keep their notice. Use the retired Pair notice here so the follow-up
-    // still proves it is attached to the live message instead of being replayed from history.
-    const notice = profileEnterNotice('builtin:pair');
-    assert.ok(notice, 'the historical Pair notice still resolves');
+    // Historical sessions keep their notice. The retired Pair profile and its notice text were
+    // deleted, so a literal in the same shape proves the notice is attached to the live message
+    // instead of being replayed from history.
+    const notice = '<system-notice>\nPair Mode is ON. HISTORICAL_PAIR_WORKFLOW\n</system-notice>';
     const file = onlyFile(s.convDir);
     const facts = readFacts(file);
     assert.equal(textOf(facts.find((fact) => fact.type === 'turn_started').input[0]), 'say hello');

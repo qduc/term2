@@ -22,11 +22,6 @@ export type PromptSpec = {
   inlineSections: string[];
 };
 
-/** Bare owns its prompt; only concise capability guidance is added. */
-export function isBareProfile(profile: ResolvedProfile): boolean {
-  return profile.identity.id === 'builtin:bare';
-}
-
 export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   const {
     profile,

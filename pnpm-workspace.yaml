@@ -11,7 +11,7 @@ minimumReleaseAgeExclude:
   - ink-prompt
   - '@qduc/web-fetch@0.1.4'
   # Published by this project; carries the host-supplied context assumption and cache accounting.
-  - '@qduc/agent-core@0.2.0-alpha.3'
+  - '@qduc/agent-core@0.2.0-alpha.4'
 
 patchedDependencies:
   '@anthropic-ai/sandbox-runtime@0.0.56': patches/@anthropic-ai__sandbox-runtime@0.0.56.patch

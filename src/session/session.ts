@@ -200,7 +200,13 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
           event.type === 'tool_progress' ||
           event.type === 'tool_call_streaming_delta'
         ) {
-          if (event.type === 'codex_quota') state = { ...state, codexQuota: event.quota ?? undefined };
+          if (event.type === 'codex_quota') {
+            state = {
+              ...state,
+              codexQuota: event.quota ?? undefined,
+              ...(event.fiveHourQuota !== undefined ? { codexFiveHourQuota: event.fiveHourQuota ?? undefined } : {}),
+            };
+          }
           if (event.type === 'reasoning_delta') state = { ...state, reasoning: state.reasoning + event.delta };
           publish({ type: 'transient', position: ++position, event });
         }

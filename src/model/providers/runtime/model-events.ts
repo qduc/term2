@@ -1,7 +1,7 @@
 /** Provider events translated at the ModelRegistry boundary, independent of registry lifetime. */
 import type { StreamedModelTurnEvent } from '../../streamed-model-turn.js';
 import type { ModelEvent, ModelError, ToolCallId } from '../../index.js';
-import { weeklyQuota } from '../../provider-quota.js';
+import { fiveHourQuota, weeklyQuota } from '../../provider-quota.js';
 import { extractAiSdkUpstreamProvider } from '../ai-sdk-streamed-model.js';
 import { StreamingSpeedTracker } from '../../../shared/utils/streaming/streaming-speed-tracker.js';
 import { outputToItem, toUsage, stopReason } from '../../provider-items.js';
@@ -34,7 +34,13 @@ export class ModelEventProjection {
         yield { type: 'usage', usage: toUsage(event.usage) };
         break;
       case 'codex_rate_limits':
-        if (this.providerId === 'codex') yield { type: 'codex_quota', quota: weeklyQuota(event.rateLimits) };
+        if (this.providerId === 'codex') {
+          yield {
+            type: 'codex_quota',
+            quota: weeklyQuota(event.rateLimits),
+            fiveHourQuota: fiveHourQuota(event.rateLimits),
+          };
+        }
         break;
       case 'text_delta':
         this.#speed.recordDelta(event.text);

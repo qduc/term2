@@ -16,7 +16,7 @@ const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', impor
 // Seconds until the 'expiry' case's quota window resets; the footer drops it on a timer at that moment.
 const EXPIRY_S = 4;
 
-it.each(['expiry', 'configuration', 'secondary'] as const)(
+it.each(['expiry', 'five-hour-expiry', 'configuration', 'secondary', 'five-hour-only', 'invalid', 'missing'] as const)(
   'shows genuine Codex quota and clears it on %s',
   async (clearBy) => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-codex-quota-')));
@@ -45,7 +45,7 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
         const frames: unknown[] = [
           { type: 'response.created', response: { id: 'resp_' + requests, status: 'in_progress' } },
         ];
-        if (requests === 2)
+        if (requests === 2 || (requests === 3 && (clearBy === 'invalid' || clearBy === 'missing')))
           frames.push({
             type: 'codex.rate_limits',
             rate_limits: {
@@ -54,14 +54,27 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
               ...(clearBy === 'secondary'
                 ? { primary: { window_minutes: 10080, used_percent: 101, reset_at: 1 } }
                 : {}),
-              [clearBy === 'secondary' ? 'secondary' : 'primary']: {
-                window_minutes: 10080,
-                used_percent: 37,
-                // Whole seconds: the window really resets 3-4 s after this reply. That only has to
-                // outlast rendering the reply's status line, not a fixed observation period.
-                reset_at: Math.floor(Date.now() / 1000) + (clearBy === 'expiry' ? EXPIRY_S : 60),
-                reset_after_seconds: EXPIRY_S,
-              },
+              ...(clearBy !== 'secondary' && (requests === 2 || clearBy === 'invalid')
+                ? {
+                    secondary: {
+                      window_minutes: 300,
+                      used_percent: requests === 3 ? 101 : 12,
+                      reset_at: Math.floor(Date.now() / 1000) + (clearBy === 'five-hour-expiry' ? EXPIRY_S : 60),
+                      reset_after_seconds: EXPIRY_S,
+                    },
+                  }
+                : {}),
+              ...(clearBy === 'five-hour-only'
+                ? {}
+                : {
+                    [clearBy === 'secondary' ? 'secondary' : 'primary']: {
+                      window_minutes: 10080,
+                      used_percent: 37,
+                      // Whole seconds: enough time to observe the initial render before expiry.
+                      reset_at: Math.floor(Date.now() / 1000) + (clearBy === 'expiry' ? EXPIRY_S : 60),
+                      reset_after_seconds: EXPIRY_S,
+                    },
+                  }),
             },
           });
         frames.push(
@@ -121,17 +134,28 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
       generation = await waitForHarnessIdleGeneration(idle, { after: generation, timeoutMs: 60000 });
       expect(terminal.getVisibleOutput()).not.toContain('7D 37%');
       await submit('second');
-      await terminal.waitForOutput('7D 37%', 30000);
-      expect(terminal.getVisibleOutput()).toMatch(/7D 37%→\d\d\/\d\d/);
+      if (clearBy === 'five-hour-only') {
+        await terminal.waitForOutput('5H 12%', 30000);
+        expect(terminal.getVisibleOutput()).not.toContain('7D 37%');
+      } else {
+        await terminal.waitForOutput('7D 37%', 30000);
+        expect(terminal.getVisibleOutput()).toMatch(/7D 37%→\d\d\/\d\d/);
+      }
+      if (clearBy !== 'secondary') expect(terminal.getVisibleOutput()).toContain('5H 12%');
       const mark = terminal.getVisibleOutput().length;
-      if (clearBy === 'expiry') {
-        // The window resets EXPIRY_S after the reply; wait for the status line that drops it.
+      if (clearBy === 'expiry' || clearBy === 'five-hour-expiry') {
+        // When only the five-hour window resets, the weekly window must survive that redraw.
         await expect
           .poll(
             () => {
               const updates = terminal.getVisibleOutput().slice(mark);
               const at = updates.lastIndexOf('Codex/');
-              return at >= 0 && !updates.slice(at).includes('7D 37%');
+              return (
+                at >= 0 &&
+                (clearBy === 'expiry'
+                  ? !updates.slice(at).includes('7D 37%') && updates.slice(at).includes('5H 12%')
+                  : updates.slice(at).includes('7D 37%') && !updates.slice(at).includes('5H 12%'))
+              );
             },
             { timeout: 30000, interval: 100 },
           )
@@ -142,11 +166,21 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
         // The /effort menu takes the Enter and applies the level silently, as legacy does.
         await submit('/effort high');
         await terminal.waitForOutput('· high', 30000);
+      } else if (clearBy === 'invalid' || clearBy === 'missing') {
+        await terminal.waitForOutput('REPLY-2', 30000);
+        generation = await waitForHarnessIdleGeneration(idle, { after: generation, timeoutMs: 60000 });
+        await submit('third');
+        await terminal.waitForOutput('REPLY-3', 30000);
+        await waitForHarnessIdleGeneration(idle, { after: generation, timeoutMs: 60000 });
+        const updates = terminal.getVisibleOutput().slice(mark);
+        expect(updates.slice(updates.lastIndexOf('Codex/'))).toContain('7D 37%');
+        expect(updates.slice(updates.lastIndexOf('Codex/'))).not.toContain('5H 12%');
       }
-      if (clearBy !== 'secondary') {
+      if (clearBy === 'configuration') {
         const updates = terminal.getVisibleOutput().slice(mark);
         expect(updates).toContain('Codex/');
         expect(updates.slice(updates.lastIndexOf('Codex/'))).not.toContain('7D 37%');
+        expect(updates.slice(updates.lastIndexOf('Codex/'))).not.toContain('5H 12%');
       }
       const logs = fs
         .readdirSync(path.join(root, 'conversations'))

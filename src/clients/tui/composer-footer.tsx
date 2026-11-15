@@ -56,16 +56,20 @@ export function directStatusView(
   liveTps?: number | null,
   largeUncached?: LargeUncachedStatus,
 ): StatusView {
-  const quota = state.codexQuota && state.codexQuota.resetAt * 1000 > Date.now() ? state.codexQuota : undefined;
-  const reset = quota ? new Date(quota.resetAt * 1000) : undefined;
-  const resetDate = reset
-    ? `${String(reset.getMonth() + 1).padStart(2, '0')}/${String(reset.getDate()).padStart(2, '0')}`
-    : '';
-  const resetText =
-    reset && reset.getTime() - Date.now() < 86400000
-      ? `${resetDate} ${reset.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}`
-      : resetDate;
-  const quotaWindows = quota ? [{ label: '7D', percent: quota.usedPercent, resetText }] : [];
+  const now = Date.now();
+  const quotaWindows = [
+    { label: '5H', quota: state.codexFiveHourQuota },
+    { label: '7D', quota: state.codexQuota },
+  ].flatMap(({ label, quota }) => {
+    if (!quota || quota.resetAt * 1000 <= now) return [];
+    const reset = new Date(quota.resetAt * 1000);
+    const resetDate = `${String(reset.getMonth() + 1).padStart(2, '0')}/${String(reset.getDate()).padStart(2, '0')}`;
+    const resetText =
+      reset.getTime() - now < 86400000
+        ? `${resetDate} ${reset.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}`
+        : resetDate;
+    return [{ label, percent: quota.usedPercent, resetText }];
+  });
   // Legacy StatusBar: every usage figure is the last request's (lastUsage), not a session total.
   const lastUsage = state.lastUsage;
   const contextWindow = info.contextWindow;
@@ -257,12 +261,14 @@ export function ComposerFooter({
   const theme = useTheme();
   const [, setQuotaClock] = useState(0);
   useEffect(() => {
-    if (!state.codexQuota) return;
-    const delay = state.codexQuota.resetAt * 1000 - Date.now();
-    if (delay <= 0) return;
-    const timer = setTimeout(() => setQuotaClock((value) => value + 1), Math.min(delay + 1, 2147483647));
-    return () => clearTimeout(timer);
-  }, [state.codexQuota]);
+    const timers = [state.codexFiveHourQuota, state.codexQuota].flatMap((quota) => {
+      if (!quota) return [];
+      const delay = quota.resetAt * 1000 - Date.now();
+      if (delay <= 0) return [];
+      return [setTimeout(() => setQuotaClock((value) => value + 1), Math.min(delay + 1, 2147483647))];
+    });
+    return () => timers.forEach(clearTimeout);
+  }, [state.codexFiveHourQuota, state.codexQuota]);
   const info = integration.status?.(state.sessionId);
   return (
     <>

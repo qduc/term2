@@ -123,7 +123,13 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         },
       };
     case 'codex_quota':
-      return { ...state, codexQuota: event.payload.quota ?? undefined };
+      return {
+        ...state,
+        codexQuota: event.payload.quota ?? undefined,
+        ...(event.payload.fiveHourQuota !== undefined
+          ? { codexFiveHourQuota: event.payload.fiveHourQuota ?? undefined }
+          : {}),
+      };
     case 'reasoning_delta':
       return {
         ...state,
@@ -289,6 +295,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         lastUsage: undefined,
         lastSpeed: undefined,
         codexQuota: undefined,
+        codexFiveHourQuota: undefined,
         terminal: null,
         timeline: [],
         turnResults: [],
@@ -390,6 +397,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
       return {
         ...state,
         codexQuota: undefined,
+        codexFiveHourQuota: undefined,
         model: event.payload.model ?? state.model,
         lastUsage: undefined,
         lastSpeed: undefined,

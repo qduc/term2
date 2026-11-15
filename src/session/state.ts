@@ -13,6 +13,8 @@ import { isDirectNotificationFactType } from './notifications.js';
 import { withNotice } from './input-notice.js';
 import { INTERRUPTED_BEFORE_START } from './replay-active-turn.js';
 import { withdrawDisplayDraft } from './state-messages.js';
+import { directSubmittedTurn } from './queue-state.js';
+export { directSubmittedTurn } from './queue-state.js';
 
 export type DirectDisplayTool = DirectToolDisplay & {
   /** A model call is not evidence that its physical body started. */
@@ -166,6 +168,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         lastUsage: undefined,
         lastSpeed: undefined,
         codexQuota: undefined,
+        codexFiveHourQuota: undefined,
         terminal: null,
         runtimeError: null,
         timeline: [],
@@ -206,6 +209,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       return {
         ...state,
         codexQuota: undefined,
+        codexFiveHourQuota: undefined,
         configuration: structuredClone(configuration),
         model: fact.configuration.model,
         lastUsage: undefined,
@@ -475,27 +479,4 @@ function addUsage(left: Usage, right: Usage): Usage {
 function replaceTool(tools: readonly DirectDisplayTool[], tool: DirectDisplayTool): readonly DirectDisplayTool[] {
   const existing = tools.findIndex((entry) => entry.executionId === tool.executionId);
   return existing < 0 ? [...tools, tool] : tools.map((entry, index) => (index === existing ? tool : entry));
-}
-
-/** Reads exactly the durable user item named by turn_started submission correlation. */
-export function directSubmittedTurn(fact: Extract<Fact, { readonly type: 'turn_started' }>) {
-  if (!fact.submission) return null;
-  const submission = fact.submission;
-  const item = fact.input.find((entry) => entry.type === 'user_message' && entry.id === submission.messageId);
-  if (!submission.clientRequestId?.trim() || item?.type !== 'user_message') {
-    throw new Error('invalid direct turn submission correlation');
-  }
-  return {
-    request: {
-      clientRequestId: submission.clientRequestId,
-      content: item.content,
-      ...(submission.origin ? { origin: submission.origin } : {}),
-    },
-    admission: {
-      kind: 'started',
-      clientRequestId: submission.clientRequestId,
-      messageId: submission.messageId,
-      turnId: fact.turnId,
-    } as const,
-  };
 }

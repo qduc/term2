@@ -86,7 +86,17 @@ export class DirectProjection {
         const { type: _type, ...retry } = update.event;
         events = [this.#event('retrying', retry, null, this.#state.activeTurnId)];
       } else if (update.event.type === 'codex_quota') {
-        events = [this.#event('codex_quota', { quota: update.event.quota }, null, this.#state.activeTurnId)];
+        events = [
+          this.#event(
+            'codex_quota',
+            {
+              quota: update.event.quota,
+              ...(update.event.fiveHourQuota !== undefined ? { fiveHourQuota: update.event.fiveHourQuota } : {}),
+            },
+            null,
+            this.#state.activeTurnId,
+          ),
+        ];
       } else if (update.event.type === 'reasoning_delta') {
         events = [
           this.#event(
@@ -228,18 +238,7 @@ export class DirectProjection {
       case 'command_finished':
         return [commandFactEvent(fact, this.#state, seq)];
       case 'configuration_changed':
-        return [
-          this.#event(
-            'configuration',
-            {
-              model: { provider: fact.configuration.model.provider, model: fact.configuration.model.model },
-              ...(fact.configuration.reasoning !== undefined ? { reasoning: fact.configuration.reasoning } : {}),
-              ...(fact.configuration.temperature !== undefined ? { temperature: fact.configuration.temperature } : {}),
-            },
-            seq,
-            null,
-          ),
-        ];
+        return [this.#event('configuration', rotationConfiguration(fact), seq, null)];
       case 'request_cost_recorded':
         return [this.#event('request_cost_recorded', publicRequestCost(fact), seq, fact.turnId)];
       case 'compaction_started':

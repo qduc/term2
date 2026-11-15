@@ -284,6 +284,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     ],
     usage: usageText(snapshot.usage),
     codexQuota: snapshot.codexQuota,
+    codexFiveHourQuota: snapshot.codexFiveHourQuota,
     ...(snapshot.retry ? { retry: snapshot.retry } : {}),
     speed: snapshot.lastSpeed,
     lastUsage: snapshot.lastUsage,

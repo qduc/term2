@@ -6,9 +6,23 @@ type Window = { readonly window_minutes: number; readonly used_percent: number; 
 export function weeklyQuota(
   info: { readonly primary?: Window; readonly secondary?: Window } | null | undefined,
 ): CodexWeeklyQuota | null {
+  return windowQuota(info, 10080);
+}
+
+/** Only report a real, unexpired five-hour provider observation. */
+export function fiveHourQuota(
+  info: { readonly primary?: Window; readonly secondary?: Window } | null | undefined,
+): CodexWeeklyQuota | null {
+  return windowQuota(info, 300);
+}
+
+function windowQuota(
+  info: { readonly primary?: Window; readonly secondary?: Window } | null | undefined,
+  minutes: number,
+): CodexWeeklyQuota | null {
   const quota = [info?.primary, info?.secondary].find(
     (window) =>
-      window?.window_minutes === 10080 &&
+      window?.window_minutes === minutes &&
       Number.isFinite(window.used_percent) &&
       window.used_percent >= 0 &&
       window.used_percent <= 100 &&

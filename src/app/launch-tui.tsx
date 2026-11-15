@@ -61,6 +61,7 @@ function DirectTui({
   const [headerHeight, setHeaderHeight] = useState(4);
   // Holds what this client has folded, for the commands that read it.
   const latest = useRef(initial.snapshot);
+  const pendingNotices = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   // The notifier already owns terminal focus and all three preference gates.
   // Never use launch defaults: attached sessions own separate mutable settings.
   const settings = app.liveSettings(connection.sessionId);
@@ -150,8 +151,22 @@ function DirectTui({
         if (event.sessionId !== connection.sessionId) return;
         // An approval opens only once a person must decide: the session reviews first and never
         // publishes a request it approves itself (src/session/approval/approval-arbiter.ts).
-        if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
-          notifier.approvalNeeded();
+        // A person who answers during the review (`n`) opens and closes the request together; the
+        // close arrives in the same delivery burst, so wait one macrotask before notifying.
+        if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval') {
+          const id = event.payload.interaction.requestId;
+          pendingNotices.current.set(
+            id,
+            setTimeout(() => {
+              pendingNotices.current.delete(id);
+              notifier.approvalNeeded();
+            }, 0),
+          );
+        }
+        if (event.type === 'interaction_resolved') {
+          clearTimeout(pendingNotices.current.get(event.payload.requestId));
+          pendingNotices.current.delete(event.payload.requestId);
+        }
         if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
       }}
       onSnapshot={(snapshot) => {

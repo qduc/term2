@@ -131,7 +131,7 @@ type ToolApproval = {
 5. Concurrency is session-serialised: the first answer for a `requestId` wins; a user answer or `take_over` aborts the review; a result that arrives after the request settled is dropped.
 6. Reviewer error, timeout, abort or staleness → `awaiting_user` with `review: unavailable`. Never allow, never deny.
 
-Headless runs the same arbiter; at `awaiting_user` with no interactive client it applies today's non-interactive fallback (deny, or allow under `--auto-approve`), replacing the separate advisor + `NonInteractiveApprovalPolicy` double pass. ACP forwards only `awaiting_user` requests to the editor.
+Headless runs the same arbiter; at `awaiting_user` with no interactive client it applies today's non-interactive fallback (deny, or allow under `--auto-approve`; a recorded review rejection denies even a GREEN command), replacing the separate advisor + `NonInteractiveApprovalPolicy` double pass. ACP forwards only `awaiting_user` requests to the editor.
 
 A process that dies while a request is `reviewing` reopens the turn as interrupted, as for any pending interaction (`layers.md`, "The engine waits instead of calling up"). On replay, `interaction_review_started` without an outcome projects as `awaiting_user` with `review: unavailable`, for turn- and task-owned requests alike.
 

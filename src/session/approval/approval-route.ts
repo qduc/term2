@@ -111,6 +111,7 @@ export async function decideApproval(input: {
     kind: 'reviewed',
     approved,
     advisory,
+    ...(mode === 'advisory' ? { advisoryOnly: true as const } : {}),
     ...(approved && input.profile.autoGrant ? { grant: input.profile.autoGrant } : {}),
   };
 }

@@ -3,12 +3,16 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { getProviderIds } from '../../src/model/providers/index.js';
+import {
+  HARNESS_IDLE_ENV,
+  waitForHarnessComposerValue,
+  waitForHarnessIdleGeneration,
+} from '../../src/shared/lib/harness-input-idle.js';
 import { createTestChildEnv, spawnTerminal, testCliPath } from '../helpers/terminal-e2e.js';
 
 const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
@@ -134,18 +138,22 @@ it.skipIf(!enabled)(
       async function fetchFrom(cwd: string, approve: boolean): Promise<void> {
         posts = 0;
         results.length = 0;
-        const terminal = spawnTerminal('node', [cli, '-m', 'mockprov/mock-alpha'], { cwd, env, cols: 110, rows: 36 });
+        const idlePath = path.join(root, `idle-${path.basename(cwd)}`);
+        const terminal = spawnTerminal('node', [cli, '-m', 'mockprov/mock-alpha'], {
+          cwd,
+          env: { ...env, [HARNESS_IDLE_ENV]: idlePath },
+          cols: 110,
+          rows: 36,
+        });
         try {
-          await terminal.waitForOutput('/ commands │ @ paths │ ! shell');
+          await waitForHarnessIdleGeneration(idlePath);
           terminal.write('Fetch the fixture');
-          await delay(150);
+          await waitForHarnessComposerValue(idlePath, 'Fetch the fixture');
           terminal.write('\r');
           if (approve) {
-            await terminal.waitForOutput('Always allow host for this project');
-            terminal.write('\x1b[B');
-            await delay(125);
-            terminal.write('\x1b[B');
-            await delay(125);
+            await terminal.waitForOutput('❯ 1. Allow once');
+            terminal.write('\x1b[A');
+            await terminal.waitForOutput('❯ 3. Always allow host for this project');
             terminal.write('\r');
           }
           await terminal.waitForOutput('AFTER-FETCH');

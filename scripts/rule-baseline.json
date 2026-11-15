@@ -1468,30 +1468,6 @@
       "reason": "Pre-existing unused export \"resetSandboxDeniedReadStoresForTest\" in tools/shell/sandbox/denied-read-stores.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
-      "export": "tools/shell/sandbox/sandbox-network-approval.ts registerSandboxNetworkApprovalHandler",
-      "reason": "Pre-existing unused export \"registerSandboxNetworkApprovalHandler\" in tools/shell/sandbox/sandbox-network-approval.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/sandbox-network-store.ts ProjectNetworkAllowStore",
-      "reason": "Internal tools class \"ProjectNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/shell/sandbox/sandbox-network-store.ts SessionNetworkAllowStore",
-      "reason": "Internal tools class \"SessionNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/shell/sandbox/sandbox-network-store.ts getProjectNetworkAllowStore",
-      "reason": "Internal tools helper function \"getProjectNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/shell/sandbox/sandbox-network-store.ts resetSandboxNetworkStoreForTest",
-      "reason": "Pre-existing unused export \"resetSandboxNetworkStoreForTest\" in tools/shell/sandbox/sandbox-network-store.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/sandbox-network-store.ts sessionNetworkAllowStore",
-      "reason": "Internal tools constant or variable \"sessionNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "tools/shell/sandbox/sandbox-policy.ts isPathProtected",
       "reason": "Internal tools helper function \"isPathProtected\" in tools/shell/sandbox/sandbox-policy.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },

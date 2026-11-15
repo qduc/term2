@@ -376,6 +376,8 @@ export interface TuiProps {
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   /** New durable events only; snapshot/replay callbacks do not trigger side effects. */
   readonly onLiveEvent?: (event: WireEvent) => void;
+  /** Fires when an approval interaction actually requires manual user input (not while auto-reviewing). */
+  readonly onManualApprovalNeeded?: (interactionId: string) => void;
   readonly onExit: () => void;
 }
 

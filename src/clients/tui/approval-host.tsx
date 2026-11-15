@@ -154,6 +154,7 @@ type HostProps = {
   readonly replaceInput: (text: string) => void;
   /** Legacy BottomArea draws the tasks panel straight under the prompt, above its (hidden) input surface. */
   readonly panel?: React.ReactNode;
+  readonly onManualApprovalNeeded?: (interactionId: string) => void;
 };
 
 /** The request the prompt shows, if any; a new request gets fresh prompt state. */
@@ -189,6 +190,7 @@ function Host({
   changeInput,
   replaceInput,
   panel,
+  onManualApprovalNeeded,
 }: HostProps): React.ReactElement {
   const theme = useTheme();
   const { columns, rows } = useTerminalSize();
@@ -232,6 +234,13 @@ function Host({
   const reviewing = Boolean(
     reviewEligible && reviewApproval && !reviewResult && !reviewStopped && !approval.llmAdvisory,
   );
+  const onManualApprovalNeededRef = useRef(onManualApprovalNeeded);
+  onManualApprovalNeededRef.current = onManualApprovalNeeded;
+  useEffect(() => {
+    if (interaction.kind === 'approval' && !reviewing) {
+      onManualApprovalNeededRef.current?.(interaction.id);
+    }
+  }, [interaction.id, interaction.kind, reviewing]);
   useEffect(() => {
     if (!reviewApproval || !reviewEligible || reviewCancelled.current || reviewed.current.has(interaction.id)) return;
     const reviewedRequests = reviewed.current;

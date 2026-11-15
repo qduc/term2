@@ -50,6 +50,7 @@ export function TuiSession({
   retainedSnapshot,
   onSnapshot,
   onLiveEvent,
+  onManualApprovalNeeded,
   onExit,
   interrupt,
   switchSession,
@@ -445,6 +446,7 @@ export function TuiSession({
         <ApprovalHost
           request={shown}
           reviewApproval={integration.reviewApproval}
+          onManualApprovalNeeded={onManualApprovalNeeded}
           activeTurnId={state.activeTurnId}
           {...{ connection, cancelInput, setNotice, changeInput, replaceInput, editorValue: editor.value }}
           inputHandler={interactionInput}

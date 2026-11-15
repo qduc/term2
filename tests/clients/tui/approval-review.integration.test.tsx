@@ -357,3 +357,87 @@ it('defers the approval menu while review is pending, ignores focus events, and 
     screen.unmount();
   }
 });
+
+it('calls onManualApprovalNeeded only when an approval requires manual input', async () => {
+  const onManualApprovalNeeded = vi.fn();
+  const autoReview = vi.fn().mockResolvedValue({
+    kind: 'reviewed',
+    approved: true,
+    advisory: { reasoning: 'Safe', model: 'review-model', approved: true, riskLevel: 'low', confidence: 'high' },
+  });
+  const connection = {
+    sessionId: 'session',
+    send: vi.fn().mockResolvedValue({ ok: true }),
+  } as unknown as TuiConnection;
+  const props = {
+    connection,
+    inputHandler: { current: null },
+    interrupt: { current: null },
+    activeTurnId: 'turn',
+    cancelInput: async () => '',
+    setNotice: () => {},
+    onStopped: () => {},
+    hide: () => {},
+    editorValue: '',
+    changeInput: () => {},
+    replaceInput: () => {},
+    onManualApprovalNeeded,
+  };
+  const autoScreen = render(
+    <ApprovalHost
+      {...props}
+      reviewApproval={autoReview}
+      request={{
+        interaction: {
+          id: 'auto-req',
+          kind: 'approval',
+          title: 'shell',
+          turnId: 'turn',
+          choices: [],
+          toolName: 'shell',
+          input: { command: 'ls', sandbox: 'unsandboxed' },
+        },
+        owner: 'turn',
+        agentName: 'Agent',
+        backgroundCount: 0,
+      }}
+    />,
+  );
+  try {
+    await vi.waitFor(() => expect(connection.send).toHaveBeenCalledTimes(1));
+    expect(onManualApprovalNeeded).not.toHaveBeenCalled();
+  } finally {
+    autoScreen.unmount();
+  }
+
+  const manualReview = vi.fn().mockResolvedValue({
+    kind: 'reviewed',
+    approved: false,
+    advisory: { reasoning: 'Risky', model: 'review-model', approved: false, riskLevel: 'high', confidence: 'high' },
+  });
+  const manualScreen = render(
+    <ApprovalHost
+      {...props}
+      reviewApproval={manualReview}
+      request={{
+        interaction: {
+          id: 'manual-req',
+          kind: 'approval',
+          title: 'shell',
+          turnId: 'turn',
+          choices: [],
+          toolName: 'shell',
+          input: { command: 'rm -rf foo', sandbox: 'unsandboxed' },
+        },
+        owner: 'turn',
+        agentName: 'Agent',
+        backgroundCount: 0,
+      }}
+    />,
+  );
+  try {
+    await vi.waitFor(() => expect(onManualApprovalNeeded).toHaveBeenCalledWith('manual-req'));
+  } finally {
+    manualScreen.unmount();
+  }
+});

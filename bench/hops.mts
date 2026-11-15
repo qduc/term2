@@ -115,7 +115,14 @@ const exited = new Promise<number>((resolve) => {
 });
 const output: string[] = [];
 const write = process.stdout.write.bind(process.stdout);
-process.stdout.write = ((chunk: string | Uint8Array) => (output.push(String(chunk)), true)) as typeof write;
+// Complete each write like a stream would: the entry exits only after its stdout
+// write callbacks run (exitAfterDrain), so a stub that drops them hangs the bench.
+process.stdout.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
+  output.push(String(chunk));
+  const done = rest.find((arg): arg is () => void => typeof arg === 'function');
+  if (done) queueMicrotask(done);
+  return true;
+}) as typeof write;
 process.argv = [process.execPath, path.join(repo, 'src/app/cli.ts'), 'hello'];
 
 let code: number;

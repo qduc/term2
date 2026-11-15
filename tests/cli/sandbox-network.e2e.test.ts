@@ -12,7 +12,7 @@ import { getProviderIds } from '../../src/model/providers/index.js';
 import { createTestChildEnv, spawnTerminal, testCliPath } from '../helpers/terminal-e2e.js';
 
 const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
-const enabled = process.platform === 'darwin' && process.env.RUN_SHELL_SANDBOX_INTEGRATION === '1';
+const enabled = ['darwin', 'linux'].includes(process.platform) && process.env.RUN_SHELL_SANDBOX_INTEGRATION === '1';
 
 it.skipIf(!enabled)(
   'approves a linked-worktree fetch and reuses or revokes the decision across sessions',
@@ -45,12 +45,18 @@ it.skipIf(!enabled)(
     git(repo, 'clone', '-q', '--bare', repo, remote);
     git(repo, '--git-dir=' + remote, 'update-server-info');
 
+    const fixtureCredentials = 'fixture:fixture-token';
+    const authorization = 'Basic ' + Buffer.from(fixtureCredentials).toString('base64');
     let command = '';
     let posts = 0;
     const results: string[] = [];
     const server = http.createServer((req, res) => {
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
       if (/^\/remote\/(?:HEAD|info\/refs|objects\/[a-zA-Z0-9/._-]+)$/.test(pathname)) {
+        if (req.headers.authorization !== authorization) {
+          res.writeHead(401, { 'www-authenticate': 'Basic realm="fixture"' }).end();
+          return;
+        }
         const target = path.resolve(remote, pathname.slice('/remote/'.length));
         if (!target.startsWith(remote + path.sep)) {
           res.writeHead(404).end();
@@ -105,7 +111,7 @@ it.skipIf(!enabled)(
       const host = '127.0.0.1';
       const { port } = address;
       const baseUrl = `http://${host}:${port}`;
-      command = `git -c credential.helper= fetch --no-tags ${baseUrl}/remote/ HEAD`;
+      command = `git -c credential.helper= fetch --no-tags http://${fixtureCredentials}@${host}:${port}/remote/ HEAD`;
       const env = createTestChildEnv({
         HOME: home,
         TMPDIR: scratch,
@@ -154,8 +160,11 @@ it.skipIf(!enabled)(
       await fetchFrom(repo, false);
       const nested = path.join(repo, 'nested');
       fs.mkdirSync(nested);
-      const provision = (decision: 'allow' | 'revoke') => {
-        const result = spawnSync('node', [cli, 'sandbox-network', decision, host, String(port)], { cwd: nested, env });
+      const provision = (decision: 'allow' | 'revoke', destinationPort = port) => {
+        const result = spawnSync('node', [cli, 'sandbox-network', decision, host, String(destinationPort)], {
+          cwd: nested,
+          env,
+        });
         expect(result.status, result.stderr?.toString()).toBe(0);
       };
       async function fetchHeadless() {
@@ -170,6 +179,7 @@ it.skipIf(!enabled)(
       }
 
       provision('revoke');
+      provision('allow', port === 65535 ? port - 1 : port + 1);
       expect(await fetchHeadless()).toMatch(/403|requires.*approval/i);
       provision('allow');
       expect(await fetchHeadless()).toMatch(/HEAD\s+-> FETCH_HEAD/);

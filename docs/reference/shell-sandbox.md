@@ -3,7 +3,8 @@
 Term2 runs shell commands inside the sandbox by default. Commands can edit the
 checkout, use a temporary directory, and reuse a project dependency cache.
 Term2 supplies XDG cache paths and cache locations for tools such as npm and
-pip that use different defaults. Credentials inherited from the host process
+pip that use different defaults. Other tools can point their caches at
+`$XDG_CACHE_HOME` or a directory in the checkout. Credentials inherited from the host process
 are filtered and common credential files remain protected.
 
 ## Network approval
@@ -11,9 +12,12 @@ are filtered and common credential files remain protected.
 The first foreground connection to a destination through the sandbox proxy
 asks for a host and port. **Allow once** applies to the current command.
 **Always allow host for this project** also covers later sessions and sibling
-registered Git worktrees. Approval covers the host and port rather than a URL or
-individual repository. Use a separate credential with the scope your task needs
-when a service requires authentication.
+registered Git worktrees. Approval covers all URLs and repositories on the specified host and port. Use a separate credential with the scope your task needs
+when a service requires authentication. Git over SSH also uses the approval
+proxy. Use a task-specific identity and pinned host key that the sandbox can
+read. The host's SSH agent and default private keys stay protected. To add SSH
+identity or host-key options for a command, append them to the sandbox-provided
+`GIT_SSH_COMMAND` so Git retains the proxy settings.
 
 For automation, an operator can provision or revoke endpoints from a regular
 host terminal in the project directory.

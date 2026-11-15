@@ -11,7 +11,7 @@ import { hasGrokLogin } from './providers/grok-auth.js';
 
 const hasConfiguredCredential = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0;
 
-export const PROVIDER_CREDENTIAL_SETTING_KEYS = {
+const PROVIDER_CREDENTIAL_SETTING_KEYS = {
   openai: 'agent.openai.apiKey',
   openrouter: 'agent.openrouter.apiKey',
 } as const;
@@ -198,7 +198,7 @@ export const getAvailableProviderIds = (settingsService: ISettingsService, allPr
  * picker/catalog visibility choice, not a teardown: the provider stays
  * configured and can be re-enabled in provider management.
  */
-export const getDisabledProviderIds = (settingsService: ISettingsService): Set<string> => {
+const getDisabledProviderIds = (settingsService: ISettingsService): Set<string> => {
   const raw: unknown = settingsService?.get(SETTING_KEYS.AGENT_DISABLED_PROVIDERS);
   return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : []);
 };

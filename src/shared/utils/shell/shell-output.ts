@@ -30,7 +30,7 @@ export interface FormatShellExecutionOutputResult {
 }
 
 /** Load-bearing prose: the agent reads this path back with an ordinary file read. */
-export const FULL_OUTPUT_SAVED_NOTE_PREFIX = 'Full output saved to';
+const FULL_OUTPUT_SAVED_NOTE_PREFIX = 'Full output saved to';
 
 const TOOL_OUTPUT_DIR = path.join(SANDBOX_TEMP_DIR, 'tool-output');
 let toolOutputDirPromise: Promise<string> | undefined;

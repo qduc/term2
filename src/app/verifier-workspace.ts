@@ -18,7 +18,7 @@ export function assertDirectVerifierActive(signal: AbortSignal): void {
  * root above a narrower grant is not permission to inspect it. Run this before
  * snapshotWorkspace, which otherwise deliberately inspects the whole project.
  */
-export async function directVerifierRoot(workspace: Workspace, signal: AbortSignal): Promise<string> {
+async function directVerifierRoot(workspace: Workspace, signal: AbortSignal): Promise<string> {
   assertDirectVerifierActive(signal);
   if (workspace.target !== 'local')
     throw new UnsupportedWorkspaceError(

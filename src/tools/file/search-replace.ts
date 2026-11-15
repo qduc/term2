@@ -248,7 +248,7 @@ function executeReplacement(
   };
 }
 
-export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
+const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
   const args = (readSearchReplaceArguments(normalizeToolArguments(normalizedArgs) ?? {}) as Record<string, any>) ?? {};
   const replacements = Array.isArray(args?.replacements) ? args.replacements : [];

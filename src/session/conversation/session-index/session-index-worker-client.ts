@@ -54,7 +54,7 @@ import('node:module').then(({ createRequire }) => {
 
 const DEFAULT_WORKER_TIMEOUT_MS = 10_000;
 
-export function resolveWorkerTimeoutMs(optionsTimeout?: number): number {
+function resolveWorkerTimeoutMs(optionsTimeout?: number): number {
   if (typeof optionsTimeout === 'number' && Number.isFinite(optionsTimeout) && optionsTimeout > 0) {
     return optionsTimeout;
   }

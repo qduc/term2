@@ -171,11 +171,6 @@ const loadWorkspaceEntries = async (): Promise<PathEntry[]> => {
   return result.entries;
 };
 
-export const scanWorkspaceEntries = async (
-  cwd: string,
-  options: WorkspaceEntryScanOptions = {},
-): Promise<WorkspaceEntryScanResult> => loadDirectoryEntries(cwd, options);
-
 export const getWorkspaceEntries = async (): Promise<PathEntry[]> => {
   // The cache holds one root's entries, so a worktree switch has to drop it —
   // otherwise completion keeps offering paths from the checkout we just left.

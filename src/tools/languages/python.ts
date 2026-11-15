@@ -144,7 +144,7 @@ function extractPythonOutline(source: string): Outline {
   return { imports, exports, decls };
 }
 
-export async function resolvePythonImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
+async function resolvePythonImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
   const fromDir = path.dirname(path.join(root, fromPath));
   // Try the specifier directly
   const candidate = path.resolve(fromDir, specifier.endsWith('.py') ? specifier : `${specifier}.py`);
@@ -171,7 +171,7 @@ export async function resolvePythonImport(specifier: string, fromPath: string, r
   return null;
 }
 
-export function buildPythonTestPatterns(filePath: string): { forSource: string[] } {
+function buildPythonTestPatterns(filePath: string): { forSource: string[] } {
   const dir = path.dirname(filePath);
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);

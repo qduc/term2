@@ -8,7 +8,7 @@ import { getActiveGrokAccount, listGrokAccounts, removeGrokAccount, setActiveGro
  * Only providers term2 logs in to over OAuth appear here. API-key providers
  * hold one credential in settings and are managed by the existing key editor.
  */
-export const OAUTH_ACCOUNT_PROVIDERS = ['codex', 'grok'] as const;
+const OAUTH_ACCOUNT_PROVIDERS = ['codex', 'grok'] as const;
 export type OAuthAccountProviderId = (typeof OAUTH_ACCOUNT_PROVIDERS)[number];
 
 export type OAuthAccountSummary = {

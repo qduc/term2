@@ -32,7 +32,7 @@ function toolStatus(tool: DirectToolDisplay & Partial<Pick<DirectDisplayTool, 'p
   return tool.phase ?? tool.status;
 }
 /** Exact public configuration fields; no native intent/profile/runtime graph. */
-export function publicWireConfiguration(state: DirectSessionState): WireConfiguration & { readonly model: WireModel } {
+function publicWireConfiguration(state: DirectSessionState): WireConfiguration & { readonly model: WireModel } {
   const configuration = state.configuration?.configuration;
   return {
     model: configuration?.model
@@ -44,7 +44,7 @@ export function publicWireConfiguration(state: DirectSessionState): WireConfigur
 }
 
 /** First element per key, matching Array.find for unique-or-duplicate keys. */
-export function firstById<T>(items: readonly T[], key: (item: T) => string): Map<string, T> {
+function firstById<T>(items: readonly T[], key: (item: T) => string): Map<string, T> {
   const byId = new Map<string, T>();
   for (const item of items) {
     const id = key(item);

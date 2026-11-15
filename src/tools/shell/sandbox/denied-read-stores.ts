@@ -108,7 +108,7 @@ interface ProjectAllowPathsFile {
  * A separate, dedicated store (not the global settings system) so that remembered
  * paths stay scoped to the workspace where they were approved.
  */
-export class ProjectSandboxAllowReadStore {
+class ProjectSandboxAllowReadStore {
   readonly #workspaceRoot: string;
   readonly #log?: ILoggingService;
   readonly #fs: typeof fs;
@@ -168,8 +168,8 @@ export class ProjectSandboxAllowReadStore {
 }
 
 /** Module-level compatibility singletons shared by nested tools and approval flow. */
-export const deniedReadStore = new DeniedReadStore();
-export const executionOverrideStore = new ExecutionOverrideStore();
+const deniedReadStore = new DeniedReadStore();
+const executionOverrideStore = new ExecutionOverrideStore();
 
 let projectAllowReadStore: ProjectSandboxAllowReadStore | null = null;
 let projectAllowReadStoreRoot: string | null = null;

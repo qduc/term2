@@ -12,7 +12,7 @@ export interface OutputTrimConfig {
 }
 
 /** Default trim configuration */
-export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
+const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
   maxLines: 1000,
   maxCharacters: 40000,
 };

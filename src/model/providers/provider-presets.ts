@@ -34,7 +34,7 @@ const inventorySchema = z
 export type ProviderPreset = z.infer<typeof presetSchema>;
 
 /** Validate a declarative setup inventory; unknown fields and unsupported adapters fail closed. */
-export function parseProviderInventory(value: unknown): ProviderPreset[] {
+function parseProviderInventory(value: unknown): ProviderPreset[] {
   return inventorySchema.parse(value).presets.sort((a, b) => a.name.localeCompare(b.name, 'en'));
 }
 

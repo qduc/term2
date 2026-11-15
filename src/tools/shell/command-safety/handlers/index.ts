@@ -7,7 +7,7 @@ import { rmHandler } from './rm-handler.js';
 /**
  * Registry of command-specific handlers
  */
-export const commandHandlers = new Map<string, CommandHandler>([
+const commandHandlers = new Map<string, CommandHandler>([
   ['git', gitHandler],
   ['find', findHandler],
   ['sed', sedHandler],

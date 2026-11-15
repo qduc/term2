@@ -27,7 +27,7 @@ function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEf
   };
 }
 
-export function applyLlamaCppRequestTransform(body: Record<string, any>, providerType: string): boolean {
+function applyLlamaCppRequestTransform(body: Record<string, any>, providerType: string): boolean {
   const reasoningEffort = typeof body.reasoning_effort === 'string' ? body.reasoning_effort : undefined;
   if (providerType !== 'llama.cpp' || !reasoningEffort) {
     return false;

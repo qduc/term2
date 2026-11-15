@@ -57,7 +57,7 @@ export type PendingInteractionDto = {
   revision: number;
 };
 
-export class InteractionProtocolError extends Error {
+class InteractionProtocolError extends Error {
   readonly code = 'interaction_sanitization_rejected' as const;
   constructor(message = 'interaction descriptor is not safe for presentation') {
     super(message);
@@ -345,7 +345,7 @@ function exactKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>)
 }
 
 /** Validate persisted/replayed DTOs without reconstructing private approval state. */
-export function validatePendingInteractionDto(value: unknown): PendingInteractionDto {
+function validatePendingInteractionDto(value: unknown): PendingInteractionDto {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new InteractionProtocolError();
   const dto = value as Record<string, unknown>;
   if (

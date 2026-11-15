@@ -9,7 +9,7 @@ import {
   normalizeToolArguments,
 } from '../format-helpers.js';
 
-export const sessionRolloverParameters = z
+const sessionRolloverParameters = z
   .object({
     brief: z
       .string()

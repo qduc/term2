@@ -81,7 +81,7 @@ export function isPairingRegisterBody(body: unknown): body is { publicKeyPem: st
   );
 }
 
-export function isSafeSettingsValue(value: unknown): boolean {
+function isSafeSettingsValue(value: unknown): boolean {
   return (
     value === null ||
     typeof value === 'string' ||

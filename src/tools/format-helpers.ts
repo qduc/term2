@@ -209,7 +209,7 @@ export const normalizeToolArguments = (value: unknown): any => {
  * file path. Returns an empty string when none of those fields are present so
  * callers can filter it out.
  */
-export const pickPatchOutputItemText = (item: unknown): string => {
+const pickPatchOutputItemText = (item: unknown): string => {
   if (!item || typeof item !== 'object') return '';
   const record = item as Record<string, unknown>;
   if (typeof record.error === 'string' && record.error) return record.error;
@@ -236,11 +236,7 @@ export const formatPatchOutputItems = (items: unknown): string => {
 /**
  * Generates a stable ID for a command message.
  */
-export const generateMessageId = (
-  item: ToolResultItem | null | undefined,
-  index: number,
-  subIndex: number = 0,
-): string => {
+const generateMessageId = (item: ToolResultItem | null | undefined, index: number, subIndex: number = 0): string => {
   const rawItem = item?.providerItem ?? item?.rawItem ?? item;
   const providerId = rawItem?.id ?? rawItem?.callId;
   const baseId =

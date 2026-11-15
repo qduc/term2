@@ -174,7 +174,7 @@ function extractGoOutline(source: string): Outline {
   return { imports, exports, decls };
 }
 
-export async function resolveGoImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
+async function resolveGoImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
   // Standard library and external modules — can't resolve to a single file
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
     return null;
@@ -188,7 +188,7 @@ export async function resolveGoImport(specifier: string, fromPath: string, root:
   return null;
 }
 
-export function buildGoTestPatterns(filePath: string): { forSource: string[] } {
+function buildGoTestPatterns(filePath: string): { forSource: string[] } {
   const dir = path.dirname(filePath);
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);

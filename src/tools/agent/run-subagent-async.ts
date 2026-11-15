@@ -114,7 +114,7 @@ export type CancelRunAcknowledgement =
   | { ok: true; runId: string; status: 'cancelling' }
   | { ok: false; code: 'not_active'; target: string };
 
-export const formatRunSubagentAsyncCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatRunSubagentAsyncCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
@@ -144,7 +144,7 @@ export const formatRunSubagentAsyncCommandMessage: FormatCommandMessage = (item,
   ];
 };
 
-export const formatGetSubagentResultCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatGetSubagentResultCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
@@ -390,7 +390,7 @@ function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[], n
   )}\n\nThis run has finished. The completion notification inlined its full result; inside run_code, call tools.get_subagent_result(...) only to re-fetch it.`;
 }
 
-export const formatGetSubagentStatusCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatGetSubagentStatusCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
@@ -450,7 +450,7 @@ export function createGetSubagentStatusToolDefinition(
   };
 }
 
-export const formatSendMessageCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatSendMessageCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const args =
@@ -481,7 +481,7 @@ export const formatSendMessageCommandMessage: FormatCommandMessage = (item, inde
   ];
 };
 
-export const formatCancelRunCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatCancelRunCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const args =

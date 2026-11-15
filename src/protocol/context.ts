@@ -4,7 +4,7 @@ import type { DirectGoalState } from '../session/goal.js';
 import type { DirectVerificationAttempt } from '../session/goal-verification.js';
 import type { WireEvent, WireGoal, WireSnapshot, WireVerification } from './wire.js';
 
-export function publicGoal(goal: NonNullable<DirectGoalState['goal']>): WireGoal {
+function publicGoal(goal: NonNullable<DirectGoalState['goal']>): WireGoal {
   return {
     id: goal.id,
     text: goal.outcome,
@@ -12,7 +12,7 @@ export function publicGoal(goal: NonNullable<DirectGoalState['goal']>): WireGoal
     ...(goal.successCriteria !== undefined ? { successCriteria: goal.successCriteria } : {}),
   };
 }
-export function publicVerification(attempt: DirectVerificationAttempt): WireVerification {
+function publicVerification(attempt: DirectVerificationAttempt): WireVerification {
   return {
     attemptId: attempt.attemptId,
     goalGeneration: attempt.goalGeneration,

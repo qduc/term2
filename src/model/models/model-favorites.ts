@@ -46,7 +46,7 @@ export function parseFavoriteEntry(entry: string): ParsedFavorite | null {
 }
 
 /** Reads and parses `agent.favoriteModels`, silently dropping malformed entries. */
-export function getFavoriteEntries(settingsService: ISettingsService): ParsedFavorite[] {
+function getFavoriteEntries(settingsService: ISettingsService): ParsedFavorite[] {
   const raw = settingsService.get('agent.favoriteModels');
   const list = Array.isArray(raw) ? raw : [];
   const parsed: ParsedFavorite[] = [];
@@ -66,12 +66,6 @@ export function getFavoriteEntries(settingsService: ISettingsService): ParsedFav
  */
 export function getFavoriteModelInfos(settingsService: ISettingsService): ModelInfo[] {
   return getFavoriteEntries(settingsService).map(({ provider, modelId }) => ({ id: modelId, provider }));
-}
-
-export function isFavoriteModel(settingsService: ISettingsService, provider: string, modelId: string): boolean {
-  return getFavoriteEntries(settingsService).some(
-    (f) => f.provider.toLowerCase() === provider.toLowerCase() && f.modelId === modelId,
-  );
 }
 
 /**

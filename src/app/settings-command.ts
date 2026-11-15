@@ -105,7 +105,7 @@ export function parseSettingValueForKey(key: string, raw: string): any {
 const DURATION_UNIT_MS: Record<string, number> = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 };
 
 /** Parse `5m`, `1h 30m`, `1.5s`, `250ms`; returns undefined for anything else (including bare numbers). */
-export function parseDurationText(raw: string): number | undefined {
+function parseDurationText(raw: string): number | undefined {
   const text = raw.trim().toLowerCase();
   if (!/^(\d+(?:\.\d+)?\s*(?:ms|s|m|h)\s*)+$/.test(text)) return undefined;
   let total = 0;

@@ -136,7 +136,7 @@ function sanitizeOpenRouterReasoningDetails(messages: any[]): void {
   }
 }
 
-export const openRouterPreprocessingMiddleware: FetchMiddleware = async (ctx, next) => {
+const openRouterPreprocessingMiddleware: FetchMiddleware = async (ctx, next) => {
   if (typeof ctx.init?.body === 'string') {
     try {
       const body = JSON.parse(ctx.init.body);

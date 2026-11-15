@@ -49,7 +49,7 @@ export function shouldDetectBackground(setting: ThemeSetting, env: ResolveThemeC
  * 0-6 and 8 are dark; 7 and 9-15 are light. Anything else is unknown rather
  * than guessed.
  */
-export function parseColorFgBg(value: string | undefined): BackgroundMode | undefined {
+function parseColorFgBg(value: string | undefined): BackgroundMode | undefined {
   if (!value) {
     return undefined;
   }

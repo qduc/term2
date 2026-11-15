@@ -7,7 +7,7 @@ import type { WireEvent } from '../protocol/wire.js';
 import type { AgentWireV2Envelope } from './server-wire-v2.js';
 import type { ServerResult } from './server-contracts.js';
 
-export const SERVER_EVENT_HEARTBEAT_INTERVAL_MS = 15_000;
+const SERVER_EVENT_HEARTBEAT_INTERVAL_MS = 15_000;
 // Preserve the gateway's existing replay-drain and live-buffer containment policy. These limits
 // detach only the network subscriber: durable Session work and future attachments remain intact.
 const DRAIN_TIMEOUT_MS = 10_000;

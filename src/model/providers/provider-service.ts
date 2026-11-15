@@ -48,7 +48,7 @@ const getCustomProviderConfigs = (settingsService: ISettingsService): StoredCust
   return decodeStoredCustomProviderConfigs(raw);
 };
 
-export const getConfiguredProviderNames = (settingsService: ISettingsService): Set<string> => {
+const getConfiguredProviderNames = (settingsService: ISettingsService): Set<string> => {
   const names = new Set<string>();
 
   for (const provider of getAllProviders()) {
@@ -62,7 +62,7 @@ export const getConfiguredProviderNames = (settingsService: ISettingsService): S
   return names;
 };
 
-export const hasProviderNameConflict = (
+const hasProviderNameConflict = (
   settingsService: ISettingsService,
   candidate: string,
   currentName?: string,

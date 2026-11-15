@@ -2,7 +2,7 @@ import type { AgentConfig, AgentLimits, AgentSpec } from './types.js';
 import { DEFAULT_AGENT_SPEC_TOOLS } from '../../tools/agent/agent-spec-tools.js';
 
 /** Existing preset prompts use 200 as a generous max-turn tripwire. */
-export const AGENT_SPEC_DEFAULT_MAX_TURNS = 200;
+const AGENT_SPEC_DEFAULT_MAX_TURNS = 200;
 
 /**
  * Translate the task-shaped public spec into the shared AgentRuntime config.

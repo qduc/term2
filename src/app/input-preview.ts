@@ -36,7 +36,7 @@ export function createDirectInputPreview(options: DirectInputPreviewOptions): {
 }
 
 /** Existing guard policy and defaults, primed only from real lifecycle evidence. */
-export function inspectDirectInputPreview(
+function inspectDirectInputPreview(
   snapshot: DirectInputPreviewSnapshot,
   now = Date.now(),
 ): DirectInputPreviewDecisions {
@@ -76,7 +76,7 @@ export function inspectDirectInputPreview(
 }
 
 /** Surge confirmation precedes the idle-only large-input advisory, as in source. */
-export function directInputPreviewResult(decisions: DirectInputPreviewDecisions): DirectInputPreviewResult {
+function directInputPreviewResult(decisions: DirectInputPreviewDecisions): DirectInputPreviewResult {
   if (decisions.inputSurge.action === 'block') {
     return {
       requiresConfirmation: true,

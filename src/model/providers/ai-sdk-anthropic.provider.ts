@@ -19,7 +19,7 @@ function defaultAnthropicPromptCachingPredicate(modelId: string): boolean {
   return lowerModelId.includes('anthropic') || lowerModelId.includes('claude');
 }
 
-export function addAnthropicPromptCachingToMessages(
+function addAnthropicPromptCachingToMessages(
   messages: any[],
   modelId?: string,
   shouldApplyPromptCaching: AnthropicPromptCachingPredicate = defaultAnthropicPromptCachingPredicate,
@@ -152,7 +152,7 @@ const MAX_OUTPUT_TOKENS_MAP: Record<string, number> = {
   'mimo-v2.5-pro': 128000,
 };
 
-export function getMaxOutputTokens(modelId: string): number {
+function getMaxOutputTokens(modelId: string): number {
   const defaultLimit = 65536;
   if (!modelId) return defaultLimit;
   const key = modelId.split('/').pop()?.toLowerCase() ?? '';

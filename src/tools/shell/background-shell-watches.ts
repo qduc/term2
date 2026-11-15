@@ -140,7 +140,7 @@ export interface BackgroundShellWatchesOptions {
   onFiring?: (firing: ShellOutputFiring) => void;
 }
 
-export class BackgroundShellWatchesError extends Error {
+class BackgroundShellWatchesError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'BackgroundShellWatchesError';

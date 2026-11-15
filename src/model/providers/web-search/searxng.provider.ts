@@ -58,7 +58,7 @@ function isConfigured({ settingsService }: { settingsService: ISettingsService }
   return Boolean(get(settingsService, 'webSearch.searxng.baseUrl'));
 }
 
-export const searxngProvider: WebSearchProvider = {
+const searxngProvider: WebSearchProvider = {
   id: 'searxng',
   label: 'SearXNG',
   search: searchSearxng,

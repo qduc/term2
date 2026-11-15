@@ -31,7 +31,7 @@ import { ProviderReauthenticationRequiredError } from './common/provider-errors.
 const GROK_OIDC_ISSUER = 'https://auth.x.ai';
 const GROK_OIDC_CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
 const GROK_AUTHORIZE_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/authorize`;
-export const GROK_TOKEN_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/token`;
+const GROK_TOKEN_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/token`;
 /**
  * auth.x.ai stopped accepting `http://localhost:22255/callback` for this client
  * ("redirect_uri does not match any registered URI"). The grok CLI (1.0.30)
@@ -109,7 +109,7 @@ function parseExpiry(value: unknown): number | undefined {
  * and once that access token expires the user runs `term2 --grok-login` to get
  * a rotation chain of our own.
  */
-export function readGrokCliTokens(filePath: string): GrokTokens | null {
+function readGrokCliTokens(filePath: string): GrokTokens | null {
   let parsed: any;
   try {
     parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -165,7 +165,7 @@ function createGrokAccountStore(filePath = resolveGrokAuthPath()): OAuthAccountS
 }
 
 /** The credential of whichever Grok account is currently selected. */
-export function readStoredGrokTokens(filePath = resolveGrokAuthPath()): GrokTokens | null {
+function readStoredGrokTokens(filePath = resolveGrokAuthPath()): GrokTokens | null {
   return createGrokAccountStore(filePath).getActiveTokens();
 }
 

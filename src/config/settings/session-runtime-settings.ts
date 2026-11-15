@@ -20,11 +20,10 @@ export type SessionSettingsInitialized = {
 const efforts = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const exact = (v: Record<string, unknown>, keys: readonly string[]) => Object.keys(v).every((k) => keys.includes(k));
-export const isReasoningSetting = (v: unknown): v is ReasoningEffortSetting =>
-  typeof v === 'string' && efforts.includes(v);
+const isReasoningSetting = (v: unknown): v is ReasoningEffortSetting => typeof v === 'string' && efforts.includes(v);
 export const isTemperatureSetting = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 2;
-export function isNormalizedSelection(v: unknown): v is ModelSelection {
+function isNormalizedSelection(v: unknown): v is ModelSelection {
   if (!object(v) || !exact(v, ['provider', 'model'])) return false;
   const result = ModelSelectionSchema.safeParse(v);
   return result.success && result.data.provider === v['provider'] && result.data.model === v['model'];

@@ -35,7 +35,7 @@ export type McpToolDefinition = AnyToolDefinition & { readonly [MCP_TOOL_BINDING
 const noopFormatter = (() => []) as unknown as FormatCommandMessage;
 
 /** The only names MCP may contribute to the flat `tools` namespace. */
-export const mcpMemberName = (server: string, tool: string): string => {
+const mcpMemberName = (server: string, tool: string): string => {
   const raw = `${server}__${tool}`.replace(/[^A-Za-z0-9_$]/g, '_');
   return /^[0-9]/.test(raw) ? `_${raw}` : raw;
 };
@@ -154,7 +154,7 @@ export const createMcpCatalog = (source: McpToolSource, builtInNames: ReadonlySe
   return { snapshots, tools: candidates, collisions };
 };
 
-export const mcpTextResult = (content: readonly unknown[]): string =>
+const mcpTextResult = (content: readonly unknown[]): string =>
   content
     .map((block) => {
       if (block && typeof block === 'object' && (block as { type?: unknown }).type === 'text') {

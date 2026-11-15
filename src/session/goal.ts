@@ -30,9 +30,9 @@ export type DirectGoalWrite = (
 ) => boolean | Promise<boolean>;
 
 // Keep the model-facing contract (including field guidance) identical to source.
-export const directGoalCheckSchema = goalCheckParameters;
+const directGoalCheckSchema = goalCheckParameters;
 export type DirectGoalCheck = z.infer<typeof directGoalCheckSchema>;
-export const DIRECT_GOAL_CHECK_PREFIX = 'Self-check recorded:';
+const DIRECT_GOAL_CHECK_PREFIX = 'Self-check recorded:';
 
 /** Pure replay projection; invoke only after Session has accepted a goal fact. */
 export function reduceDirectGoal(state: DirectGoalState, fact: DirectGoalFact): DirectGoalState {

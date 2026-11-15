@@ -241,7 +241,7 @@ export function bindDirectCapabilities(options: {
 }
 
 /** Accepted human-window evidence is independent of compacted provider history. */
-export function directAcceptedGoalWindow(facts: readonly Fact[]): readonly DirectGoalHistoryItem[] {
+function directAcceptedGoalWindow(facts: readonly Fact[]): readonly DirectGoalHistoryItem[] {
   let window: DirectGoalHistoryItem[] = [];
   let turnId: TurnId | undefined;
   let stepOffset = 0;

@@ -112,7 +112,7 @@ export class CachedOpencodeTransportDiscovery implements OpencodeTransportDiscov
   }
 }
 
-export function parseOpencodeTransportDocumentation(documentation: string): TransportMap {
+function parseOpencodeTransportDocumentation(documentation: string): TransportMap {
   const transports: TransportMap = {};
   for (const line of documentation.split('\n')) {
     const cells = line.split('|').map((cell) => cell.trim());

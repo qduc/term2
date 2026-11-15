@@ -41,7 +41,7 @@ export interface HookRegistryOptions {
   readonly logger?: HookDiagnosticLogger;
 }
 
-export class HookRegistrationClosedError extends Error {
+class HookRegistrationClosedError extends Error {
   constructor() {
     super('Term2Hooks.on() may only be called while a hook registration function is running');
     this.name = 'HookRegistrationClosedError';

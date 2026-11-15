@@ -57,7 +57,7 @@ const serializedBytes = (input: unknown): number => {
   }
 };
 
-export const collectInputSurgeStats = (input: unknown): InputSurgeStats => {
+const collectInputSurgeStats = (input: unknown): InputSurgeStats => {
   const items = Array.isArray(input) ? input : [input];
   const toolCallCounts = new Map<string, number>();
 

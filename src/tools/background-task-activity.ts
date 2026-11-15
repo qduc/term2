@@ -33,7 +33,7 @@ export type BackgroundTaskActivity = {
 };
 
 export const BACKGROUND_SUBAGENT_QUIET_AFTER_MS = 30_000;
-export const BACKGROUND_TASK_TOOL_LABEL_LIMIT = 80;
+const BACKGROUND_TASK_TOOL_LABEL_LIMIT = 80;
 
 /** Bounds provider-derived labels before they enter retained presentation state. */
 export const sanitizeBackgroundTaskToolLabel = (value: string): string => {
@@ -46,7 +46,7 @@ export const sanitizeBackgroundTaskToolLabel = (value: string): string => {
     : normalized;
 };
 
-export const assessBackgroundTaskLiveness = ({
+const assessBackgroundTaskLiveness = ({
   lastObservedAt,
   now,
   quietAfterMs,
@@ -76,7 +76,7 @@ const formatObservationAge = (ageMs: number): string => {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 };
 
-export const isTerminalStatus = (status: string): boolean =>
+const isTerminalStatus = (status: string): boolean =>
   status === 'completed' || status === 'failed' || status === 'timed_out' || status === 'cancelled';
 
 export const normalizeBackgroundTaskActivity = ({

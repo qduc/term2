@@ -4,10 +4,6 @@ export const HOME_DIRECTORY_START_WARNING =
   'Warning: you are starting term2 in non-lite mode from your home directory.\n' +
   'This can expose a large amount of local context. Continue? [y/N] ';
 
-export function isExactDirectory(candidatePath: string, directoryPath: string): boolean {
-  return path.resolve(candidatePath) === path.resolve(directoryPath);
-}
-
 export function shouldWarnOnHomeDirectoryStart(options: {
   cwd: string;
   homeDir: string;
@@ -20,7 +16,7 @@ export function shouldWarnOnHomeDirectoryStart(options: {
   return options.isNonLiteStart && (cwd === homeDir || cwd === rootDir);
 }
 
-export function isAffirmativeAnswer(answer: string): boolean {
+function isAffirmativeAnswer(answer: string): boolean {
   const normalized = answer.trim().toLowerCase();
   return normalized === 'y' || normalized === 'yes';
 }

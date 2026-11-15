@@ -58,7 +58,7 @@ export function isReadFileSessionApproveAnswer(
 }
 
 /** Answer strings for the denied-read approval variant (see prepareContinuation). */
-export const DENIED_READ_APPROVE_ANSWERS: ReadonlySet<DeniedReadApproveAnswer> = new Set<DeniedReadApproveAnswer>([
+const DENIED_READ_APPROVE_ANSWERS: ReadonlySet<DeniedReadApproveAnswer> = new Set<DeniedReadApproveAnswer>([
   'allow-once',
   'allow-remember',
   'unsandboxed-once',

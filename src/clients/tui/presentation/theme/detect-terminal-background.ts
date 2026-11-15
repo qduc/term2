@@ -5,7 +5,7 @@ const OSC11_QUERY = '\u001B]11;?\u001B\\';
 const DA1_QUERY = '\u001B[c';
 const DA1_REPLY = /\u001B\[\?[\d;]*c/;
 
-export const DEFAULT_DETECTION_TIMEOUT_MS = 150;
+const DEFAULT_DETECTION_TIMEOUT_MS = 150;
 
 type DetectionStdin = Pick<
   NodeJS.ReadStream,

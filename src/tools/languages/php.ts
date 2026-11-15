@@ -2,7 +2,7 @@ import path from 'path';
 import { LanguageProvider, Outline, ImportEntry, ExportEntry, DeclEntry, DeclarationKind } from './types.js';
 import { escapeRegExp, normalizeRelativePath, fileExists } from './utils.js';
 
-export function extractPHPOutline(source: string): Outline {
+function extractPHPOutline(source: string): Outline {
   const imports: ImportEntry[] = [];
   const exports: ExportEntry[] = [];
   const decls: DeclEntry[] = [];
@@ -88,7 +88,7 @@ export function extractPHPOutline(source: string): Outline {
   return { imports, exports, decls };
 }
 
-export async function resolvePHPImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
+async function resolvePHPImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
   const fromDir = path.dirname(path.join(root, fromPath));
   const candidate = path.resolve(fromDir, specifier.endsWith('.php') ? specifier : `${specifier}.php`);
   if (await fileExists(candidate)) {
@@ -97,7 +97,7 @@ export async function resolvePHPImport(specifier: string, fromPath: string, root
   return null;
 }
 
-export function buildPHPTestPatterns(filePath: string): { forSource: string[] } {
+function buildPHPTestPatterns(filePath: string): { forSource: string[] } {
   const dir = path.dirname(filePath);
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);

@@ -6,7 +6,7 @@ import { createBaseMessage, getOutputText, isSuccessOutput } from '../tools/form
 import { TOOL_NAME_DISCORD_SEND } from '../tools/tool-names.js';
 
 const requestId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
-export const discordSendParameters = z.discriminatedUnion('action', [
+const discordSendParameters = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('send'),

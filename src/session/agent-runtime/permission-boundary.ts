@@ -104,36 +104,6 @@ export type AgentSpecBoundaryResult =
     };
 
 /**
- * Adapt the existing resolved runtime definition into the authority snapshot
- * consumed by the script boundary. This is deliberately an adapter: the
- * interactive root currently does not expose a public effective-permissions
- * object of its own.
- */
-export function parentAuthorityFromDefinition(
-  definition: ResolvedAgentDefinition,
-  options: {
-    worktreeScope?: ReadonlyArray<string>;
-    worktreePaths?: Readonly<Record<string, string>>;
-  } = {},
-): AgentPermissionBoundaryParent {
-  const worktreePaths =
-    options.worktreePaths ?? ((options.worktreeScope as any)?.authorizedPaths as Record<string, string> | undefined);
-  return {
-    tools: [...definition.tools],
-    permissions: { ...definition.permissions },
-    ...(definition.filesystemScope
-      ? {
-          filesystemScope: { read: [...definition.filesystemScope.read], write: [...definition.filesystemScope.write] },
-        }
-      : {}),
-    ...(definition.networkScope ? { networkScope: [...definition.networkScope] } : {}),
-    limits: { ...definition.limits },
-    ...(options.worktreeScope ? { worktreeScope: [...options.worktreeScope] } : {}),
-    ...(worktreePaths ? { worktreePaths: { ...worktreePaths } } : {}),
-  };
-}
-
-/**
  * Build the only authority object a future script-launched AgentSpec may use.
  *
  * This adapter intentionally starts from the already-effective root tool

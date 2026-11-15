@@ -19,7 +19,7 @@ const PATTERNS: RegExp[] = [
   /\b([A-Za-z0-9_]*(?:api[_-]?key|secret|token|passw(?:or)?d|credential)[A-Za-z0-9_]*)(\s*[:=]\s*)("[^"\n]{4,}"|'[^'\n]{4,}'|[^\s"',;]{8,})/gi,
 ];
 
-export function redactSecrets(text: string): string {
+function redactSecrets(text: string): string {
   let result = text;
   for (const pattern of PATTERNS) {
     result = result.replace(pattern, (match, name: string | undefined, separator: string | undefined) => {

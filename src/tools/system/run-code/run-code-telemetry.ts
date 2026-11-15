@@ -27,8 +27,8 @@ import type { RunCodeDiagnosticCode, RunCodeExecution } from './run-code-executi
  * an unknown member name is arbitrary model-authored text. The execution
  * contract supplies the closed diagnostic code before this layer is reached.
  */
-export const RUN_CODE_COMPLETION_EVENT = 'tool.run_code.completion';
-export const RUN_CODE_COMPLETION_MESSAGE = 'run_code completed';
+const RUN_CODE_COMPLETION_EVENT = 'tool.run_code.completion';
+const RUN_CODE_COMPLETION_MESSAGE = 'run_code completed';
 
 /**
  * How the invocation ended.
@@ -224,7 +224,7 @@ const classifyDiagnostic = (diagnostic: RunCodeDiagnosticCode): RunCodeCompletio
  * The event's fields. Exported for tests; the emit path below is the only
  * caller in production.
  */
-export const buildRunCodeCompletionMeta = (input: RunCodeCompletionInput): LogMetadataContract => {
+const buildRunCodeCompletionMeta = (input: RunCodeCompletionInput): LogMetadataContract => {
   const classification: RunCodeCompletionClassification & { diagnosticCode?: RunCodeDiagnosticCode } =
     input.execution.script.status === 'succeeded'
       ? { outcome: 'success' as const }

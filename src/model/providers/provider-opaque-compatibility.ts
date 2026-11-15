@@ -47,7 +47,7 @@ export const GROK_RESPONSES_OPAQUE_TAG = 'grok';
  * window still replay on any openai-compatible provider; a genuinely foreign
  * tag is still refused.
  */
-export const LEGACY_SHARED_PROVIDER_TAG = 'openai-compatible';
+const LEGACY_SHARED_PROVIDER_TAG = 'openai-compatible';
 
 /**
  * Reads the lane tag off either spelling of an opaque item: the

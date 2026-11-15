@@ -26,7 +26,7 @@ const askMentorSchema = z.object({
 
 export type AskMentorParams = z.infer<typeof askMentorSchema>;
 
-export const formatAskMentorCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatAskMentorCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

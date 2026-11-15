@@ -38,7 +38,7 @@ export function toCodexResponsesInput(input: readonly StreamedModelTurnInput[]):
     });
 }
 
-export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
+function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
   switch (item.type) {
     case 'message':
       return {
@@ -105,7 +105,7 @@ function toCodexMessagePart(role: 'system' | 'user' | 'assistant', part: Streame
   };
 }
 
-export function toCodexToolResultOutput(output: string | readonly StreamedModelToolResultPart[]): unknown {
+function toCodexToolResultOutput(output: string | readonly StreamedModelToolResultPart[]): unknown {
   if (typeof output === 'string') return output;
   return output.map((part) => {
     switch (part.type) {

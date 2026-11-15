@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
  * package version otherwise (source checkouts have no `dist/build-info.json`).
  * The loader is injectable so the fallback rule is testable without a build.
  */
-export const resolveDisplayVersion = (load: (specifier: string) => unknown = require): string => {
+const resolveDisplayVersion = (load: (specifier: string) => unknown = require): string => {
   // The build (dist/src/...) and the source tree place this module at different depths.
   for (const specifier of ['../../../../../../build-info.json', '../../../../../../dist/build-info.json']) {
     try {

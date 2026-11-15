@@ -141,7 +141,7 @@ function resolveHomePath(home: string): string {
   }
 }
 
-export function isPathProtected(target: string, home: string): boolean {
+function isPathProtected(target: string, home: string): boolean {
   const resolved = path.resolve(target);
   const resolvedHome = resolveHomePath(home);
 

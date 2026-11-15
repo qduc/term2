@@ -21,7 +21,7 @@ export function restoreAttachments(parts: readonly WireContent[]): { images: Ima
 }
 
 /** Preserve raw base64 image bytes in the direct public content shape. */
-export function wireImages(images: readonly ImageRef[], originals: readonly WireContent[] = []): WireContent[] {
+function wireImages(images: readonly ImageRef[], originals: readonly WireContent[] = []): WireContent[] {
   const remaining = [...originals];
   return images.map((image) => {
     const index = remaining.findIndex(

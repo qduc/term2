@@ -2,7 +2,7 @@ import { getTrimConfig } from './output-trim.js';
 import { countFileLines, formatFullOutputSavedNote, saveOutputArtifact } from '../shell/shell-output.js';
 
 /** Default byte cap for tool results that enter model context. */
-export const DEFAULT_TOOL_RESULT_MAX_BYTES = 40_000;
+const DEFAULT_TOOL_RESULT_MAX_BYTES = 40_000;
 
 /**
  * True when `run_code` made this call from inside a script.
@@ -34,9 +34,9 @@ export function resolveResultMaxBytesForCall(context: unknown, override?: number
  * layer out; duplicated as a literal to keep this module free of a dependency
  * on the tool layer.
  */
-export const SCRIPTED_TOOL_RESULT_MAX_BYTES = 100_000;
+const SCRIPTED_TOOL_RESULT_MAX_BYTES = 100_000;
 
-export function utf8ByteLength(text: string): number {
+function utf8ByteLength(text: string): number {
   return Buffer.byteLength(text, 'utf8');
 }
 

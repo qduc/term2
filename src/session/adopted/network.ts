@@ -29,9 +29,9 @@ const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, allowed: readonly string[]) =>
   Object.keys(value).every((key) => allowed.includes(key));
-export const isNetworkIdentity = (value: unknown): value is string =>
+const isNetworkIdentity = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x1f\x7f]/u.test(value);
-export const isNetworkAnswer = (value: unknown): value is NetworkApprovalAnswer =>
+const isNetworkAnswer = (value: unknown): value is NetworkApprovalAnswer =>
   typeof value === 'boolean' ||
   value === 'deny' ||
   value === 'allow-once' ||

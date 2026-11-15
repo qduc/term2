@@ -253,7 +253,7 @@ function backgroundShellToolTranscript(
  * every message behind it stays out of Ink's Static region for the rest of the
  * session.
  */
-export const formatBackgroundShellJobCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatBackgroundShellJobCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(
     item,
     toolCallArgumentsById,
@@ -304,11 +304,7 @@ export const formatBackgroundShellJobCommandMessage: FormatCommandMessage = (ite
  * job it is attached to; a later `background_shell_output` notification carries
  * the seq/matchedLines of each firing.
  */
-export const formatBackgroundShellMonitorCommandMessage: FormatCommandMessage = (
-  item,
-  index,
-  toolCallArgumentsById,
-) => {
+const formatBackgroundShellMonitorCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(
     item,
     toolCallArgumentsById,
@@ -350,11 +346,7 @@ export const formatBackgroundShellMonitorCommandMessage: FormatCommandMessage = 
 };
 
 /** Transcript row for `cancel_shell_monitor`. */
-export const formatBackgroundShellCancelMonitorCommandMessage: FormatCommandMessage = (
-  item,
-  index,
-  toolCallArgumentsById,
-) => {
+const formatBackgroundShellCancelMonitorCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(
     item,
     toolCallArgumentsById,
@@ -550,7 +542,7 @@ const coerceCommandText = (value: unknown): string => {
   return coerceToText(value);
 };
 
-export const formatShellCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatShellCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

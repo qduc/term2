@@ -248,7 +248,7 @@ export interface ShellExecutionResult {
 
 import { ISSHService } from '../../shared/service-interfaces.js';
 
-export class GatewayShellEnvironmentError extends Error {
+class GatewayShellEnvironmentError extends Error {
   constructor() {
     super('gateway shell execution requires an explicit sanitized environment');
     this.name = 'GatewayShellEnvironmentError';

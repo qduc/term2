@@ -61,7 +61,7 @@ import {
 } from '../../tools/system/run-code/script-surface.js';
 
 /** Static semantic adapters for action tools whose result contract is known. */
-export const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActionOutcome; reason?: string }> = {
+const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActionOutcome; reason?: string }> = {
   configure_task_check_in: (raw) => {
     const parsed = parseActionPayload(raw);
     if (!isRecord(parsed) || typeof parsed.ok !== 'boolean')
@@ -96,7 +96,7 @@ export const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCo
   },
 };
 
-export const isActionTool = (name: string): boolean => ACTION_SEMANTICS[name] !== undefined;
+const isActionTool = (name: string): boolean => ACTION_SEMANTICS[name] !== undefined;
 
 const parseActionPayload = (raw: unknown): unknown => {
   if (typeof raw !== 'string') return raw;
@@ -108,10 +108,10 @@ const parseActionPayload = (raw: unknown): unknown => {
 };
 
 const MAX_RECEIPT_REASON_CHARS = 280;
-export const clipReason = (reason: string): string =>
+const clipReason = (reason: string): string =>
   reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
 
-export function describeTool(tool: AnyToolDefinition): JsonValue {
+function describeTool(tool: AnyToolDefinition): JsonValue {
   let parameters: JsonValue;
   const targetSchema = tool.canonicalParameters ?? tool.parameters;
   if (isZodToolParameterSchema(targetSchema)) {
@@ -167,7 +167,7 @@ type MediaReference = { [MEDIA_REFERENCE_KEY]: string };
 const isMediaReference = (value: unknown): value is MediaReference =>
   isRecord(value) && typeof value[MEDIA_REFERENCE_KEY] === 'string' && Object.keys(value).length === 1;
 
-export function createMediaReferenceStore() {
+function createMediaReferenceStore() {
   const attachments = new Map<string, RunCodeContentPart>();
   const byValue = new WeakMap<object, string | null>();
   let totalBytes = 0;
@@ -223,7 +223,7 @@ const truncate = (text: string, limit: number): string => {
   return `${prefix}\n[truncated: result exceeded ${limit} characters]`;
 };
 
-export const serializeResult = async (
+const serializeResult = async (
   result: unknown,
   limit: number,
   toolName: string,
@@ -306,7 +306,7 @@ const PATH_TOOLS = new Set([
 type BoundAuthority = { kind: 'bound'; physicalRoot: string; params: unknown } | { kind: 'denied'; message: string };
 type PathSemantics = 'referent' | 'unlink-source';
 
-export async function bindPreparedAuthority(
+async function bindPreparedAuthority(
   toolName: string,
   params: unknown,
   cwd: string,
@@ -459,13 +459,13 @@ async function bindPatchPaths(
   return lines.join('\n');
 }
 
-export function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
+function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
   return context && typeof context === 'object'
     ? { ...(context as Record<string, unknown>), signal, ...extra }
     : { signal, ...extra };
 }
 
-export function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: AbortSignal): AbortSignal {
+function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: AbortSignal): AbortSignal {
   if (!callerSignal || callerSignal === hostSignal) return callerSignal ?? hostSignal;
   const controller = new AbortController();
   const abort = () => {

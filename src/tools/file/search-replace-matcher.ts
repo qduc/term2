@@ -1,7 +1,5 @@
 import path from 'path';
 
-export const GAP_MARKER = '<...>';
-
 export type IndexedMatch = { startIndex: number; endIndex: number };
 
 export type MatchInfo =
@@ -48,7 +46,7 @@ function getEditCacheKey(params: SearchReplaceOperation): string {
   return JSON.stringify(params);
 }
 
-export function detectEOL(content: string): string {
+function detectEOL(content: string): string {
   const crlfCount = (content.match(/\r\n/g) || []).length;
   const lfCount = (content.match(/(?<!\r)\n/g) || []).length;
   return crlfCount > lfCount ? '\r\n' : '\n';
@@ -169,7 +167,7 @@ function trimBlankBoundaryLines(lines: string[]): string[] {
   return lines.slice(start, end);
 }
 
-export function containsGapMarkerLine(content: string): boolean {
+function containsGapMarkerLine(content: string): boolean {
   return /^\s*<\.\.\.>\s*$/m.test(content);
 }
 

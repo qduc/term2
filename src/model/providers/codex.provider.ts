@@ -63,7 +63,7 @@ async function getNpmCodexVersion(fetchImpl: ProviderFetch = globalThis.fetch): 
   }
 }
 
-export async function resolveCodexClientVersion(options?: {
+async function resolveCodexClientVersion(options?: {
   fetchImpl?: ProviderFetch;
   cacheDir?: string;
   execImpl?: (command: string) => Promise<{ stdout: string }>;
@@ -116,7 +116,7 @@ export async function resolveCodexClientVersion(options?: {
   return version;
 }
 
-export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): RequestInit | undefined {
+function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): RequestInit | undefined {
   const target = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
   if (!target.includes('/responses') || !init?.body || typeof init.body !== 'string') {
     return init;
@@ -157,7 +157,7 @@ export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): Requ
   }
 }
 
-export function addCodexResponsesLiteHeader(url: unknown, init?: RequestInit): RequestInit | undefined {
+function addCodexResponsesLiteHeader(url: unknown, init?: RequestInit): RequestInit | undefined {
   const target = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
   if (!target.includes('/responses') || typeof init?.body !== 'string') {
     return init;
@@ -352,7 +352,7 @@ function codexAuthMiddleware(
   };
 }
 
-export function addCodexCompactHeaders(
+function addCodexCompactHeaders(
   url: unknown,
   headers: HeadersInit,
   sessionId: string | undefined,

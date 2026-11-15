@@ -32,7 +32,7 @@ import {
   takeDirectVerifierSnapshot,
 } from './verifier-workspace.js';
 
-export const DIRECT_VERIFIER_VERSION = VERIFIER_VERSION;
+const DIRECT_VERIFIER_VERSION = VERIFIER_VERSION;
 export type DirectVerifierOptions = {
   /** Resolved by app authority; no model/provider selection or paid-route fallback here. */
   readonly models: ModelRegistry;

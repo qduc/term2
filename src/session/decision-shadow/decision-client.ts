@@ -20,7 +20,7 @@ export type DecisionClientResponse = {
 
 export type DecisionEvaluationErrorCode = 'invalid_response' | 'invalid_choice';
 
-export class DecisionEvaluationError extends Error {
+class DecisionEvaluationError extends Error {
   readonly code: DecisionEvaluationErrorCode;
   readonly resolvedModel?: string;
   readonly costUsdMicros?: number;

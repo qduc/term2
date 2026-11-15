@@ -27,16 +27,6 @@ import {
 } from '../../shared/utils/output/bound-tool-result.js';
 import { parseUpstreamApplyPatch } from '../../shared/utils/upstream-apply-patch.js';
 
-/**
- * Error thrown when patch validation fails (malformed diff)
- */
-export class PatchValidationError extends Error {
-  constructor(message: string, public filePath: string) {
-    super(message);
-    this.name = 'PatchValidationError';
-  }
-}
-
 // Canonical-only schema: the patch envelope IS the argument. The legacy
 // {type,path,diff} / operations[] JSON shape is deleted, not deprecated —
 // keeping two accepted formats lets the model drift back into the shape
@@ -77,7 +67,7 @@ function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperat
   return parseUpstreamApplyPatch(params.patch).operations;
 }
 
-export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const rawItem = (item?.providerItem as ToolResultItem | undefined) ?? item?.rawItem ?? item;
   const callId =
     rawItem?.callId ??
@@ -678,7 +668,7 @@ function findClosestContextBlocks(contextLines: string[], originalLines: string[
     );
 }
 
-export function diagnoseContextMismatch(contextText: string, original: string, closestHints = false): string {
+function diagnoseContextMismatch(contextText: string, original: string, closestHints = false): string {
   const contextLines = contextText.split(/\r?\n/);
   const originalLines = original.split(/\r?\n/);
 

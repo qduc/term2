@@ -117,7 +117,7 @@ function parseJavaDeclaration(line: string, lineNumber: number): DeclEntry | nul
   return null;
 }
 
-export function extractJavaOutline(source: string): Outline {
+function extractJavaOutline(source: string): Outline {
   const imports = [...extractImportEntries(source)].sort((a, b) => a.line - b.line);
   const decls: DeclEntry[] = [];
   const lines = source.split('\n');
@@ -147,7 +147,7 @@ function buildJavaTestPatterns(filePath: string): { forSource: string[] } {
   return { forSource };
 }
 
-export async function resolveJavaImport(specifier: string, _fromPath: string, root: string): Promise<string | null> {
+async function resolveJavaImport(specifier: string, _fromPath: string, root: string): Promise<string | null> {
   // Java uses fully-qualified names, not relative paths
   if (specifier.startsWith('.') || specifier.startsWith('/')) {
     return null;

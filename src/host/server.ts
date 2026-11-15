@@ -65,7 +65,7 @@ export function createDirectServerHost(
   });
 }
 /** Embeddable authenticated RPC handler; normally called only by DirectServerTransport. */
-export function createDirectServerHandler(
+function createDirectServerHandler(
   dependencies: ServerHostDependencies,
 ): (input: ServerRequest) => Promise<ServerResult> {
   const globals = new ServerGlobalRoutes(dependencies);

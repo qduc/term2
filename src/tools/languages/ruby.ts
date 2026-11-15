@@ -2,7 +2,7 @@ import path from 'path';
 import { LanguageProvider, Outline, ImportEntry, ExportEntry, DeclEntry, DeclarationKind } from './types.js';
 import { escapeRegExp, normalizeRelativePath, fileExists } from './utils.js';
 
-export function extractRubyOutline(source: string): Outline {
+function extractRubyOutline(source: string): Outline {
   const imports: ImportEntry[] = [];
   const exports: ExportEntry[] = [];
   const decls: DeclEntry[] = [];
@@ -52,7 +52,7 @@ export function extractRubyOutline(source: string): Outline {
   return { imports, exports, decls };
 }
 
-export async function resolveRubyImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
+async function resolveRubyImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
   const fromDir = path.dirname(path.join(root, fromPath));
   const candidate = path.resolve(fromDir, specifier.endsWith('.rb') ? specifier : `${specifier}.rb`);
   if (await fileExists(candidate)) {
@@ -61,7 +61,7 @@ export async function resolveRubyImport(specifier: string, fromPath: string, roo
   return null;
 }
 
-export function buildRubyTestPatterns(filePath: string): { forSource: string[] } {
+function buildRubyTestPatterns(filePath: string): { forSource: string[] } {
   const dir = path.dirname(filePath);
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);

@@ -148,7 +148,7 @@ export function findModelMatches(catalog: ModelCatalogData, modelId: string): Ca
  * default provider). Cross-provider duplicates in the vendored catalog agree
  * on the model's shape, so any hit is authoritative.
  */
-export function lookupModelAnyProvider(catalog: ModelCatalogData, modelId: string): CatalogModelInfo | undefined {
+function lookupModelAnyProvider(catalog: ModelCatalogData, modelId: string): CatalogModelInfo | undefined {
   return findModelMatches(catalog, modelId)[0]?.info;
 }
 

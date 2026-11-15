@@ -25,7 +25,7 @@ export type UserTurn = {
 const IMAGE_SENTINEL_PATTERN = /\uE000[^\uE000\uE001]*\uE001\s*/g;
 const ORPHANED_IMAGE_SENTINEL_MARKER_PATTERN = /[\uE000\uE001]/g;
 
-export function stripImageSentinels(text: string): string {
+function stripImageSentinels(text: string): string {
   return text.replace(IMAGE_SENTINEL_PATTERN, '').replace(ORPHANED_IMAGE_SENTINEL_MARKER_PATTERN, '');
 }
 
@@ -41,30 +41,6 @@ export function normalizeUserTurn(input: string | UserTurn): UserTurn {
     ...(input.humanInputAt !== undefined ? { humanInputAt: input.humanInputAt } : {}),
     ...(input.humanInputBaseline !== undefined ? { humanInputBaseline: input.humanInputBaseline } : {}),
   };
-}
-
-export function hasUserTurnContent(turn: UserTurn): boolean {
-  return Boolean(turn.text.trim() || turn.images?.length);
-}
-
-export function formatUserTurnForDisplay(turn: UserTurn): string {
-  const text = turn.text;
-  const imageCount = turn.images?.length ?? 0;
-  const skillName = turn.skill?.name;
-
-  let result = text;
-
-  if (skillName) {
-    const skillPlaceholder = `[Skill: ${skillName}]`;
-    result = result.trim() ? `${skillPlaceholder}\n${result}` : skillPlaceholder;
-  }
-
-  if (imageCount > 0) {
-    const suffix = `[${imageCount} ${imageCount === 1 ? 'image' : 'images'} attached]`;
-    result = result.trim() ? `${result}\n${suffix}` : suffix;
-  }
-
-  return result;
 }
 
 export function injectSkillIntoTurn(turn: UserTurn): UserTurn {

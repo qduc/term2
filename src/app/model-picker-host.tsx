@@ -23,34 +23,10 @@ export type ModelPickerHostStreams = {
  * the "never mount Ink for a non-interactive run" rule lives in one tested
  * place.
  */
-export function isModelPickerHostSupported(streams: { stdin?: TtyStreamLike; stdout?: TtyStreamLike } = {}): boolean {
+function isModelPickerHostSupported(streams: { stdin?: TtyStreamLike; stdout?: TtyStreamLike } = {}): boolean {
   const stdin = streams.stdin ?? process.stdin;
   const stdout = streams.stdout ?? process.stdout;
   return Boolean(stdin.isTTY) && Boolean(stdout.isTTY);
-}
-
-/**
- * Full eligibility for offering the interactive picker anywhere in the
- * `--model` flow (ambiguous match, no match, or no value): a real TTY on
- * both ends, no positional prompt (non-interactive run), no `--json`, and no
- * isolated-harness marker. Every one of these must independently block the
- * picker; a session that fails any of them keeps today's non-interactive
- * behavior (readline disambiguation, hard errors, or silent passthrough)
- * untouched.
- */
-export function isModelPickerEligible(opts: {
-  stdin?: TtyStreamLike;
-  stdout?: TtyStreamLike;
-  hasPositionalPrompt: boolean;
-  json: boolean;
-  harnessIdle: boolean;
-}): boolean {
-  return (
-    isModelPickerHostSupported({ stdin: opts.stdin, stdout: opts.stdout }) &&
-    !opts.hasPositionalPrompt &&
-    !opts.json &&
-    !opts.harnessIdle
-  );
 }
 
 export type ModelPickerHostOptions = ModelPickerHostStreams & {

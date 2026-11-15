@@ -54,7 +54,7 @@ export type WebSearchParams = z.infer<typeof webSearchSchema>;
 /**
  * Convert web search results to a markdown-formatted string
  */
-export function formatResultsAsMarkdown(response: WebSearchResponse): string {
+function formatResultsAsMarkdown(response: WebSearchResponse): string {
   const parts: string[] = [];
 
   // Add answer box if available (Tavily's synthesized answer)
@@ -87,7 +87,7 @@ export function formatResultsAsMarkdown(response: WebSearchResponse): string {
 /**
  * Format command message for display in the terminal
  */
-export const formatWebSearchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatWebSearchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

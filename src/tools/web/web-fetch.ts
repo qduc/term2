@@ -51,7 +51,7 @@ export type WebFetchParams = z.infer<typeof webFetchSchema>;
 /**
  * Format command message for display in the terminal
  */
-export const formatWebFetchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatWebFetchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

@@ -55,7 +55,7 @@ function toolUseCounts(value: unknown): readonly WireToolUseCount[] | undefined 
   }
   return counts;
 }
-export function publicTaskResult(result: DirectTaskResult): WireTaskResult {
+function publicTaskResult(result: DirectTaskResult): WireTaskResult {
   const text = 'value' in result ? output(result.value) : undefined;
   const counts = 'value' in result ? toolUseCounts(result.value) : undefined;
   return {
@@ -97,7 +97,7 @@ export function publicTask(task: DirectTaskState): WireTask {
   };
 }
 /** Carry accepted descriptor ownership without publishing workspace or private result data. */
-export function publicTaskOwner(task: WireTask): WireTaskOwner {
+function publicTaskOwner(task: WireTask): WireTaskOwner {
   return {
     id: task.id,
     turnId: task.turnId,

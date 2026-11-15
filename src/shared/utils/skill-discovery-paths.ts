@@ -2,7 +2,7 @@ import os from 'os';
 import path from 'path';
 
 // Centralized list of skill scope directory names.
-export const SKILL_SCOPE_DIRS = ['.term2', '.agents', '.claude'] as const;
+const SKILL_SCOPE_DIRS = ['.term2', '.agents', '.claude'] as const;
 
 export function getProjectSkillScopes(baseDir: string): string[] {
   return SKILL_SCOPE_DIRS.map((scopeDir) => path.join(baseDir, scopeDir, 'skills'));

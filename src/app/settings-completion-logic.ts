@@ -23,7 +23,7 @@ export function getSettingCategory(key: string): SettingsCategory | undefined {
   return CATEGORY_POSITION.get(key)?.category;
 }
 
-export function isAdvancedSetting(key: string): boolean {
+function isAdvancedSetting(key: string): boolean {
   return !CATEGORY_POSITION.has(key);
 }
 

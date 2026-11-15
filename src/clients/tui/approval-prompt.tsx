@@ -23,6 +23,8 @@ import DiffView from './presentation/components/layout/DiffView.js';
 import { type ColorRole, useTheme } from './presentation/components/theme.js';
 import { SelectionMarker } from './presentation/components/common/SelectionMarker.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
+import { useTerminalSize } from './terminal.js';
+import { parseUpstreamApplyPatch } from '../../shared/utils/upstream-apply-patch.js';
 
 const ASK_USER_CUSTOM_ANSWER_LABEL = 'Something else… (type your answer)';
 const ASK_USER_SUBMIT_LABEL = 'Submit answer';
@@ -116,6 +118,7 @@ type ApplyPatchArgs = {
   type: 'create_file' | 'update_file' | 'delete_file';
   path: string;
   diff?: string;
+  moveTo?: string;
 };
 
 type ShellArgs = {
@@ -207,22 +210,62 @@ const operationLabels: Record<string, { label: string; tone: ColorRole }> = {
   delete_file: { label: 'DELETE', tone: 'danger' },
 };
 
-const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {
+const ApplyPatchPrompt: FC<{ lines: string[]; page: number; pages: number }> = ({ lines, page, pages }) => {
   const theme = useTheme();
-  const op = operationLabels[args.type] || { label: args.type, tone: 'text' as const };
-
   return (
     <Box flexDirection="column">
-      <Box>
-        <Text color={theme[op.tone]} bold>
-          [{op.label}]
+      {lines.map((line, index) => (
+        <Text
+          key={index}
+          color={line.startsWith('+') ? theme.success : line.startsWith('-') ? theme.danger : undefined}
+        >
+          {line || ' '}
         </Text>
-        <Text> {args.path}</Text>
-      </Box>
-      {args.diff && <DiffView diff={args.diff} />}
+      ))}
+      <Text color={theme.textSubtle}>
+        Patch preview {page + 1}/{pages} — [ / ] previous / next page
+      </Text>
     </Box>
   );
 };
+
+function patchPreviewLines(argumentsText: string): string[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(argumentsText);
+    const record = value as Record<string, unknown> | null;
+    let operations: ApplyPatchArgs[];
+    if (record && typeof record.patch === 'string') {
+      operations = parseUpstreamApplyPatch(record.patch).operations;
+    } else {
+      const candidates = record && Array.isArray(record.operations) ? record.operations : [record];
+      if (
+        !candidates.length ||
+        !candidates.every(
+          (op) =>
+            op &&
+            typeof op === 'object' &&
+            (op.type === 'create_file' || op.type === 'update_file' || op.type === 'delete_file') &&
+            typeof op.path === 'string' &&
+            (op.diff === undefined || typeof op.diff === 'string') &&
+            (op.moveTo === undefined || typeof op.moveTo === 'string'),
+        )
+      )
+        throw new Error('Unknown patch input');
+      operations = candidates as ApplyPatchArgs[];
+    }
+    return operations.flatMap((op) => [
+      `[${operationLabels[op.type].label}] ${op.path}${op.moveTo ? ` → ${op.moveTo}` : ''}`,
+      ...(op.diff ? op.diff.split('\n') : []),
+    ]);
+  } catch {
+    // Show the complete input, not a misleading partial parse.
+    return [
+      '[Raw patch input]',
+      ...(typeof value === 'object' && value !== null ? JSON.stringify(value, null, 2) : argumentsText).split('\n'),
+    ];
+  }
+}
 
 const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
   const theme = useTheme();
@@ -439,6 +482,24 @@ const ApprovalPrompt: FC<Props> = ({
   const { ApprovalFrame, ApprovalChoices, QuestionPrompt } = useSkin();
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(new Set());
+  const [patchPage, setPatchPage] = React.useState(0);
+  const { columns } = useTerminalSize();
+  const patchLines = React.useMemo(() => {
+    if (approval.toolName !== TOOL_NAME_APPLY_PATCH) return [];
+    const width = Math.max(1, Math.floor((columns - 12) / 2));
+    return patchPreviewLines(approval.argumentsText).flatMap((line) => {
+      const safe = line.replace(
+        /[\x00-\x1f\x7f-\x9f]/g,
+        (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+      );
+      const chars = Array.from(safe);
+      const chunks: string[] = [];
+      for (let i = 0; i < chars.length; i += width) chunks.push(chars.slice(i, i + width).join(''));
+      return chunks.length ? chunks : [''];
+    });
+  }, [approval.argumentsText, approval.toolName, columns]);
+  const patchPages = Math.max(1, Math.ceil(patchLines.length / 4));
+  const currentPatchPage = Math.min(patchPage, patchPages - 1);
 
   const isAskUser = approval.toolName === TOOL_NAME_ASK_USER;
   const askUserArgs = React.useMemo<AskUserArgs | null>(() => {
@@ -582,9 +643,14 @@ const ApprovalPrompt: FC<Props> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection on question/approval change
     setSelectedIndex(0);
     setSelectedIndices(new Set());
+    setPatchPage(0);
   }, [currentQuestionIndex, approval.argumentsText, approval.toolName]);
 
   useInteractionInput(inputHandler, (input, key) => {
+    if (approval.toolName === TOOL_NAME_APPLY_PATCH && (input === '[' || input === ']')) {
+      setPatchPage((page) => Math.max(0, Math.min(patchPages - 1, page + (input === ']' ? 1 : -1))));
+      return;
+    }
     if (key.escape) {
       // Escape cancels/interrupts the pending action for every approval type.
       // The parent routes it (ask_user → graceful cancel; anything else →
@@ -795,15 +861,13 @@ const ApprovalPrompt: FC<Props> = ({
   );
 
   if (approval.toolName === TOOL_NAME_APPLY_PATCH) {
-    let parsedApplyPatch: ApplyPatchArgs | null = null;
-    try {
-      parsedApplyPatch = JSON.parse(approval.argumentsText);
-    } catch {
-      // Fall back to styled raw text if parsing fails
-    }
-    if (parsedApplyPatch) {
-      content = <ApplyPatchPrompt args={parsedApplyPatch} />;
-    }
+    content = (
+      <ApplyPatchPrompt
+        lines={patchLines.slice(currentPatchPage * 4, currentPatchPage * 4 + 4)}
+        page={currentPatchPage}
+        pages={patchPages}
+      />
+    );
   } else if (approval.toolName === 'shell') {
     const parsedShell = parseShellApprovalArgs(approval.argumentsText);
     content = parsedShell ? (

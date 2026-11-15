@@ -1,4 +1,5 @@
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import { parseUpstreamApplyPatch } from '../../../../../shared/utils/upstream-apply-patch.js';
 
 const TOOL_NAME_GREP = 'grep' as const;
 const TOOL_NAME_GLOB = 'glob' as const;
@@ -767,9 +768,22 @@ export const formatToolArgs = (
       }
 
       case TOOL_NAME_APPLY_PATCH: {
-        const type = normalizedArgs.type || 'unknown';
-        const path = normalizedArgs.path || 'unknown';
-        return `${type} ${path}`;
+        if (typeof normalizedArgs.patch === 'string') {
+          try {
+            const operations = parseUpstreamApplyPatch(normalizedArgs.patch).operations;
+            const first = operations[0];
+            return `${first.type} ${first.path}${
+              first.type === 'update_file' && first.moveTo ? ` → ${first.moveTo}` : ''
+            }${operations.length > 1 ? ` (+ ${operations.length - 1} more)` : ''}`;
+          } catch {
+            return 'invalid patch';
+          }
+        }
+        const operations = Array.isArray(normalizedArgs.operations) ? normalizedArgs.operations : [normalizedArgs];
+        const first = operations[0] ?? {};
+        return `${first.type || 'unknown'} ${first.path || 'unknown'}${first.moveTo ? ` → ${first.moveTo}` : ''}${
+          operations.length > 1 ? ` (+ ${operations.length - 1} more)` : ''
+        }`;
       }
 
       case TOOL_NAME_SEARCH_REPLACE: {

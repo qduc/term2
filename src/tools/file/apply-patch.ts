@@ -97,9 +97,15 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
   // Canonical-only arguments: a raw envelope string parses to parsed
   // operations; the legacy {type,path,diff} / operations[] object shape is
   // no longer accepted, only displayed from inert history records.
-  if (typeof rawArguments === 'string' && rawArguments.trimStart().startsWith('*** Begin Patch')) {
+  const patch =
+    typeof normalizedArgs.patch === 'string'
+      ? normalizedArgs.patch
+      : typeof rawArguments === 'string' && rawArguments.trimStart().startsWith('*** Begin Patch')
+      ? rawArguments
+      : undefined;
+  if (patch !== undefined) {
     try {
-      normalizedArgs = parseUpstreamApplyPatch(rawArguments);
+      normalizedArgs = parseUpstreamApplyPatch(patch);
     } catch {
       normalizedArgs = {};
     }

@@ -23,7 +23,7 @@ export type PreparedConversationGeneration = {
 };
 
 /** Reject attempts to replace Session-owned hooks, memory lifetime, or workspace authority. */
-export function prepareConversationGeneration(
+function prepareConversationGeneration(
   deps: ConversationDeps,
   runtimeDeps: ConversationDeps,
   supplied: DirectPreparedConfiguration['capabilities'] | undefined,
@@ -82,7 +82,7 @@ export function prepareConversationGeneration(
 }
 
 /** Installation follows durable acceptance; a throwing app install poisons its Session. */
-export function installConversationGeneration(
+function installConversationGeneration(
   candidate: DirectPreparedConfiguration,
   prepared: PreparedConversationGeneration,
   previousContinuity: ConversationDeps['continuity'],

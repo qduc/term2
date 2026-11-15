@@ -18,7 +18,7 @@ export function useTerminalSize(): { columns: number; rows: number } {
 }
 
 /** Match the legacy CLI's clear-and-redraw policy without importing its app layer. */
-export const TERMINAL_REDRAW_CLEAR = '\u001B[2J\u001B[3J\u001B[H';
+const TERMINAL_REDRAW_CLEAR = '\u001B[2J\u001B[3J\u001B[H';
 export function clearTerminalForRedraw(stdout: { write: (text: string) => unknown }): void {
   stdout.write(TERMINAL_REDRAW_CLEAR);
 }

@@ -24,8 +24,8 @@ export type DiskModelCacheEntry = {
   models: ModelInfo[];
 };
 
-export const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-export const MODEL_CACHE_STALE_GRACE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days fallback ceiling for last-known-good
+const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MODEL_CACHE_STALE_GRACE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days fallback ceiling for last-known-good
 
 export type FetchModelsDeps = {
   settingsService: ISettingsService;
@@ -69,7 +69,7 @@ export function clearModelMemoryCacheForTest(): void {
   cache.clear();
 }
 
-export function getModelCacheDir(customDir?: string): string {
+function getModelCacheDir(customDir?: string): string {
   const baseDir = customDir || testCacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache;
   return path.join(baseDir, 'models');
 }
@@ -83,7 +83,7 @@ export function getModelCacheFilePath(provider: string, customDir?: string): str
  * Determines whether candidate models list represents a strict subset of previous models.
  * An empty list or a list with strictly fewer models containing only IDs from previous is degraded.
  */
-export function isStrictSubsetModels(candidates: ModelInfo[], previous: ModelInfo[]): boolean {
+function isStrictSubsetModels(candidates: ModelInfo[], previous: ModelInfo[]): boolean {
   if (previous.length === 0) return false;
   if (candidates.length === 0) return true;
   if (candidates.length >= previous.length) return false;

@@ -65,7 +65,7 @@ export function isClassifiedCancellation(error: unknown): boolean {
  * for boundaries where hiding a real failure would be worse than showing an
  * abort from the same race.
  */
-export function hasExplicitCancellationMarker(error: unknown): boolean {
+function hasExplicitCancellationMarker(error: unknown): boolean {
   const result = inspectCancellationTree(error, new Set<unknown>());
   return result.hasCancellation && !result.hasFailure;
 }

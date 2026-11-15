@@ -13,7 +13,7 @@ const OPEN_FENCE_PATTERN = /^\s*(`{3,}|~{3,})([^\n]*)$/;
 const CLOSE_FENCE_PATTERN = /^\s*([`~]{3,})\s*$/;
 
 /** Extract fenced Markdown code blocks, excluding the fence and language hint. */
-export function extractFencedCodeBlocks(text: string): string[] {
+function extractFencedCodeBlocks(text: string): string[] {
   const lines = text.split(/\r?\n/);
   const blocks: string[] = [];
   let openFence: OpenFence | null = null;

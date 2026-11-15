@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-export const HOOK_DECLARATION_SHIM_FILENAME = 'term2-hooks.d.ts';
-export const HOOK_TSCONFIG_FILENAME = 'tsconfig.json';
+const HOOK_DECLARATION_SHIM_FILENAME = 'term2-hooks.d.ts';
+const HOOK_TSCONFIG_FILENAME = 'tsconfig.json';
 
 const HOOK_DECLARATION_SHIM_CONTENT = `/**
  * Type declarations for Term2 hooks.

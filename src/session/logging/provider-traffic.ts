@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const TRAFFIC_TEXT_LIMIT = 100;
+const TRAFFIC_TEXT_LIMIT = 100;
 const PREVIEW_LIMIT = 160;
 
 export type { SessionTrafficContext } from '../../shared/service-interfaces.js';
@@ -42,7 +42,7 @@ export type SentTrafficRecord = {
   sentBody: Record<string, unknown>;
 };
 
-export const PROVIDER_REQUEST_FINGERPRINT_VERSION = 'provider-request-fingerprint-v1';
+const PROVIDER_REQUEST_FINGERPRINT_VERSION = 'provider-request-fingerprint-v1';
 
 type FingerprintPart = ProviderRequestFingerprint['prefix']['parts'][number];
 
@@ -71,7 +71,7 @@ function fingerprintValue(value: unknown): { sha256: string; bytes: number; enco
  * prompt text or tool schemas in logs. This proves serialized-component
  * equality, not provider tokenization or cache acceptance.
  */
-export function buildProviderRequestFingerprint(body: Record<string, unknown>): ProviderRequestFingerprint {
+function buildProviderRequestFingerprint(body: Record<string, unknown>): ProviderRequestFingerprint {
   const parts: FingerprintPart[] = [];
   const rawParts: string[] = [];
   const addPart = (source: string, value: unknown): ProviderRequestFingerprintMeasurement => {
@@ -254,7 +254,7 @@ const sanitizeToolDefinitions = (tools: unknown): unknown => {
  * all, which makes the log useless for confirming that encrypted reasoning is
  * actually round-tripping on the Responses lane.
  */
-export const ENCRYPTED_CONTENT_REDACTION = '<redacted>';
+const ENCRYPTED_CONTENT_REDACTION = '<redacted>';
 
 /**
  * Field-name pattern for values that may carry bearer credentials in a
@@ -266,7 +266,7 @@ export const ENCRYPTED_CONTENT_REDACTION = '<redacted>';
  */
 const RAW_CREDENTIAL_KEY_PATTERN = /authorization|api[_-]?key|key|cookie|token|secret|signature/i;
 
-export const isRawTrafficCaptureEnabled = (env: NodeJS.ProcessEnv = process.env): boolean =>
+const isRawTrafficCaptureEnabled = (env: NodeJS.ProcessEnv = process.env): boolean =>
   parseBooleanEnvValue(env.TERM2_RAW_TRAFFIC);
 
 const redactRawCredentialFields = (value: unknown): unknown => {
@@ -286,8 +286,7 @@ const redactRawCredentialFields = (value: unknown): unknown => {
  * Derives the sidecar path for an opt-in raw (unsanitized) request-body
  * capture from the sanitized artifact path: `<request>_raw.json` next to it.
  */
-export const rawCapturePathForRequestPath = (requestPath: string): string =>
-  requestPath.replace(/\.json$/, '_raw.json');
+const rawCapturePathForRequestPath = (requestPath: string): string => requestPath.replace(/\.json$/, '_raw.json');
 
 const sanitizeReasoningDetails = (reasoningDetails: unknown): unknown => {
   if (!Array.isArray(reasoningDetails)) return reasoningDetails;
@@ -379,7 +378,7 @@ const redactEncryptedContent = (value: unknown): unknown => {
   return value;
 };
 
-export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<string, unknown> => {
+const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<string, unknown> => {
   const sanitized: Record<string, unknown> = { ...body };
 
   if (Object.prototype.hasOwnProperty.call(sanitized, 'instructions')) {
@@ -525,7 +524,7 @@ const extractJsonToolCalls = (body: Record<string, unknown>): unknown[] => {
   });
 };
 
-export async function summarizeReceivedTraffic(response: Response): Promise<ReceivedTrafficSummary> {
+async function summarizeReceivedTraffic(response: Response): Promise<ReceivedTrafficSummary> {
   const contentType = detectContentType(response);
   const raw = await response.text();
   let transport = transportFromContentType(contentType);

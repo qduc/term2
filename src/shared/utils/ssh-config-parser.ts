@@ -15,7 +15,7 @@ export type SSHConfigMap = Record<string, SSHHostConfig>;
 /**
  * Parse SSH config content into a map of host aliases to their configurations
  */
-export function parseSSHConfig(content: string): SSHConfigMap {
+function parseSSHConfig(content: string): SSHConfigMap {
   const result: SSHConfigMap = {};
   let currentHost: string | null = null;
 

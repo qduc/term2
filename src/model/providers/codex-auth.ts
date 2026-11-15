@@ -27,7 +27,7 @@ export const CODEX_TOKEN_ENDPOINT = `${CODEX_OAUTH_ISSUER}/oauth/token`;
  * the same two, so the redirect is matched exactly — an unregistered port is
  * refused, and 1457 exists purely to survive a concurrent `codex login`.
  */
-export const CODEX_REDIRECT_PORTS = [1455, 1457];
+const CODEX_REDIRECT_PORTS = [1455, 1457];
 const CODEX_REDIRECT_PORT = CODEX_REDIRECT_PORTS[0];
 const codexRedirectUri = (port: number) => `http://localhost:${port}/auth/callback`;
 export const CODEX_REDIRECT_URI = codexRedirectUri(CODEX_REDIRECT_PORT);

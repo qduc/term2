@@ -10,7 +10,7 @@ export type HookModuleImporter = (path: string) => unknown | Promise<unknown>;
 
 export type JitiModuleLoader = (path: string) => unknown | Promise<unknown>;
 
-export class HookModuleLoadError extends Error {
+class HookModuleLoadError extends Error {
   readonly path: string;
 
   constructor(path: string, message: string, options?: { readonly cause?: unknown }) {

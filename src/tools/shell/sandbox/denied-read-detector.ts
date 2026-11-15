@@ -130,7 +130,7 @@ const STORE_PARENTS: StoreMapping[] = [
  * For others, falls back to `dirname` of the denied path.
  * Never collapses to the home root or broad config ancestors.
  */
-export function suggestStableParent(p: string): string {
+function suggestStableParent(p: string): string {
   const normalized = path.resolve(p);
 
   // Known store mappings — prefer the most specific matching prefix.

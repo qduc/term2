@@ -58,7 +58,7 @@ interface SuccessfulSendState {
   completedAt: number;
 }
 
-export const DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG: LargeUncachedInputGuardConfig = {
+const DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG: LargeUncachedInputGuardConfig = {
   enabled: true,
   largePromptTokenThreshold: 64_000,
   idleMs: 5 * 60 * 1_000,

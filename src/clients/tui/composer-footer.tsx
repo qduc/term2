@@ -48,7 +48,7 @@ function providerModelText(model: string, provider: TuiStatusInfo['provider'], u
  * The bar the old terminal shows under the composer: provider/model, effort and approval mode, then
  * session token totals and measured provider telemetry when available.
  */
-export function directStatusView(
+function directStatusView(
   state: TuiState,
   info: ReturnType<NonNullable<TuiIntegration['status']>>,
   columns: number,

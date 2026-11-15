@@ -52,7 +52,7 @@ function withinRoot(root: string, target: string): boolean {
  *
  * Returns the normalized absolute path, or null if the path is unsafe.
  */
-export function normalizeToolPath(rawPath: string, root: string): string | null {
+function normalizeToolPath(rawPath: string, root: string): string | null {
   if (!rawPath || rawPath.includes('\0')) return null;
   const resolved = path.resolve(root, rawPath);
 
@@ -77,7 +77,7 @@ export function normalizeToolPath(rawPath: string, root: string): string | null 
  * - A symlink points outside the workspace
  * - The composed path (for nonexistent targets) would escape
  */
-export async function resolveRealToolPath(rawPath: string, root: string): Promise<string | null> {
+async function resolveRealToolPath(rawPath: string, root: string): Promise<string | null> {
   if (!rawPath || rawPath.includes('\0')) return null;
 
   const normalizedRoot = path.resolve(root);
@@ -185,7 +185,7 @@ export async function isPathInScopeSafe(rawPath: string, scopePatterns: string[]
  *
  * Returns the normalized relative pattern, or null if invalid.
  */
-export function normalizeScopePattern(raw: string): string | null {
+function normalizeScopePattern(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
@@ -361,25 +361,6 @@ function intersectFilePatterns(child: string[], parent: string[]): string[] {
 // ─── Filesystem scope enforcement ────────────────────────────────
 
 /**
- * Check if a tool-targeted file path is within the given filesystem scope patterns.
- *
- * @param rawPath - The raw path from a tool invocation
- * @param scopePatterns - Resolved scope patterns (relative to workspace root)
- * @returns true if the path matches at least one scope pattern
- */
-export function isPathInScope(rawPath: string, scopePatterns: string[], root: string): boolean {
-  if (scopePatterns.length === 0) return true; // Empty patterns = no restriction (but coarse flags may still deny)
-
-  const normalized = normalizeToolPath(rawPath, root);
-  if (!normalized) return false;
-
-  const relative = path.relative(root, normalized);
-  if (relative.startsWith('..')) return false;
-
-  return scopePatterns.some((pattern) => matchGlobPattern(relative, pattern));
-}
-
-/**
  * Simple glob matching for filesystem scopes.
  * Supports:
  * - `**` matches any number of path segments
@@ -461,7 +442,7 @@ function matchSingleSegment(segment: string, pattern: string): boolean {
  *
  * Returns normalized `hostname[:port]` or null if invalid.
  */
-export function normalizeHostPattern(raw: string): string | null {
+function normalizeHostPattern(raw: string): string | null {
   const trimmed = raw.trim().toLowerCase();
   if (!trimmed) return null;
 
@@ -680,21 +661,3 @@ function hostCoveredBy(child: string, parent: string): boolean {
 }
 
 // ─── Empty scope utilities ───────────────────────────────────────
-
-/**
- * Check if filesystem scopes are explicitly empty (no authority).
- * Used to determine if tool invocation should be denied even if
- * coarse flags would otherwise allow it.
- */
-export function isFilesystemScopeEmpty(scope?: ResolvedFilesystemScope): boolean {
-  if (!scope) return false; // Not defined = no restriction
-  return scope.read.length === 0 && scope.write.length === 0;
-}
-
-/**
- * Check if network scopes are explicitly empty (no authority).
- */
-export function isNetworkScopeEmpty(scope?: ResolvedNetworkScope): boolean {
-  if (!scope) return false; // Not defined = no restriction
-  return scope.length === 0;
-}

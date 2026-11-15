@@ -6,8 +6,8 @@
  * The block is model input only. Everything the app shows, rewinds to, or
  * treats as user-authored text must strip it first.
  */
-export const MEMORY_RECALL_OPEN = '<memory-recall>';
-export const MEMORY_RECALL_CLOSE = '</memory-recall>';
+const MEMORY_RECALL_OPEN = '<memory-recall>';
+const MEMORY_RECALL_CLOSE = '</memory-recall>';
 
 const MEMORY_RECALL_HEADER =
   'Persistent memory summaries that may be relevant to the message below. Added automatically by the harness, not written by the user. Treat them as leads, not verified facts; memory_get returns full evidence.';
@@ -37,17 +37,12 @@ export function renderRecallLine(line: RecallLine): string {
   return `- ${line.scope} / \`${line.id}\` — ${inline(line.title)} — ${inline(line.summary)}`;
 }
 
-export function renderMemoryRecall(lines: readonly string[]): string {
+function renderMemoryRecall(lines: readonly string[]): string {
   return [MEMORY_RECALL_OPEN, MEMORY_RECALL_HEADER, ...lines, MEMORY_RECALL_CLOSE].join('\n');
 }
 
 /** Characters a recall block spends before its lines; each line adds its length plus one. */
 export const MEMORY_RECALL_OVERHEAD = renderMemoryRecall([]).length;
-
-export function withMemoryRecall(recall: string, text: string): string {
-  if (!recall) return text;
-  return text ? `${recall}\n\n${text}` : recall;
-}
 
 /** Recover the user's own words from a turn that carries a recall block. */
 export function stripMemoryRecall(text: string): string {

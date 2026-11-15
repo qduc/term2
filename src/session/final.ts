@@ -52,7 +52,7 @@ export type DirectFinalWindow = {
 };
 
 /** Recognize only complete source-formatted command DTOs. No output-to-command guessing. */
-export function directPublicCommandMessages(display: unknown): readonly CommandMessage[] {
+function directPublicCommandMessages(display: unknown): readonly CommandMessage[] {
   const candidates = Array.isArray(display)
     ? display
     : display && typeof display === 'object' && 'messages' in display

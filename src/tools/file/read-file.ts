@@ -96,7 +96,7 @@ const readFileParametersSchema = z.object({
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;
 
-export const formatReadFileCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatReadFileCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

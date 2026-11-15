@@ -62,7 +62,7 @@ function isConfigured({ settingsService }: { settingsService: ISettingsService }
   );
 }
 
-export const firecrawlProvider: WebSearchProvider = {
+const firecrawlProvider: WebSearchProvider = {
   id: 'firecrawl',
   label: 'Firecrawl',
   search: searchFirecrawl,

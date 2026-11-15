@@ -12,7 +12,7 @@ import path from 'node:path';
  * became invisible to their own process.
  */
 
-export function normalizeProjectPath(projectPath: string): string {
+function normalizeProjectPath(projectPath: string): string {
   const normalized = path.normalize(projectPath);
   return normalized.endsWith(path.sep) && normalized !== path.sep ? normalized.slice(0, -1) : normalized;
 }
@@ -20,7 +20,7 @@ export function normalizeProjectPath(projectPath: string): string {
 /** The git common dir for `dir`, or null when `dir` is not (or no longer) inside a repository. */
 export type GitCommonDirLookup = (dir: string) => string | null;
 
-export function readGitCommonDir(dir: string): string | null {
+function readGitCommonDir(dir: string): string | null {
   // Most historical session paths are removed worktrees; skip the git spawn.
   if (!existsSync(dir)) return null;
   try {
@@ -49,7 +49,7 @@ function worktreeConventionRoot(normalized: string): string | null {
   return index > 0 ? normalized.slice(0, index) : null;
 }
 
-export function createProjectScopeResolver(gitCommonDir: GitCommonDirLookup = readGitCommonDir) {
+function createProjectScopeResolver(gitCommonDir: GitCommonDirLookup = readGitCommonDir) {
   const cache = new Map<string, string>();
   return (projectPath: string, sshHost?: string): string => {
     const normalized = normalizeProjectPath(projectPath);

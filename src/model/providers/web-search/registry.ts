@@ -65,27 +65,6 @@ export function registerWebSearchProvider(
 }
 
 /**
- * Get a specific web search provider by ID
- */
-export function getWebSearchProvider(id: string): WebSearchProvider | undefined {
-  return defaultWebSearchRegistry.getWebSearchProvider(id);
-}
-
-/**
- * Get the default web search provider
- */
-export function getDefaultWebSearchProvider(): WebSearchProvider | undefined {
-  return defaultWebSearchRegistry.getDefaultWebSearchProvider();
-}
-
-/**
- * Get all registered web search providers
- */
-export function getAllWebSearchProviders(): WebSearchProvider[] {
-  return defaultWebSearchRegistry.getAllWebSearchProviders();
-}
-
-/**
  * Get the configured provider based on settings, falling back to default
  */
 export function getConfiguredWebSearchProvider(deps: {
@@ -97,11 +76,4 @@ export function getConfiguredWebSearchProvider(deps: {
     if (provider) return provider;
   }
   return defaultWebSearchRegistry.getDefaultWebSearchProvider();
-}
-
-/**
- * Clear all registered providers (useful for testing)
- */
-export function clearWebSearchProviders(): void {
-  defaultWebSearchRegistry.clearWebSearchProviders();
 }

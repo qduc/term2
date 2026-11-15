@@ -311,7 +311,7 @@ export const AgentSettingsSchema = z.preprocess(
   AgentSettingsObjectSchema,
 );
 
-export const ShellSettingsSchema = z.object({
+const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),
   backgroundTimeout: z
     .number()
@@ -329,7 +329,7 @@ export const ShellSettingsSchema = z.object({
     ),
 });
 
-export const SandboxSettingsSchema = z.object({
+const SandboxSettingsSchema = z.object({
   enabled: z.boolean().optional().default(true),
   readPolicy: z.enum(['standard', 'strict']).optional().default('standard'),
   allowReadExtra: z.array(z.string()).optional().default([]),
@@ -337,7 +337,7 @@ export const SandboxSettingsSchema = z.object({
   allowNetworking: z.boolean().optional().default(true),
 });
 
-export const AgentWorkflowSettingsSchema = z.object({
+const AgentWorkflowSettingsSchema = z.object({
   // Node `setTimeout` wraps delays above 2**31-1 to ~1 ms.
   timeoutMs: z.number().int().positive().max(2_147_483_647).default(120_000),
   maxRuns: z.number().int().positive().default(8),
@@ -347,7 +347,7 @@ export const AgentWorkflowSettingsSchema = z.object({
   maxConsoleBytes: z.number().int().positive().default(16_384),
 });
 
-export const SubagentSettingsSchema = z.object({
+const SubagentSettingsSchema = z.object({
   asyncSessionTtlMs: z
     .number()
     .int()
@@ -362,7 +362,7 @@ export const SubagentSettingsSchema = z.object({
     .describe('Maximum number of user turns to retain in a persisted async subagent session'),
 });
 
-export const UISettingsSchema = z.object({
+const UISettingsSchema = z.object({
   historySize: z.number().int().positive().default(1000),
   pasteThreshold: z
     .number()
@@ -384,18 +384,18 @@ export const UISettingsSchema = z.object({
     .describe('Layout skin: how messages, tool calls, approvals and the status bar are drawn'),
 });
 
-export const LoggingSettingsSchema = z.object({
+const LoggingSettingsSchema = z.object({
   logLevel: z.enum(['error', 'warn', 'info', 'security', 'debug']).default('info'),
   disableLogging: z.boolean().optional().default(false),
   debugLogging: z.boolean().optional().default(false),
   suppressConsoleOutput: z.boolean().optional().default(true),
 });
 
-export const EnvironmentSettingsSchema = z.object({
+const EnvironmentSettingsSchema = z.object({
   nodeEnv: z.string().optional(),
 });
 
-export const AppSettingsSchema = z.object({
+const AppSettingsSchema = z.object({
   shellPath: z.string().optional(),
   // Legacy compatibility fields accepted at boundaries; activeProfileId is the canonical profile selection.
   // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
@@ -522,16 +522,16 @@ const ToolsSettingsObjectSchema = z.object({
     ),
 });
 
-export const ToolsSettingsSchema = z.preprocess(
+const ToolsSettingsSchema = z.preprocess(
   rejectRemovedSelectionKeys(['editHealingModel', 'editHealingProvider']),
   ToolsSettingsObjectSchema,
 );
 
-export const DebugSettingsSchema = z.object({
+const DebugSettingsSchema = z.object({
   debugBashTool: z.boolean().optional().default(false),
 });
 
-export const SSHSettingsSchema = z.object({
+const SSHSettingsSchema = z.object({
   enabled: z.boolean().default(false),
   host: z.string().optional(),
   port: z.number().int().positive().default(22),
@@ -539,7 +539,7 @@ export const SSHSettingsSchema = z.object({
   remoteDir: z.string().optional(),
 });
 
-export const WebSearchSettingsSchema = z.object({
+const WebSearchSettingsSchema = z.object({
   provider: z.string().optional(),
   tavily: z
     .object({
@@ -564,7 +564,7 @@ export const WebSearchSettingsSchema = z.object({
     .optional(),
 });
 
-export const MemorySettingsSchema = z
+const MemorySettingsSchema = z
   .object({
     enabled: z.boolean().optional().default(true),
     directory: z
@@ -580,7 +580,7 @@ export const MemorySettingsSchema = z
     path: ['searchDefaultLimit'],
   });
 
-export const HooksSettingsSchema = z.object({
+const HooksSettingsSchema = z.object({
   user: z
     .object({
       enabled: z.boolean().default(true),
@@ -615,7 +615,7 @@ export function isKnownCustomProviderType(value: string): value is KnownCustomPr
 
 const CustomProviderTypeSchema = z.enum(KNOWN_CUSTOM_PROVIDER_TYPES).default('openai-compatible');
 
-export const CustomProviderSchema = z
+const CustomProviderSchema = z
   .object({
     id: z.string().min(1).optional(),
     name: z.string().min(1).optional(),

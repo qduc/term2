@@ -379,7 +379,7 @@ export const createGrepToolDefinition = (
   };
 };
 
-export const formatGrepCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatGrepCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
   const rawItem = item?.rawItem ?? item;
   const lookupCallId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id ?? getCallIdFromItem(item);

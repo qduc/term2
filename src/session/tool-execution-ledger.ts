@@ -89,15 +89,6 @@ const isToolResult = (item: unknown): boolean => canonicalToolItem(item)?.type =
 export const isToolCallHistoryItem = isToolCall;
 export const isToolResultHistoryItem = isToolResult;
 
-export const toolNameOf = (item: unknown): string => {
-  return canonicalToolItem(item)?.toolName ?? 'unknown';
-};
-
-export const outputOf = (item: unknown): unknown => {
-  const normalized = canonicalToolItem(item);
-  return normalized?.type === 'tool_result' ? normalized.output : undefined;
-};
-
 /** History remains provider-facing even when the stream hands us an SDK wrapper. */
 const providerHistoryItem = (item: unknown): unknown => {
   const canonical = canonicalToolItem(item);

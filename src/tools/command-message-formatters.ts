@@ -9,7 +9,3 @@ export const registerToolFormatters = (
     toolFormatters.set(tool.name, tool.formatCommandMessage);
   }
 };
-
-export const clearToolFormatters = (): void => {
-  toolFormatters.clear();
-};

@@ -21,7 +21,7 @@ const STATE_LABEL: Record<McpServerState, string> = {
 /** States a user can do something about; the ones worth interrupting them for. */
 const ACTIONABLE: ReadonlySet<McpServerState> = new Set<McpServerState>(['needs-auth', 'failed']);
 
-export const isActionableMcpState = (state: McpServerState): boolean => ACTIONABLE.has(state);
+const isActionableMcpState = (state: McpServerState): boolean => ACTIONABLE.has(state);
 
 const toolCount = (server: McpServerSnapshot): string =>
   server.state === 'ready' ? `${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}` : '';

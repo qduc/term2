@@ -62,7 +62,7 @@ export interface BackgroundShellOutputStoreOptions {
   maxRetainedJobs?: number;
 }
 
-export class BackgroundShellOutputStoreError extends Error {
+class BackgroundShellOutputStoreError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'BackgroundShellOutputStoreError';

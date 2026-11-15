@@ -9,8 +9,8 @@ import {
 } from './goal.js';
 
 /** Keep the original two idle retries / six reminders per human instruction. */
-export const DIRECT_GOAL_IDLE_REMINDERS = 2;
-export const DIRECT_GOAL_TURN_REMINDERS = 6;
+const DIRECT_GOAL_IDLE_REMINDERS = 2;
+const DIRECT_GOAL_TURN_REMINDERS = 6;
 export type DirectGoalHistoryItem = { readonly item: Item; readonly modelStep: number };
 export type DirectGoalReminderFact = {
   readonly type: 'goal_stop_reminded';
@@ -82,7 +82,7 @@ function finalCheck(
  * Reminders are Session facts, never inferred from user-authored notice text.
  * Non-goal work resets only the idle counter; it cannot waive the total bound.
  */
-export function decideDirectGoalStop(state: DirectGoalState, input: DirectGoalStopInput): DirectGoalStopDecision {
+function decideDirectGoalStop(state: DirectGoalState, input: DirectGoalStopInput): DirectGoalStopDecision {
   if (!input.goalToolAvailable) return { action: 'stop', reason: 'tool_unavailable' };
   if (state.goal?.status !== 'active') return { action: 'stop', reason: 'no_active_goal' };
   const result = finalCheck(state, input.history);

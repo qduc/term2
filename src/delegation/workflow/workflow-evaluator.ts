@@ -35,7 +35,7 @@ const WORKFLOW_WEB_TOOLS = new Set(['web_search', 'web_fetch']);
  * union can be checked against them at compile time.
  */
 import { WORKFLOW_PROHIBITED_TOOL_NAMES } from '../../tools/system/run-code/script-surface.js';
-export const WORKFLOW_PROHIBITED_TOOLS: Set<string> = new Set<string>(WORKFLOW_PROHIBITED_TOOL_NAMES);
+const WORKFLOW_PROHIBITED_TOOLS: Set<string> = new Set<string>(WORKFLOW_PROHIBITED_TOOL_NAMES);
 
 export interface WorkflowEvaluatorDeps {
   runtime: AgentLauncher;

@@ -65,7 +65,7 @@ export type ChainedModelInputFilterOptions = {
   knownToolCallIds?: readonly string[];
 };
 
-export class MissingChainedToolOutputError extends Error {
+class MissingChainedToolOutputError extends Error {
   readonly callIds: string[];
 
   constructor(callIds: readonly string[]) {
@@ -114,7 +114,7 @@ export const isOrphanedChainedToolOutputError = (error: unknown): error is Orpha
  * In practice, this is rare because model invocations are typically triggered by new user
  * inputs or new tool results.
  */
-export const findChainedDeltaStart = (input: unknown[]): number => {
+const findChainedDeltaStart = (input: unknown[]): number => {
   let endUserIndex = input.length;
   while (
     endUserIndex > 0 &&

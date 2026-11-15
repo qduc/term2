@@ -35,7 +35,7 @@ const OPENAI_CAPABILITIES = {
  * being dispatched. This also covers transport failures and emits nothing for
  * exhausted attempt N=0.
  */
-export function createRetryAwareFetch(
+function createRetryAwareFetch(
   baseFetch: typeof fetch,
   onRetry: (() => void) | undefined,
   retryAttempts: number,

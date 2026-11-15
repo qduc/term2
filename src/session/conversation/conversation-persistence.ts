@@ -51,10 +51,6 @@ export function getConversationsDir(): string {
   return conversationsDirOverride ?? process.env['TERM2_CONVERSATIONS_DIR'] ?? CONVERSATIONS_DIR;
 }
 
-export function getConversationsDirForTest(): string {
-  return getConversationsDir();
-}
-
 export function setConversationsDirForTest(dir: string | null): void {
   conversationsDirOverride = dir;
 }
@@ -128,7 +124,7 @@ function getConversationPath(id: string): string {
   return path.join(getConversationsDir(), `${id}.jsonl`);
 }
 
-export function getConversationLockPath(id: string): string {
+function getConversationLockPath(id: string): string {
   return path.join(getConversationsDir(), `${id}.lock`);
 }
 
@@ -350,11 +346,7 @@ export function collectOrphanedDeltaSidecars(): number {
   return removed;
 }
 
-export function loadConversation(
-  id: string,
-  expectedProjectPath?: string,
-  expectedSshHost?: string,
-): RestoredState | null {
+function loadConversation(id: string, expectedProjectPath?: string, expectedSshHost?: string): RestoredState | null {
   ensureConversationsDir();
   const filePath = getConversationPath(id);
   try {
@@ -634,53 +626,6 @@ export function isConversationLocked(id: string): ConversationLockDiagnostic | n
     return { status: 'stale', ...base };
   }
   return { status: 'held', ...base };
-}
-
-export function deleteConversation(id: string): boolean {
-  const filePath = getConversationPath(id);
-  const lockFile = getConversationLockPath(id);
-  const deltaFile = deltaSidecarPathFor(filePath);
-  let removed = false;
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      removed = true;
-    }
-  } catch {
-    // ignore
-  }
-  try {
-    if (fs.existsSync(lockFile)) {
-      fs.unlinkSync(lockFile);
-    }
-  } catch {
-    // ignore
-  }
-  // The residual `.deltas` sidecar is removed synchronously with the explicit
-  // delete: deletion is the user's privacy boundary and must not leave turn
-  // text behind for the next launch's orphan GC.
-  try {
-    if (fs.existsSync(deltaFile)) {
-      fs.unlinkSync(deltaFile);
-    }
-  } catch {
-    // ignore
-  }
-  // Remove any last.json entries pointing to this id
-  const file = readLastConversationFile();
-  const filtered = file.entries.filter((e) => e.id !== id);
-  if (filtered.length !== file.entries.length) {
-    if (filtered.length === 0) {
-      try {
-        fs.unlinkSync(getLastConversationPath());
-      } catch {
-        // ignore
-      }
-    } else {
-      writeLastConversationFile({ entries: filtered });
-    }
-  }
-  return removed;
 }
 
 export interface ConversationListEntry {
@@ -1068,7 +1013,7 @@ const CONTENT_EVENT_TYPES = new Set([
   'goal_changed',
 ]);
 
-export function hasConversationContent(id: string): boolean {
+function hasConversationContent(id: string): boolean {
   const filePath = getConversationPath(id);
   if (!fs.existsSync(filePath)) {
     return false;

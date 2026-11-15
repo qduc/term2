@@ -22,7 +22,7 @@ const SHORT_ENUM_MAX_CHARS = 80;
 /** Nested object properties expand to this depth before degrading to `object`. */
 const MAX_OBJECT_DEPTH = 3;
 
-export const RUN_CODE_ESSENTIAL_TOOLS = new Set([
+const RUN_CODE_ESSENTIAL_TOOLS = new Set([
   'read_file',
   'grep',
   'glob',
@@ -41,7 +41,7 @@ function renderFields(node: JsonSchemaNode, depth: number): string[] {
   });
 }
 
-export function renderSchemaType(node: JsonSchemaNode | undefined, depth = 0): string {
+function renderSchemaType(node: JsonSchemaNode | undefined, depth = 0): string {
   if (!node) return 'unknown';
   if (node.const !== undefined) return JSON.stringify(node.const);
   if (node.enum?.length) {
@@ -153,7 +153,7 @@ export function renderCompactSignature(tool: {
  * for a tool whose full description the model already has from its direct
  * definition in the same request.
  */
-export function renderDetailedEntry(tool: ToolRegistry[number], options: { omitDescription?: boolean } = {}): string {
+function renderDetailedEntry(tool: ToolRegistry[number], options: { omitDescription?: boolean } = {}): string {
   const description =
     !options.omitDescription && typeof tool.description === 'string' && tool.description
       ? ` — ${oneLine(tool.description)}`

@@ -39,7 +39,7 @@ export type SettingsFileRecovery = {
  * file from stalling startup; when the cap is hit the file is treated as
  * unrecoverable (the original bytes are preserved untouched).
  */
-export function scanForRecoverableJson(content: string): { recovered: unknown; reason: string } | null {
+function scanForRecoverableJson(content: string): { recovered: unknown; reason: string } | null {
   const MAX_SCAN_ITERATIONS = 20_000;
   let iterations = 0;
 
@@ -81,7 +81,7 @@ function waitForLockRetry(retryMs: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, retryMs);
 }
 
-export function acquireSettingsLock(settingsDir: string, options: LockOptions = {}): () => void {
+function acquireSettingsLock(settingsDir: string, options: LockOptions = {}): () => void {
   const lockFile = path.join(settingsDir, 'settings.json.lock');
   const retryMs = options.retryMs ?? LOCK_RETRY_MS;
   const staleMs = options.staleMs ?? STALE_LOCK_MS;

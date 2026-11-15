@@ -18,7 +18,7 @@ const askOrchestratorSchema = z.object({
 
 export type AskOrchestratorParams = z.infer<typeof askOrchestratorSchema>;
 
-export const formatAskOrchestratorCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatAskOrchestratorCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const args =

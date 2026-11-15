@@ -357,7 +357,7 @@ export const createCodeContextSearchToolDefinition = (
   };
 };
 
-export const formatReadCodeOutlineCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatReadCodeOutlineCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const args = getFormatterArgs(item, toolCallArgumentsById);
   const filePath = args?.path ?? 'unknown';
   const output = getOutputText(item) || 'No output';
@@ -373,7 +373,7 @@ export const formatReadCodeOutlineCommandMessage: FormatCommandMessage = (item, 
   ];
 };
 
-export const formatCodeContextSearchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatCodeContextSearchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const args = getFormatterArgs(item, toolCallArgumentsById);
   const output = getOutputText(item) || 'No output';
   const command =

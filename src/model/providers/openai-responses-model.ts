@@ -209,7 +209,7 @@ function toResponsesOutputFormat(
 }
 
 /** Shared allowlist for Responses `context_management` (OpenAI + Codex). */
-export function supportsContextCompactionModel(model: string): boolean {
+function supportsContextCompactionModel(model: string): boolean {
   // Server-side context_management is model-dependent: gpt-5.1/gpt-5.2 returned
   // opaque 500s when the threshold fired (docs/plans/context-and-memory/openai-context-compaction.md).
   // OpenAI's compaction guide demos gpt-5.3-codex; the compact endpoint enum and
@@ -502,7 +502,7 @@ export interface ResponseEventNormalizationState {
   compactionStartedAtByIndex: Map<number | string, number>;
 }
 
-export function createResponseEventNormalizationState(): ResponseEventNormalizationState {
+function createResponseEventNormalizationState(): ResponseEventNormalizationState {
   return {
     toolNamesByIndex: new Map(),
     toolArgumentLengthsByIndex: new Map(),
@@ -531,7 +531,7 @@ export function responsesTextDelta(event: any): StreamedModelTurnEvent {
 }
 
 /** Convert one native OpenAI Responses event to the application turn protocol. */
-export function normalizeResponseEvent(
+function normalizeResponseEvent(
   event: any,
   state: ResponseEventNormalizationState = createResponseEventNormalizationState(),
   lane: string = OPENAI_RESPONSES_OPAQUE_TAG,

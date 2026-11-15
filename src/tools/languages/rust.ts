@@ -119,7 +119,7 @@ function extractRustOutline(source: string): Outline {
   return { imports, exports, decls };
 }
 
-export async function resolveRustImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
+async function resolveRustImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
   // External crates and std lib — can't resolve to a single file
   if (!specifier.startsWith('crate::') && !specifier.startsWith('self::') && !specifier.startsWith('super::')) {
     return null;
@@ -143,7 +143,7 @@ export async function resolveRustImport(specifier: string, fromPath: string, roo
   return null;
 }
 
-export function buildRustTestPatterns(filePath: string): { forSource: string[] } {
+function buildRustTestPatterns(filePath: string): { forSource: string[] } {
   const dir = path.dirname(filePath);
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);

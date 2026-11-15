@@ -108,7 +108,7 @@ const escapeRawControlCharactersInStrings = (text: string): string => {
  * IMPORTANT: Only runs the repair heuristics when `JSON.parse` fails on the
  * input, so already-valid JSON is never modified.
  */
-export const repairJson = (text: string): string => {
+const repairJson = (text: string): string => {
   if (!text || text.trim() === '') return text;
 
   // Skip repair for very large payloads to avoid regex backtracking
@@ -347,7 +347,7 @@ export const normalizeToolInput = (
  * incoming arguments fail to parse) across SDK versions / bundlers that may
  * rename the class.
  */
-export const isInvalidToolInputError = (error: any): boolean => {
+const isInvalidToolInputError = (error: any): boolean => {
   if (!error) return false;
   const name = error.name || error.constructor?.name;
   return name === 'InvalidToolInputError' || name === 'AI_InvalidToolInputError';

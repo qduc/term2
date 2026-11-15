@@ -17,7 +17,7 @@ export type SettingValueSuggestion = {
 
 const MAX_RESULTS = 10;
 
-export const AUTO_APPROVE_MODE_DESCRIPTIONS = {
+const AUTO_APPROVE_MODE_DESCRIPTIONS = {
   off: 'Show approval prompts for tool calls; in-workspace apply-patch edits remain automatic.',
   advisory:
     'Use an LLM to assess shell-command risk, but do not auto-approve based on that assessment; in-workspace apply-patch edits remain automatic.',

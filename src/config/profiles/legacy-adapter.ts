@@ -1,13 +1,13 @@
 import type { ProfileId, SavedAppMode } from './types.js';
 
 /** Retired Standard Profile; existing selections now use Bare. */
-export const LEGACY_STANDARD_PROFILE_ID = 'builtin:standard' as const;
+const LEGACY_STANDARD_PROFILE_ID = 'builtin:standard' as const;
 export const BARE_PROFILE_ID = 'builtin:bare' as const;
 /** Retired Lite Profile; saved settings, sessions, and commands that name it select Bare. */
-export const LEGACY_LITE_PROFILE_ID = 'builtin:lite' as const;
-export const PLAN_PROFILE_ID = 'builtin:plan' as const;
-export const MENTOR_PROFILE_ID = 'builtin:mentor' as const;
-export const ORCHESTRATOR_PROFILE_ID = 'builtin:orchestrator' as const;
+const LEGACY_LITE_PROFILE_ID = 'builtin:lite' as const;
+const PLAN_PROFILE_ID = 'builtin:plan' as const;
+const MENTOR_PROFILE_ID = 'builtin:mentor' as const;
+const ORCHESTRATOR_PROFILE_ID = 'builtin:orchestrator' as const;
 
 /** Map a retired built-in Profile ID to the Profile that replaced it. */
 export function canonicalProfileId(profileId: string): string {
@@ -43,7 +43,7 @@ export function legacyModeFromProfileId(profileId: string): SavedAppMode {
   }
 }
 
-export function normalizeLegacyMode(mode: Partial<SavedAppMode> | undefined): SavedAppMode {
+function normalizeLegacyMode(mode: Partial<SavedAppMode> | undefined): SavedAppMode {
   return legacyModeFromProfileId(profileIdFromLegacyMode(mode));
 }
 

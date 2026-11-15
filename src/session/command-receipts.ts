@@ -110,10 +110,7 @@ export function parseDirectCommandFact(raw: unknown): DirectCommandFact {
 }
 
 /** Repeated IDs refer to exactly one original request, even after a durable rejection/interruption. */
-export function inspectDirectCommand(
-  state: DirectCommandReceipts,
-  input: DirectCommandRequest,
-): DirectCommandInspection {
+function inspectDirectCommand(state: DirectCommandReceipts, input: DirectCommandRequest): DirectCommandInspection {
   request.parse(input);
   const previous = state.find((receipt) => receipt.request.commandId === input.commandId);
   if (!previous) return { kind: 'new' };

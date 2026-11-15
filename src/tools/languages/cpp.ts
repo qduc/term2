@@ -97,7 +97,7 @@ function findMatchingBrace(source: string, openIndex: number): number {
   return source.length;
 }
 
-export function extractCppOutline(source: string): Outline {
+function extractCppOutline(source: string): Outline {
   const stripped = stripComments(source);
   const imports: ImportEntry[] = [];
   const decls: DeclEntry[] = [];
@@ -279,7 +279,7 @@ export function extractCppOutline(source: string): Outline {
   return { imports, exports, decls };
 }
 
-export async function resolveLocalCppImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
+async function resolveLocalCppImport(specifier: string, fromPath: string, root: string): Promise<string | null> {
   if (specifier.startsWith('<')) return null;
   const cleanSpecifier = specifier.replace(/^"|"$/g, '');
   const fromDir = path.dirname(path.join(root, fromPath));
@@ -292,7 +292,7 @@ export async function resolveLocalCppImport(specifier: string, fromPath: string,
   return null;
 }
 
-export function buildCppTestPatterns(filePath: string): { forSource: string[] } {
+function buildCppTestPatterns(filePath: string): { forSource: string[] } {
   const dir = path.dirname(filePath);
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);

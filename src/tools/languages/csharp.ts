@@ -168,7 +168,7 @@ function parseCsharpDeclaration(line: string, lineNumber: number): DeclEntry | n
   return null;
 }
 
-export function extractCsharpOutline(source: string): Outline {
+function extractCsharpOutline(source: string): Outline {
   const imports = [...extractImportEntries(source)].sort((a, b) => a.line - b.line);
   const decls: DeclEntry[] = [];
   const lines = source.split('\n');
@@ -198,7 +198,7 @@ function buildCsharpTestPatterns(filePath: string): { forSource: string[] } {
   return { forSource };
 }
 
-export async function resolveCsharpImport(specifier: string, _fromPath: string, root: string): Promise<string | null> {
+async function resolveCsharpImport(specifier: string, _fromPath: string, root: string): Promise<string | null> {
   // C# uses namespace-based imports, not relative file paths
   if (specifier.startsWith('.') || specifier.startsWith('/')) {
     return null;

@@ -125,7 +125,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
  * first accepted timestamp. A snapshot cut is not this helper. Presentation
  * timestamps come from the app's `sessionDetails(sessionId, snapshot.seq)`.
  */
-export function sessionStart(
+function sessionStart(
   directory: string,
   sessionId: string,
 ): {

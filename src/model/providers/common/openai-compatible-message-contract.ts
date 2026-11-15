@@ -1,4 +1,4 @@
-export function hasOpenAICompatibleAssistantPayload(message: any): boolean {
+function hasOpenAICompatibleAssistantPayload(message: any): boolean {
   if (message?.role !== 'assistant') return true;
 
   if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) return true;

@@ -68,11 +68,6 @@ export function getSessionAccount(providerId: string, store: SessionAccountStore
   return store.get(providerId) ?? null;
 }
 
-/** Test seam; production code never needs to forget a pin. */
-export function resetSessionAccounts(store: SessionAccountStore): void {
-  store.clear();
-}
-
 /** A caller may stop waiting while an admitted credential rotation persists safely.
  * Token-manager HTTP timeouts bound that work and release account admission. */
 export function waitForSessionAccountRefresh<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {

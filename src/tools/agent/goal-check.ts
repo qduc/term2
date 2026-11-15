@@ -48,7 +48,7 @@ export const GOAL_CHANGED_PROBLEM =
   'the session goal changed after this response began, so this check was for a goal no longer current; ' +
   'check the current goal (shown in your instructions on the next request)';
 
-export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const args =

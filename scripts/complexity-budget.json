@@ -118,11 +118,11 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One line labels `agent.cachePreservingEffort`."
     },
     "src/session/agent-runtime/permission-boundary.ts": {
-      "lines": 660,
+      "lines": 630,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/agent-runtime/scope-resolver.ts": {
-      "lines": 700,
+      "lines": 663,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/failure/retry-error-classification.ts": {
@@ -130,7 +130,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/models/model-resolution.ts": {
-      "lines": 699,
+      "lines": 696,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/ai-sdk-streamed-model.ts": {
@@ -166,11 +166,11 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/conversation/conversation-persistence.ts": {
-      "lines": 1195,
+      "lines": 1140,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/conversation/conversation-replay.ts": {
-      "lines": 1974,
+      "lines": 1971,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/conversation/session-browser.ts": {
@@ -181,16 +181,12 @@
       "lines": 1042,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/session/logging/conversation-log-events.ts": {
-      "lines": 506,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/session/logging/logging-service.ts": {
       "lines": 566,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/logging/provider-traffic.ts": {
-      "lines": 1766,
+      "lines": 1765,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/adopted/interaction-protocol.ts": {
@@ -214,7 +210,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/apply-patch.ts": {
-      "lines": 841,
+      "lines": 831,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails. Two lines keep Update and known-change batching guidance beside the existing tool description; extracting only these sentences would fragment one prompt without separating a responsibility. Six lines read the canonical `patch` string from the arguments object as well as from a raw envelope string, so an approval preview of the same call parses what execution will run; retire that increment when apply_patch stops accepting both argument shapes. Retire the reasoning increments when the complete patch description or presentation boundary is extracted."
     },
     "src/tools/file/code-context.ts": {
@@ -242,7 +238,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/system/shell.ts": {
-      "lines": 1529,
+      "lines": 1521,
       "reason": "The shell executor owns the sandbox lease and foreground-to-background handoff. Its network approval registration and cleanup follow those same execution boundaries. Destination decision handling lives in sandbox-network-approval.ts. Lower the ceiling when the shell execution pipeline can move as a whole. Forty lines are the foreground-only presentation shown to sessions without a background job registry (presentForegroundShell, its narrowed parameter schema and the description variant). They stay here because they are derived from the shell schema and description in this file and must not drift from the canonical schema that validates and authorizes calls; they can move out with the description text when the model-facing shell presentation is split from the executor."
     },
     "src/delegation/subagents/tool-policy.ts": {

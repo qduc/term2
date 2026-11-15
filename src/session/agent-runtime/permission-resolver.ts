@@ -13,7 +13,7 @@ export interface PermissionResolutionError {
 // ─── Defaults ─────────────────────────────────────────────────────
 
 /** Default effective permissions: no authority. */
-export const DEFAULT_RESOLVED_PERMISSIONS: ResolvedAgentPermissions = Object.freeze({
+const DEFAULT_RESOLVED_PERMISSIONS: ResolvedAgentPermissions = Object.freeze({
   canRead: false,
   canWrite: false,
   canRunShell: false,
@@ -22,7 +22,7 @@ export const DEFAULT_RESOLVED_PERMISSIONS: ResolvedAgentPermissions = Object.fre
 });
 
 /** Default effective limits: conservative. */
-export const DEFAULT_LIMITS: AgentLimits = Object.freeze({
+const DEFAULT_LIMITS: AgentLimits = Object.freeze({
   maxTurns: 20,
   maxTokens: undefined,
   maxCost: undefined,

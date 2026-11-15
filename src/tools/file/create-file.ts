@@ -39,7 +39,7 @@ type PendingOverwrite = {
   createdAt: number;
 };
 
-export const formatCreateFileCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
+const formatCreateFileCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
   const args = normalizeToolArguments(normalizedArgs) ?? {};
 

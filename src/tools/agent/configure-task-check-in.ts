@@ -9,10 +9,10 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 
-export const MIN_CHECK_IN_INTERVAL_SECONDS = 300; // 5 minutes
-export const MIN_NEXT_CHECK_IN_SECONDS = 30; // 30 seconds (scheduler tick granularity)
+const MIN_CHECK_IN_INTERVAL_SECONDS = 300; // 5 minutes
+const MIN_NEXT_CHECK_IN_SECONDS = 30; // 30 seconds (scheduler tick granularity)
 
-export const configureTaskCheckInSchema = z.object({
+const configureTaskCheckInSchema = z.object({
   target: z
     .string()
     .trim()
@@ -53,7 +53,7 @@ export interface ConfigureTaskCheckInResult {
 }
 
 /** The scripted path deliberately exposes the JSON envelope as a string. */
-export const configureTaskCheckInScriptedReturnSchema = z.string();
+const configureTaskCheckInScriptedReturnSchema = z.string();
 
 export function createConfigureTaskCheckInToolDefinition(
   configureTaskCheckIn: (params: ConfigureTaskCheckInParams) => ConfigureTaskCheckInResult,
@@ -89,7 +89,7 @@ export function createConfigureTaskCheckInToolDefinition(
   };
 }
 
-export const formatConfigureTaskCheckInCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatConfigureTaskCheckInCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const args =

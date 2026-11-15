@@ -23,7 +23,7 @@ const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
  * Generous tripwire, not a workload estimate — healthy runs should rarely
  * approach it; settlement reports a budget stop rather than failing.
  */
-export const ROLE_MAX_TURNS_DEFAULT = 200;
+const ROLE_MAX_TURNS_DEFAULT = 200;
 
 const isInherited = (value: unknown): boolean =>
   value === 'inherit' || value === undefined || value === null || value === '';

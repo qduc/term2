@@ -92,7 +92,7 @@ export type ModelResolutionResult =
  * Parse a raw `--model` flag string, separating optional thinking suffix
  * (":<thinking>") and optional provider prefix ("<provider>/<id>").
  */
-export function parseModelFlag(
+function parseModelFlag(
   rawModelFlag: string,
   options?: { providerFlag?: string; knownProviders?: string[] },
 ): ParsedModelFlag {
@@ -152,10 +152,7 @@ function passthroughModelId(parsed: ParsedModelFlag): string {
  * literal aggregator id like `anthropic/claude-3.5-sonnet` is never
  * reinterpreted when the vendor name collides with a provider id.
  */
-export function matchModels(
-  groups: ProviderModelGroup[],
-  parsed: ParsedModelFlag,
-): { exact: boolean; matches: ModelMatch[] } {
+function matchModels(groups: ProviderModelGroup[], parsed: ParsedModelFlag): { exact: boolean; matches: ModelMatch[] } {
   const patternLower = parsed.pattern.toLowerCase();
   const rawPatternLower = parsed.rawPattern.toLowerCase();
 
@@ -251,7 +248,7 @@ export function matchModels(
  * Format matching models as a numbered list grouped by provider,
  * matching `--list-models` style with sequential 1-based numbering.
  */
-export function formatDisambiguationPrompt(matches: ModelMatch[], groups: ProviderModelGroup[]): string {
+function formatDisambiguationPrompt(matches: ModelMatch[], groups: ProviderModelGroup[]): string {
   const lines: string[] = [];
   const labelByProvider = new Map<string, string>();
   for (const group of groups) {
@@ -287,7 +284,7 @@ export function formatDisambiguationPrompt(matches: ModelMatch[], groups: Provid
 /**
  * Interactive prompt for disambiguating multiple matching models.
  */
-export async function promptForDisambiguation(
+async function promptForDisambiguation(
   matches: ModelMatch[],
   groups: ProviderModelGroup[],
   pattern: string,

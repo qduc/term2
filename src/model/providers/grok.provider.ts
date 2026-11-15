@@ -24,7 +24,7 @@ import type { StreamedModelTurn } from '../streamed-model-turn.js';
  * public xAI API: an OAuth access token is only accepted here. The proxy speaks
  * OpenAI chat completions.
  */
-export const GROK_BASE_URL = 'https://cli-chat-proxy.grok.com/v1';
+const GROK_BASE_URL = 'https://cli-chat-proxy.grok.com/v1';
 const DEFAULT_GROK_MODEL = 'grok-4.6';
 
 /**
@@ -36,7 +36,7 @@ const DEFAULT_GROK_MODEL = 'grok-4.6';
  * Order: fresh cache, online, stale cache, installed binary, then this
  * constant, which is only the last resort and can go stale.
  */
-export const GROK_CLIENT_VERSION_FALLBACK = '1.0.62';
+const GROK_CLIENT_VERSION_FALLBACK = '1.0.62';
 
 const GROK_STABLE_VERSION_URLS = [
   'https://x.ai/cli/stable',
@@ -81,10 +81,7 @@ function getInstalledGrokVersion(): Promise<string | null> {
   });
 }
 
-export async function lookupGrokClientVersion(options?: {
-  fetchImpl?: ProviderFetch;
-  cacheDir?: string;
-}): Promise<string> {
+async function lookupGrokClientVersion(options?: { fetchImpl?: ProviderFetch; cacheDir?: string }): Promise<string> {
   const cachePath = grokVersionCachePath(options?.cacheDir);
   const cached = readGrokVersionCache(cachePath);
   if (cached?.fresh) return cached.version;
@@ -103,7 +100,7 @@ export async function lookupGrokClientVersion(options?: {
 }
 
 /** The persistent version cache is consulted outside a model instance. */
-export function resolveGrokClientVersion(): Promise<string> {
+function resolveGrokClientVersion(): Promise<string> {
   return lookupGrokClientVersion();
 }
 
@@ -190,7 +187,7 @@ export function buildGrokFetch(deps: ProviderDeps, tokenManager: GrokTokenManage
   });
 }
 
-export async function fetchGrokModels(
+async function fetchGrokModels(
   deps: ProviderDeps,
   fetchImpl: ProviderFetch = fetch,
 ): Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>> {
@@ -225,7 +222,7 @@ export async function fetchGrokModels(
     .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
-export function createGrokStreamedModel(model: string, deps: ProviderDeps): StreamedModelTurn {
+function createGrokStreamedModel(model: string, deps: ProviderDeps): StreamedModelTurn {
   const resolvedModel = (model || deps.settingsService.get('agent.modelSelection').model || DEFAULT_GROK_MODEL).trim();
   const retryAttempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;
 

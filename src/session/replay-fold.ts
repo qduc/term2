@@ -35,7 +35,7 @@ import type { ReplayOptions, ReplayedCompaction, ReplayedConversation } from './
 
 type Slot = { item: Item | null };
 
-export function replayProjection(
+function replayProjection(
   facts: readonly Fact[],
   options: ReplayOptions,
   repairActiveTurn: boolean,

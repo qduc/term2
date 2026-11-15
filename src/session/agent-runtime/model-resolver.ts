@@ -49,7 +49,7 @@ export function toTierModelPoolEntries(value: unknown): TierModelPoolEntry[] {
   return TierModelPoolEntrySchema.array().parse(value);
 }
 
-export function getTierModelPoolEntries(tier: AncillaryModelTier, settings: ISettingsService): TierModelPoolEntry[] {
+function getTierModelPoolEntries(tier: AncillaryModelTier, settings: ISettingsService): TierModelPoolEntry[] {
   return toTierModelPoolEntries(settings.getDynamic(`agent.${tier}Model`));
 }
 

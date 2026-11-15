@@ -2295,7 +2295,7 @@ function codexStreamError(message: string, details: unknown): Error {
   return Object.assign(new Error(message), { error: details });
 }
 
-export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: DiagnosticLogger): AsyncIterable<any> {
+async function* wrapCodexStream(source: AsyncIterable<any>, logger?: DiagnosticLogger): AsyncIterable<any> {
   let accumulatedItems: any[] = [];
   // Track call_id values from function_call_arguments events keyed by item_id,
   // since the Codex server may omit call_id on output_item.done for function_calls

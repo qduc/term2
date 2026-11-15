@@ -170,7 +170,7 @@ export function controlDirectory(runtimeDir: string): string {
   return path.join(runtimeDir, 'term2', 'control');
 }
 
-export function parseProcStartTime(stat: string): string | null {
+function parseProcStartTime(stat: string): string | null {
   const close = stat.lastIndexOf(')');
   if (close < 0) return null;
   const fields = stat

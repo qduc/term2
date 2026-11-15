@@ -20,7 +20,7 @@ export type SettingUIMetadata = {
  * here still renders through `humanizeSettingKey`, so new keys never fall back
  * to showing the raw dotted key alone.
  */
-export const SETTING_LABELS: Record<string, string> = {
+const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.VERIFIER_MODEL]: 'Verifier model',
   [SETTING_KEYS.AGENT_BACKGROUND_WAIT_TIMEOUT_MS]: 'Headless background wait limit',
   [SETTING_KEYS.ENABLE_AGENT_WORKFLOW]: 'Agent workflows',
@@ -163,7 +163,7 @@ export const SETTING_LABELS: Record<string, string> = {
  * Turn a dotted setting key into a readable name when no curated label exists
  * (for example a key added after `SETTING_LABELS`).
  */
-export function humanizeSettingKey(key: string): string {
+function humanizeSettingKey(key: string): string {
   const leaf = key.slice(key.lastIndexOf('.') + 1);
   const words = leaf
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -499,7 +499,7 @@ export function isArraySetting(key: string): boolean {
   return meta ? meta.isArray : false;
 }
 
-export function getSettingDescription(key: string): string | undefined {
+function getSettingDescription(key: string): string | undefined {
   return getSettingMetadata(key)?.description;
 }
 

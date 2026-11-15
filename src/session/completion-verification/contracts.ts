@@ -47,7 +47,7 @@ export type VerificationReport = z.infer<typeof reportSchema>;
 export type VerificationRequest = Pick<CompletionProposal, 'goal' | 'criteria' | 'revision' | 'environment'> & {
   attemptId: string;
 };
-export const budgetsSchema = z
+const budgetsSchema = z
   .object({
     maxRepairs: z.number().int().min(0).max(10),
     maxGateAttempts: z.number().int().positive().max(20),

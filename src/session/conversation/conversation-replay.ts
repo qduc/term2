@@ -1392,10 +1392,7 @@ function buildMessagesFromJournal(
 }
 
 /** Verify source's rewind retained an exact native prefix and count real user turns removed. */
-export function rewindRemovedUserCount(
-  before: readonly ProviderInputItem[],
-  after: readonly ProviderInputItem[],
-): number {
+function rewindRemovedUserCount(before: readonly ProviderInputItem[], after: readonly ProviderInputItem[]): number {
   const equivalent = (left: ProviderInputItem, right: ProviderInputItem): boolean => {
     if (isDeepStrictEqual(left, right)) return true;
     if (
@@ -1439,7 +1436,7 @@ type ReplayWithRetryTarget = {
 };
 
 /** Replay and identity are computed together from the same resolved envelopes. */
-export function replayEventsWithRetryTarget(
+function replayEventsWithRetryTarget(
   envelopes: PersistedLogEnvelope[],
   options: { finalization?: 'live' | 'reopened' } = {},
 ): ReplayWithRetryTarget {

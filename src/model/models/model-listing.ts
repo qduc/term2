@@ -122,7 +122,7 @@ export async function collectProviderModelsConcurrently(
  * within the rest filter models with the picker's own fuzzy match. Groups left
  * without models are dropped.
  */
-export function filterModelGroups(groups: ProviderModelGroup[], search: string): ProviderModelGroup[] {
+function filterModelGroups(groups: ProviderModelGroup[], search: string): ProviderModelGroup[] {
   const trimmed = search.trim();
   if (!trimmed) return groups;
   return groups
@@ -134,7 +134,7 @@ export function filterModelGroups(groups: ProviderModelGroup[], search: string):
 }
 
 /** Plain-text listing: `provider (label):` headers, two-space-indented models. */
-export function formatModelGroups(groups: ProviderModelGroup[]): string {
+function formatModelGroups(groups: ProviderModelGroup[]): string {
   const lines: string[] = [];
   for (const group of groups) {
     if (group.models.length === 0) continue;

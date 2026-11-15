@@ -2,7 +2,7 @@ import type { RunBudgetEvidence } from './agent-runtime/run-budget.js';
 
 const MAX_TURNS_LEFT_THRESHOLD = 5;
 
-export function buildTurnLimitWarning(turnsLeft: number): string {
+function buildTurnLimitWarning(turnsLeft: number): string {
   return `
 
 [Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
@@ -34,11 +34,11 @@ export interface RunBudgetStallEvidence {
  * this must not tell the model it is stuck or what to do instead. The run has
  * the context to decide whether the repetition means anything.
  */
-export function buildToolStallWarning(evidence: RunBudgetStallEvidence): string {
+function buildToolStallWarning(evidence: RunBudgetStallEvidence): string {
   return `\n\n[Note: This is call ${evidence.count} of \`${evidence.toolName}\` with byte-identical arguments, with no file-modifying call in between. If those calls are making progress, carry on; if they are not, change the approach rather than repeating it.]`;
 }
 
-export function buildRunBudgetWarning(evidence: RunBudgetEvidence): string {
+function buildRunBudgetWarning(evidence: RunBudgetEvidence): string {
   const labels: Record<RunBudgetEvidence['dimension'], string> = {
     usd: 'priced USD budget',
     unpriced_tokens: 'unpriced-token budget',
@@ -57,7 +57,7 @@ export function buildRunBudgetWarning(evidence: RunBudgetEvidence): string {
  * `turn` object or a turn count kept on the run's user context, and prefers
  * `turn` when both are present.
  */
-export function resolveTurnLimitContext(toolContext: unknown): TurnLimitContext | undefined {
+function resolveTurnLimitContext(toolContext: unknown): TurnLimitContext | undefined {
   const candidate = toolContext as { turn?: { count?: number; max?: number }; context?: TurnLimitContext } | undefined;
   const turn = candidate?.turn;
   if (turn && typeof turn.count === 'number' && typeof turn.max === 'number') {
@@ -66,7 +66,7 @@ export function resolveTurnLimitContext(toolContext: unknown): TurnLimitContext 
   return candidate?.context;
 }
 
-export function injectTurnLimitWarning(output: string, context: unknown): string {
+function injectTurnLimitWarning(output: string, context: unknown): string {
   const limitContext = context as TurnLimitContext | undefined;
   if (limitContext && typeof limitContext.turnCount === 'number' && typeof limitContext.maxTurns === 'number') {
     const turnsLeft = limitContext.maxTurns - limitContext.turnCount;
@@ -95,7 +95,7 @@ export function injectRunBudgetWarning(output: string, context: unknown): string
   return result;
 }
 
-export const injectWarningIntoToolOutput = (output: string, warning: string): string => {
+const injectWarningIntoToolOutput = (output: string, warning: string): string => {
   if (!output) {
     return warning;
   }

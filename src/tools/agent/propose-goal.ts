@@ -37,7 +37,7 @@ const proposeGoalSchema = z.object({
 
 export type ProposeGoalParams = z.infer<typeof proposeGoalSchema>;
 
-export const formatProposeGoalCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+const formatProposeGoalCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

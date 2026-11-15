@@ -34,7 +34,7 @@ export type NicknameEntry = { nickname: string } & ParsedNicknameTarget;
 const NICKNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 /** Generous ceiling; nicknames exist to be shorter than the ids they replace. */
-export const NICKNAME_MAX_LENGTH = 64;
+const NICKNAME_MAX_LENGTH = 64;
 
 /**
  * Parses one persisted target entry ("provider/modelId" with an optional
@@ -45,7 +45,7 @@ export const NICKNAME_MAX_LENGTH = 64;
  * hand-edited settings file degrades to "fewer nicknames" instead of crashing
  * resolution or the picker.
  */
-export function parseNicknameTargetEntry(raw: string): ParsedNicknameTarget | null {
+function parseNicknameTargetEntry(raw: string): ParsedNicknameTarget | null {
   const { value, reasoningEffort } = stripReasoningEffortSuffix(raw);
   const parsed = parseFavoriteEntry(value);
   if (!parsed) return null;
@@ -53,7 +53,7 @@ export function parseNicknameTargetEntry(raw: string): ParsedNicknameTarget | nu
 }
 
 /** Serializes a target back to its persisted "provider/modelId[:effort]" form. */
-export function serializeNicknameTarget(target: ParsedNicknameTarget): string {
+function serializeNicknameTarget(target: ParsedNicknameTarget): string {
   const base = serializeFavorite(target.provider, target.modelId);
   return target.reasoningEffort ? base + ':' + target.reasoningEffort : base;
 }
@@ -130,7 +130,7 @@ export type NicknameValidation = { ok: true; nickname: string } | { ok: false; e
  * resolution time — exact nickname wins, the real id stays reachable as
  * `provider/id` — covers that case instead.
  */
-export function validateNicknameName(
+function validateNicknameName(
   rawNickname: string,
   options: { providerIds?: readonly string[]; existingNicknames?: readonly string[] } = {},
 ): NicknameValidation {
@@ -176,7 +176,7 @@ export type SetNicknameResult = { ok: true } | { ok: false; error: string; confl
  * `replace` is set — the first attempt returns that model as `conflict` so
  * the editor can ask. Committing an unchanged mapping writes nothing.
  */
-export function setNicknameTarget(
+function setNicknameTarget(
   settingsService: ISettingsService,
   rawNickname: string,
   target: ParsedNicknameTarget,

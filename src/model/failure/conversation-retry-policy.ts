@@ -1,9 +1,9 @@
 import { isModelBehaviorError } from '../../shared/contracts/model-errors.js';
 export { isTransientRetryableError } from './retry-error-classification.js';
 
-export const MAX_HALLUCINATION_RETRIES = 2;
+const MAX_HALLUCINATION_RETRIES = 2;
 
-export const isRecoverableModelError = (error: unknown): boolean => {
+const isRecoverableModelError = (error: unknown): boolean => {
   if (!isModelBehaviorError(error)) {
     return false;
   }

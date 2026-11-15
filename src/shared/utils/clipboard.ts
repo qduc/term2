@@ -28,10 +28,7 @@ export interface CopyToClipboardOptions {
 
 const OSC52_MAX_BYTES = 70 * 1024;
 
-export function getClipboardCommandCandidates(
-  platform: NodeJS.Platform,
-  env: NodeJS.ProcessEnv,
-): ClipboardCommandCandidate[] {
+function getClipboardCommandCandidates(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): ClipboardCommandCandidate[] {
   if (platform === 'darwin') {
     return [{ command: 'pbcopy', args: [] }];
   }
@@ -124,7 +121,7 @@ function buildOsc52Sequence(text: string, env: NodeJS.ProcessEnv): string {
   return wrapForMultiplexer(inner, env);
 }
 
-export async function copyViaOsc52(text: string, options: Osc52Options = {}): Promise<void> {
+async function copyViaOsc52(text: string, options: Osc52Options = {}): Promise<void> {
   const env = options.env ?? process.env;
   const getTtyWriter = options.getTtyWriter ?? defaultGetTtyWriter;
 

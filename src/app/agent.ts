@@ -1,11 +1,10 @@
-import { healPatchOperation } from '../tools/file/patch-healing.js';
-import type { NestedRunDriverFactory, NestedModelBinding } from '../tools/nested-run-driver.js';
-import { healSearchReplaceParams } from '../tools/file/edit-healing.js';
 import { createDiscordSendToolDefinition } from './discord-send.js';
 import type { DiscordSend } from '../clients/discord/discord-outbound.js';
 import { createGrepToolDefinition } from '../tools/file/grep.js';
 import { presentBareShell } from '../tools/system/bare-shell.js';
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
+import { createHintReadAccess } from '../tools/file/read-access.js';
+import { isWebSearchAvailable } from '../tools/web/web-search.js';
 import type { SessionAccessState } from '../session/session/session-access-state.js';
 import { createFindFilesToolDefinition } from '../tools/file/glob.js';
 import { createSearchReplaceToolDefinition } from '../tools/file/search-replace.js';
@@ -73,7 +72,6 @@ import { SkillsService } from '../tools/skills/skills-service.js';
 import { createProposeGoalToolDefinition } from '../tools/agent/propose-goal.js';
 import { createGoalCheckToolDefinition } from '../tools/agent/goal-check.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
-import { resolveAncillaryModelTier } from '../session/agent-runtime/model-resolver.js';
 import { createRunAgentWorkflowToolDefinition } from '../tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from '../tools/system/worktree.js';
 import { createRunCodeToolDefinition } from '../delegation/index.js';
@@ -162,8 +160,6 @@ function positiveIntegerSetting(
  */
 export const getAgentDefinition = (
   deps: {
-    driverFactory?: NestedRunDriverFactory;
-    modelBinding?: NestedModelBinding;
     settingsService: ISettingsService;
     loggingService: ILoggingService;
     getGoal?: () => DurableGoal | undefined;
@@ -306,10 +302,10 @@ export const getAgentDefinition = (
     Boolean(getSubagentStatus) &&
     Boolean(sendSubagentMessage) &&
     Boolean(cancelSubagentRun);
-  // A complete async capability owns the model-facing delegation contract. The
-  // nested runner remains wired for foreground-only compatibility sessions and
-  // for legacy lifecycle controls, but is not selectable alongside async work.
-  const runSubagentForegroundEnabled = Boolean(runSubagent) && !asyncSubagentEnabled;
+  // Beside a complete async capability, foreground stays selectable only for
+  // the roles that write no files (run_subagent enforces which); background
+  // keeps workers, mentors, reviewers and agent_spec launches.
+  const runSubagentForegroundEnabled = Boolean(runSubagent);
   let profile: ReturnType<typeof resolveActiveProfile>;
   try {
     profile = resolveActiveProfile(settingsService, {
@@ -399,6 +395,7 @@ export const getAgentDefinition = (
     hasCapability('discord-send') &&
     !profile.enforcement.denials.has('discord-send') &&
     !profile.enforcement.denials.has('filesystem-mutation');
+  const webSearchEnabled = isWebSearchAvailable(settingsService);
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     profile,
@@ -417,6 +414,7 @@ export const getAgentDefinition = (
     runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
     fileReadEnabled: filesystemReadEnabled,
+    webSearchEnabled,
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
 
@@ -481,7 +479,7 @@ export const getAgentDefinition = (
     tools.push(
       bareMode ? presentBareShell(shellTool, { background: Boolean(rootBackgroundShellRegistry) }) : shellTool,
     );
-  if (features.web) tools.push(...createWebToolDefinitions({ settingsService, loggingService }));
+  if (features.web) tools.push(...createWebToolDefinitions({ settingsService, loggingService }, webSearchEnabled));
 
   if (
     backgroundTasksEnabled &&
@@ -591,6 +589,12 @@ export const getAgentDefinition = (
     );
   }
 
+  const editHintReadAccess = createHintReadAccess({
+    enabled: filesystemReadEnabled,
+    executionContext,
+    settingsService,
+    sessionAccess,
+  });
   {
     if (filesystemReadEnabled) {
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
@@ -607,17 +611,11 @@ export const getAgentDefinition = (
       if (usesPatchEditingSurface) {
         tools.push(
           createApplyPatchToolDefinition({
-            resolveHealingModel: () => resolveAncillaryModelTier('chore', settingsService),
             settingsService,
             loggingService,
             executionContext,
             sessionAccess,
-            patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
-              healPatchOperation(path, diff, content, diagnosis, model, key, {
-                ...healingDeps,
-                driverFactory: deps.driverFactory,
-                modelBinding: deps.modelBinding,
-              }),
+            readAccess: editHintReadAccess,
           }),
         );
       } else {
@@ -629,17 +627,11 @@ export const getAgentDefinition = (
             sessionAccess,
           }),
           createSearchReplaceToolDefinition({
-            resolveHealingModel: () => resolveAncillaryModelTier('chore', settingsService),
-            editHealing: (params, content, model, key, healingDeps) =>
-              healSearchReplaceParams(params, content, model, key, {
-                ...healingDeps,
-                driverFactory: deps.driverFactory,
-                modelBinding: deps.modelBinding,
-              }),
             settingsService,
             loggingService,
             executionContext,
             sessionAccess,
+            readAccess: editHintReadAccess,
           }),
         );
       }

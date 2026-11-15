@@ -13,6 +13,7 @@ import { MemoryCapabilityBuilder } from '../../tools/memory/memory-capabilities.
 import { resolveAncillaryModelTier } from '../../session/agent-runtime/model-resolver.js';
 import { getAncillaryTierForRole } from './subagent-pool-config.js';
 import { ModelSelectionSchema } from '../../config/settings/model-selection.js';
+import { withoutWebSearchText } from './dead-tool-references.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../session/prompts');
 const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -243,6 +244,12 @@ function withoutDeadAudienceText(
   toolNames: readonly string[],
 ) {
   const capability = writeCapability(toolNames);
+  // The section is about the ask_orchestrator tool, which a foreground child is not offered,
+  // except for "do not contact the user directly", which still applies to that child.
+  const roleFile =
+    text.roleFile === undefined || toolNames.includes('ask_orchestrator')
+      ? text.roleFile
+      : withoutAskOrchestratorSection(text.roleFile);
   return {
     skillConflicts: capability.cannotEdit
       ? text.skillConflicts.replace(EDITING_TOOL_SENTENCE, '')
@@ -251,12 +258,11 @@ function withoutDeadAudienceText(
     worktreeHygiene: capability.cannotWriteFiles
       ? text.worktreeHygiene.replace(WORKER_AUDIENCE_LINE, '').trimEnd()
       : text.worktreeHygiene,
-    // The section is about the ask_orchestrator tool, which a foreground child is not offered,
-    // except for "do not contact the user directly", which still applies to that child.
+    // web_search is not offered without a configured search provider; web_fetch is.
     roleFile:
-      text.roleFile === undefined || toolNames.includes('ask_orchestrator')
-        ? text.roleFile
-        : withoutAskOrchestratorSection(text.roleFile),
+      roleFile === undefined || toolNames.includes('web_search') || !toolNames.includes('web_fetch')
+        ? roleFile
+        : withoutWebSearchText(roleFile),
   };
 }
 

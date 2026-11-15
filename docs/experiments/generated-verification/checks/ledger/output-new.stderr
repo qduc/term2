@@ -1,1 +1,0 @@
-$ node --import tsx scripts/generated-verification/run.mjs --target history --runs 100 --seed 19 --output docs/experiments/generated-verification/checks/ledger/cli-output.stdout

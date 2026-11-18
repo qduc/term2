@@ -1,5 +1,6 @@
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware } from './logging-middleware.js';
+import { disableTransportTimeouts } from './provider-dispatcher.js';
 import { createRateLimitMiddleware } from './rate-limit-middleware.js';
 import type { ILoggingService, IProviderTraffic } from '../../../shared/service-interfaces.js';
 
@@ -42,7 +43,7 @@ export function createProviderFetch({
   fetchImpl = fetch,
 }: CreateProviderFetchOptions): typeof fetch {
   const dispatchFetch: typeof fetch = (input, init) => {
-    const response = fetchImpl(input, init);
+    const response = fetchImpl(input, disableTransportTimeouts(init, fetchImpl));
     deps.onDispatched?.();
     return response;
   };

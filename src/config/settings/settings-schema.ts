@@ -113,7 +113,7 @@ const AgentSettingsObjectSchema = z.object({
   // Provider-neutral inactivity window: abort a request that streams no output
   // for this many ms. Re-arms on every streamed delta, so long legitimate
   // reasoning survives while a silent stall is cut. 0 disables it.
-  maxModelStreamIdleMs: z.number().int().nonnegative().default(600_000),
+  maxModelStreamIdleMs: z.number().int().nonnegative().default(300_000),
   retryAttempts: z.number().int().nonnegative().default(2),
   transport: z.enum(['websocket', 'http']).default('websocket'),
   maxParallelToolCalls: z
@@ -1180,7 +1180,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxOutputTokens: 32_000,
     maxStreamOutputChars: 100_000,
     maxModelRequestDurationMs: 0,
-    maxModelStreamIdleMs: 600_000,
+    maxModelStreamIdleMs: 300_000,
     retryAttempts: 2,
     transport: 'websocket',
     maxParallelToolCalls: 3,

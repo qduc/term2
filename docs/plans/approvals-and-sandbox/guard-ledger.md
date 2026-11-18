@@ -7,6 +7,31 @@ implementation establishes current behavior. Routine task and test-run accountin
 was retired on 2026-10-31; old ledger references below describe archived evidence,
 not instructions to recreate it.
 
+## Provider transport timeouts handed to the stream-idle guard (2026-11-18)
+
+Owner: `disableTransportTimeouts` in
+`src/model/providers/fetch/provider-dispatcher.ts`, applied by
+`createProviderFetch` to every provider SDK lane. Class: timeout ownership
+(which layer may end a quiet request). Harm prevented: Node's bundled undici
+applied a fixed 300 s headers/body inactivity timeout, so a stalled Gemini SSE
+stream became an opaque `TypeError: terminated` (`UND_ERR_BODY_TIMEOUT`) before
+Term2's configurable, typed inactivity watchdog could report it. Signal: no
+bytes from the transport, versus no streamed model event at the guard boundary
+after re-arming on every event. Scope: only native `fetch` on the provider
+request path; model listing, OAuth and decision fetches keep the transport
+defaults. Action: pass the process dispatcher (found through undici's internal
+`Symbol.for('undici.globalDispatcher.1')`) wrapped to pin `bodyTimeout` and
+`headersTimeout` to `0` per request; `connectTimeout` stays at its default
+because a connect failure is a distinct, already-retryable phase. Effective
+default: `agent.maxModelStreamIdleMs` 300_000 (5m) in schema and guard, so the
+worst case users already hit is now reported by the guard; `0` still disables
+the watchdog, and with both model timers at `0` provider requests are unbounded
+by Term2. Recovery owner: unchanged retry classifier; a guard trip remains an
+ambiguous outcome and is not auto-replayed. If a Node version stops exposing the
+symbol, the lane falls back to plain `fetch` (today's behaviour) rather than
+failing. Rollback boundary: revert the dispatcher module, its composer wiring,
+and the two default changes as one branch.
+
 ## Personal memory prompt section (2026-10-30)
 
 Owner: `renderPersonalContext` / `FileMemoryStore.personalContextSync`; access,

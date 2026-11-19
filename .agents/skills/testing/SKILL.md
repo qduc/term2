@@ -356,6 +356,15 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   `expected [] to have a length of 1` (no hint row), 3 of 12 on `main` and 2 of 12
   on the candidate beside four busy loops. Wait for the text you will assert on
   (`waitForOutput`) before reading `getVisibleOutput()` after an idle wait.
+- **Raw PTY output cannot show scrollback vs live frame (2026-11-19):** Ink diffs each
+  frame, so a notice rendered in the live frame is emitted once and not re-written while
+  it is unchanged; a notice committed to `<Static>` scrollback also prints once. The
+  concatenated PTY stream therefore looks the same whether a row stays pinned below the
+  transcript or is committed into history, and neither first/last-occurrence ordering nor
+  "re-emitted after idle" discriminates the two. Verify placement structurally (timeline
+  membership and projected transcript rows) or with a screen emulator, not by grepping
+  the PTY stream. The retry-notice fix (`projection.ts` `transcriptNotices`) first looked
+  "verified" by a blackbox probe that passed unchanged on `main`.
 
 ### Local-only boundary lessons reviewed for reconciliation
 

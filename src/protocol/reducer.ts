@@ -3,7 +3,14 @@
  */
 import { historyReplacedMessage, nestedPresentation, replace, withToolTracking } from './reducer-nested.js';
 import { completedFinalText } from './turn-results.js';
-import { COMPACTING, COMPACTION_NOTICE, compactionOutcome, ENDS_RETRY, retrying } from './reducer-notices.js';
+import {
+  appendedNotice,
+  COMPACTING,
+  COMPACTION_NOTICE,
+  compactionOutcome,
+  ENDS_RETRY,
+  retrying,
+} from './reducer-notices.js';
 import type { WireCommandReceipt, WireEvent, WireMessage, WireSnapshot } from './wire.js';
 import { reduceApprovalReview, withoutReview } from './review-projection.js';
 
@@ -182,7 +189,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
           ],
           notices: [
             ...state.notices,
-            { kind: 'tool_result', message: `Tool result ${event.payload.executionId}: ${event.payload.output}` },
+            appendedNotice(state, 'tool_result', `Tool result ${event.payload.executionId}: ${event.payload.output}`),
           ],
         };
       return {
@@ -272,7 +279,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     // live lines (conversation-event-handler.ts): the started line is replaced by its outcome.
     case 'compaction_started':
       return event.payload.trigger === 'automatic'
-        ? { ...state, notices: [...state.notices, { kind: COMPACTION_NOTICE, message: COMPACTING }] }
+        ? { ...state, notices: [...state.notices, appendedNotice(state, COMPACTION_NOTICE, COMPACTING)] }
         : state;
     case 'compaction_completed':
     case 'compaction_failed':
@@ -333,7 +340,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...(event.payload.retainTranscript ? {} : { lastUsage: undefined, lastSpeed: undefined }),
         notices: [
           ...state.notices,
-          { kind: 'history_replaced', message: historyReplacedMessage(event.payload.reason) },
+          appendedNotice(state, 'history_replaced', historyReplacedMessage(event.payload.reason)),
         ],
       };
     // An accepted response boundary is not an aggregate settled cost or a terminal.
@@ -459,11 +466,14 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...state,
         notices: [
           ...state.notices,
-          { kind: 'automatic_memory', message: `${event.payload.command}\n${event.payload.output}` },
+          appendedNotice(state, 'automatic_memory', `${event.payload.command}\n${event.payload.output}`),
         ],
       };
     case 'notice':
-      return { ...state, notices: [...state.notices, event.payload] };
+      return {
+        ...state,
+        notices: [...state.notices, appendedNotice(state, event.payload.kind, event.payload.message)],
+      };
     case 'goal':
       return {
         ...state,
@@ -486,10 +496,11 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...state,
         notices: [
           ...state.notices,
-          {
-            kind: 'compacted',
-            message: `Compacted ${event.payload.replaced} items (summary ${event.payload.summaryId}).`,
-          },
+          appendedNotice(
+            state,
+            'compacted',
+            `Compacted ${event.payload.replaced} items (summary ${event.payload.summaryId}).`,
+          ),
         ],
       };
     case 'subagent':

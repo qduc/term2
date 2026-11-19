@@ -367,7 +367,9 @@ export type WireError = {
   readonly retryable?: boolean;
   readonly retryAfterMs?: number;
 };
-export type WireNotice = { readonly kind: string; readonly message: string };
+/** A public notice line. `after` is the accepted row the reducer recorded it following, so a
+ * replayed notice lands in the transcript where it was said instead of at the end. */
+export type WireNotice = { readonly kind: string; readonly message: string; readonly after?: string };
 export type WireGoal = {
   readonly id: string;
   readonly text: string;

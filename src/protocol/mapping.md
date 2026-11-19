@@ -241,7 +241,9 @@ Local editor/navigation/reset actions are intentionally not wire commands.
 | reset_all | local replacement only after authorized actual session switch |
 
 The shared reducer retains retry/compaction notices; scoped subagent events update their task and add a
-notice only for a nested error. Legacy retrying/compacted DTOs still
+notice only for a nested error. Each retained notice carries `after`, the `${kind}:${id}` of the last accepted
+timeline row when it was appended, so the TUI can render it as a transcript system row in the position it was
+said (`clients/tui/projection.ts`) instead of a pinned live line, matching legacy's system messages. Legacy retrying/compacted DTOs still
 need corresponding native producers; real branch/history facts now have direct
 mappings. Notice retention is not runtime evidence that these paths occurred.
 A scoped subagent event updates that agent's task (text, progress); only a nested `error` also adds a

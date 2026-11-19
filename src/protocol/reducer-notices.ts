@@ -1,8 +1,19 @@
 /** Legacy's live notice lines for compaction and retries, folded into the snapshot. */
-import type { WireEvent, WireSnapshot } from './wire.js';
+import type { WireEvent, WireNotice, WireSnapshot } from './wire.js';
 
 export const COMPACTION_NOTICE = 'context_compaction';
 export const COMPACTING = 'Compacting context...';
+
+/** The accepted row a new notice follows, so a replayed notice lands where it was said, not at the end. */
+export function noticeAnchor(state: WireSnapshot): { readonly after?: string } {
+  const last = state.timeline?.at(-1);
+  return last ? { after: `${last.kind}:${last.id}` } : {};
+}
+
+/** A notice line anchored to the transcript position it was said at. */
+export function appendedNotice(state: WireSnapshot, kind: string, message: string): WireNotice {
+  return { kind, message, ...noticeAnchor(state) };
+}
 
 export function compactionOutcome(
   state: WireSnapshot,
@@ -23,8 +34,9 @@ export function compactionOutcome(
       ? 'Context compaction failed (request). The turn continues with the full context.'
       : undefined;
   const notices = state.notices.slice();
+  // Keep the started line's anchor: the outcome replaces it in place where the compaction began.
   if (message === undefined) notices.splice(index, 1);
-  else notices[index] = { kind: COMPACTION_NOTICE, message };
+  else notices[index] = { ...notices[index]!, message };
   return { ...state, notices };
 }
 
@@ -58,7 +70,7 @@ export function retrying(state: WireSnapshot, event: Extract<WireEvent, { type: 
   const { attempt, maxRetries, delayMs } = event.payload;
   return {
     ...state,
-    notices: [...state.notices, { kind: 'retrying', message: retryMessage(event.payload) }],
+    notices: [...state.notices, appendedNotice(state, 'retrying', retryMessage(event.payload))],
     ...(maxRetries !== undefined ? { retry: { id: state.notices.length, attempt, maxRetries, delayMs } } : {}),
   };
 }

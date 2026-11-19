@@ -5,7 +5,7 @@ export const COMPACTION_NOTICE = 'context_compaction';
 export const COMPACTING = 'Compacting context...';
 
 /** The accepted row a new notice follows, so a replayed notice lands where it was said, not at the end. */
-export function noticeAnchor(state: WireSnapshot): { readonly after?: string } {
+function noticeAnchor(state: WireSnapshot): { readonly after?: string } {
   const last = state.timeline?.at(-1);
   return last ? { after: `${last.kind}:${last.id}` } : {};
 }

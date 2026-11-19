@@ -52,6 +52,11 @@ function commandReceipts(
     ? items.map((item) => (item.request.commandId === id ? next : item))
     : [...items, next];
 }
+/** A snapshot with one more notice line, anchored to the accepted row it followed. */
+const withNotice = (state: WireSnapshot, kind: string, message: string): WireSnapshot => ({
+  ...state,
+  notices: [...state.notices, appendedNotice(state, kind, message)],
+});
 function message(items: readonly WireMessage[], next: WireMessage, draftId?: string): readonly WireMessage[] {
   // The streaming draft is the last message; replace it without scanning or rebuilding every item.
   if (draftId === undefined && items.at(-1)?.id === next.id) return [...items.slice(0, -1), next];
@@ -278,9 +283,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     // Lifecycle evidence is otherwise a public audit event. An automatic compaction also shows legacy's
     // live lines (conversation-event-handler.ts): the started line is replaced by its outcome.
     case 'compaction_started':
-      return event.payload.trigger === 'automatic'
-        ? { ...state, notices: [...state.notices, appendedNotice(state, COMPACTION_NOTICE, COMPACTING)] }
-        : state;
+      return event.payload.trigger === 'automatic' ? withNotice(state, COMPACTION_NOTICE, COMPACTING) : state;
     case 'compaction_completed':
     case 'compaction_failed':
       return compactionOutcome(state, event);
@@ -336,12 +339,8 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
       };
     case 'history_replaced':
       return {
-        ...state,
+        ...withNotice(state, 'history_replaced', historyReplacedMessage(event.payload.reason)),
         ...(event.payload.retainTranscript ? {} : { lastUsage: undefined, lastSpeed: undefined }),
-        notices: [
-          ...state.notices,
-          appendedNotice(state, 'history_replaced', historyReplacedMessage(event.payload.reason)),
-        ],
       };
     // An accepted response boundary is not an aggregate settled cost or a terminal.
     case 'model_response_completed':
@@ -462,18 +461,9 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'cost':
       return { ...state, cost: event.payload };
     case 'automatic_memory_notice':
-      return {
-        ...state,
-        notices: [
-          ...state.notices,
-          appendedNotice(state, 'automatic_memory', `${event.payload.command}\n${event.payload.output}`),
-        ],
-      };
+      return withNotice(state, 'automatic_memory', `${event.payload.command}\n${event.payload.output}`);
     case 'notice':
-      return {
-        ...state,
-        notices: [...state.notices, appendedNotice(state, event.payload.kind, event.payload.message)],
-      };
+      return withNotice(state, event.payload.kind, event.payload.message);
     case 'goal':
       return {
         ...state,
@@ -492,17 +482,11 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'retrying':
       return retrying(state, event);
     case 'compacted':
-      return {
-        ...state,
-        notices: [
-          ...state.notices,
-          appendedNotice(
-            state,
-            'compacted',
-            `Compacted ${event.payload.replaced} items (summary ${event.payload.summaryId}).`,
-          ),
-        ],
-      };
+      return withNotice(
+        state,
+        'compacted',
+        `Compacted ${event.payload.replaced} items (summary ${event.payload.summaryId}).`,
+      );
     case 'subagent':
       return nestedPresentation(state, event);
   }

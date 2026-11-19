@@ -23,7 +23,7 @@ menus through `TuiMenus.settings.lib`.
 - `src/clients/tui/presentation/theme/resolve-theme.ts` — `resolveThemeName()` plus the pure parsers
   (`parseColorFgBg`, `parseOsc11Response`, `backgroundModeFromRgb`) and
   `shouldDetectBackground()`.
-- `src/clients/tui/presentation/theme/detect-terminal-background.ts` — the startup OSC 11 query.
+- `src/clients/terminal-probe.ts` — the startup terminal probe (OSC 11 colour, OSC 7501 support).
 - `src/clients/tui/presentation/components/theme.ts` — what components import: `useTheme`, the glyph
   constants, and the types. Glyphs stay here because they do not vary by palette.
 
@@ -76,13 +76,16 @@ without user configuration (no-color.org); only `auto` honours it.
 
 **Detection: OSC 11, then `COLORFGBG`, then dark.** `COLORFGBG` is static and set by
 only some terminals, so it is the fallback, not the source. At startup
-`detectTerminalBackground` sends the OSC 11 colour query followed by a Device
+`probeTerminal` sends the OSC 11 colour query followed by a Device
 Attributes query (`ESC [ c`). Terminals answer in order and all answer DA1, so
 receiving the DA1 reply means any colour reply has already arrived: a terminal that
 ignores OSC 11 costs one round trip instead of the full 150 ms timeout, and its DA1
 reply is consumed instead of landing in the prompt later. It must run before Ink
-takes over stdin because the replies arrive as input, and only when
-`shouldDetectBackground()` says the answer can matter. `launch-tui-terminal.ts`
+takes over stdin because the replies arrive as input. The colour query is only
+included when `shouldDetectBackground()` says the answer can matter; the same
+probe also asks for OSC 7501 program-status support (see
+[program-status.md](program-status.md)), so the round trip happens on every
+interactive start. `launch-tui-terminal.ts`
 sends the query before the TUI's modules load and `runTui` reads the answer just
 before rendering, so the round trip (or the timeout) overlaps startup. Because
 startup can keep the event loop busy past 150 ms while a reply waits, the timeout

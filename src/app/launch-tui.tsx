@@ -28,7 +28,7 @@ import { printUsage } from './usage-report.js';
 import { createDirectTuiMenus } from './launch-tui-menus.js';
 import { performRestart, type DirectRestartPlan } from './launch-tui-restart.js';
 import type { DirectLaunchRequest } from './launch-types.js';
-import type { TerminalBackground } from './launch-tui-terminal.js';
+import type { TerminalBackground, TerminalProgramStatus } from './launch-tui-terminal.js';
 import type { ILoggingService, ISettingsService } from '../shared/service-interfaces.js';
 import { INTERACTIVE_TERMINAL_REQUIRED } from './launch.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
@@ -36,6 +36,7 @@ import type { DirectMcp } from './mcp.js';
 import { displaySessionId } from '../protocol/session-id.js';
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
+type TerminalProbe = { readonly background: TerminalBackground; readonly programStatus: TerminalProgramStatus };
 
 function DirectTui({
   app,
@@ -253,7 +254,7 @@ async function runTui(
   request: InteractiveRequest,
   target: DirectSessionTarget,
   pending: Restart,
-  background: TerminalBackground,
+  { background, programStatus }: TerminalProbe,
   mcp?: DirectMcp,
 ): Promise<number> {
   const { conversationsDir, selection, resumeId, fork, profileExplicit, controlSocket } = request;
@@ -276,7 +277,7 @@ async function runTui(
     authorizeModel: () => undefined,
     authority: target.authority,
     ...(target.binding ? { sessionBinding: target.binding } : {}),
-    hooks: { root: fs.realpathSync(process.cwd()), mode: 'interactive' },
+    hooks: { root: fs.realpathSync(process.cwd()), mode: 'interactive', programStatus },
   });
   let unmount: (() => void) | null = null;
   let exitCode = 0;
@@ -371,8 +372,8 @@ async function runTui(
   }
 }
 
-/** Runs after `prepareInteractiveTerminal` confirmed the start and sent the background query. */
-export async function launchTui(request: InteractiveRequest, background: TerminalBackground): Promise<number> {
+/** Runs after `prepareInteractiveTerminal` confirmed the start and sent the terminal probe. */
+export async function launchTui(request: InteractiveRequest, terminal: TerminalProbe): Promise<number> {
   const target = await openDirectSessionTarget(request.ssh, request.lite, new AbortController().signal);
   const pending: Restart = {};
   let exitCode: number;
@@ -388,7 +389,7 @@ export async function launchTui(request: InteractiveRequest, background: Termina
           onNotice: (message) => stderr.write(`MCP: ${message}\n`),
         });
       }
-      exitCode = await runTui(request, target, pending, background, mcp);
+      exitCode = await runTui(request, target, pending, terminal, mcp);
     } finally {
       try {
         await mcp?.close();

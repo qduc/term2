@@ -17,10 +17,10 @@ export type {
 export async function launchDirect(request: DirectLaunchRequest): Promise<number> {
   switch (request.kind) {
     case 'interactive': {
-      // Before the TUI's modules load: its terminal query then overlaps their initialization.
+      // Before the TUI's modules load: its terminal probe then overlaps their initialization.
       const terminal = await (await import('./launch-tui-terminal.js')).prepareInteractiveTerminal(request);
       if (!terminal) return 1;
-      return (await import('./launch-tui.js')).launchTui(request, terminal.background);
+      return (await import('./launch-tui.js')).launchTui(request, terminal);
     }
     case 'acp':
       return (await import('./acp/launch-acp.js')).launchAcp(request);

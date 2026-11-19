@@ -17,7 +17,7 @@ Pass a prompt as a command-line argument.
 term2 "Explain the purpose of package.json in this project"
 ```
 
-Tool execution requires `--auto-approve`. That flag enables tools under GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
+Tool execution requires `--auto-approve`. That flag enables tools under GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused. It does not override a review that rejected a command.
 
 Replies stream to stdout. Diagnostic logs go to stderr.
 

@@ -67,6 +67,8 @@ export type ProviderRegistryDeps = {
   readonly providers?: Pick<SourceProviderRegistry, 'getAllProviders'>;
   /** Compatibility input for host composition; provider identity never reads this service. */
   readonly sessionContext?: ISessionContextService;
+  /** Live notification when a model starts a reasoning item (even before summary deltas arrive). */
+  readonly onReasoningStarted?: (conversationKey?: string) => void;
   /** The session's record of a refused effort marker; without one, a refusal is retried but not remembered. */
   readonly effortUpdatesRejection?: EffortUpdatesRejection;
 };
@@ -268,6 +270,9 @@ function lazyModel(
                         transport,
                         ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
                       }
+                    : undefined,
+                  deps.onReasoningStarted
+                    ? () => deps.onReasoningStarted?.(request.affinity?.conversationKey)
                     : undefined,
                 );
                 const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>

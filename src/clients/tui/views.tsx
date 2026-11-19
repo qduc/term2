@@ -223,11 +223,16 @@ function StreamingStatus({
     retry && retryUntil.current
       ? Math.max(0, Math.ceil((retryUntil.current.until - Math.max(now, Date.now())) / 1000))
       : 0;
+  const hasDraft = Object.values(state.drafts).some((text) => text.length > 0);
+  const hasReasoning = Object.values(state.reasoning).some((text) => text.length > 0);
+  const thinking = !toolRunning && !hasDraft && (Boolean(state.thinking) || hasReasoning);
   const phase =
     retry && retrySeconds > 0
       ? 'retrying'
       : toolRunning
       ? 'tool_call'
+      : thinking
+      ? 'thinking'
       : rate != null && rate > 0
       ? 'generating'
       : 'processing';

@@ -100,6 +100,8 @@ export class DirectProjection {
             this.#state.activeTurnId,
           ),
         ];
+      } else if (update.event.type === 'reasoning_started') {
+        events = [this.#event('reasoning_started', {}, null, this.#state.activeTurnId)];
       } else if (update.event.type === 'reasoning_delta') {
         events = [
           this.#event(

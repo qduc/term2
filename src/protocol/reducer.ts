@@ -73,6 +73,7 @@ function delta(state: WireSnapshot, event: Extract<WireEvent, { type: 'text_delt
   const text = (previous?.text ?? '') + payload.delta;
   return {
     ...state,
+    thinking: false,
     timeline: timeline(state, [{ kind: 'message', id: payload.messageId }]),
     messages: message(state.messages, {
       id: payload.messageId,
@@ -117,6 +118,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
               status: 'running' as const,
               activeTurnId: event.turnId,
               reasoning: '',
+              thinking: false,
               reasoningIdentity: null,
               lastError: null,
               terminal: null,
@@ -143,9 +145,12 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
           ? { codexFiveHourQuota: event.payload.fiveHourQuota ?? undefined }
           : {}),
       };
+    case 'reasoning_started':
+      return { ...state, thinking: true };
     case 'reasoning_delta':
       return {
         ...state,
+        thinking: true,
         reasoning: state.reasoning + event.payload.delta,
         reasoningIdentity: event.payload.messageId
           ? { messageId: event.payload.messageId, turnId: event.turnId, modelStep: event.payload.modelStep }
@@ -166,6 +171,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'tool_started':
       return {
         ...state,
+        thinking: false,
         timeline: timeline(state, [{ kind: 'tool', id: event.payload.tool.executionId }]),
         tools: replace(
           state.tools.map((tool) => ({ ...tool, id: tool.executionId })),
@@ -303,6 +309,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         tools: [],
         unmatchedToolResults: [],
         reasoning: '',
+        thinking: false,
         reasoningIdentity: null,
         usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
         lastUsage: undefined,
@@ -391,6 +398,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...(state.activeTurnId === event.turnId || state.activeTurnId === null
           ? {
               activeTurnId: null,
+              thinking: false,
               status: event.payload.outcome === 'interrupted' ? ('interrupted' as const) : ('idle' as const),
             }
           : {}),

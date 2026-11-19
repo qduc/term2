@@ -217,8 +217,23 @@ export function createDirectRuntimes(
       }
       const settings = sessionSettings(options, context);
       const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
+      let publishTransient:
+        | ((
+            event: Extract<import('../session/facade-types.js').DirectSessionUpdate, { type: 'transient' }>['event'],
+          ) => void)
+        | undefined;
       const selection = withEffortRejection(
-        { settings, logger, sessionContext, sessionAccountStore },
+        {
+          settings,
+          logger,
+          sessionContext,
+          sessionAccountStore,
+          onReasoningStarted: (conversationKey?: string) => {
+            if (!conversationKey || conversationKey === context.id) {
+              publishTransient?.({ type: 'reasoning_started' });
+            }
+          },
+        },
         () => installed.bound?.port,
       );
       const providerModels = createProviderRegistry(selection);
@@ -488,7 +503,11 @@ export function createDirectRuntimes(
           digest: profile.activeProfileDigest,
         },
         appVersion: installationVersion,
+        onAttach(publish) {
+          publishTransient = publish;
+        },
         async dispose() {
+          publishTransient = undefined;
           records.delete(context.id);
           stopTrimUpdates();
           const results = await Promise.allSettled(generations.map(async (dispose) => dispose()));

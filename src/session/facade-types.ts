@@ -189,6 +189,7 @@ export type DirectSessionUpdate =
             readonly fiveHourQuota?: import('../model/index.js').CodexWeeklyQuota | null;
           }
         | Extract<import('../engine/index.js').TurnEvent, { readonly type: 'retrying' }>
+        | { readonly type: 'reasoning_started' }
         | { readonly type: 'reasoning_delta'; readonly delta: string }
         | { readonly type: 'tool_progress'; readonly executionId: ExecutionId; readonly chunk: string };
     }

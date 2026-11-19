@@ -25,8 +25,11 @@ export class ModelEventProjection {
   #completed = false;
   readonly #speed = new StreamingSpeedTracker();
   #streamedReasoning = false;
+  readonly #onReasoningStarted: (() => void) | undefined;
 
-  constructor(readonly providerId: string, readonly continuation?: ResponseIdentity) {}
+  constructor(readonly providerId: string, readonly continuation?: ResponseIdentity, onReasoningStarted?: () => void) {
+    this.#onReasoningStarted = onReasoningStarted;
+  }
 
   *project(event: StreamedModelTurnEvent): Generator<ModelEvent> {
     switch (event.type) {
@@ -45,6 +48,9 @@ export class ModelEventProjection {
       case 'text_delta':
         this.#speed.recordDelta(event.text);
         yield { type: 'text_delta', delta: event.text, ...(event.partId ? { partId: event.partId } : {}) };
+        break;
+      case 'reasoning_started':
+        this.#onReasoningStarted?.();
         break;
       case 'reasoning_delta':
         if (event.text) this.#streamedReasoning = true;

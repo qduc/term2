@@ -25,6 +25,7 @@ export function canonicalCandidate(
 ): Candidate | null {
   switch (event.type) {
     case 'codex_quota':
+    case 'reasoning_started':
       return null;
     case 'approval_review':
       // Live-only review progress; the pinned agent-wire has no event for it. A request
@@ -320,6 +321,7 @@ function nestedCandidate(
     case 'turn_ended':
     case 'text_delta':
     case 'reasoning':
+    case 'reasoning_started':
     case 'reasoning_delta':
     case 'tool_called':
     case 'tool_progress':

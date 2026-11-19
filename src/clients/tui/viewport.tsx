@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { renderToString, useInput, useStdout, Text } from 'ink';
+import { Box, renderToString, useBoxMetrics, useStdout, Text, type DOMElement, type Key } from 'ink';
 import { ThemeProvider, useTheme } from './presentation/components/theme.js';
 import { SkinProvider, useSkin } from './presentation/skins/SkinContext.js';
 import type { TuiState } from './state.js';
@@ -45,28 +45,37 @@ export function useTranscriptViewport(
   history: TuiState,
   columns: number,
   rows: number,
-  active: boolean,
+  helpRows: number,
   header?: React.ReactNode,
   historyRevision = 0,
   showReasoning = true,
 ) {
   const { stdout } = useStdout();
+  // Ink accepts an unattached ref, though the metrics hook's type omits null.
+  const controlsRef = useRef<DOMElement>(null!);
+  const controls = useBoxMetrics(controlsRef);
+  // Stay below Ink's fullscreen threshold and leave a margin above the controls.
+  const maxHeight = Math.max(1, rows - 1);
+  const spaceAboveControls = controls.hasMeasured ? Math.max(0, maxHeight - controls.height) : 0;
+  const availableRows = Math.max(0, spaceAboveControls - 1);
   const [epoch, setEpoch] = useState(0);
+  const [reader, setReader] = useState<{ lines: readonly string[]; start: number } | null>(null);
   const state = useLegacyWindow(history, epoch);
   const redraw = () => {
     clearTerminalForRedraw(stdout);
+    setReader(null);
     setEpoch((current) => current + 1);
   };
   const [frame, setFrame] = useState<{
     lines: string[];
     activeTurnId: string | null;
-    expanded: boolean;
+    columns: number;
     showReasoning: boolean;
     committed: readonly unknown[] | null;
   }>({
     lines: [],
     activeTurnId: null,
-    expanded: false,
+    columns,
     showReasoning,
     committed: null,
   });
@@ -83,6 +92,8 @@ export function useTranscriptViewport(
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const resize = () => {
+      // The reading snapshot contains ANSI rows already wrapped at the old width.
+      setReader(null);
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         if (activeTurn.current) {
@@ -109,16 +120,15 @@ export function useTranscriptViewport(
   const [help, setHelp] = useState<string | null>(null);
   const theme = useTheme();
   const skin = useSkin();
-  const [expanded, setExpanded] = useState(false);
   // Never print a throttled active-turn frame after its turn has settled.
   const lines =
-    frame.expanded !== expanded ||
+    frame.columns !== columns ||
     frame.showReasoning !== showReasoning ||
-    (!expanded && frame.committed !== committed) ||
+    frame.committed !== committed ||
     (!state.activeTurnId && frame.activeTurnId)
       ? []
       : frame.lines;
-  const renderLive = (shown: TuiState, ages: ReadonlyMap<string, LiveToolAge>, all: boolean): string[] => {
+  const renderLive = (shown: TuiState, ages: ReadonlyMap<string, LiveToolAge>): string[] => {
     const rendered = renderToString(
       <ThemeProvider theme={theme}>
         <SkinProvider skin={skin}>
@@ -128,7 +138,6 @@ export function useTranscriptViewport(
               messages={shown.messages}
               columns={columns}
               live
-              expanded={all}
             />
           </LiveToolAgesContext.Provider>
         </SkinProvider>
@@ -148,15 +157,15 @@ export function useTranscriptViewport(
     // leaving every row live.
     if (state.activeTurnId) return redraw();
     const pending = setTimeout(() => {
-      const next = renderLive(state, new Map(), false);
+      const next = renderLive(state, new Map());
       clearTerminalForRedraw(stdout);
+      setReader(null);
       setEpoch((current) => current + 1);
-      setFrame({ lines: next, activeTurnId: state.activeTurnId, expanded: false, showReasoning, committed: NO_ROWS });
+      setFrame({ lines: next, activeTurnId: state.activeTurnId, columns, showReasoning, committed: NO_ROWS });
     }, 0);
     return () => clearTimeout(pending);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyRevision, stdout, showReasoning]);
-  const [offset, setOffset] = useState(0);
   const [helpOffset, setHelpOffset] = useState(0);
   const [helpLines, setHelpLines] = useState<string[]>([]);
   useEffect(() => {
@@ -167,8 +176,6 @@ export function useTranscriptViewport(
     }, 0);
     return () => clearTimeout(pending);
   }, [help, columns]);
-  // Ctrl+O shows every tool's output; by default only failures and edits are open.
-  const height = Math.max(1, rows - 9);
   const lastRender = useRef(0);
   const [clock, setClock] = useState(0);
   const activeShell = state.tasks.some((task) => task.wire?.kind === 'shell' && task.status === 'running');
@@ -188,7 +195,7 @@ export function useTranscriptViewport(
     // outside React's effect/commit stack or it can free a still-pending Yoga root.
     const pending = setTimeout(() => {
       lastRender.current = performance.now();
-      const shown = expanded ? state : tail;
+      const shown = tail;
       const now = performance.now();
       const ages = new Map<string, LiveToolAge>();
       const seen = new Map<string, { inFlight: number; running?: number }>();
@@ -206,85 +213,126 @@ export function useTranscriptViewport(
         });
       }
       firstSeen.current = seen;
-      const next = renderLive(shown, ages, expanded);
+      const next = renderLive(shown, ages);
       for (const [id, text] of Object.entries(shown.drafts)) if (text) drawnDrafts.current.add(id);
       // A held reply drawn here counts as drawn: the next commit pass moves it to scrollback.
       for (const message of shown.messages)
         if (message.replacesDraftId) drawnDrafts.current.add(message.replacesDraftId);
       // An identical frame must not re-render the whole session.
       setFrame((previous) =>
-        previous.expanded === expanded &&
+        previous.columns === columns &&
         previous.showReasoning === showReasoning &&
         previous.committed === committed &&
         previous.activeTurnId === shown.activeTurnId &&
         previous.lines.length === next.length &&
         previous.lines.every((line, index) => line === next[index])
           ? previous
-          : { lines: next, activeTurnId: shown.activeTurnId, expanded, showReasoning, committed },
+          : { lines: next, activeTurnId: shown.activeTurnId, columns, showReasoning, committed },
       );
     }, wait);
     return () => clearTimeout(pending);
-  }, [state, tail, columns, theme, skin, expanded, showReasoning, committed, clock]);
-  const maxOffset = Math.max(0, lines.length - height);
-  const visibleOffset = Math.min(offset, maxOffset);
-  useInput(
-    (input, key) => {
-      if (help && (key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow)))) {
-        const delta = key.pageUp || key.pageDown ? height : 1;
-        setHelpOffset((current) =>
-          Math.max(
-            0,
-            Math.min(Math.max(0, helpLines.length - height), current + (key.pageUp || key.upArrow ? -delta : delta)),
-          ),
-        );
-      } else if (key.pageUp || (key.ctrl && key.upArrow)) {
-        setOffset((current) => Math.min(maxOffset, current + (key.pageUp ? height : 1)));
-      } else if (key.pageDown || (key.ctrl && key.downArrow)) {
-        setOffset((current) => Math.max(0, current - (key.pageDown ? height : 1)));
-      }
-    },
-    { isActive: active },
-  );
-  if (help) {
-    const start = Math.min(helpOffset, Math.max(0, helpLines.length - height));
-    const end = Math.min(helpLines.length, start + height);
-    return {
-      epoch,
-      staticTranscript,
-      redraw,
-      paged: true,
-      text: helpLines.slice(start, end).join('\n'),
-      start,
-      end,
-      total: helpLines.length,
-      live: end === helpLines.length,
-      setHelp,
-      expanded,
-      collapse: () => {
-        setOffset(0);
-        setExpanded(false);
-      },
-    };
-  }
-  const end = Math.max(0, lines.length - visibleOffset);
-  const start = !expanded && visibleOffset === 0 ? 0 : Math.max(0, end - height);
+  }, [tail, columns, theme, skin, showReasoning, committed, clock]);
+
+  const clipped = lines.length > availableRows;
+  const showHint =
+    availableRows > 1 && (help ? helpLines.length > Math.min(helpRows, availableRows) : clipped || reader !== null);
+  const height = availableRows - Number(showHint);
+  const pageHeight = help ? Math.min(height, helpRows) : height;
+  const source = help ? helpLines : reader?.lines ?? lines;
+  const lastPage = Math.max(0, source.length - pageHeight);
+  const start = help ? Math.min(helpOffset, lastPage) : reader ? Math.min(reader.start, lastPage) : lastPage;
+  const end = Math.min(source.length, start + pageHeight);
+
+  const handleKey = (key: Key): boolean => {
+    if (key.escape && reader) {
+      setReader(null);
+      return true;
+    }
+    const up = key.pageUp || (key.ctrl && key.upArrow);
+    const down = key.pageDown || (key.ctrl && key.downArrow);
+    if ((!up && !down) || !pageHeight) return false;
+    const delta = key.pageUp || key.pageDown ? pageHeight : 1;
+    if (help) {
+      setHelpOffset((current) => Math.max(0, Math.min(lastPage, current + (up ? -delta : delta))));
+    } else if (up && (reader || clipped)) {
+      // Keep the displayed rows even if new tokens arrive or the draft moves into Static.
+      setReader((current) => ({
+        lines: current?.lines ?? lines,
+        start: Math.max(0, Math.min(current?.start ?? lastPage, lastPage) - delta),
+      }));
+    } else if (down && reader) {
+      setReader((current) => {
+        if (!current || current.start + delta >= lastPage) return null;
+        return { ...current, start: current.start + delta };
+      });
+    }
+    return true;
+  };
+
+  const text = source.slice(start, end).join('\n');
+  const hasText = Boolean(text.trim());
+  const hint = !showHint
+    ? null
+    : help
+    ? `Lines ${start + 1}–${end} of ${source.length} · PgUp/PgDn or Ctrl+↑/↓`
+    : reader
+    ? `Lines ${start + 1}–${end} of ${source.length} · PgUp/PgDn · Esc to live`
+    : 'PgUp to read earlier output';
   return {
     epoch,
-    staticTranscript,
-    redraw,
-    paged: expanded,
     // The live text has been drawn for the current committed rows (false right after a remount, until its render).
     frameReady: frame.committed === committed && frame.showReasoning === showReasoning,
-    text: lines.slice(start, end).join('\n'),
-    start,
-    end,
-    total: lines.length,
-    live: visibleOffset === 0,
+    staticTranscript,
+    text: hasText ? text : null,
+    hint,
+    maxHeight,
+    controlsBoxProps: {
+      ref: controlsRef,
+      flexShrink: 0,
+      flexDirection: 'column',
+      paddingX: 2,
+      // Legacy uses three rows of margin with no transcript. Yield it when the controls need the room.
+      marginTop: controls.hasMeasured ? Math.min(hasText || hint ? 1 : 3, spaceAboveControls) : 3,
+    } as const,
     setHelp,
-    expanded,
-    collapse: () => {
-      setOffset(0);
-      setExpanded(false);
-    },
+    reading: reader !== null,
+    closeReader: () => setReader(null),
+    handleKey,
   };
+}
+
+type TranscriptFrameView = Pick<
+  ReturnType<typeof useTranscriptViewport>,
+  'staticTranscript' | 'text' | 'hint' | 'maxHeight' | 'reading'
+>;
+
+export function TranscriptFrame({ viewport, children }: React.PropsWithChildren<{ viewport: TranscriptFrameView }>) {
+  const theme = useTheme();
+  const { staticTranscript, text, hint, maxHeight, reading } = viewport;
+  const visible = Boolean(text || hint);
+  return (
+    <Box flexDirection="column" maxHeight={visible ? maxHeight : undefined}>
+      {staticTranscript}
+      {visible ? (
+        // Controls can grow in the same commit as a transcript update. Shrink and clip the
+        // transcript in that layout while the measured row budget catches up.
+        <Box
+          flexDirection="column"
+          flexShrink={1}
+          overflowY="hidden"
+          justifyContent={reading ? 'flex-start' : 'flex-end'}
+        >
+          <Box flexDirection="column" flexShrink={0}>
+            {text ? <Text>{text}</Text> : null}
+            {hint ? (
+              <Text color={theme.textSubtle} wrap="truncate-end">
+                {hint}
+              </Text>
+            ) : null}
+          </Box>
+        </Box>
+      ) : null}
+      {children}
+    </Box>
+  );
 }

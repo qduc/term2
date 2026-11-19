@@ -20,6 +20,7 @@ import { cleanImageMarkers, wireAttachments } from './draft.js';
 import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
 import { useCommandTranscriptViewport } from './command-transcript.js';
+import { TranscriptFrame } from './viewport.js';
 import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
@@ -120,12 +121,10 @@ export function TuiSession({
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const approvalInterrupt = useRef<(() => boolean) | null>(null);
-  const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
   const sessionHeader = useNewConversationHeader(header, newConversation, columns);
   const viewport = useCommandTranscriptViewport(
     state,
     (headerHeight ?? 0) + (newConversation ? BOUNDARY_ROWS : 0),
-    viewportActive,
     sessionHeader,
     historyRevision,
     { transitionNotices: [...(newConversation ?? []), ...(transitionNotice ? [transitionNotice] : [])], redrawKey },
@@ -174,14 +173,14 @@ export function TuiSession({
     replaceInput,
     notice: setNotice,
   });
-  // Legacy InputBox's double Escape clear; menus, panels, the expanded output viewer and the queue take Escape first.
+  // Menus, panels, the transcript reader and the queue take Escape before the composer's double Escape.
   const shell = useShellMode(editor.value, replaceInput);
   const largeUncached = useLargeUncachedAdvisory(connection, editor.value, !shell.active, state, confirmation);
   const { escHintVisible } = useEscapeKey({
     value: editor.value,
     onChange: (value) => replaceInput(value),
     onEscape: () => {
-      if (!composerActive || menuStack.open || viewport.expanded || queue.index >= 0 || Boolean(editing)) return true;
+      if (!composerActive || menuStack.open || viewport.reading || queue.index >= 0 || Boolean(editing)) return true;
       // Legacy InputBox handleEscape: Esc on an empty shell prompt leaves shell mode.
       return shell.escape();
     },
@@ -214,7 +213,7 @@ export function TuiSession({
   });
   const composerFilter = useComposerFilter({
     composerActive,
-    outputExpanded: viewport.expanded,
+    readingTranscript: viewport.reading,
     draft: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
     submit: (text) => void submit(text, images),
   });
@@ -235,14 +234,13 @@ export function TuiSession({
     if (confirmation.handleKey(input, key)) return;
     if (taskOpen || budgetOpen) return;
     if (composerActive && key.escape && handoffFlow.escape()) return;
-    if (composerActive && key.escape && !viewport.expanded && queue.index < 0 && !editing && interruptConfirm.press())
-      return;
+    if (composerActive && !queuePaused.shown && queue.index < 0 && !editing && viewport.handleKey(key)) return;
+    if (composerActive && key.escape && queue.index < 0 && !editing && interruptConfirm.press()) return;
     // Legacy's Shift+Tab entered Plan mode, a dropped profile (#149): the key is consumed and does nothing.
     if (composerActive && isShiftTab(input, key)) return;
     // Legacy use-app-keyboard-shortcuts: Ctrl+O and Ctrl+T replace the draft with the menu command.
     if (composerActive && isCtrlO(input, key)) return replaceInput('/model ');
     if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
-    if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     // Legacy's Ctrl+G is only the background task manager, and it opens only when there is live work to manage.
     const liveTasks = state.tasks.some((task) => task.status === 'running' || task.status === 'awaiting_interaction');
     if (isCtrlG(input, key) && !busy && liveTasks) setTaskOpen(true);
@@ -288,6 +286,7 @@ export function TuiSession({
     setBusy(true);
     setNotice(null);
     viewport.setHelp(null);
+    viewport.closeReader();
     // True when the draft was held for confirmation instead of sent.
     const held = async (text: string, attachments: readonly WireContent[], retry: () => void): Promise<boolean> => {
       if (confirmed) return false;
@@ -410,15 +409,8 @@ export function TuiSession({
   };
   submitRef.current = (text) => void submit(text, [], undefined, false, true);
   return (
-    <Box flexDirection="column">
-      {viewport.staticTranscript}
-      {viewport.text.trim() ? <Text>{viewport.text}</Text> : null}
-      {viewport.paged && viewport.total > 0 && (viewport.start > 0 || !viewport.live) ? (
-        <Text color={theme.textSubtle}>
-          Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓
-        </Text>
-      ) : null}
-      <Box flexDirection="column" paddingX={2} marginTop={viewport.bottomMargin}>
+    <TranscriptFrame viewport={viewport}>
+      <Box {...viewport.controlsBoxProps}>
         <Activity
           state={{ ...state, interactions: state.interactions.filter((item) => item.id !== answeredId) }}
           dialogInteractionId={foregroundInteraction?.id}
@@ -545,6 +537,6 @@ export function TuiSession({
           largeUncached={largeUncached}
         />
       </Box>
-    </Box>
+    </TranscriptFrame>
   );
 }

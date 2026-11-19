@@ -23,6 +23,14 @@ description: Keyboard shortcuts for input, approvals, menus, and tasks.
 | `Ctrl + C` | Global | Clear the draft first, or interrupt the active turn when the draft is empty. Press again within 2 seconds to exit with the usage summary. |
 | `Ctrl + \\` | Global | Exit immediately with the session usage summary. |
 
+## Transcript Shortcuts
+
+| Shortcut | Context | Action |
+| :--- | :--- | :--- |
+| `Page Up` / `Ctrl + ↑` | Overflowing live transcript | Snapshot the visible output so streaming tokens and new rows cannot move the reading position. |
+| `Page Down` / `Ctrl + ↓` | Scrolled transcript | Move toward newer output; at the newest line, return to live output. |
+| `Escape` | Scrolled transcript | Return to live output without changing the composer draft. |
+
 ## Approval Prompt Shortcuts
 
 | Shortcut | Context | Action |

@@ -7,11 +7,23 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
-## Changes on main since 1.2.0
+## 1.4.0 - November 19, 2026
 
-- The composer footer shows session cost and, when reported, Codex five-hour and seven-day quota usage.
-- Subscription reference cost is shown separately from spend; it is a catalog comparison, not a billed charge.
-- Assisted approval reviews use a shared decision path across terminal, ACP and non-interactive sessions.
+- Terminals that speak the OSC 7501 program-status protocol (Ghostty, Rex, hc) can show whether term2 is idle, working or waiting for a person without screen scraping. Piped headless runs emit no escape bytes.
+- While a reply streams, `Page Up` / `Ctrl+↑` snapshots the live transcript so new tokens cannot move your reading position; `Page Down` / `Ctrl+↓` or `Escape` returns to live output.
+- Retry, compaction and memory notices appear in the transcript where they were said instead of a pinned live line.
+- Provider streams no longer end at Node's fixed 300-second transport timeout before the configured stream-idle watchdog can report the stall.
+- Approval fixes: `--auto-approve` honours a review that rejected a command, an empty reason in the TUI denies without a reason, and advisory-mode reviews say the review is advisory.
+
+See the [1.4.0 changelog](https://github.com/qduc/term2/blob/v1.4.0/CHANGELOG.md) for details.
+
+## 1.3.0 - November 15, 2026
+
+- The composer footer shows session cost and, when reported, Codex five-hour and seven-day quota usage. Subscription reference cost is shown separately from spend; it is a catalog comparison, not a billed charge.
+- Assisted approval reviews use a shared decision path across terminal, ACP and non-interactive sessions, including review of outside-workspace edits.
+- Fixes for `apply_patch` approval previews, session path grants for symlinked and home-relative paths, completed-task notice timing and the development watcher with TypeScript 7.
+
+See the [1.3.0 changelog](https://github.com/qduc/term2/blob/v1.3.0/CHANGELOG.md) for details.
 
 ## 1.2.0 - November 12, 2026
 

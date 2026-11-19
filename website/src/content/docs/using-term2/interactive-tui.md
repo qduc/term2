@@ -3,7 +3,11 @@ title: Interactive TUI
 description: Using the terminal user interface, prompt composer, queueing, and steering.
 ---
 
-The terminal shows replies as they arrive. You can expand tool calls and view file changes as unified diffs.
+The terminal shows replies as they arrive. You can expand tool calls and view file changes as unified diffs. If a live reply overflows the viewport, `Page Up` / `Ctrl+↑` snapshots it while you read; `Page Down` / `Ctrl+↓` or `Escape` returns to live output.
+
+## Terminal Status
+
+On terminals that speak the OSC 7501 program-status protocol (Ghostty/libghostty, Rex, hc), term2 reports `idle`, `working` and `blocked` (waiting for a question or approval) so the terminal can show its state without screen scraping. Reports are sent only after the terminal answers the startup probe, so terminals without support see no extra bytes. Headless runs probe only when both stdin and stdout are terminals; piped or redirected runs send no escape sequences. An interactive exit clears the status, while a headless exit leaves `done` and a fatal error leaves `error`.
 
 ## The Prompt Composer
 

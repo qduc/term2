@@ -1,5 +1,6 @@
 /** Scoped subagent presentation and the id-keyed replace both use. */
 import { formatToolCommand } from './json.js';
+import { appendedNotice } from './reducer-notices.js';
 import type { WireEvent, WireSnapshot, WireTask } from './wire.js';
 
 type Identified = { readonly id: string };
@@ -63,7 +64,7 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
       ? {
           notices: [
             ...state.notices,
-            { kind: 'subagent', message: `${role ?? 'Subagent'} (${agentId}): ${child.payload.error.message}` },
+            appendedNotice(state, 'subagent', `${role ?? 'Subagent'} (${agentId}): ${child.payload.error.message}`),
           ],
         }
       : {}),

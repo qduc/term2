@@ -150,6 +150,56 @@ function interactionView(interaction: WireInteraction, callId: string | undefine
   };
 }
 
+/** Legacy printed reducer notices as system messages in the transcript; the reducer anchors each to the row it followed. */
+const noticeText = (notice: { readonly kind: string; readonly message: string }): string =>
+  notice.kind === 'history_replaced' || notice.kind === 'context_compaction' || notice.kind === 'retrying'
+    ? notice.message
+    : `${notice.kind}: ${notice.message}`;
+
+/** An anchor as a timeline key, following a streaming draft replaced by its accepted message. */
+function settledAnchor(after: string, messages: readonly WireMessage[]): string {
+  const prefix = 'message:';
+  if (!after.startsWith(prefix)) return after;
+  const draft = after.slice(prefix.length);
+  const accepted = messages.find((message) => message.replacesDraftId === draft);
+  return accepted ? `${prefix}${accepted.id}` : after;
+}
+
+/** The renderable notices as transcript system rows, spliced in after the accepted row each followed. */
+function projectNotices(
+  snapshot: WireSnapshot,
+  timeline: WireSnapshot['timeline'],
+): { readonly messages: readonly Message[]; readonly timeline: WireSnapshot['timeline'] } {
+  const shown = snapshot.notices.filter(
+    (notice) =>
+      !(notice.kind === 'history_replaced' && SILENT_HISTORY_EDITS.has(notice.message)) &&
+      notice.kind !== 'memory_global_snapshot',
+  );
+  const next = timeline ? [...timeline] : null;
+  const inserted = new Set<string>();
+  const messages: Message[] = [];
+  shown.forEach((notice, index) => {
+    const id = `notice:${index}`;
+    if (next) {
+      if (notice.after !== undefined) {
+        const anchor = settledAnchor(notice.after, snapshot.messages);
+        const found = next.findIndex((item) => `${item.kind}:${item.id}` === anchor);
+        // A line whose anchor left the history (rewound or retried away) goes with it, as legacy truncates its
+        // system lines; only a notice with no recorded anchor is appended at the end.
+        if (found < 0) return;
+        let at = found + 1;
+        // Keep append order among notices that follow the same row.
+        while (at < next.length && inserted.has(next[at]!.id)) at++;
+        next.splice(at, 0, { kind: 'message', id });
+      } else next.push({ kind: 'message', id });
+      inserted.add(id);
+    }
+    // Role `system` keeps notices out of reply-consuming views (`use-handoff` takes the last assistant reply).
+    messages.push({ id, role: 'system', text: noticeText(notice), localSystem: true });
+  });
+  return { messages, timeline: next ?? timeline };
+}
+
 const shallowEqual = (a: object, b: object): boolean => {
   const ak = Object.keys(a);
   return ak.length === Object.keys(b).length && ak.every((k) => (a as never)[k] === (b as never)[k]);
@@ -221,18 +271,23 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     if (message.draft && message.role === 'assistant' && live && !interrupted) drafts[message.id] = view.text;
     else messages.push(view);
   }
-  const before = lastLists.get(snapshot.sessionId);
-  const stableMessages = sameList(before?.messages, messages, shallowEqual) as Message[];
   const notices = noticeRows(snapshot, snapshot.timeline);
+  const transcript = projectNotices(snapshot, notices.timeline);
+  const before = lastLists.get(snapshot.sessionId);
+  const stableMessages = sameList(
+    before?.messages,
+    transcript.messages.length ? [...messages, ...transcript.messages] : messages,
+    shallowEqual,
+  ) as Message[];
   const stableTools = sameList(
     before?.tools,
     [...snapshot.tools.map(toolView), ...notices.tools],
     (a, b) => a === b,
   ) as ToolView[];
   const stableTimeline = (
-    notices.timeline
-      ? sameList(before?.timeline as typeof notices.timeline | undefined, notices.timeline, shallowEqual)
-      : notices.timeline
+    transcript.timeline
+      ? sameList(before?.timeline as typeof transcript.timeline | undefined, transcript.timeline, shallowEqual)
+      : transcript.timeline
   ) as typeof snapshot.timeline;
   lastLists.set(snapshot.sessionId, { messages: stableMessages, tools: stableTools, timeline: stableTimeline });
   return {
@@ -268,23 +323,8 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     queueState: snapshot.queueState,
     queuePauseReason: snapshot.queuePauseReason,
     tasks: snapshot.tasks.map(taskView),
-    notices: [
-      // A history edit already reads as a sentence; the raw kind label is internal.
-      ...snapshot.notices
-        .filter(
-          (notice) =>
-            // Legacy redraws a rewound, retried or compacted conversation without a line about it.
-            !(notice.kind === 'history_replaced' && SILENT_HISTORY_EDITS.has(notice.message)) &&
-            // Legacy loads memory into context without a line on screen.
-            notice.kind !== 'memory_global_snapshot',
-        )
-        .map((notice) =>
-          notice.kind === 'history_replaced' || notice.kind === 'context_compaction' || notice.kind === 'retrying'
-            ? notice.message
-            : `${notice.kind}: ${notice.message}`,
-        ),
-      ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
-    ],
+    // Reducer notices are transcript rows now (see transcriptNotices); only the terminal line stays live.
+    notices: snapshot.terminal?.notice ? [snapshot.terminal.notice] : [],
     usage: usageText(snapshot.usage),
     codexQuota: snapshot.codexQuota,
     codexFiveHourQuota: snapshot.codexFiveHourQuota,

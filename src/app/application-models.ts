@@ -3,6 +3,29 @@ import type { ISessionContextService } from '../shared/service-interfaces.js';
 import type { Model, ModelEvent, ModelRegistry, ModelRequest, ModelAffinity } from '../model/index.js';
 import type { EffortUpdatesRejection } from '../model/effort-fallback.js';
 import type { DirectContextPort } from '../session/capabilities.js';
+import type { DirectSessionUpdate } from '../session/facade-types.js';
+
+type TransientPublisher = (event: Extract<DirectSessionUpdate, { type: 'transient' }>['event']) => void;
+
+/** Routes foreground model `reasoning_started` notifications to the attached session's transient stream. */
+export function createForegroundReasoningPublisher(sessionId: string): {
+  readonly onReasoningStarted: (conversationKey?: string) => void;
+  readonly onAttach: (publish: TransientPublisher) => void;
+  readonly clear: () => void;
+} {
+  let publish: TransientPublisher | undefined;
+  return {
+    onReasoningStarted: (conversationKey) => {
+      if (!conversationKey || conversationKey === sessionId) publish?.({ type: 'reasoning_started' });
+    },
+    onAttach: (next) => {
+      publish = next;
+    },
+    clear: () => {
+      publish = undefined;
+    },
+  };
+}
 
 /** Runs an operation inside one session's traffic attribution. */
 export type SessionScope = <T>(operation: () => T) => T;

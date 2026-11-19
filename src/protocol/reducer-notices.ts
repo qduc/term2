@@ -70,6 +70,7 @@ export function retrying(state: WireSnapshot, event: Extract<WireEvent, { type: 
   const { attempt, maxRetries, delayMs } = event.payload;
   return {
     ...state,
+    thinking: false,
     notices: [...state.notices, appendedNotice(state, 'retrying', retryMessage(event.payload))],
     ...(maxRetries !== undefined ? { retry: { id: state.notices.length, attempt, maxRetries, delayMs } } : {}),
   };

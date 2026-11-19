@@ -67,6 +67,8 @@ export type ProviderRegistryDeps = {
   readonly providers?: Pick<SourceProviderRegistry, 'getAllProviders'>;
   /** Compatibility input for host composition; provider identity never reads this service. */
   readonly sessionContext?: ISessionContextService;
+  /** Live notification when a model starts a reasoning item (even before summary deltas arrive). */
+  readonly onReasoningStarted?: (conversationKey?: string) => void;
   /** The session's record of a refused effort marker; without one, a refusal is retried but not remembered. */
   readonly effortUpdatesRejection?: EffortUpdatesRejection;
 };
@@ -257,19 +259,20 @@ function lazyModel(
                 linked.throwIfAborted();
                 const turn = await providerContext.runWithContext(identity, () => turnModel(transport));
                 linked.throwIfAborted();
-                const projection = new ModelEventProjection(
-                  ref.provider,
-                  capabilities.continuity
-                    ? {
-                        kind: 'direct_response',
-                        owner,
-                        provider: ref.provider,
-                        model: ref.model,
-                        transport,
-                        ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
-                      }
-                    : undefined,
-                );
+                const continuation = capabilities.continuity
+                  ? {
+                      kind: 'direct_response' as const,
+                      owner,
+                      provider: ref.provider,
+                      model: ref.model,
+                      transport,
+                      ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
+                    }
+                  : undefined;
+                const onReasoning = deps.onReasoningStarted
+                  ? () => deps.onReasoningStarted?.(request.affinity?.conversationKey)
+                  : undefined;
+                const projection = new ModelEventProjection(ref.provider, continuation, onReasoning);
                 const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
                   turn.stream({ ...prepared, signal: linked, onDispatched: notify }),
                 );

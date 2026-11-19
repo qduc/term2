@@ -221,7 +221,7 @@ it(
     expect(session.getVisibleOutput()).not.toContain('Locating the unique workspace fixture');
     expect(session.getVisibleOutput()).not.toContain('with more streamed detail');
     const liveFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(liveFrame).toMatch(/Generating · \d+s/);
+    expect(liveFrame).toMatch(/Thinking · \d+s/);
     expect(liveFrame).toContain('tok/s');
     expect(liveFrame).not.toContain('Queue: running');
     const beforeSettled = session.getVisibleOutput().length;

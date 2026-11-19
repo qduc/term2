@@ -82,6 +82,8 @@ export type WireSnapshot = {
     readonly delayMs: number;
   };
   readonly reasoning: string;
+  /** Live only: true once the active model step has begun reasoning (even before summary deltas arrive). */
+  readonly thinking?: boolean;
   readonly reasoningIdentity?: {
     readonly messageId: string;
     readonly turnId: string | null;
@@ -157,6 +159,7 @@ export type WireEventPayloads = {
   };
   text_delta: { readonly delta: string; readonly messageId: string; readonly modelStep: number };
   reasoning: { readonly text: string; readonly messageId: string; readonly modelStep: number | null };
+  reasoning_started: Record<string, never>;
   reasoning_delta: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null };
   codex_quota: {
     readonly quota: import('../model/index.js').CodexWeeklyQuota | null;

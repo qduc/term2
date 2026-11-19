@@ -6,7 +6,7 @@ import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import { createConversation, openConversation } from './conversation.js';
 import type { ConversationDeps, TurnRequest } from './types.js';
-import type { DirectBinding, DirectSessionStore } from './facade-types.js';
+import type { DirectBinding, DirectSessionStore, DirectSessionUpdate } from './facade-types.js';
 import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { createDirectSession, type DirectLiveSession } from './session.js';
 import type { ConversationLog } from './log.js';
@@ -40,6 +40,7 @@ export type DirectConversationRuntime = {
   readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   readonly profile: SessionStartedFact['profile'];
   readonly appVersion: string;
+  onAttach?(publish: (event: Extract<DirectSessionUpdate, { type: 'transient' }>['event']) => void): void;
   dispose?(): void | Promise<void>;
 };
 export type DirectSessionStoreOptions = {
@@ -217,6 +218,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         entries,
         request: ownedRuntime.request,
         attach(observedLog, publish) {
+          ownedRuntime.onAttach?.(publish);
           const liveDeps = {
             ...ownedRuntime.deps,
             rotationBoundary: () => rollingLog.head(),

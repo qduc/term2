@@ -104,6 +104,7 @@ export type TuiState = {
   /** Draft identity must include model step, so separate responses cannot merge. */
   readonly drafts: Readonly<Record<string, string>>;
   readonly reasoning: Readonly<Record<string, string>>;
+  readonly thinking?: boolean;
   readonly tools: readonly ToolView[];
   /**
    * When each tool's row would appear in legacy: at its call, or, for a call that waited on the user (a

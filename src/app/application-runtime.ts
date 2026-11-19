@@ -23,7 +23,13 @@ import type { DirectConversationRuntime, DirectRuntimeContext } from '../session
 import { createToolSurface } from './tool-surface.js';
 import { sessionApprovalReview } from './lib/approval-model.js';
 import type { DirectHookRuntime } from './application-hooks.js';
-import { withSessionScope, createSessionScope, withEffortRejection, type SessionScope } from './application-models.js';
+import {
+  withSessionScope,
+  createSessionScope,
+  withEffortRejection,
+  createForegroundReasoningPublisher,
+  type SessionScope,
+} from './application-models.js';
 import { createNestedAuthorizer } from './application-nested.js';
 import { prepareSessionRollover } from './application-rollover.js';
 import { createDirectConfigMemoryBinding } from './config-memory.js';
@@ -217,8 +223,9 @@ export function createDirectRuntimes(
       }
       const settings = sessionSettings(options, context);
       const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
+      const reasoning = createForegroundReasoningPublisher(context.id);
       const selection = withEffortRejection(
-        { settings, logger, sessionContext, sessionAccountStore },
+        { settings, logger, sessionContext, sessionAccountStore, onReasoningStarted: reasoning.onReasoningStarted },
         () => installed.bound?.port,
       );
       const providerModels = createProviderRegistry(selection);
@@ -488,7 +495,9 @@ export function createDirectRuntimes(
           digest: profile.activeProfileDigest,
         },
         appVersion: installationVersion,
+        onAttach: reasoning.onAttach,
         async dispose() {
+          reasoning.clear();
           records.delete(context.id);
           stopTrimUpdates();
           const results = await Promise.allSettled(generations.map(async (dispose) => dispose()));

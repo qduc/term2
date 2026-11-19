@@ -1,4 +1,5 @@
 /** Per-request generation limits wrapped around every model the direct application resolves. */
+import { withApplicationTimeout } from '../model/providers/fetch/provider-dispatcher.js';
 import { GenerationGuard, GenerationStreamDeadlines } from '../session/agent-runtime/generation-guard.js';
 import type { Model, ModelEvent, ModelRegistry, ModelRequest } from '../model/index.js';
 import type { ProfileSelection } from './tool-contract.js';
@@ -30,9 +31,12 @@ export function withGenerationGuard(models: ModelRegistry, { settings }: Profile
       () => guard.progress,
     );
     const events = model.stream(request, AbortSignal.any([signal, stop.signal]), onDispatched)[Symbol.asyncIterator]();
+    const hasDeadline = guard.requestDeadlineMs > 0 || guard.maxStreamIdleMs > 0;
     try {
       for (;;) {
-        const next = await deadlines.wait(events.next());
+        // Scope the read, not the consumer: native compaction and other requests
+        // outside it still rely on transport timeouts.
+        const next = await deadlines.wait(hasDeadline ? withApplicationTimeout(() => events.next()) : events.next());
         if (next.done) return;
         deadlines.recordActivity();
         if (next.value.type === 'text_delta') guard.observeText(next.value.delta);

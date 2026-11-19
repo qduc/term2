@@ -49,12 +49,10 @@ const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<GenerationGuardOptions
   // from a stalled provider, so keep it opt-in (off by default). The stream
   // -idle watchdog below owns inactivity for every provider: it re-arms on
   // each streamed delta, so long legitimate thinking survives while true
-  // silence is cut. 300s is the worst case users already hit with undici's old
-  // body timeout, now reported as this guard's typed failure instead of an
-  // opaque transport error; a buffered provider that delivers inside the
-  // window still gets through.
+  // silence is cut. 600s matches the proven Codex inter-frame value and lets a
+  // provider that buffers its whole answer for minutes still deliver it.
   requestDeadlineMs: 0,
-  maxStreamIdleMs: 300_000,
+  maxStreamIdleMs: 600_000,
   toolArgumentRunawayMs: 60_000,
 };
 

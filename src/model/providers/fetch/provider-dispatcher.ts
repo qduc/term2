@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 /**
  * Node's bundled `fetch` (undici) applies its own 300 s headers/body inactivity
  * timeouts to every request. On a provider stream those defaults pre-empt
@@ -10,8 +12,8 @@
  * `bodyTimeout`/`headersTimeout` from the dispatch options before falling back
  * to the client defaults (`client-h1.js` on response headers, `client-h2.js` in
  * `writeH2`). Routing this lane through a thin wrapper that pins both to `0`
- * therefore disables the transport timeouts without touching other fetches
- * (model listing, OAuth, decisions) or the process-wide dispatcher.
+ * disables the transport timeouts only while application deadlines own the
+ * request. Unguarded calls (including native compaction) keep their timeouts.
  * `connectTimeout` stays at its default: a failed connect is a distinct phase
  * that already classifies as retryable.
  */
@@ -27,6 +29,12 @@ type Dispatcher = {
 };
 
 const GLOBAL_DISPATCHER_SYMBOL = Symbol.for('undici.globalDispatcher.1');
+const applicationTimeoutScope = new AsyncLocalStorage<true>();
+
+/** Run one stream read whose timeout is enforced by an application watchdog. */
+export function withApplicationTimeout<T>(read: () => T): T {
+  return applicationTimeoutScope.run(true, read);
+}
 
 /**
  * undici stores the process's dispatcher on an internal symbol shared by Node's
@@ -60,15 +68,14 @@ function timeoutFreeDispatcher(): Dispatcher | undefined {
 }
 
 /**
- * Adds the timeout-free dispatcher to a provider request. Only the native
- * `fetch` understands `dispatcher`; an injected implementation keeps its own
- * semantics.
+ * Adds the timeout-free dispatcher only to guarded native provider requests.
+ * An injected fetch keeps its own semantics.
  */
 export function disableTransportTimeouts(
   init: RequestInit | undefined,
   fetchImpl: typeof fetch,
 ): RequestInit | undefined {
-  if (fetchImpl !== fetch) return init;
+  if (fetchImpl !== fetch || !applicationTimeoutScope.getStore()) return init;
   const dispatcher = timeoutFreeDispatcher();
   if (!dispatcher) return init;
   // `RequestInit` in @types/node predates the runtime `dispatcher` option.

@@ -23,7 +23,13 @@ import type { DirectConversationRuntime, DirectRuntimeContext } from '../session
 import { createToolSurface } from './tool-surface.js';
 import { sessionApprovalReview } from './lib/approval-model.js';
 import type { DirectHookRuntime } from './application-hooks.js';
-import { withSessionScope, createSessionScope, withEffortRejection, type SessionScope } from './application-models.js';
+import {
+  withSessionScope,
+  createSessionScope,
+  withEffortRejection,
+  createForegroundReasoningPublisher,
+  type SessionScope,
+} from './application-models.js';
 import { createNestedAuthorizer } from './application-nested.js';
 import { prepareSessionRollover } from './application-rollover.js';
 import { createDirectConfigMemoryBinding } from './config-memory.js';
@@ -217,23 +223,9 @@ export function createDirectRuntimes(
       }
       const settings = sessionSettings(options, context);
       const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
-      let publishTransient:
-        | ((
-            event: Extract<import('../session/facade-types.js').DirectSessionUpdate, { type: 'transient' }>['event'],
-          ) => void)
-        | undefined;
+      const reasoning = createForegroundReasoningPublisher(context.id);
       const selection = withEffortRejection(
-        {
-          settings,
-          logger,
-          sessionContext,
-          sessionAccountStore,
-          onReasoningStarted: (conversationKey?: string) => {
-            if (!conversationKey || conversationKey === context.id) {
-              publishTransient?.({ type: 'reasoning_started' });
-            }
-          },
-        },
+        { settings, logger, sessionContext, sessionAccountStore, onReasoningStarted: reasoning.onReasoningStarted },
         () => installed.bound?.port,
       );
       const providerModels = createProviderRegistry(selection);
@@ -503,11 +495,9 @@ export function createDirectRuntimes(
           digest: profile.activeProfileDigest,
         },
         appVersion: installationVersion,
-        onAttach(publish) {
-          publishTransient = publish;
-        },
+        onAttach: reasoning.onAttach,
         async dispose() {
-          publishTransient = undefined;
+          reasoning.clear();
           records.delete(context.id);
           stopTrimUpdates();
           const results = await Promise.allSettled(generations.map(async (dispose) => dispose()));

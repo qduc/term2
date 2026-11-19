@@ -117,8 +117,14 @@ it('shows Thinking status when a Responses model starts reasoning without summar
   const env = createTestChildEnv({
     HOME: home,
     CODEX_HOME: codex,
-    TERM2_CODEX_BASE_URL: `http://127.0.0.1:${port}/backend-api/codex`,
     CODEX_BASE_URL: `http://127.0.0.1:${port}`,
+    XDG_CONFIG_HOME: path.join(home, 'config'),
+    XDG_STATE_HOME: path.join(home, 'state'),
+    XDG_DATA_HOME: path.join(home, 'data'),
+    XDG_CACHE_HOME: path.join(home, 'cache'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    CI: 'false',
     [HARNESS_IDLE_ENV]: idlePath,
   });
   const settingsDir = resolveSettingsDirectory({ env, homeDir: home });

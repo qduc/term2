@@ -259,22 +259,20 @@ function lazyModel(
                 linked.throwIfAborted();
                 const turn = await providerContext.runWithContext(identity, () => turnModel(transport));
                 linked.throwIfAborted();
-                const projection = new ModelEventProjection(
-                  ref.provider,
-                  capabilities.continuity
-                    ? {
-                        kind: 'direct_response',
-                        owner,
-                        provider: ref.provider,
-                        model: ref.model,
-                        transport,
-                        ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
-                      }
-                    : undefined,
-                  deps.onReasoningStarted
-                    ? () => deps.onReasoningStarted?.(request.affinity?.conversationKey)
-                    : undefined,
-                );
+                const continuation = capabilities.continuity
+                  ? {
+                      kind: 'direct_response' as const,
+                      owner,
+                      provider: ref.provider,
+                      model: ref.model,
+                      transport,
+                      ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
+                    }
+                  : undefined;
+                const onReasoning = deps.onReasoningStarted
+                  ? () => deps.onReasoningStarted?.(request.affinity?.conversationKey)
+                  : undefined;
+                const projection = new ModelEventProjection(ref.provider, continuation, onReasoning);
                 const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
                   turn.stream({ ...prepared, signal: linked, onDispatched: notify }),
                 );

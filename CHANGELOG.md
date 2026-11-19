@@ -1,3 +1,19 @@
+## [1.4.0] - 2026-11-19
+
+### Features
+- Report idle, working and waiting-for-person status over OSC 7501 on terminals that support it (Ghostty/libghostty, Rex and hc), so status can be shown without screen scraping. Piped headless runs emit no escape bytes.
+
+### Improvements
+- Snapshot an overflowing live transcript with `Page Up` or `Ctrl+↑` while a reply streams, so new output cannot move the reading position; `Page Down`, `Ctrl+↓` or `Escape` returns to live output.
+- Show retry, compaction and memory notices as transcript rows at the position where they were said instead of pinning them to the live frame.
+- Show a Thinking status while the provider reports reasoning or `reasoning_started`.
+- Let the configured stream-idle watchdog end a quiet provider stream instead of Node's fixed 300-second fetch timeout reporting an opaque transport error. Other fetch paths keep their transport timeouts.
+- Apply the shell-quote dependency patch with pnpm 12.
+
+### Bug Fixes
+- `--auto-approve` no longer runs a command the session's review rejected, whatever the classifier rates it.
+- Empty Enter in the TUI rejection-reason box denies without a reason, advisory reviews say the review is advisory, and a person's denial during a review no longer produces an approval notification.
+
 ## [1.3.0] - 2026-11-15
 
 ### Features

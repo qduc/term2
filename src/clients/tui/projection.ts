@@ -156,43 +156,48 @@ const noticeText = (notice: { readonly kind: string; readonly message: string })
     ? notice.message
     : `${notice.kind}: ${notice.message}`;
 
-/** The renderable notices as transcript system rows, each carrying the accepted row it followed. */
-function transcriptNotices(snapshot: WireSnapshot): {
-  readonly messages: readonly Message[];
-  readonly entries: readonly { readonly id: string; readonly after?: string }[];
-} {
+/** An anchor as a timeline key, following a streaming draft replaced by its accepted message. */
+function settledAnchor(after: string, messages: readonly WireMessage[]): string {
+  const prefix = 'message:';
+  if (!after.startsWith(prefix)) return after;
+  const draft = after.slice(prefix.length);
+  const accepted = messages.find((message) => message.replacesDraftId === draft);
+  return accepted ? `${prefix}${accepted.id}` : after;
+}
+
+/** The renderable notices as transcript system rows, spliced in after the accepted row each followed. */
+function projectNotices(
+  snapshot: WireSnapshot,
+  timeline: WireSnapshot['timeline'],
+): { readonly messages: readonly Message[]; readonly timeline: WireSnapshot['timeline'] } {
   const shown = snapshot.notices.filter(
     (notice) =>
       !(notice.kind === 'history_replaced' && SILENT_HISTORY_EDITS.has(notice.message)) &&
       notice.kind !== 'memory_global_snapshot',
   );
+  const next = timeline ? [...timeline] : null;
+  const inserted = new Set<string>();
   const messages: Message[] = [];
-  const entries: { readonly id: string; readonly after?: string }[] = [];
   shown.forEach((notice, index) => {
     const id = `notice:${index}`;
+    if (next) {
+      if (notice.after !== undefined) {
+        const anchor = settledAnchor(notice.after, snapshot.messages);
+        const found = next.findIndex((item) => `${item.kind}:${item.id}` === anchor);
+        // A line whose anchor left the history (rewound or retried away) goes with it, as legacy truncates its
+        // system lines; only a notice with no recorded anchor is appended at the end.
+        if (found < 0) return;
+        let at = found + 1;
+        // Keep append order among notices that follow the same row.
+        while (at < next.length && inserted.has(next[at]!.id)) at++;
+        next.splice(at, 0, { kind: 'message', id });
+      } else next.push({ kind: 'message', id });
+      inserted.add(id);
+    }
     // Role `system` keeps notices out of reply-consuming views (`use-handoff` takes the last assistant reply).
     messages.push({ id, role: 'system', text: noticeText(notice), localSystem: true });
-    entries.push(notice.after ? { id, after: notice.after } : { id });
   });
-  return { messages, entries };
-}
-
-/** Place each notice row right after the accepted row it followed; a missing anchor appends at the end. */
-function withNoticeEntries(
-  timeline: WireSnapshot['timeline'],
-  entries: readonly { readonly id: string; readonly after?: string }[],
-): WireSnapshot['timeline'] {
-  if (!timeline || !entries.length) return timeline;
-  const next = [...timeline];
-  const placed = new Map<string, number>();
-  for (const entry of entries) {
-    const anchor = entry.after ?? '';
-    const found = anchor ? next.findIndex((item) => `${item.kind}:${item.id}` === anchor) : -1;
-    const at = found < 0 ? next.length : (placed.get(anchor) ?? found) + 1;
-    next.splice(at, 0, { kind: 'message', id: entry.id });
-    placed.set(anchor, at);
-  }
-  return next;
+  return { messages, timeline: next ?? timeline };
 }
 
 const shallowEqual = (a: object, b: object): boolean => {
@@ -266,22 +271,23 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     if (message.draft && message.role === 'assistant' && live && !interrupted) drafts[message.id] = view.text;
     else messages.push(view);
   }
-  const transcript = transcriptNotices(snapshot);
+  const notices = noticeRows(snapshot, snapshot.timeline);
+  const transcript = projectNotices(snapshot, notices.timeline);
   const before = lastLists.get(snapshot.sessionId);
   const stableMessages = sameList(
     before?.messages,
     transcript.messages.length ? [...messages, ...transcript.messages] : messages,
     shallowEqual,
   ) as Message[];
-  const notices = noticeRows(snapshot, snapshot.timeline);
   const stableTools = sameList(
     before?.tools,
     [...snapshot.tools.map(toolView), ...notices.tools],
     (a, b) => a === b,
   ) as ToolView[];
-  const timeline = withNoticeEntries(notices.timeline, transcript.entries);
   const stableTimeline = (
-    timeline ? sameList(before?.timeline as typeof timeline | undefined, timeline, shallowEqual) : timeline
+    transcript.timeline
+      ? sameList(before?.timeline as typeof transcript.timeline | undefined, transcript.timeline, shallowEqual)
+      : transcript.timeline
   ) as typeof snapshot.timeline;
   lastLists.set(snapshot.sessionId, { messages: stableMessages, tools: stableTools, timeline: stableTimeline });
   return {

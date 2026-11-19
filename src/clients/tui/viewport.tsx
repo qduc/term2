@@ -287,7 +287,8 @@ export function useTranscriptViewport(
     hint,
     maxHeight,
     controlsBoxProps: {
-      ref: controlsRef,
+      // An idle prompt with only Static history has no preview to lay out.
+      ref: state.activeTurnId || reader || help || lines.length ? controlsRef : undefined,
       flexShrink: 0,
       flexDirection: 'column',
       paddingX: 2,

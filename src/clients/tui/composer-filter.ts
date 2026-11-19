@@ -7,7 +7,7 @@ const PASTE_END = '\x1b[201~';
 
 type FilterOptions = {
   readonly composerActive: boolean;
-  readonly outputExpanded: boolean;
+  readonly readingTranscript: boolean;
   /** The draft before this chunk, and how to empty it: the sent text is never inserted, so the draft would stay. */
   readonly draft: {
     readonly value: string;
@@ -25,7 +25,7 @@ type FilterOptions = {
  * trailing `\r` is submitted instead. A bracketed paste keeps its `\r` as a newline, and a chunk holding
  * several lines (an unbracketed paste) keeps today's behaviour; neither auto-submits.
  */
-export function useComposerFilter({ composerActive, outputExpanded, draft, submit }: FilterOptions) {
+export function useComposerFilter({ composerActive, readingTranscript, draft, submit }: FilterOptions) {
   const { stdin } = useStdin();
   // Ink strips the paste markers before the key handler runs, so track them on the raw stream.
   const pasting = useRef(false);
@@ -48,7 +48,7 @@ export function useComposerFilter({ composerActive, outputExpanded, draft, submi
       draft.replace(draft.value.slice(0, start) + draft.value.slice(cursor), start);
       return true;
     }
-    if (outputExpanded && key.escape) return true;
+    if (readingTranscript && key.escape) return true;
     if (['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) || key.pageUp || key.pageDown) return true;
     if (key.ctrl && (key.upArrow || key.downArrow || ['g', 'b', 'o'].includes(input))) return true;
     // Legacy InputBox ignores Alt+Enter in the editor: it queues during a turn and inserts nothing when idle.

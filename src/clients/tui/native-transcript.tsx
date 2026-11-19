@@ -103,7 +103,6 @@ export function useNativeTranscript(
       }
     }
     return { next, reachedEnd, orphans: messages.size + tools.size };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.timeline, state.messages, state.tools, state.activeTurnId, draftIds]);
   // A first mount with settled history and nothing live commits it all at once (the effect below would, one render
   // later). Legacy's first frame already holds its Static history, so a resumed session paints with its composer.
@@ -147,6 +146,8 @@ export function useNativeTranscript(
       !reachedEnd || orphans > 0 || Object.keys(state.drafts).length > 0 || Object.keys(state.reasoning).length > 0;
     const fresh = (row: Row) =>
       !live &&
+      // Plain command output such as idle /help belongs in scrollback from the first render.
+      !row.message?.localHelp &&
       (!row.message?.replacesDraftId ||
         (drawn !== undefined && !drawn.drafts.current.has(row.message.replacesDraftId))) &&
       (remounted || (memory.candidates.has(row.key) ? !rendered : memory.seen !== null && !memory.seen.has(row.key)));

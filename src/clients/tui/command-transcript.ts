@@ -79,7 +79,6 @@ function useCommandTranscript(state: TuiState): {
 export function useCommandTranscriptViewport(
   state: TuiState,
   headerHeight: number,
-  active: boolean,
   header?: ReactNode,
   historyRevision?: number,
   options: { readonly transitionNotices?: readonly string[]; readonly redrawKey?: string } = {},
@@ -103,19 +102,14 @@ export function useCommandTranscriptViewport(
   const viewport = useTranscriptViewport(
     transcript.state,
     columns,
-    rows - headerHeight,
-    active,
+    rows,
+    Math.max(1, rows - headerHeight - 9),
     header,
     (historyRevision ?? 0) + redraws,
     showReasoning,
   );
   return {
     ...viewport,
-    /**
-     * Rows above the bottom area, as legacy's layout: with no live rows, MessageList's spacer and margin and
-     * BottomArea's margin (3); under live rows the live Transcript's own bottom padding stands in for the spacer.
-     */
-    bottomMargin: viewport.text.trim() ? 1 : 3,
     appendCommandOutput: transcript.append,
     /** Legacy addShellMessage: a `!` command's result is a command row in the transcript. */
     appendShell(result: ShellResult): void {

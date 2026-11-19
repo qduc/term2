@@ -177,7 +177,7 @@ it('wraps settled transcript rows at terminal width', { timeout: TIMEOUT_MS }, a
 });
 
 it(
-  'does not advertise the pager while streaming, and Ctrl+O mid-stream opens the model menu as in legacy',
+  'keeps scrollback and a reading page stable during a long stream, and preserves the model shortcut',
   { timeout: TIMEOUT_MS },
   async () => {
     const { idlePath } = await start();
@@ -185,17 +185,59 @@ it(
     await waitForHarnessComposerValue(idlePath, 'long streaming question', { timeoutMs: 60_000 });
     session!.write('\r');
     await session!.waitForOutput('STREAM-ANCHOR-SENTINEL', 30_000);
-    const before = session!.getVisibleOutput().length;
+    const before = session!.getOutput().length;
+    const code = Array.from({ length: 60 }, (_, i) => `STREAM-LINE-${i}`).join('\n');
     heldResponse!.write(
       `data: ${JSON.stringify({
         id: 'chatcmpl-1',
-        choices: [{ delta: { content: `\n${Array.from({ length: 60 }, (_, i) => `STREAM-LINE-${i}`).join('\n')}` } }],
+        choices: [{ delta: { content: '\n\n```text\n' + code } }],
       })}\n\n`,
     );
     await session!.waitForOutput('STREAM-LINE-59', 30_000);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(session!.getVisibleOutput().slice(before)).not.toMatch(/Lines \d+[–-]\d+ of \d+ · PgUp/);
-    // Legacy has no output viewer: Ctrl+O replaces the draft with `/model ` and opens the model menu mid-stream.
+    expect(session!.getOutput().slice(before)).not.toContain('\x1b[3J');
+    await session!.waitForOutput('PgUp to read earlier output', 30_000);
+    const pasted = Array.from({ length: 9 }, (_, i) => `unsent draft line ${i}`).join('\n');
+    session!.write(`\x1b[200~${pasted}\x1b[201~`);
+    await waitForHarnessComposerValue(idlePath, pasted, { timeoutMs: 30_000 });
+    await session!.waitForOutput('unsent draft line 8', 30_000);
+    expect(session!.getOutput().slice(before)).not.toContain('\x1b[3J');
+    session!.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+
+    session!.write('unsent draft');
+    await waitForHarnessComposerValue(idlePath, 'unsent draft', { timeoutMs: 30_000 });
+    const beforePage = session!.getVisibleOutput().length;
+    session!.write('\x1b[5~');
+    await session!.waitForOutput('Esc to live', 30_000);
+    const page = session!.getVisibleOutput().slice(beforePage);
+    const pageLabel = /Lines \d+–\d+ of \d+ · PgUp\/PgDn · Esc to live/.exec(page)?.[0];
+    expect(pageLabel).toBeDefined();
+    expect(page).not.toContain('STREAM-LINE-59');
+
+    const beforeCommit = session!.getVisibleOutput().length;
+    heldResponse!.write(
+      `data: ${JSON.stringify({
+        id: 'chatcmpl-1',
+        choices: [{ delta: { content: '\n```\n\nSTREAM-COMMITTED\n\nSTREAM-CURRENT' } }],
+      })}\n\n`,
+    );
+    await session!.waitForOutput('STREAM-COMMITTED', 30_000);
+    await until(
+      () => session!.getVisibleOutput().slice(beforeCommit).includes(pageLabel!),
+      'the committed block is written above the same reading page',
+    );
+    expect(session!.getVisibleOutput().slice(beforeCommit)).not.toContain('STREAM-CURRENT');
+
+    session!.write('\x1b');
+    await session!.waitForOutput('STREAM-CURRENT', 30_000);
+    expect(session!.getVisibleOutput()).not.toContain('Press Esc again to interrupt');
+    const beforeDraftEdit = session!.getVisibleOutput().length;
+    session!.write(' kept');
+    await waitForHarnessComposerValue(idlePath, 'unsent draft kept', { timeoutMs: 30_000 });
+    expect(session!.getVisibleOutput().slice(beforeDraftEdit)).not.toContain('Esc to live');
+    expect(session!.getOutput().slice(before)).not.toContain('\x1b[3J');
+
+    // Ctrl+O still replaces the draft with `/model ` and opens the model menu mid-stream.
     const ctrlOStart = session!.getVisibleOutput().length;
     session!.write('\x0f');
     await session!.waitForOutput('Select model', 30_000);

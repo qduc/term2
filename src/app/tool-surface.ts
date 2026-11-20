@@ -18,6 +18,7 @@ import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/script-surface.js';
 import type { AnyToolDefinition } from '../tools/types.js';
 import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
+import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { formatApprovalReview } from '../shared/contracts/approval-review.js';
 import { approvalRouteFor, describeApproval } from '../session/approval/approval-route.js';
 import type { ToolContextSeed } from '../tools/index.js';
@@ -237,14 +238,31 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     advisoryAbort.signal,
     options.affinity ?? { conversationKey: sessionId, cacheKey: sessionId },
   );
-  // A local shell call asking to leave an enabled sandbox; a plain allow runs it unsandboxed.
-  const isSandboxEscape = (toolName: string, input: unknown): boolean =>
-    !remote &&
-    settings.get('sandbox.enabled') !== false &&
-    (toolName === 'shell' || toolName === 'bash') &&
-    !!input &&
-    typeof input === 'object' &&
-    (input as { sandbox?: unknown }).sandbox === 'unsandboxed';
+  // A local shell call asking to leave an enforcing sandbox; a plain allow runs it unsandboxed. The route is
+  // synchronous, so availability is cached and refreshed per check. Only a sandbox known to be unavailable
+  // stops counting (decision 5: the reviewer decides); an unknown state counts as enforcing (fail closed).
+  let sandboxAvailable: boolean | undefined;
+  const refreshSandbox = (): void =>
+    void getDefaultShellSandboxRunner()
+      .availability()
+      .then(
+        (availability) => void (sandboxAvailable = availability.type === 'available'),
+        () => void (sandboxAvailable = undefined),
+      );
+  if (!remote) refreshSandbox();
+  const isSandboxEscape = (toolName: string, input: unknown): boolean => {
+    if (
+      remote ||
+      settings.get('sandbox.enabled') === false ||
+      (toolName !== 'shell' && toolName !== 'bash') ||
+      !input ||
+      typeof input !== 'object' ||
+      (input as { sandbox?: unknown }).sandbox !== 'unsandboxed'
+    )
+      return false;
+    refreshSandbox();
+    return sandboxAvailable !== false;
+  };
   // The one review path every surface uses (src/session/approval/approval-route.ts).
   const reviewApproval = createAssistedApprovalReview({
     isSandboxEscape,

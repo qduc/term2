@@ -120,7 +120,8 @@ async function startProvider(main: MainReply[], verdicts: Verdict[]): Promise<{ 
   return { baseUrl: `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`, seen };
 }
 
-type Sandbox = { readonly escapeReview?: boolean; readonly shims: string };
+/** `shims` is prepended to PATH, or with `onlyShims` replaces it (a sandbox with no `bwrap` is unavailable). */
+type Sandbox = { readonly escapeReview?: boolean; readonly shims: string; readonly onlyShims?: true };
 
 /**
  * Run one headless prompt with unattended approval. The sandbox is off (owner decision 5) unless `sandbox`
@@ -154,7 +155,9 @@ async function runHeadless(
     TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
     TERM2_CONVERSATIONS_DIR: conversations,
     DISABLE_LOGGING: '1',
-    ...(sandbox ? { PATH: `${sandbox.shims}${path.delimiter}${process.env.PATH ?? ''}` } : {}),
+    ...(sandbox
+      ? { PATH: sandbox.onlyShims ? sandbox.shims : `${sandbox.shims}${path.delimiter}${process.env.PATH ?? ''}` }
+      : {}),
   });
   const settingsDir = resolveSettingsDirectory({ homeDir: home, env });
   fs.mkdirSync(settingsDir, { recursive: true });
@@ -477,6 +480,33 @@ it(
         ['reject'],
       );
       const { status, output, cwd } = await runHeadless(baseUrl, [], undefined, { shims, escapeReview: true });
+      expect(status, output).toBe(0);
+      expect(seen.reviews).toHaveLength(1);
+      expect(seen.main[1]).toContain('Fixture review: not requested by the user');
+      expect(fs.existsSync(path.join(cwd, 'ESCAPED.txt'))).toBe(false);
+    } finally {
+      fs.rmSync(shims, { recursive: true, force: true });
+    }
+  },
+);
+
+it(
+  'hands a sandbox escape to the reviewer when the sandbox is enabled but unavailable',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    if (process.platform !== 'linux') return;
+    // Only node and git on PATH: no bwrap, so the sandbox reports a missing dependency (decision 5, A12).
+    const shims = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-no-sandbox-'));
+    for (const name of ['node', 'git']) {
+      const found = execFileSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' }).trim();
+      fs.symlinkSync(found, path.join(shims, name));
+    }
+    try {
+      const { baseUrl, seen } = await startProvider(
+        [{ call: { id: 'c1', command: MARK, unsandboxed: true } }],
+        ['reject'],
+      );
+      const { status, output, cwd } = await runHeadless(baseUrl, [], undefined, { shims, onlyShims: true });
       expect(status, output).toBe(0);
       expect(seen.reviews).toHaveLength(1);
       expect(seen.main[1]).toContain('Fixture review: not requested by the user');

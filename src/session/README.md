@@ -52,7 +52,8 @@ In `shell.autoApproveMode: unattended` the port's route (`ApprovalRoute` in
 question, tools the reviewer may not grant, and an outside-sandbox escape unless
 `shell.unattendedEscapeReview` is on. An escape is a request offering
 `unsandboxed-once` (ACP) or, through the app's `isSandboxEscape`, a shell call
-with `sandbox: 'unsandboxed'` while the sandbox is on: the TUI and headless ask
+with `sandbox: 'unsandboxed'` while the sandbox is on and not known to be
+unavailable (decision 5 hands an unavailable sandbox's escapes to the reviewer): the TUI and headless ask
 for those with no grant, and a plain allow runs them outside the sandbox. A question still opens for a person (or the
 headless stop marker). The owner asks `ApprovalReviews.refusal(request)` when
 `begin` declines, and a review that does not approve goes to `owner.refuse`

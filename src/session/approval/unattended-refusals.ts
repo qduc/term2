@@ -29,9 +29,22 @@ function refusalCause(review: ApprovalReviewResult | undefined, unreviewed?: str
   return `the approval reviewer did not approve it${reasoning ? `: ${reasoning}` : ''}`;
 }
 
-/** What was asked, with its detail (a shell call's command) so a person reading the list can tell calls apart. */
-function describeRequest(request: { readonly summary: string; readonly detail?: string }): string {
-  const detail = request.detail ? sanitizeApprovalReviewText(request.detail).trim() : '';
+/**
+ * What was asked, so a person reading the list can tell calls apart: a shell call's command, else the request's
+ * detail. The detail of a shell request is its JSON arguments, which read worse than the command.
+ */
+function describeRequest(request: {
+  readonly summary: string;
+  readonly detail?: string;
+  readonly input?: unknown;
+}): string {
+  const command =
+    request.input &&
+    typeof request.input === 'object' &&
+    typeof (request.input as { command?: unknown }).command === 'string'
+      ? (request.input as { command: string }).command
+      : undefined;
+  const detail = sanitizeApprovalReviewText(command ?? request.detail ?? '').trim();
   if (!detail || request.summary.includes(detail)) return request.summary;
   return `${request.summary}: ${detail.length > 200 ? `${detail.slice(0, 200)}…` : detail}`;
 }
@@ -56,7 +69,12 @@ export class UnattendedRefusals {
    * no terminal notice of its own).
    */
   refuse(
-    request: { readonly toolName: string; readonly summary: string; readonly detail?: string },
+    request: {
+      readonly toolName: string;
+      readonly summary: string;
+      readonly detail?: string;
+      readonly input?: unknown;
+    },
     review: ApprovalReviewResult,
     unreviewed?: string,
     listAtLimit = false,

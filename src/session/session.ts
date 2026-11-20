@@ -1,6 +1,7 @@
 /** Live host facade over one direct Conversation. Only that Conversation writes facts. */
 import { randomUUID } from 'node:crypto';
 import { directPreviewLifecycle } from './preview.js';
+import { codexQuotaEvent } from '../model/provider-quota.js';
 import type { Item, ItemId } from '../model/index.js';
 import type { TurnId } from '../engine/index.js';
 import type { ModelError, ModelRef } from '../model/index.js';
@@ -193,20 +194,26 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     try {
       let terminal = false;
       for await (const event of turn.events) {
+        if (event.type === 'provider_status') {
+          const quota = codexQuotaEvent(event);
+          if (quota) {
+            state = {
+              ...state,
+              codexQuota: quota.quota ?? undefined,
+              ...(quota.fiveHourQuota !== undefined ? { codexFiveHourQuota: quota.fiveHourQuota ?? undefined } : {}),
+            };
+            publish({ type: 'transient', position: ++position, event: quota });
+          }
+        }
+        if (event.type === 'retrying') {
+          const toolName = event.retryType === 'upstream' ? 'turn' : 'conversation';
+          publish({ type: 'transient', position: ++position, event: { ...event, toolName } });
+        }
         if (
-          event.type === 'codex_quota' ||
-          event.type === 'retrying' ||
           event.type === 'reasoning_delta' ||
           event.type === 'tool_progress' ||
           event.type === 'tool_call_streaming_delta'
         ) {
-          if (event.type === 'codex_quota') {
-            state = {
-              ...state,
-              codexQuota: event.quota ?? undefined,
-              ...(event.fiveHourQuota !== undefined ? { codexFiveHourQuota: event.fiveHourQuota ?? undefined } : {}),
-            };
-          }
           if (event.type === 'reasoning_delta') state = { ...state, reasoning: state.reasoning + event.delta };
           publish({ type: 'transient', position: ++position, event });
         }

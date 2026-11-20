@@ -1,3 +1,4 @@
+import { runTerminationCause } from '../shared/contracts/run-termination.js';
 import { bindTerm2ToolContext } from './tool-context.js';
 import type { ConversationDeps } from './types.js';
 /** Same-engine branches; only the owning Session can admit their physical events. */
@@ -152,7 +153,9 @@ export function createDirectBranchDriver(options: {
               turnId,
               outcome: event.result.kind,
               ...(event.result.kind === 'failed' ? { error: event.result.error } : {}),
-              ...(event.result.kind === 'interrupted' ? { terminalCause: event.result.terminalCause } : {}),
+              ...(event.result.kind === 'interrupted' && runTerminationCause(event.result.terminalCause)
+                ? { terminalCause: runTerminationCause(event.result.terminalCause) }
+                : {}),
               ...('notice' in event.result && event.result.notice ? { notice: event.result.notice } : {}),
             };
             options.accept({ type: 'branch_event', branchId, fact });

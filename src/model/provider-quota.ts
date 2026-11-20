@@ -1,6 +1,6 @@
 import type { CodexWeeklyQuota, ProviderStatus } from './index.js';
 
-/** The `provider_status` the Codex adapter emits; Session reads it back with `codexQuotaStatus`. */
+/** The `provider_status` the Codex adapter emits; Session reads it back with `codexQuotaEvent`. */
 export function codexQuotaStatus(
   quota: CodexWeeklyQuota | null,
   fiveHourQuota: CodexWeeklyQuota | null,

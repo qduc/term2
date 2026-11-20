@@ -207,7 +207,9 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         }
         if (event.type === 'retrying') {
           const toolName = event.retryType === 'upstream' ? 'turn' : 'conversation';
-          publish({ type: 'transient', position: ++position, event: { ...event, toolName } });
+          // Keep the DTO's former key order: toolName before retryType.
+          const { retryType, ...rest } = event;
+          publish({ type: 'transient', position: ++position, event: { ...rest, toolName, retryType } });
         }
         if (
           event.type === 'reasoning_delta' ||

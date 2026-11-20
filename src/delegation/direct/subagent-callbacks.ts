@@ -2,6 +2,7 @@
  * authority or lifecycle is created here; result/status presentation uses accepted
  * task snapshots and actual execution evidence supplied by the tool surface.
  */
+import { runTerminationCause } from '../../shared/contracts/run-termination.js';
 import type { ResolvedAgentDefinition } from '../../session/agent-runtime/resolved-agent.js';
 import type { AgentSpecBoundaryResult } from '../../session/agent-runtime/permission-boundary.js';
 import type { SubagentDefinition } from '../subagents/types.js';
@@ -218,8 +219,8 @@ export function projectResult(result: NestedRunResult, role: string, evidence?: 
     toolsUsed: tools.map(([toolName, count]) => ({ toolName, count })),
     ...(result.outcome.kind === 'failed' ? { error: result.outcome.error.message } : {}),
     ...(result.outcome.kind === 'budget_exhausted' ? { terminalCause: 'budget_exhausted' as const } : {}),
-    ...(result.outcome.kind === 'interrupted' && result.outcome.terminalCause !== undefined
-      ? { terminalCause: result.outcome.terminalCause }
+    ...(result.outcome.kind === 'interrupted' && runTerminationCause(result.outcome.terminalCause)
+      ? { terminalCause: runTerminationCause(result.outcome.terminalCause) }
       : {}),
   };
 }

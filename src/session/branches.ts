@@ -1,3 +1,4 @@
+import { runTerminationCause } from '../shared/contracts/run-termination.js';
 import { bindTerm2ToolContext } from './tool-context.js';
 import type { ConversationDeps } from './types.js';
 /** Same-engine branches; only the owning Session can admit their physical events. */
@@ -135,7 +136,11 @@ export function createDirectBranchDriver(options: {
           }
           if (event.type === 'turn_ended') {
             refusalReport = event.result.kind === 'completed' ? context.refusalLimitReport() : undefined;
-            terminal = refusalReport ? { kind: 'interrupted', notice: refusalReport } : event.result;
+            terminal = refusalReport
+              ? { kind: 'interrupted', notice: refusalReport, terminalCause: 'approval_refusal_limit' }
+              : event.result;
+            const terminalCause =
+              terminal.kind === 'interrupted' ? runTerminationCause(terminal.terminalCause) : undefined;
             const repairs = replay(local, { recoverQueue: false }).recoveryFacts.filter(
               (fact) => fact.type !== 'turn_ended',
             );
@@ -150,9 +155,7 @@ export function createDirectBranchDriver(options: {
               turnId,
               outcome: terminal.kind,
               ...(terminal.kind === 'failed' ? { error: terminal.error } : {}),
-              ...(terminal.kind === 'interrupted'
-                ? { terminalCause: refusalReport ? 'approval_refusal_limit' : terminal.terminalCause }
-                : {}),
+              ...(terminalCause !== undefined ? { terminalCause } : {}),
               ...('notice' in terminal && terminal.notice ? { notice: terminal.notice } : {}),
             };
             options.accept({ type: 'branch_event', branchId, fact });

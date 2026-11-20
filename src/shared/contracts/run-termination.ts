@@ -11,3 +11,17 @@ export type RunTerminationCause =
   | 'completion_verification_blocked'
   /** Unattended approval refused too many requests; the turn stopped with each refusal listed. */
   | 'approval_refusal_limit';
+
+const RUN_TERMINATION_CAUSES: ReadonlySet<string> = new Set<RunTerminationCause>([
+  'budget_exhausted',
+  'goal_check_unresolved',
+  'completion_verification_blocked',
+  'approval_refusal_limit',
+]);
+
+/**
+ * Persist the harness and application terminal causes that Term2 recognizes.
+ */
+export function runTerminationCause(cause: string | undefined): RunTerminationCause | undefined {
+  return cause !== undefined && RUN_TERMINATION_CAUSES.has(cause) ? (cause as RunTerminationCause) : undefined;
+}

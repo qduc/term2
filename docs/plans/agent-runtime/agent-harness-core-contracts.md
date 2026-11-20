@@ -22,8 +22,17 @@ still undecided.
 - **Decisions #226 left implicit.** The package exports the run budget (`src/engine/agent-runtime/run-budget.ts`)
   and cost accounting (`src/shared/cost/model-cost.ts`), both in the package (agent-runtime `packages/core/`). The design leaves budget as an open question and never placed cost
   accounting in core; decide both before the API leaves alpha.
-- **Before leaving alpha.** Contract change 7: `codex_quota` and the OpenAI-only `ModelRequest` flags are
-  still on the core types.
+- **Before leaving alpha.** Contract change 7 landed in `@qduc/agent-core` `0.3.0-alpha.0` except for the
+  `useStandardServiceTier`/`downgradeTransport` request flags: the engine's own recovery sets them from
+  adapter evidence and `ModelCapabilities`, so moving them into `providerOptions` would make the engine write
+  provider keys; they stay as capability-gated recovery levers until a second provider needs a different shape.
+  `0.3.0-alpha.0` also moved out the other Term2 policy the core still held. Term2 now supplies it through
+  seams from `src/session/harness-host/`: notice wording and the `[Mode Notice]` prefix (`TurnDeps.text`),
+  `goal_check`/`session_rollover` as `standalone` tools, the compaction prompts, the legacy-shape context
+  estimate, receipt argument previews and the background-delivery predicate (`TurnDeps.compaction` hooks),
+  and the OpenAI compaction checkpoint (`isProviderCheckpoint`). Core reports Codex quota as a generic
+  `provider_status`; `src/session/session.ts` maps it back to Term2's `codex_quota` event and re-adds the
+  retry DTO's `toolName`.
 
 Implementation location update: the portable driver and contracts now live in
 `@qduc/agent-core` (agent-runtime `packages/core/src/`). Term2-specific agent resolution, scopes,
@@ -194,7 +203,8 @@ the core fully instance-local, because every multi-user or side-by-side use brea
 6. **Partial output on cancel.** State that accepted history holds no partial assistant text, and how
    `withdrawn` deltas behave.
 7. **Remove Term2 names.** `codex_quota` moves to provider metadata, OpenAI-only flags move to
-   `providerOptions`, stop causes become app-defined.
+   `providerOptions`, stop causes become app-defined. Done in `0.3.0-alpha.0` (`provider_status`, string stop causes), apart from the
+   request flags noted under Resume here.
 
 ### Open questions
 

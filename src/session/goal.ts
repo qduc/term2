@@ -90,6 +90,8 @@ export function createDirectGoalCheckTool(deps: {
       inputSchema: modelToolJsonSchema(directGoalCheckSchema),
     },
     parallelSafe: false,
+    // Must be the response's only call and cannot run from a script.
+    standalone: true,
     parse: (raw) => directGoalCheckSchema.parse(raw),
     approval: () => ({ kind: 'none' }),
     async execute(raw) {

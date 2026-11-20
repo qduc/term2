@@ -8,9 +8,34 @@ Can Term2 offer an approval mode in which a person is never asked, that is not `
 
 ## Recommendation
 
-Add an **unattended** mode that leaves the reviewer's approval threshold alone and changes where a non-approval goes: to the model, as a refusal it must work around, instead of to a person. Bound it with a refusal limit. Then make the mode safer in three steps that do not depend on the reviewer being right: judge authorization from the user's words only, grant per-task capabilities through the sandbox instead of approving command text, and snapshot the workspace each turn.
+Add an **unattended** mode that leaves the reviewer's approval threshold alone and changes where a non-approval goes: to the model, as a refusal it must work around, instead of to a person. Bound it with a refusal limit, refuse sandbox escapes by default, and snapshot the workspace each turn.
 
-Measure before building (see [Measure first](#measure-first)): the repository holds no data on how often `auto` falls to a person or why.
+That is the whole build for a project of Term2's size; [How much security to aim for](#how-much-security-to-aim-for) gives the reasoning. Two further steps are recorded below and deferred until use shows they are needed: judging authorization from the user's words only, and a per-task envelope enforced by the sandbox.
+
+## How much security to aim for
+
+Term2 is a hobby project: one maintainer, users who opt in and run it on their own machines, no administrator and no compliance duty. That decides which threats are worth engineering against.
+
+| Threat | How often | Aim | With what |
+| --- | --- | --- | --- |
+| An overeager agent or an honest mistake: deleted work, files touched outside the task | The common case | Prevent | The sandbox and a snapshot. Both are deterministic; neither involves a model |
+| Prompt injection from content the agent reads | Rare, costly when it lands | Bound the damage; do not try to detect it | The sandbox's floors: no credential reads, no writes outside the workspace, network approved per host |
+| An agent working against its own monitor (the 79% result below) | A lab threat model | Not attempted | Say so in the README |
+| A hostile user, tenant separation, audit trails, admin policy | Not applicable to a single-user tool | Not attempted | Nothing |
+
+Three rules follow.
+
+**Rely on what does not need measuring.** A probabilistic defence is worth what its measured error rate says. Anthropic can publish 17% because it has 10,000 labelled calls and a red team. A one-maintainer project can keep neither current. The OS sandbox (taken whole from `@anthropic-ai/sandbox-runtime`) and a git snapshot hold whether or not anyone evaluates them. The security Term2 claims should rest on those two. The reviewer should be described as a convenience that catches mistakes.
+
+**Hold one line: the sandbox escape.** Inside the sandbox a wrong decision costs workspace files, which a snapshot restores. An approved `unsandboxed` command is the one request where a wrong verdict gives host access with nobody at the keyboard. Unattended should refuse escapes by default, as workers already do (`rejectUnsandboxedSubagentShell`), with a setting for people who accept the risk. The lower-stakes crossings, a network host or a read outside the workspace, stay with the reviewer.
+
+**Say what is not defended.** HarnessSecurity-Bench recommends that harnesses publish what each mechanism covers; for a hobby project an accurate README is the cheapest security feature there is. The residual to name: the reviewer may approve a network host (`sandbox_network_access` is reviewable), so an injected page could get one approved and send it whatever the workspace holds, a `.env` included. The standard read policy denies credential paths under the home directory, not files in the workspace.
+
+This cuts the proposal below to steps 1 and 4:
+
+- **Step 2 is deferred.** Splitting the reviewer's evidence needs a labelled set to show it helps, and keeping one current is the cost this project cannot carry.
+- **Step 3 is deferred.** It is the most machinery, and its hand-written form already exists: project-level host grants and `sandbox.allowReadExtra`.
+- **Step 1 loses two parts.** The refusal ledger defends against an agent that retries on purpose, and granting a parked refusal is interface work. The refusal, its reason and the limit stay.
 
 ## What a person does in Term2 today
 
@@ -92,7 +117,7 @@ Without a person, whatever the reviewer passes has to be bounded by something th
 
 Decide capabilities once from the user's own words, let the sandbox enforce them, and turn every remaining "no" into a refusal the agent must work around. A person is never a state a request can be in.
 
-Step 1 is the mode. Steps 2 to 4 each remove a way for it to fail and can ship separately.
+Step 1 is the mode. Steps 2 to 4 each remove a way for it to fail and can ship separately. Steps 1 and 4 are the recommended build; the scope section above says what is deferred and why. The full design is kept so that a later need does not start from nothing.
 
 ### 1. A refusal outcome in the arbiter
 
@@ -101,11 +126,12 @@ Step 1 is the mode. Steps 2 to 4 each remove a way for it to fail and can ship s
 The approval threshold does not move. `acceptVerdict` stays the one threshold, as the arbiter plan's owner decisions require. Only the destination of a non-approval changes.
 
 - **Hard gates refuse without a review.** Docker host control, denied-read retries and `explicit-user` requests are not the reviewer's to grant today and stay that way.
+- **An escape refuses by default.** This is the one place unattended is stricter than `auto`, for the reason in the scope section. A setting restores the `auto` behaviour.
 - **An unavailable review refuses** with a different reason from a rejection. A fragment of Codex's documentation makes the same distinction: a timeout alone is not proof that the action is unsafe.
 - **The refusal names the subject and the reason, and asks for a different approach.** The reviewer's `reasoning` already states the specific reason approval is required.
-- **A refused path or host stays refused for the turn.** Key a ledger on the canonical subject from the arbiter plan (`canonicalPath`, the normalised host and port) and answer a repeat without a model call. Without a person, a retry is a second draw from a probabilistic reviewer; the Ctrl-Z result is that redrawing raises the pass rate. The ledger cannot catch a reworded shell command, whose subject is its text. The limit below covers that case.
+- **A refused path or host stays refused for the turn (deferred).** Key a ledger on the canonical subject from the arbiter plan (`canonicalPath`, the normalised host and port) and answer a repeat without a model call. Without a person, a retry is a second draw from a probabilistic reviewer; the Ctrl-Z result is that redrawing raises the pass rate. The ledger cannot catch a reworded shell command, whose subject is its text. The limit below covers that case.
 - **A limit ends the turn.** After N consecutive or M total refusals the turn stops with a report of what was refused and why; headless exits non-zero. The shipped values (3 consecutive; 20 per session at Anthropic; 10 of the last 50 reviews per turn at OpenAI) are starting points, not calibration. This is a new guard: the `guard-design` skill and `guard-ledger.md` apply.
-- **Refusals are parked, not lost.** They are recorded with the review, as approvals are (`review` on `interaction_opened`). A later user message can grant one, as Codex's `/approve` does. The person is on the record and out of the wait path.
+- **Refusals are recorded, not lost.** They are recorded with the review, as approvals are (`review` on `interaction_opened`), and listed when the turn ends. Letting a later user message grant one, as Codex's `/approve` does, is deferred.
 - **Budget and goals are unchanged.** Run check-ins and `propose_goal` are never answered by policy today.
 
 This replaces the three per-surface rules in the table above with one, which is goal 1 of the arbiter plan.
@@ -153,20 +179,20 @@ The snapshot covers what can be undone. Steps 1 to 3 confine what cannot. It als
 - The reviewer is not a security boundary. Vendors describe theirs the same way.
 - Workers keep their stricter rule: no escape at all.
 
-## Measure first
+## Learn from use
 
-The arbiter plan notes that metrics are not recorded beyond the review on the open fact. Three counts from session facts size this work:
+The arbiter plan notes that metrics are not recorded beyond the review on the open fact, and a metrics pipeline is out of proportion here. The end-of-turn refusal list is the measurement: the maintainer's own unattended runs show what gets refused. Three things to read from it before reviving a deferred step:
 
-1. **How often `auto` falls to a person**, by tool, hard gate and review kind. This is the refusal rate unattended would have.
-2. **How often the person then approves.** These are the refusals that would be wrong. Anthropic reports that users accept 93% of manual prompts, so expect most.
-3. **The reasons, ranked.** If hosts and outside paths dominate, step 3 matters most. If reviewer caution dominates, step 2 and the threshold do.
+1. **How often a run is refused**, by tool, hard gate and review kind.
+2. **How many refusals the maintainer would have approved.** Those are the wrong ones. Anthropic reports that users accept 93% of manual prompts, so expect most.
+3. **The reasons, ranked.** If hosts and outside paths dominate, step 3 is worth reviving. If reviewer caution dominates, step 2 and the threshold are.
 
 ## Open decisions for the owner
 
 1. **A fifth mode value, or `auto` with no person attached?** A separate value is clearer: people who choose `auto` expect to be asked.
 2. **Does `ask_user` still reach a person in an interactive unattended session?** It is a question, not an authority decision; `always` keeps it.
 3. **Limit values and scope** (turn or session).
-4. **May an unattended review approve `unsandboxed-once`?** The one-threshold decision says yes. The 17% and 79% figures argue for waiting until step 3 makes escapes rare.
+4. **May an unattended review approve `unsandboxed-once`?** Recommended: refuse by default, with a setting. This departs from the one-threshold decision for this one grant, because unattended removes the person who could notice and interrupt.
 
 ## Sources and how far to trust them
 

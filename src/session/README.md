@@ -50,7 +50,10 @@ In `shell.autoApproveMode: unattended` the port's route (`ApprovalRoute` in
 `approval/approval-route.ts`) is `judge` where `auto` would be `decide`, and
 `refuse` for what `auto` would send to a person: hard gates other than a
 question, tools the reviewer may not grant, and an outside-sandbox escape unless
-`shell.unattendedEscapeReview` is on. A question still opens for a person (or the
+`shell.unattendedEscapeReview` is on. An escape is a request offering
+`unsandboxed-once` (ACP) or, through the app's `isSandboxEscape`, a shell call
+with `sandbox: 'unsandboxed'` while the sandbox is on: the TUI and headless ask
+for those with no grant, and a plain allow runs them outside the sandbox. A question still opens for a person (or the
 headless stop marker). The owner asks `ApprovalReviews.refusal(request)` when
 `begin` declines, and a review that does not approve goes to `owner.refuse`
 instead of `settle` when the generation is unattended at settle time, so a
@@ -65,7 +68,10 @@ that reaches 3 consecutive or 10 total carries `stopAfterApprovalResolution`,
 and the turn's `turn_ended` gets `terminalCause: 'approval_refusal_limit'` and a
 notice listing every refusal (a task gets the list in that last refusal). An
 unattended turn declines every run check-in (`budget_closed` stop, source
-`system`). Failure to read the route or mode refuses rather than waits.
+`system`). Failure to read the route or mode refuses rather than waits, as do a
+review that routed but could not start and an approval whose decision the
+request does not accept. A nested (run_code) refusal marks its parent execution,
+so that parent finishing does not reset the in-a-row count.
 
 An unattended root turn (not a compaction) also takes a workspace snapshot
 through the app's `workspaceSnapshot` port (`WorkspaceSnapshotPort` in

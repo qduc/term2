@@ -28,14 +28,23 @@ const SNAPSHOT_REF_PREFIX = 'refs/term2/snapshots/';
 const SNAPSHOT_KEEP = 20;
 /** Untracked bytes above this skip the snapshot rather than copy them into the object store. */
 const UNTRACKED_BYTES_LIMIT = 256 * 1024 * 1024;
-/** Each git step's deadline; the snapshot is skipped when one is exceeded. */
+/** Each git step's deadline, and the whole snapshot's; the snapshot is skipped when one is exceeded. */
 const STEP_TIMEOUT_MS = 30_000;
+const TAKE_TIMEOUT_MS = 60_000;
 /** The end-of-turn listing runs synchronously at turn end, so its deadline is shorter. */
 const REPORT_TIMEOUT_MS = 10_000;
 const REPORT_MAX_FILES = 20;
 
 export type WorkspaceSnapshot =
-  | { readonly kind: 'taken'; readonly root: string; readonly ref: string; readonly commit: string }
+  | {
+      readonly kind: 'taken';
+      /** The repository's top level, whose whole tree the commit holds. */
+      readonly root: string;
+      /** The workspace directory; the change list and the restore command are limited to it. */
+      readonly cwd: string;
+      readonly ref: string;
+      readonly commit: string;
+    }
   | { readonly kind: 'none'; readonly reason: string };
 
 /** Never prompt, never take optional locks, and never depend on the user's identity or signing setup. */
@@ -52,11 +61,13 @@ function gitEnv(index?: string): NodeJS.ProcessEnv {
   };
 }
 
-async function git(cwd: string, args: readonly string[], index?: string): Promise<string> {
+async function git(cwd: string, args: readonly string[], index?: string, deadline?: number): Promise<string> {
+  const remaining = deadline === undefined ? STEP_TIMEOUT_MS : deadline - Date.now();
+  if (remaining <= 0) throw new Error(`exceeded ${TAKE_TIMEOUT_MS / 1000} s`);
   const { stdout } = await run('git', [...args], {
     cwd,
     env: gitEnv(index),
-    timeout: STEP_TIMEOUT_MS,
+    timeout: Math.min(STEP_TIMEOUT_MS, remaining),
     maxBuffer: 64 * 1024 * 1024,
     encoding: 'utf8',
   });
@@ -79,9 +90,71 @@ function temporaryIndex(root: string, gitPathIndex: string): { readonly file: st
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-snapshot-'));
   const file = path.join(dir, 'index');
   const real = path.resolve(root, gitPathIndex.trim());
-  if (fs.existsSync(real)) fs.copyFileSync(real, file);
+  if (fs.existsSync(real)) {
+    fs.copyFileSync(real, file);
+    // Keep the real index's mtime: git rechecks entries not older than the index ("racily clean"). A fresh
+    // mtime would make it trust stat data and miss a same-size edit made in the same second.
+    const { atime, mtime } = fs.statSync(real);
+    fs.utimesSync(file, atime, mtime);
+  }
   return { file, dispose: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
+
+/** One git invocation a step sequence asks for: arguments and, optionally, the temporary index to use. */
+type GitStep = { readonly args: readonly string[]; readonly index?: string };
+type Steps<T> = Generator<GitStep, T, string>;
+
+async function runSteps<T>(steps: Steps<T>, run: (step: GitStep) => Promise<string>): Promise<T> {
+  let next = steps.next();
+  while (!next.done) next = steps.next(await run(next.value));
+  return next.value;
+}
+
+function runStepsSync<T>(steps: Steps<T>, run: (step: GitStep) => string): T {
+  let next = steps.next();
+  while (!next.done) next = steps.next(run(next.value));
+  return next.value;
+}
+
+/** Whether untracked, non-ignored files stay within UNTRACKED_BYTES_LIMIT. */
+function* untrackedWithinBound(root: string): Steps<boolean> {
+  const untracked = (yield { args: ['ls-files', '-o', '--exclude-standard', '-z'] }).split('\0').filter(Boolean);
+  let bytes = 0;
+  for (const file of untracked) {
+    try {
+      bytes += fs.lstatSync(path.join(root, file)).size;
+    } catch {
+      // A file that vanished is not copied either.
+    }
+    if (bytes > UNTRACKED_BYTES_LIMIT) return false;
+  }
+  return true;
+}
+
+/**
+ * Stage the working tree into the temporary index. `assume-unchanged` and (present) `skip-worktree` entries are
+ * cleared there first, so the commit holds what is on disk for them, not the index version a restore would
+ * write over a local edit with.
+ */
+function* stageWorkingTree(root: string, index: string): Steps<void> {
+  const assume: string[] = [];
+  const skip: string[] = [];
+  for (const entry of (yield { args: ['ls-files', '-v', '-z'], index }).split('\0').filter(Boolean)) {
+    const tag = entry[0]!;
+    const file = entry.slice(2);
+    if (tag >= 'a' && tag <= 'z') assume.push(file);
+    if ((tag === 'S' || tag === 's') && fs.existsSync(path.join(root, file))) skip.push(file);
+  }
+  for (const [flag, files] of [
+    ['--no-assume-unchanged', assume],
+    ['--no-skip-worktree', skip],
+  ] as const)
+    for (let at = 0; at < files.length; at += 500)
+      yield { args: ['update-index', flag, '--', ...files.slice(at, at + 500)], index };
+  yield { args: ['add', '-A', '--', '.'], index };
+}
+
+const UNTRACKED_REASON = `untracked files exceed ${UNTRACKED_BYTES_LIMIT / (1024 * 1024)} MiB, the snapshot size bound`;
 
 function refLabel(label: string): string {
   return (
@@ -102,32 +175,22 @@ export async function takeWorkspaceSnapshot(cwd: string, label: string): Promise
     return { kind: 'none', reason: 'the workspace is not a git repository' };
   }
   let index: ReturnType<typeof temporaryIndex> | undefined;
+  const deadline = Date.now() + TAKE_TIMEOUT_MS;
+  const gitRun = (args: readonly string[], file?: string): Promise<string> => git(root, args, file, deadline);
+  const step = (next: GitStep): Promise<string> => gitRun(next.args, next.index);
   try {
-    const untracked = (await git(root, ['ls-files', '-o', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
-    let bytes = 0;
-    for (const file of untracked) {
-      try {
-        bytes += fs.lstatSync(path.join(root, file)).size;
-      } catch {
-        // A file that vanished is not copied either.
-      }
-      if (bytes > UNTRACKED_BYTES_LIMIT)
-        return {
-          kind: 'none',
-          reason: `untracked files exceed ${UNTRACKED_BYTES_LIMIT / (1024 * 1024)} MiB, the snapshot size bound`,
-        };
-    }
-    index = temporaryIndex(root, await git(root, ['rev-parse', '--git-path', 'index']));
-    await git(root, ['add', '-A', '--', '.'], index.file);
-    const tree = (await git(root, ['write-tree'], index.file)).trim();
+    if (!(await runSteps(untrackedWithinBound(root), step))) return { kind: 'none', reason: UNTRACKED_REASON };
+    index = temporaryIndex(root, await gitRun(['rev-parse', '--git-path', 'index']));
+    await runSteps(stageWorkingTree(root, index.file), step);
+    const tree = (await gitRun(['write-tree'], index.file)).trim();
     let parent: string | undefined;
     try {
-      parent = (await git(root, ['rev-parse', '--verify', '-q', 'HEAD'])).trim() || undefined;
+      parent = (await gitRun(['rev-parse', '--verify', '-q', 'HEAD'])).trim() || undefined;
     } catch {
       parent = undefined;
     }
     const commit = (
-      await git(root, [
+      await gitRun([
         'commit-tree',
         '--no-gpg-sign',
         tree,
@@ -137,9 +200,9 @@ export async function takeWorkspaceSnapshot(cwd: string, label: string): Promise
       ])
     ).trim();
     const ref = `${SNAPSHOT_REF_PREFIX}${Date.now()}-${refLabel(label)}`;
-    await git(root, ['update-ref', ref, commit]);
+    await gitRun(['update-ref', ref, commit]);
     await prune(root).catch(() => undefined);
-    return { kind: 'taken', root, ref, commit };
+    return { kind: 'taken', root, cwd: path.resolve(cwd), ref, commit };
   } catch (error) {
     const message = error instanceof Error ? error.message.split('\n')[0] : String(error);
     return { kind: 'none', reason: `the snapshot failed (${message})` };
@@ -158,7 +221,7 @@ async function prune(root: string): Promise<void> {
 
 /** The command that puts modified and deleted files back as they were in the snapshot. */
 function restoreCommand(snapshot: Extract<WorkspaceSnapshot, { kind: 'taken' }>): string {
-  return `git -C ${JSON.stringify(snapshot.root)} restore --source=${snapshot.ref} --worktree -- .`;
+  return `git -C ${JSON.stringify(snapshot.cwd)} restore --source=${snapshot.ref} --worktree -- .`;
 }
 
 /**
@@ -169,12 +232,16 @@ export function describeWorkspaceSnapshot(snapshot: WorkspaceSnapshot): string {
   if (snapshot.kind === 'none') return `No workspace snapshot for this turn: ${snapshot.reason}.`;
   let changes: string;
   let index: ReturnType<typeof temporaryIndex> | undefined;
+  const step = (next: GitStep): string => gitSync(snapshot.root, next.args, next.index);
   try {
+    // The listing stages what the turn left, so it keeps the snapshot's size bound.
+    if (!runStepsSync(untrackedWithinBound(snapshot.root), step)) throw new Error(UNTRACKED_REASON);
     index = temporaryIndex(snapshot.root, gitSync(snapshot.root, ['rev-parse', '--git-path', 'index']));
-    gitSync(snapshot.root, ['add', '-A', '--', '.'], index.file);
+    runStepsSync(stageWorkingTree(snapshot.root, index.file), step);
+    // Only the workspace directory, with paths relative to it, as the restore command is.
     const lines = gitSync(
-      snapshot.root,
-      ['diff', '--cached', '--no-renames', '--name-status', snapshot.commit],
+      snapshot.cwd,
+      ['diff', '--cached', '--no-renames', '--relative', '--name-status', snapshot.commit, '--', '.'],
       index.file,
     )
       .split('\n')

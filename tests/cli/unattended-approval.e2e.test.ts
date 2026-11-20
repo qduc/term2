@@ -25,7 +25,10 @@ afterEach(async () => {
   root = '';
 });
 
-type MainReply = { readonly call?: { readonly id: string; readonly command: string }; readonly text?: string };
+type MainReply = {
+  readonly call?: { readonly id: string; readonly command: string; readonly unsandboxed?: true };
+  readonly text?: string;
+};
 type Verdict = 'pass' | 'reject' | 'error';
 
 const VERDICTS: Record<Exclude<Verdict, 'error'>, object> = {
@@ -88,7 +91,13 @@ async function startProvider(main: MainReply[], verdicts: Verdict[]): Promise<{ 
                           index: 0,
                           id: reply.call.id,
                           type: 'function',
-                          function: { name: 'shell', arguments: JSON.stringify({ command: reply.call.command }) },
+                          function: {
+                            name: 'shell',
+                            arguments: JSON.stringify({
+                              command: reply.call.command,
+                              ...(reply.call.unsandboxed ? { sandbox: 'unsandboxed' } : {}),
+                            }),
+                          },
                         },
                       ],
                     },
@@ -111,11 +120,17 @@ async function startProvider(main: MainReply[], verdicts: Verdict[]): Promise<{ 
   return { baseUrl: `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`, seen };
 }
 
-/** Run one headless prompt with unattended approval and the sandbox off (owner decision 5). */
+type Sandbox = { readonly escapeReview?: boolean; readonly shims: string };
+
+/**
+ * Run one headless prompt with unattended approval. The sandbox is off (owner decision 5) unless `sandbox`
+ * names a folder of stand-in sandbox binaries that make it report available.
+ */
 async function runHeadless(
   baseUrl: string,
   args: readonly string[] = [],
   prepare?: (workspace: string) => string,
+  sandbox?: Sandbox,
 ): Promise<{ status: number | null; output: string; conversations: string; cwd: string }> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unattended-')));
   const home = path.join(root, 'home');
@@ -139,6 +154,7 @@ async function runHeadless(
     TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
     TERM2_CONVERSATIONS_DIR: conversations,
     DISABLE_LOGGING: '1',
+    ...(sandbox ? { PATH: `${sandbox.shims}${path.delimiter}${process.env.PATH ?? ''}` } : {}),
   });
   const settingsDir = resolveSettingsDirectory({ homeDir: home, env });
   fs.mkdirSync(settingsDir, { recursive: true });
@@ -147,8 +163,11 @@ async function runHeadless(
     JSON.stringify({
       agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
       providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
-      sandbox: { enabled: false },
-      shell: { autoApproveMode: 'unattended' },
+      sandbox: { enabled: sandbox !== undefined },
+      shell: {
+        autoApproveMode: 'unattended',
+        ...(sandbox?.escapeReview ? { unattendedEscapeReview: true } : {}),
+      },
     }),
   );
   const child = spawn('node', [builtCli, ...args, 'Check the runtime'], {
@@ -215,6 +234,8 @@ it('refuses what the reviewer rejects and lets the turn continue', { timeout: TI
   expect(seen.main[1]).toContain('Fixture review: not requested by the user');
   expect(seen.main[1]).toContain('Take a different approach');
   expect(seen.main[1]).not.toContain(process.version);
+  // No client was asked: the headless client never saw the request as open.
+  expect(output).not.toContain('[approval required]');
   // Durable: the open carries the review, the close is a policy refusal, and nothing stays pending.
   const facts = loggedFacts(conversations);
   const opened = facts.find((fact) => fact['type'] === 'interaction_opened');
@@ -257,7 +278,7 @@ it('ends the turn at three consecutive refusals and exits non-zero', { timeout: 
   expect(seen.main).toHaveLength(3);
   expect(output).not.toContain('SHOULD_NOT_BE_REQUESTED');
   // The final output lists each refusal with its reason.
-  expect(output).toContain('Unattended approval stopped this run after 3 refused requests');
+  expect(output).toContain('Unattended approval stopped this run after refusing 3 requests');
   expect(output.match(/Fixture review: not requested by the user/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
   const ended = loggedFacts(conversations).find((fact) => fact['type'] === 'turn_ended');
   expect(ended).toMatchObject({ terminalCause: 'approval_refusal_limit' });
@@ -414,3 +435,54 @@ it('keeps only the newest 20 snapshot refs', { timeout: TIMEOUT_MS }, async () =
   expect(refs).not.toContain('refs/term2/snapshots/1000000000000-old');
   expect(refs.filter((ref) => !ref.endsWith('-old'))).toHaveLength(1);
 });
+
+// Decision 4: where the sandbox is on, a request to leave it is refused without a review. The TUI and headless
+// ask with no `unsandboxed-once` grant and run an allowed escape outside the sandbox, so the route must
+// recognise the call itself. Stand-in `bwrap`/`socat` make the sandbox report available; they exit 97 if run,
+// so a marker file written means the command ran unsandboxed.
+const MARK = "node -e \"require('fs').writeFileSync('ESCAPED.txt','outside')\"";
+
+function sandboxShims(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-sandbox-shims-'));
+  for (const name of ['bwrap', 'socat'])
+    fs.writeFileSync(path.join(dir, name), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+  return dir;
+}
+
+it('refuses a sandbox escape without a review where the sandbox is on', { timeout: TIMEOUT_MS }, async () => {
+  if (process.platform !== 'linux') return;
+  const shims = sandboxShims();
+  try {
+    const { baseUrl, seen } = await startProvider([{ call: { id: 'c1', command: MARK, unsandboxed: true } }], ['pass']);
+    const { status, output, cwd } = await runHeadless(baseUrl, ['--auto-approve'], undefined, { shims });
+    expect(status, output).toBe(0);
+    expect(seen.reviews).toHaveLength(0);
+    expect(seen.main[1]).toContain('Refused by unattended approval');
+    expect(seen.main[1]).toContain('outside the sandbox');
+    expect(fs.existsSync(path.join(cwd, 'ESCAPED.txt'))).toBe(false);
+  } finally {
+    fs.rmSync(shims, { recursive: true, force: true });
+  }
+});
+
+it(
+  'hands a sandbox escape to the reviewer when shell.unattendedEscapeReview is on',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    if (process.platform !== 'linux') return;
+    const shims = sandboxShims();
+    try {
+      const { baseUrl, seen } = await startProvider(
+        [{ call: { id: 'c1', command: MARK, unsandboxed: true } }],
+        ['reject'],
+      );
+      const { status, output, cwd } = await runHeadless(baseUrl, [], undefined, { shims, escapeReview: true });
+      expect(status, output).toBe(0);
+      expect(seen.reviews).toHaveLength(1);
+      expect(seen.main[1]).toContain('Fixture review: not requested by the user');
+      expect(fs.existsSync(path.join(cwd, 'ESCAPED.txt'))).toBe(false);
+    } finally {
+      fs.rmSync(shims, { recursive: true, force: true });
+    }
+  },
+);

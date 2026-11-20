@@ -82,7 +82,9 @@ export function createAssistedApprovalReview({
   sessionContext,
   sessionAccess,
   withWorkspace,
+  isSandboxEscape,
 }: {
+  isSandboxEscape?: (toolName: string, input: unknown) => boolean;
   agentClient: ShellAutoApprovalAgentClient;
   settings: ISettingsService;
   logger: ILoggingService;
@@ -93,6 +95,7 @@ export function createAssistedApprovalReview({
   return async (request, history, signal) => {
     const profile = describeApproval(request, {
       isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
+      ...(isSandboxEscape ? { isSandboxEscape } : {}),
     });
     return decideApproval({
       request,

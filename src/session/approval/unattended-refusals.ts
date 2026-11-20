@@ -29,6 +29,13 @@ function refusalCause(review: ApprovalReviewResult | undefined, unreviewed?: str
   return `the approval reviewer did not approve it${reasoning ? `: ${reasoning}` : ''}`;
 }
 
+/** What was asked, with its detail (a shell call's command) so a person reading the list can tell calls apart. */
+function describeRequest(request: { readonly summary: string; readonly detail?: string }): string {
+  const detail = request.detail ? sanitizeApprovalReviewText(request.detail).trim() : '';
+  if (!detail || request.summary.includes(detail)) return request.summary;
+  return `${request.summary}: ${detail.length > 200 ? `${detail.slice(0, 200)}…` : detail}`;
+}
+
 /** The text the model receives as the refused call's result. */
 function refusalMessage(refusal: UnattendedRefusal, limitReached: boolean): string {
   const head = `Refused by unattended approval (no person is available to approve): ${refusal.summary}. Reason: ${refusal.reason}.`;
@@ -49,12 +56,16 @@ export class UnattendedRefusals {
    * no terminal notice of its own).
    */
   refuse(
-    request: { readonly toolName: string; readonly summary: string },
+    request: { readonly toolName: string; readonly summary: string; readonly detail?: string },
     review: ApprovalReviewResult,
     unreviewed?: string,
     listAtLimit = false,
   ): { readonly denial: RefusalDenial; readonly review: ApprovalReviewResult } {
-    const refusal = { toolName: request.toolName, summary: request.summary, reason: refusalCause(review, unreviewed) };
+    const refusal = {
+      toolName: request.toolName,
+      summary: describeRequest(request),
+      reason: refusalCause(review, unreviewed),
+    };
     const limited = this.#record(refusal);
     const message = refusalMessage(refusal, limited);
     return {
@@ -90,11 +101,11 @@ export class UnattendedRefusals {
   /** The end-of-run listing of every refusal and its reason; empty when nothing was refused. */
   report(): string {
     if (this.#refusals.length === 0) return '';
-    const lines = this.#refusals.map((r, index) => `${index + 1}. ${r.toolName}: ${r.summary} — ${r.reason}`);
-    const n = `${this.#refusals.length} refused request${this.#refusals.length === 1 ? '' : 's'}`;
+    const lines = this.#refusals.map((r, index) => `${index + 1}. ${r.summary} — ${r.reason}`);
+    const n = `${this.#refusals.length} request${this.#refusals.length === 1 ? '' : 's'}`;
     return [
       this.#limited
-        ? `Unattended approval stopped this run after ${n} (limit: ${UNATTENDED_REFUSAL_LIMIT.consecutive} in a row or ${UNATTENDED_REFUSAL_LIMIT.total} in total).`
+        ? `Unattended approval stopped this run after refusing ${n} (limit: ${UNATTENDED_REFUSAL_LIMIT.consecutive} in a row or ${UNATTENDED_REFUSAL_LIMIT.total} in total).`
         : `Unattended approval refused ${n} in this run.`,
       ...lines,
     ].join('\n');

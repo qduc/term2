@@ -164,6 +164,12 @@ export function ownConversationTurn(
         : { kind: 'allow' }
       : undefined;
     const automatic = decision && validDecision(request, decision) ? decision : undefined;
+    // Unattended never opens an approval for a person, even when an approval cannot be applied.
+    if (!automatic && options.reviews?.unattended()) {
+      const refused = refuse(request, { ...review, approved: false } as ApprovalReviewResult);
+      if (refused) handle.answer(request.requestId, refused);
+      return;
+    }
     const facts: Fact[] = [
       openFact(request, automatic ? review : ({ ...review, approved: false } as ApprovalReviewResult)),
     ];
@@ -221,7 +227,8 @@ export function ownConversationTurn(
       cancel();
       return undefined;
     }
-    if (request.executionId) refusedExecutions.add(request.executionId);
+    // A nested (run_code) refusal names its parent: that parent finishing is not a result that resets the count.
+    for (const id of [request.executionId, request.parentExecutionId]) if (id) refusedExecutions.add(id);
     requests.delete(request.requestId);
     return decision;
   }

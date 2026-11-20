@@ -237,8 +237,17 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     advisoryAbort.signal,
     options.affinity ?? { conversationKey: sessionId, cacheKey: sessionId },
   );
+  // A local shell call asking to leave an enabled sandbox; a plain allow runs it unsandboxed.
+  const isSandboxEscape = (toolName: string, input: unknown): boolean =>
+    !remote &&
+    settings.get('sandbox.enabled') !== false &&
+    (toolName === 'shell' || toolName === 'bash') &&
+    !!input &&
+    typeof input === 'object' &&
+    (input as { sandbox?: unknown }).sandbox === 'unsandboxed';
   // The one review path every surface uses (src/session/approval/approval-route.ts).
   const reviewApproval = createAssistedApprovalReview({
+    isSandboxEscape,
     agentClient,
     settings,
     logger,
@@ -317,6 +326,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     approvalRoute: (request) => {
       const profile = describeApproval(request, {
         isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
+        isSandboxEscape,
       });
       return approvalRouteFor(settings.get('shell.autoApproveMode'), profile, {
         reviewEscapes: settings.get('shell.unattendedEscapeReview') === true,

@@ -112,7 +112,9 @@ export class ApprovalReviews {
   refusal(request: InteractionRequest | DirectTaskInteraction): string | undefined {
     try {
       const route = this.port?.route(request);
-      return route?.kind === 'refuse' ? route.reason : undefined;
+      if (route?.kind === 'refuse') return route.reason;
+      // Routed to a review that `begin` could not start: unattended refuses rather than ask a person.
+      return route?.kind === 'judge' ? 'the approval review could not start' : undefined;
     } catch {
       return this.unattended() ? 'the approval route could not be read' : undefined;
     }

@@ -128,6 +128,8 @@ export const approvalProperties = [
         explicitUser: fc.boolean(),
         deniedRead: fc.boolean(),
         docker: fc.boolean(),
+        // The app reports a shell call asking to leave an enabled sandbox (TUI/headless offer no grant for it).
+        inputEscape: fc.boolean(),
         grants: fc.subarray(['unsandboxed-once', 'network-allow-once', 'allow-project', 'allow-folder-session']),
       }),
       fc.constantFrom('off', 'advisory', 'auto', 'unattended', 'always', undefined),
@@ -159,10 +161,13 @@ export const approvalProperties = [
             ...(shape.deniedRead ? { deniedRead: { path: '/x' } } : {}),
           },
         };
-        const profile = describeApproval(request, { isDockerHostControl: () => shape.docker });
+        const profile = describeApproval(request, {
+          isDockerHostControl: () => shape.docker,
+          isSandboxEscape: () => shape.inputEscape,
+        });
         const surfaceRoute = approvalRouteFor(mode, profile, { reviewEscapes });
         const route = ['decide', 'advise', 'judge'].includes(surfaceRoute.kind) ? 'review' : surfaceRoute.kind;
-        const escape = shape.kind !== 'question' && shape.grants.includes('unsandboxed-once');
+        const escape = shape.kind !== 'question' && (shape.grants.includes('unsandboxed-once') || shape.inputEscape);
         if (mode === 'unattended') {
           // Unattended (unattended-approval.md): nothing waits for a person except a question.
           if (shape.kind === 'question') assert.equal(route, 'ask_user', 'unattended did not ask a question');

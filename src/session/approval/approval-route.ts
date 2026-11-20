@@ -32,6 +32,12 @@ export type ApprovalProfile = {
    * honoured with that grant; anything else is a plain allow.
    */
   readonly autoGrant?: string;
+  /**
+   * The request would run a command outside an enforcing sandbox: it offers the `unsandboxed-once` grant
+   * (ACP), or it is a shell call with `sandbox: 'unsandboxed'` while the sandbox is on (TUI, headless, where
+   * a plain allow runs it unsandboxed). Read only by `unattended` (decision 4).
+   */
+  readonly escape?: true;
 };
 
 /** One-time grants a request may require in place of a plain allow, in priority order. */
@@ -39,7 +45,11 @@ const ONE_TIME_GRANTS = ['unsandboxed-once', 'network-allow-once'] as const;
 
 export function describeApproval(
   request: ApprovalRequestShape,
-  context: { readonly isDockerHostControl: (toolName: string, input: unknown) => boolean },
+  context: {
+    readonly isDockerHostControl: (toolName: string, input: unknown) => boolean;
+    /** The sandbox is on and this call asks to run outside it (the app knows the sandbox and workspace). */
+    readonly isSandboxEscape?: (toolName: string, input: unknown) => boolean;
+  },
 ): ApprovalProfile {
   const autoGrant = ONE_TIME_GRANTS.find((grant) => request.grants?.includes(grant));
   const hardGate: ApprovalHardGate | undefined =
@@ -54,10 +64,13 @@ export function describeApproval(
         context.isDockerHostControl(request.toolName, request.input)
       ? 'docker-host'
       : undefined;
+  const escape =
+    autoGrant === 'unsandboxed-once' || context.isSandboxEscape?.(request.toolName, request.input) === true;
   return {
     ...(hardGate ? { hardGate } : {}),
     reviewable: isAutoApprovableTool(request.toolName),
     ...(autoGrant ? { autoGrant } : {}),
+    ...(escape ? { escape: true as const } : {}),
   };
 }
 
@@ -83,7 +96,7 @@ function routeApproval(
   if (mode === 'unattended') {
     if (profile.hardGate === 'question') return 'ask_user';
     if (profile.hardGate || !profile.reviewable) return 'refuse';
-    if (profile.autoGrant === 'unsandboxed-once' && options.reviewEscapes !== true) return 'refuse';
+    if (profile.escape && options.reviewEscapes !== true) return 'refuse';
     return 'review';
   }
   if (mode !== 'auto' && mode !== 'advisory') return 'ask_user';

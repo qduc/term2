@@ -30,7 +30,7 @@ Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. 
 - **Refused, not asked.** The request is closed and the agent receives a refusal as the tool's result: what was refused, why (the reviewer's reasoning, or that the review was unavailable), and an instruction to try a different approach. It is recorded in the conversation as refused by policy.
 - **Refused without a review:** running a command outside the sandbox, Docker host control, retrying a read the sandbox denied, anything that needs an explicit answer from you, tools the reviewer is not allowed to grant (such as `propose_goal`), and run budget check-ins. To let the reviewer decide sandbox escapes as in `auto`, set `shell.unattendedEscapeReview` to `true`.
 - **Questions still ask.** In an interactive session `ask_user` still waits for your answer; a non-interactive run stops on a question as before.
-- **Refusal limit.** Three refusals in a row, or ten in one turn, end the turn without another model request. The turn's final output lists every refusal and its reason; a non-interactive run exits with code 2. A command that runs between refusals resets the "in a row" count. Each background task has its own count.
+- **Refusal limit.** Three refusals in a row, or ten in one turn, end the turn without another model request. The turn's final output lists every refusal and its reason; a non-interactive run exits with code 2. In a turn, a tool that runs between refusals resets the "in a row" count; a `run_code` script in which a request was refused does not. Each background task has its own count, which only an approved request resets.
 
 ### Workspace snapshot
 
@@ -39,12 +39,12 @@ Before an unattended turn's first model request, and so before any of its tool c
 When the turn ends, its output names the snapshot, lists the files changed since it, and gives the command that puts them back:
 
 ```bash
-git -C <workspace> restore --source=refs/term2/snapshots/<time>-<turn> --worktree -- .
+git -C <workspace directory> restore --source=refs/term2/snapshots/<time>-<turn> --worktree -- .
 ```
 
-It restores modified and deleted files to their content before the turn. It leaves the index alone and keeps files the turn created, except a created file that was added to the index, which it removes from the working tree; `git status` shows what is left to clean up.
+It restores modified and deleted files under the workspace directory to their content before the turn; the snapshot holds the whole repository, but the listing and the restore cover only the directory term2 runs in. Files marked `assume-unchanged` or `skip-worktree` are recorded as they are on disk, so a local edit to one survives a restore. It leaves the index alone and keeps files the turn created, except a created file that was added to the index, which it removes from the working tree; `git status` shows what is left to clean up.
 
-There is no snapshot, and the turn says so once at its end, when the workspace is not a git repository, is on an SSH host, has more than 256 MiB of untracked files, or a git step fails or takes longer than 30 seconds. A snapshot never stops a turn. term2 keeps the 20 newest snapshot refs in a repository and deletes older ones; git's own garbage collection later removes what they held. The snapshot lives in the workspace's repository, which the sandbox lets the agent write, so it protects against mistakes, not against an agent that deletes the ref.
+There is no snapshot, and the turn says so once at its end, when the workspace is not a git repository, is on an SSH host, has more than 256 MiB of untracked files, or a git step fails, takes longer than 30 seconds, or the snapshot as a whole takes longer than 60 seconds. The end-of-turn listing of changed files has the same 256 MiB bound and a 10-second limit per step; when it cannot run, the output says the files could not be listed and still gives the restore command. A snapshot never stops a turn. term2 keeps the 20 newest snapshot refs in a repository and deletes older ones; git's own garbage collection later removes what they held. The snapshot lives in the workspace's repository, which the sandbox lets the agent write, so it protects against mistakes, not against an agent that deletes the ref.
 
 What unattended does not defend:
 

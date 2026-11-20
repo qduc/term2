@@ -62,6 +62,9 @@ export class DirectBackgroundInteractions {
         : { kind: 'allow' }
       : undefined;
     const automatic = decision && validDecision(entry.request, decision) ? decision : undefined;
+    // Unattended never opens an approval for a person, even when an approval cannot be applied.
+    if (!automatic && this.#reviews?.unattended())
+      return this.#refuse(entry, { ...review, approved: false } as ApprovalReviewResult);
     try {
       this.#accept({
         type: 'task_interaction_opened',

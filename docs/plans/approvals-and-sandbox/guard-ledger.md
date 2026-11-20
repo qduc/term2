@@ -41,8 +41,10 @@ and retention bound. Harm prevented: a snapshot copies untracked files into the
 repository's object store and runs before the turn's first model request, so an
 unbounded one could fill a disk or stall every unattended turn; unbounded refs
 would keep every copy alive. Signals: untracked bytes from `git ls-files -o
---exclude-standard` (256 MiB), each git step's wall time (30 s; 10 s for the
-synchronous end-of-turn listing), and the count of `refs/term2/snapshots/*`
+--exclude-standard` (256 MiB, checked before the snapshot and again before the
+end-of-turn listing stages what the turn left), each git step's wall time (30 s,
+with 60 s for the whole snapshot; 10 s per step for the synchronous end-of-turn
+listing, which blocks the event loop for at most that long per step), and the count of `refs/term2/snapshots/*`
 refs (keep 20, ordered by the millisecond timestamp the name starts with).
 Legitimate look-alike: a repository with large generated but unignored files,
 which gets no snapshot and one notice instead of a slow turn. Action: skip the

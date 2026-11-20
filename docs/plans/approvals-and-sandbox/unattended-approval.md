@@ -1,5 +1,7 @@
 # Unattended approval: build brief
 
+**Status:** built (2026-11-20). Part A is `src/session/approval/approval-route.ts`, `approval-arbiter.ts` and `unattended-refusals.ts`; part B is `src/tools/workspace/workspace-snapshot.ts` and `src/session/approval/unattended-snapshot.ts`. Evidence: `tests/cli/unattended-approval.e2e.test.ts` and the `approvals` target of `pnpm verify:generated`. The decisions below are the ones built.
+
 Rationale, evidence and the deferred designs are in [`docs/research/unattended-approval.md`](../../research/unattended-approval.md). This brief states what to build and how to tell it is done. It does not prescribe a design.
 
 ## Goal

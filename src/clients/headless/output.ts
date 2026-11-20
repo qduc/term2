@@ -140,7 +140,9 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
       streamedByMessage.clear();
       streamedTextByMessage.clear();
     },
-    completeTurn(): void {
+    /** `notice`: the turn's host notice (unattended refusals, the workspace snapshot), written to stderr. */
+    completeTurn(notice?: string): void {
+      if (notice !== undefined && output === 'plain' && !quiet) io.stderr.write(`${notice}\n`);
       // Progress already written to stdout is not the accepted answer. In
       // particular, an empty retry must not fall back to its withdrawn attempt.
       if (output !== 'json') completedText = terminalText ?? (finalText || streamedText || completedText);

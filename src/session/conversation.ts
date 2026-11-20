@@ -1,4 +1,5 @@
 import { conversationApprovalReviews } from './approval/approval-arbiter.js';
+import { unattendedSnapshot } from './approval/unattended-snapshot.js';
 import { bindTerm2ToolContext } from './tool-context.js';
 import { abortConversation } from './conversation-abort.js';
 import { ASK_USER_NO_ANSWER_RESULT, QuestionCancelNotice } from './conversation-question-cancel.js';
@@ -295,6 +296,11 @@ function conversation(
         compactionHoldSession = backingSession;
         delete compactionHold.rearmAt;
       }
+      const workspaceSnapshot = unattendedSnapshot(
+        turnId,
+        reviews,
+        planned?.compaction ? undefined : deps.workspaceSnapshot,
+      );
       const handle = (planned?.compaction ? startCompaction : startTurn)(
         {
           ...settings,
@@ -310,7 +316,11 @@ function conversation(
           budget: runBudgets.open(turnId, undefined, turnDeps.budget),
           continuity: turnContinuity,
           takeSteering: boundary,
-          prepareRequest: capabilities!.prepareRequest,
+          prepareRequest: async (request, input) => {
+            // Unattended: the snapshot precedes the turn's first model request, so it precedes every tool call.
+            await workspaceSnapshot.take();
+            return capabilities!.prepareRequest(request, input);
+          },
           normalStop: capabilities!.normalStop,
           ...(generation.supplied?.contextMilestones
             ? { contextMilestones: generation.supplied.contextMilestones }
@@ -327,6 +337,7 @@ function conversation(
         capabilities: capabilities!,
         publishNotice: deps.publishNotice,
         reviews,
+        snapshotReport: workspaceSnapshot.report,
         released: () => {
           if (active?.turnId === turnId) active = null;
         },

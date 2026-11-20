@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { testCliPath, createTestChildEnv } from '../helpers/terminal-e2e.js';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
@@ -115,13 +115,16 @@ async function startProvider(main: MainReply[], verdicts: Verdict[]): Promise<{ 
 async function runHeadless(
   baseUrl: string,
   args: readonly string[] = [],
-): Promise<{ status: number | null; output: string; conversations: string }> {
+  prepare?: (workspace: string) => string,
+): Promise<{ status: number | null; output: string; conversations: string; cwd: string }> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unattended-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
   const tmp = path.join(root, 'tmp');
   for (const dir of [home, workspace, tmp]) fs.mkdirSync(dir);
   const conversations = path.join(root, 'conversations');
+  // `prepare` may set the workspace up (a git repository) and choose the directory the run starts in.
+  const cwd = prepare ? prepare(workspace) : workspace;
   const env = createTestChildEnv({
     HOME: home,
     // Approval fixtures isolate scratch paths: an inherited TMPDIR changes path classification.
@@ -149,7 +152,7 @@ async function runHeadless(
     }),
   );
   const child = spawn('node', [builtCli, ...args, 'Check the runtime'], {
-    cwd: workspace,
+    cwd,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -160,7 +163,7 @@ async function runHeadless(
     child.on('error', reject);
     child.on('close', resolve);
   });
-  return { status, output, conversations };
+  return { status, output, conversations, cwd };
 }
 
 /** Every fact line of every conversation log under the run's conversations directory. */
@@ -274,4 +277,140 @@ it('a command that runs resets the consecutive count', { timeout: TIMEOUT_MS }, 
   expect(status, output).toBe(0);
   expect(seen.main).toHaveLength(5);
   expect(output).toContain('UNATTENDED_DONE');
+});
+
+// Part B: the per-turn workspace snapshot.
+
+const git = (cwd: string, ...args: string[]): string =>
+  execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], {
+    cwd,
+    encoding: 'utf8',
+  });
+
+/** A repository with a committed, a modified, a staged, an untracked and an ignored file. */
+function seedRepository(dir: string): void {
+  git(dir, 'init', '-q');
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'ignored.txt\n');
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'one\n');
+  fs.writeFileSync(path.join(dir, 'b.txt'), 'two\n');
+  fs.writeFileSync(path.join(dir, 'd.txt'), 'keep\n');
+  git(dir, 'add', '.');
+  git(dir, 'commit', '-qm', 'init');
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'modified\n');
+  fs.writeFileSync(path.join(dir, 'b.txt'), 'staged\n');
+  git(dir, 'add', 'b.txt');
+  fs.writeFileSync(path.join(dir, 'u.txt'), 'untracked\n');
+  fs.writeFileSync(path.join(dir, 'ignored.txt'), 'ignored\n');
+}
+
+const snapshotRefs = (cwd: string): string[] =>
+  git(cwd, 'for-each-ref', '--format=%(refname)', 'refs/term2/snapshots/').split('\n').filter(Boolean);
+
+const MUTATE =
+  "node -e \"const f=require('fs');f.writeFileSync('a.txt','turn\\n');f.rmSync('d.txt');f.writeFileSync('c.txt','created\\n')\"";
+
+for (const layout of ['primary checkout', 'linked worktree'] as const) {
+  it(
+    `snapshots a ${layout} before the first tool call without touching status or index`,
+    { timeout: TIMEOUT_MS },
+    async () => {
+      const { baseUrl } = await startProvider([{ call: { id: 'c1', command: 'node -v' } }], ['pass']);
+      let before = { status: '', index: '', stash: '', head: '' };
+      const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
+        let dir = workspace;
+        if (layout === 'linked worktree') {
+          const main = path.join(workspace, 'main');
+          fs.mkdirSync(main);
+          seedRepository(main);
+          dir = path.join(workspace, 'linked');
+          git(main, 'worktree', 'add', '-q', dir);
+          // The linked worktree gets its own modified, staged and untracked files.
+          fs.writeFileSync(path.join(dir, 'a.txt'), 'linked modified\n');
+          fs.writeFileSync(path.join(dir, 'b.txt'), 'linked staged\n');
+          git(dir, 'add', 'b.txt');
+          fs.writeFileSync(path.join(dir, 'u.txt'), 'linked untracked\n');
+        } else seedRepository(dir);
+        before = {
+          status: git(dir, 'status', '--porcelain'),
+          index: git(dir, 'ls-files', '-s'),
+          stash: git(dir, 'stash', 'list'),
+          head: git(dir, 'rev-parse', 'HEAD', '--symbolic-full-name', 'HEAD'),
+        };
+        return dir;
+      });
+      expect(status, output).toBe(0);
+      expect(git(cwd, 'status', '--porcelain')).toBe(before.status);
+      expect(git(cwd, 'ls-files', '-s')).toBe(before.index);
+      expect(git(cwd, 'stash', 'list')).toBe(before.stash);
+      expect(git(cwd, 'rev-parse', 'HEAD', '--symbolic-full-name', 'HEAD')).toBe(before.head);
+      const refs = snapshotRefs(cwd);
+      expect(refs).toHaveLength(1);
+      const files = git(cwd, 'ls-tree', '-r', '--name-only', refs[0]!).split('\n').filter(Boolean);
+      expect(files).toEqual(expect.arrayContaining(['a.txt', 'b.txt', 'd.txt', 'u.txt']));
+      expect(files).not.toContain('ignored.txt');
+      const prefix = layout === 'linked worktree' ? 'linked ' : '';
+      expect(git(cwd, 'show', `${refs[0]}:a.txt`)).toBe(`${prefix}modified\n`);
+      expect(git(cwd, 'show', `${refs[0]}:b.txt`)).toBe(`${prefix}staged\n`);
+      expect(git(cwd, 'show', `${refs[0]}:u.txt`)).toBe(`${prefix}untracked\n`);
+      expect(output).toContain(`Workspace snapshot before this turn: ${refs[0]}`);
+      expect(output).toContain('No files changed since it.');
+    },
+  );
+}
+
+it(
+  'reports the files a turn changed, and the restore command puts back modified and deleted files',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    const { baseUrl } = await startProvider([{ call: { id: 'c1', command: MUTATE } }], ['pass']);
+    const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
+      seedRepository(workspace);
+      return workspace;
+    });
+    expect(status, output).toBe(0);
+    expect(fs.readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('turn\n');
+    expect(output).toMatch(/Files changed since it \(3\):/);
+    expect(output).toContain('M a.txt');
+    expect(output).toContain('D d.txt');
+    expect(output).toContain('A c.txt');
+    const restore =
+      /To put back modified and deleted files: git -C ("[^"]+") restore --source=(\S+) --worktree -- \./.exec(output);
+    expect(restore, output).not.toBeNull();
+    const indexBefore = git(cwd, 'ls-files', '-s');
+    git(JSON.parse(restore![1]!) as string, 'restore', `--source=${restore![2]}`, '--worktree', '--', '.');
+    expect(fs.readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('modified\n');
+    expect(fs.readFileSync(path.join(cwd, 'd.txt'), 'utf8')).toBe('keep\n');
+    // Documented: a file the turn created and did not stage is kept; the index is not touched.
+    expect(fs.readFileSync(path.join(cwd, 'c.txt'), 'utf8')).toBe('created\n');
+    expect(git(cwd, 'ls-files', '-s')).toBe(indexBefore);
+  },
+);
+
+it(
+  'says there is no snapshot in a workspace that is not a git repository, and the turn proceeds',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    const { baseUrl, seen } = await startProvider([{ call: { id: 'c1', command: 'node -v' } }], ['pass']);
+    const { status, output } = await runHeadless(baseUrl);
+    expect(status, output).toBe(0);
+    expect(seen.main[1]).toContain(process.version);
+    expect(output.match(/No workspace snapshot for this turn: the workspace is not a git repository\./g)).toHaveLength(
+      1,
+    );
+  },
+);
+
+it('keeps only the newest 20 snapshot refs', { timeout: TIMEOUT_MS }, async () => {
+  const { baseUrl } = await startProvider([{ text: 'UNATTENDED_DONE' }], []);
+  const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
+    seedRepository(workspace);
+    const head = git(workspace, 'rev-parse', 'HEAD').trim();
+    for (let i = 0; i < 20; i += 1) git(workspace, 'update-ref', `refs/term2/snapshots/${1000000000000 + i}-old`, head);
+    return workspace;
+  });
+  expect(status, output).toBe(0);
+  const refs = snapshotRefs(cwd);
+  expect(refs).toHaveLength(20);
+  expect(refs).not.toContain('refs/term2/snapshots/1000000000000-old');
+  expect(refs.filter((ref) => !ref.endsWith('-old'))).toHaveLength(1);
 });

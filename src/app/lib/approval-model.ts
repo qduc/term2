@@ -9,6 +9,9 @@ import type { Item, ModelAffinity, ModelRegistry, ItemId } from '../../model/ind
 import type { ShellAutoApprovalAgentClient } from '../../session/conversation-agent-client.js';
 import type { AgentSurface, ProfileSelection } from '../tool-contract.js';
 import type { DirectRuntimeRecord } from '../application-runtime.js';
+import type { WorkspaceSnapshotPort } from '../../session/types.js';
+import type { Workspace } from '../../tools/index.js';
+import { describeWorkspaceSnapshot, takeWorkspaceSnapshot } from '../../tools/workspace/workspace-snapshot.js';
 
 /** One tool-free model request for the existing approval evaluator; never starts an agent loop. */
 export function createApprovalModelClient(
@@ -180,5 +183,16 @@ export function sessionApprovalReview(
       if (!current || !review) return { kind: 'not_reviewed', approved: false };
       return current.scope(() => review(request, history, signal));
     },
+  };
+}
+
+/** Unattended turns snapshot a local workspace; an SSH workspace has no snapshot, and the turn says so. */
+export function workspaceSnapshotPort(workspace: Workspace): WorkspaceSnapshotPort {
+  return {
+    take: (label) =>
+      workspace.target === 'local'
+        ? takeWorkspaceSnapshot(workspace.root, label)
+        : Promise.resolve({ kind: 'none', reason: 'the workspace is on an SSH host' }),
+    describe: describeWorkspaceSnapshot,
   };
 }

@@ -467,7 +467,7 @@ export async function runDirectHeadless(
         if (outcome === 'completed') {
           // Both formats use accepted terminal text for completion; already
           // streamed progress remains visible even when its attempt was withdrawn.
-          presentation.completeTurn();
+          presentation.completeTurn(event.payload.notice);
           if (background === null) {
             background = { deadline: Date.now() + backgroundWaitTimeoutMs, nextDrainAt: 0, drainRequestId: null };
             targetTurnId = null;

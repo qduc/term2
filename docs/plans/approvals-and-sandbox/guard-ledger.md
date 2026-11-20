@@ -32,6 +32,27 @@ list and resubmits or changes mode; a new turn starts with fresh counts. Rollbac
 boundary: the limit and the refusal route revert together with
 `unattended-refusals.ts`; the other modes never reach this code.
 
+## Unattended workspace snapshot bounds (2026-11-20)
+
+Owner: `takeWorkspaceSnapshot` / `describeWorkspaceSnapshot` in
+`src/tools/workspace/workspace-snapshot.ts`; per-turn timing in
+`src/session/approval/unattended-snapshot.ts`. Class: admission limit (cost)
+and retention bound. Harm prevented: a snapshot copies untracked files into the
+repository's object store and runs before the turn's first model request, so an
+unbounded one could fill a disk or stall every unattended turn; unbounded refs
+would keep every copy alive. Signals: untracked bytes from `git ls-files -o
+--exclude-standard` (256 MiB), each git step's wall time (30 s; 10 s for the
+synchronous end-of-turn listing), and the count of `refs/term2/snapshots/*`
+refs (keep 20, ordered by the millisecond timestamp the name starts with).
+Legitimate look-alike: a repository with large generated but unignored files,
+which gets no snapshot and one notice instead of a slow turn. Action: skip the
+snapshot (never fail or block the turn) and say so in the turn's notice; delete
+refs beyond the newest 20 after writing a new one, leaving the objects to git's
+own garbage collection. Values are fixed, not settings; they are starting
+points, not measured on Term2 users' repositories. Rollback boundary: the
+snapshot module, the session holder and the app port revert together; approval
+routing does not depend on them.
+
 ## Provider transport timeouts handed to the stream-idle guard (2026-11-18)
 
 Owner: `withGenerationGuard` opts guarded stream reads into the dispatcher in

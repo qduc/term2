@@ -67,6 +67,18 @@ notice listing every refusal (a task gets the list in that last refusal). An
 unattended turn declines every run check-in (`budget_closed` stop, source
 `system`). Failure to read the route or mode refuses rather than waits.
 
+An unattended root turn (not a compaction) also takes a workspace snapshot
+through the app's `workspaceSnapshot` port (`WorkspaceSnapshotPort` in
+`types.ts`; the git implementation is `tools/workspace/workspace-snapshot.ts`).
+`approval/unattended-snapshot.ts` holds it per turn: the turn's
+`prepareRequest` awaits `take()` when the arbiter reports unattended, so the
+snapshot precedes the first model request and therefore every tool call, and is
+taken at most once. `take` never rejects: no repository, an SSH workspace, the
+size bound or a git failure is `{ kind: 'none', reason }`. At settlement the turn
+owner appends `describe(snapshot)` (bounded and synchronous) to the
+`turn_ended` notice, after the refusal list. Headless plain output writes a
+completed turn's notice to stderr.
+
 ## Background notices across reopen
 
 A background notice (a child's or shell job's completion, a "moved to

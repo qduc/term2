@@ -32,6 +32,20 @@ Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. 
 - **Questions still ask.** In an interactive session `ask_user` still waits for your answer; a non-interactive run stops on a question as before.
 - **Refusal limit.** Three refusals in a row, or ten in one turn, end the turn without another model request. The turn's final output lists every refusal and its reason; a non-interactive run exits with code 2. A command that runs between refusals resets the "in a row" count. Each background task has its own count.
 
+### Workspace snapshot
+
+Before an unattended turn's first model request, and so before any of its tool calls, term2 records the workspace in a git commit under a private ref, `refs/term2/snapshots/<time>-<turn>`. The commit holds tracked, staged and untracked files that git does not ignore. Your branch, `HEAD`, the index, the working tree and the stash are not changed; nothing appears in `git status` or in your branch's history.
+
+When the turn ends, its output names the snapshot, lists the files changed since it, and gives the command that puts them back:
+
+```bash
+git -C <workspace> restore --source=refs/term2/snapshots/<time>-<turn> --worktree -- .
+```
+
+It restores modified and deleted files to their content before the turn. It leaves the index alone and keeps files the turn created, except a created file that was added to the index, which it removes from the working tree; `git status` shows what is left to clean up.
+
+There is no snapshot, and the turn says so once at its end, when the workspace is not a git repository, is on an SSH host, has more than 256 MiB of untracked files, or a git step fails or takes longer than 30 seconds. A snapshot never stops a turn. term2 keeps the 20 newest snapshot refs in a repository and deletes older ones; git's own garbage collection later removes what they held. The snapshot lives in the workspace's repository, which the sandbox lets the agent write, so it protects against mistakes, not against an agent that deletes the ref.
+
 What unattended does not defend:
 
 - **The reviewer is a model, not a security boundary.** It catches mistakes; it can be wrong, and it reads text the agent, a web page, or a file can write. Published results for comparable reviewers miss a meaningful share of overeager or injected actions.

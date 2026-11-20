@@ -1,6 +1,6 @@
 # Unattended approval: build brief
 
-**Status:** built (2026-11-20). Part A is `src/session/approval/approval-route.ts`, `approval-arbiter.ts` and `unattended-refusals.ts`; part B is `src/tools/workspace/workspace-snapshot.ts` and `src/session/approval/unattended-snapshot.ts`. Evidence: `tests/cli/unattended-approval.e2e.test.ts` and the `approvals` target of `pnpm verify:generated`. The decisions below are the ones built.
+**Status:** built (2026-11-20). Part A is `src/session/approval/approval-route.ts`, `approval-arbiter.ts` and `unattended-refusals.ts`; part B is `src/tools/workspace/workspace-snapshot.ts` (a shadow repository, decision 7) and `src/session/approval/unattended-snapshot.ts`. Evidence: `tests/cli/unattended-approval.e2e.test.ts` and the `approvals` target of `pnpm verify:generated`. The decisions below are the ones built.
 
 Rationale, evidence and the deferred designs are in [`docs/research/unattended-approval.md`](../../research/unattended-approval.md). This brief states what to build and how to tell it is done. It does not prescribe a design.
 
@@ -20,6 +20,7 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 4. Where a sandbox is enforcing, an escape from it (`unsandboxed-once`) is refused without a review. A setting, off by default, lets the reviewer decide it as in `auto`. The person chose the sandbox; the agent does not leave it on a reviewer's word.
 5. Unattended works without a sandbox (owner decision, 2026-11-20). When no sandbox contains the command (sandbox disabled or unavailable, or an SSH execution context), a shell request goes to the reviewer as it does in `auto`. The reviewer is then the only layer, and the user-facing documentation says so.
 6. The snapshot is taken in `unattended` only.
+7. The snapshot lives in a shadow git repository under term2's state directory, not in the workspace's repository (owner decision, 2026-11-20, after the first build used a private ref in the project). It keeps the snapshot out of the sandbox's writable paths, writes nothing to the project, and covers a non-git workspace. Criteria B1 and B3 below are worded for it.
 
 ## Constraints
 
@@ -54,9 +55,9 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 
 ### B. The snapshot
 
-1. Before the first tool call of an unattended turn in a local git workspace, a commit holding tracked, staged and untracked non-ignored files is written under a private ref. `HEAD`, branch refs, the index, the working tree and the stash are unchanged: `git status --porcelain` and `git ls-files -s` print the same before and after.
+1. Before the first tool call of an unattended turn in a local workspace, a commit holding tracked, staged and untracked non-ignored files is written to a shadow repository outside the workspace (decision 7). In a git workspace, `HEAD`, refs, the index, the working tree, the stash and the object store are unchanged: `git status --porcelain`, `git ls-files -s`, `git for-each-ref` and `git count-objects` print the same before and after.
 2. Criterion 1 holds in a primary checkout and in a linked worktree.
-3. In a non-git workspace, over SSH, or when the snapshot fails or exceeds its cost bound, the turn proceeds and one notice says there is no snapshot. A snapshot never fails or blocks a turn.
+3. A non-git workspace is snapshotted the same way, and no `.git` is created in it. Over SSH, or when the snapshot fails or exceeds its cost bound, the turn proceeds and one notice says there is no snapshot. A snapshot never fails or blocks a turn.
 4. The end-of-turn output, including the refusal-limit report, names the snapshot and the files changed since it.
 5. A documented restore command is exercised by a test: after a turn that modifies, deletes and creates files, it returns the modified and deleted files to their pre-turn content. The documentation says what it does with files the turn created.
 6. Old snapshots are pruned by a stated rule.

@@ -34,17 +34,17 @@ Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. 
 
 ### Workspace snapshot
 
-Before an unattended turn's first model request, and so before any of its tool calls, term2 records the workspace in a git commit under a private ref, `refs/term2/snapshots/<time>-<turn>`. The commit holds tracked, staged and untracked files that git does not ignore. Your branch, `HEAD`, the index, the working tree and the stash are not changed; nothing appears in `git status` or in your branch's history.
+Before an unattended turn's first model request, and so before any of its tool calls, term2 records the workspace in a private snapshot repository of its own, kept under term2's state directory (`~/.local/state/term2-nodejs/workspace-snapshots/` on Linux) rather than in your project. The snapshot holds every file git does not ignore: tracked, staged, modified and untracked. Nothing in your project changes: no branch, ref, index entry, stash entry or object is added, and nothing appears in `git status` or `git log --all`. In a git project, the snapshot repository reads the project's own object store, so files that are already committed are not stored twice. A folder that is not a git repository gets a snapshot too, and no `.git` is created in it.
 
-When the turn ends, its output names the snapshot, lists the files changed since it, and gives the command that puts them back:
+When the turn ends, its output names the snapshot, lists the files changed in the workspace directory since it, and gives the command that puts them back:
 
 ```bash
-git -C <workspace directory> restore --source=refs/term2/snapshots/<time>-<turn> --worktree -- .
+git -C <workspace directory> --git-dir=<snapshot repository> --work-tree=<project root> restore --overlay --source=refs/snapshots/<time>-<turn> --worktree -- .
 ```
 
-It restores modified and deleted files under the workspace directory to their content before the turn; the snapshot holds the whole repository, but the listing and the restore cover only the directory term2 runs in. Files marked `assume-unchanged` or `skip-worktree` are recorded as they are on disk, so a local edit to one survives a restore. It leaves the index alone and keeps files the turn created, except a created file that was added to the index, which it removes from the working tree; `git status` shows what is left to clean up.
+It restores modified and deleted files under the workspace directory to their content before the turn. It never deletes a file: files the turn created stay until you remove them (the listing marks them `A`). It does not touch your index or anything outside the workspace directory. Files marked `assume-unchanged` or `skip-worktree` are recorded as they are on disk, so a local edit to one survives a restore.
 
-There is no snapshot, and the turn says so once at its end, when the workspace is not a git repository, is on an SSH host, has more than 256 MiB of untracked files, or a git step fails, takes longer than 30 seconds, or the snapshot as a whole takes longer than 60 seconds. The end-of-turn listing of changed files has the same 256 MiB bound and a 10-second limit per step; when it cannot run, the output says the files could not be listed and still gives the restore command. A snapshot never stops a turn. term2 keeps the 20 newest snapshot refs in a repository and deletes older ones; git's own garbage collection later removes what they held. The snapshot lives in the workspace's repository, which the sandbox lets the agent write, so it protects against mistakes, not against an agent that deletes the ref.
+There is no snapshot, and the turn says so once at its end, when the workspace is on an SSH host, its new and changed files exceed 256 MiB, or a git step fails, takes longer than 30 seconds, or the snapshot as a whole takes longer than 60 seconds. The end-of-turn listing of changed files has the same 256 MiB bound and a 10-second limit per step; when it cannot run, the output says the files could not be listed and still gives the restore command. A snapshot never stops a turn. term2 keeps the 20 newest snapshots of a workspace, deletes older ones, and lets git reclaim their space. The snapshot repository is outside the sandbox's writable paths, so a sandboxed agent cannot delete it. Without the sandbox, nothing stops a command from removing it.
 
 What unattended does not defend:
 

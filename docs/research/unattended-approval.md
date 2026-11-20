@@ -169,7 +169,7 @@ Inside the sandbox the shell runs unreviewed and can destroy uncommitted work. A
 
 Before an unattended turn's first mutation, write the workspace to a commit under a private ref using a temporary index. Probed on 2026-11-20 in a scratch repository with one modified, one staged and one untracked file: `GIT_INDEX_FILE=<copy> git add -A`, `git write-tree`, `git commit-tree`, `git update-ref` left `git status` and the real index unchanged, and the commit held all three files.
 
-A snapshot kept in the workspace's own repository guards against mistakes, not against an agent that deletes the ref: the workspace is in the sandbox's `allowWrite`, and for a linked worktree `resolveGitWorktreeWritePaths` allows the shared `refs` and `objects`. Keeping the snapshot outside the sandbox's writable paths closes that gap.
+A snapshot kept in the workspace's own repository guards against mistakes, not against an agent that deletes the ref: the workspace is in the sandbox's `allowWrite`, and for a linked worktree `resolveGitWorktreeWritePaths` allows the shared `refs` and `objects`. Keeping the snapshot outside the sandbox's writable paths closes that gap. As built, the snapshot lives in a shadow repository under term2's state directory, which closes it (build brief, decision 7).
 
 The snapshot covers what can be undone. Steps 1 to 3 confine what cannot. It also gives the end-of-turn report something concrete: the files changed since the snapshot and how to restore them.
 

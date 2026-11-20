@@ -228,7 +228,7 @@ it('shows the workspace snapshot report at the end of an unattended turn', { tim
     git('commit', '-qm', 'init');
   }).then(({ submit }) => submit('Check the runtime'));
   await session!.waitForOutput('TUI_SNAPSHOT_DONE', 60_000);
-  await session!.waitForOutput('Workspace snapshot before this turn: refs/term2/snapshots/', 30_000);
+  await session!.waitForOutput('Workspace snapshot before this turn: refs/snapshots/', 30_000);
   capture('snapshot');
   expect(session!.getVisibleOutput()).toContain('No files changed since it.');
 });

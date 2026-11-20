@@ -4,6 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { testCliPath, createTestChildEnv } from '../helpers/terminal-e2e.js';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
@@ -327,19 +328,31 @@ function seedRepository(dir: string): void {
   fs.writeFileSync(path.join(dir, 'ignored.txt'), 'ignored\n');
 }
 
-const snapshotRefs = (cwd: string): string[] =>
-  git(cwd, 'for-each-ref', '--format=%(refname)', 'refs/term2/snapshots/').split('\n').filter(Boolean);
+/**
+ * The shadow repository term2 keeps for a work tree: under the run's home, outside the workspace (the code
+ * resolves the same root through sandboxUserStateRoot()).
+ */
+function shadowDir(workTree: string): string {
+  const key = createHash('sha256').update(fs.realpathSync(workTree)).digest('hex').slice(0, 24);
+  return path.join(resolveSettingsDirectory({ homeDir: path.join(root, 'home'), env: {} }), 'workspace-snapshots', key);
+}
+
+const shadowGit = (workTree: string, ...args: string[]): string =>
+  execFileSync('git', [`--git-dir=${shadowDir(workTree)}`, ...args], { encoding: 'utf8' });
+
+const snapshotRefs = (workTree: string): string[] =>
+  shadowGit(workTree, 'for-each-ref', '--format=%(refname)', 'refs/snapshots/').split('\n').filter(Boolean);
 
 const MUTATE =
   "node -e \"const f=require('fs');f.writeFileSync('a.txt','turn\\n');f.rmSync('d.txt');f.writeFileSync('c.txt','created\\n')\"";
 
 for (const layout of ['primary checkout', 'linked worktree'] as const) {
   it(
-    `snapshots a ${layout} before the first tool call without touching status or index`,
+    `snapshots a ${layout} into a shadow repository without touching the project's git state`,
     { timeout: TIMEOUT_MS },
     async () => {
       const { baseUrl } = await startProvider([{ call: { id: 'c1', command: 'node -v' } }], ['pass']);
-      let before = { status: '', index: '', stash: '', head: '' };
+      let before = { status: '', index: '', stash: '', head: '', refs: '', objects: '' };
       const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
         let dir = workspace;
         if (layout === 'linked worktree') {
@@ -359,23 +372,29 @@ for (const layout of ['primary checkout', 'linked worktree'] as const) {
           index: git(dir, 'ls-files', '-s'),
           stash: git(dir, 'stash', 'list'),
           head: git(dir, 'rev-parse', 'HEAD', '--symbolic-full-name', 'HEAD'),
+          refs: git(dir, 'for-each-ref'),
+          objects: git(dir, 'count-objects'),
         };
         return dir;
       });
       expect(status, output).toBe(0);
+      // Nothing in the project changes: status, index, stash, HEAD, refs, and no objects are added.
       expect(git(cwd, 'status', '--porcelain')).toBe(before.status);
       expect(git(cwd, 'ls-files', '-s')).toBe(before.index);
       expect(git(cwd, 'stash', 'list')).toBe(before.stash);
       expect(git(cwd, 'rev-parse', 'HEAD', '--symbolic-full-name', 'HEAD')).toBe(before.head);
+      expect(git(cwd, 'for-each-ref')).toBe(before.refs);
+      expect(git(cwd, 'count-objects')).toBe(before.objects);
+      expect(shadowDir(cwd).startsWith(cwd)).toBe(false);
       const refs = snapshotRefs(cwd);
       expect(refs).toHaveLength(1);
-      const files = git(cwd, 'ls-tree', '-r', '--name-only', refs[0]!).split('\n').filter(Boolean);
+      const files = shadowGit(cwd, 'ls-tree', '-r', '--name-only', refs[0]!).split('\n').filter(Boolean);
       expect(files).toEqual(expect.arrayContaining(['a.txt', 'b.txt', 'd.txt', 'u.txt']));
       expect(files).not.toContain('ignored.txt');
       const prefix = layout === 'linked worktree' ? 'linked ' : '';
-      expect(git(cwd, 'show', `${refs[0]}:a.txt`)).toBe(`${prefix}modified\n`);
-      expect(git(cwd, 'show', `${refs[0]}:b.txt`)).toBe(`${prefix}staged\n`);
-      expect(git(cwd, 'show', `${refs[0]}:u.txt`)).toBe(`${prefix}untracked\n`);
+      expect(shadowGit(cwd, 'show', `${refs[0]}:a.txt`)).toBe(`${prefix}modified\n`);
+      expect(shadowGit(cwd, 'show', `${refs[0]}:b.txt`)).toBe(`${prefix}staged\n`);
+      expect(shadowGit(cwd, 'show', `${refs[0]}:u.txt`)).toBe(`${prefix}untracked\n`);
       expect(output).toContain(`Workspace snapshot before this turn: ${refs[0]}`);
       expect(output).toContain('No files changed since it.');
     },
@@ -397,45 +416,60 @@ it(
     expect(output).toContain('M a.txt');
     expect(output).toContain('D d.txt');
     expect(output).toContain('A c.txt');
-    const restore =
-      /To put back modified and deleted files: git -C ("[^"]+") restore --source=(\S+) --worktree -- \./.exec(output);
+    const restore = /To put back modified and deleted files: (git .+)$/m.exec(output);
     expect(restore, output).not.toBeNull();
     const indexBefore = git(cwd, 'ls-files', '-s');
-    git(JSON.parse(restore![1]!) as string, 'restore', `--source=${restore![2]}`, '--worktree', '--', '.');
+    execFileSync('sh', ['-c', restore![1]!]);
     expect(fs.readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('modified\n');
     expect(fs.readFileSync(path.join(cwd, 'd.txt'), 'utf8')).toBe('keep\n');
-    // Documented: a file the turn created and did not stage is kept; the index is not touched.
+    // Documented: the restore never deletes a file, so one the turn created is kept; the index is not touched.
     expect(fs.readFileSync(path.join(cwd, 'c.txt'), 'utf8')).toBe('created\n');
     expect(git(cwd, 'ls-files', '-s')).toBe(indexBefore);
   },
 );
 
 it(
-  'says there is no snapshot in a workspace that is not a git repository, and the turn proceeds',
+  'snapshots a workspace that is not a git repository without creating one in it',
   { timeout: TIMEOUT_MS },
   async () => {
-    const { baseUrl, seen } = await startProvider([{ call: { id: 'c1', command: 'node -v' } }], ['pass']);
-    const { status, output } = await runHeadless(baseUrl);
+    const { baseUrl, seen } = await startProvider([{ call: { id: 'c1', command: MUTATE } }], ['pass']);
+    const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
+      fs.writeFileSync(path.join(workspace, 'a.txt'), 'plain\n');
+      fs.writeFileSync(path.join(workspace, 'd.txt'), 'keep\n');
+      return workspace;
+    });
     expect(status, output).toBe(0);
-    expect(seen.main[1]).toContain(process.version);
-    expect(output.match(/No workspace snapshot for this turn: the workspace is not a git repository\./g)).toHaveLength(
-      1,
-    );
+    expect(seen.main).toHaveLength(2);
+    expect(fs.existsSync(path.join(cwd, '.git'))).toBe(false);
+    expect(snapshotRefs(cwd)).toHaveLength(1);
+    expect(output).toMatch(/Files changed since it \(3\):/);
+    execFileSync('sh', ['-c', /To put back modified and deleted files: (git .+)$/m.exec(output)![1]!]);
+    expect(fs.readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('plain\n');
+    expect(fs.readFileSync(path.join(cwd, 'd.txt'), 'utf8')).toBe('keep\n');
   },
 );
 
 it('keeps only the newest 20 snapshot refs', { timeout: TIMEOUT_MS }, async () => {
   const { baseUrl } = await startProvider([{ text: 'UNATTENDED_DONE' }], []);
   const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
-    seedRepository(workspace);
-    const head = git(workspace, 'rev-parse', 'HEAD').trim();
-    for (let i = 0; i < 20; i += 1) git(workspace, 'update-ref', `refs/term2/snapshots/${1000000000000 + i}-old`, head);
+    // An existing shadow repository holding 20 older snapshots.
+    const dir = shadowDir(workspace);
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    execFileSync('git', ['init', '-q', '--bare', dir]);
+    const tree = execFileSync('git', [`--git-dir=${dir}`, 'mktree'], { input: '', encoding: 'utf8' }).trim();
+    const commit = execFileSync(
+      'git',
+      ['-c', 'user.name=f', '-c', 'user.email=f@x', `--git-dir=${dir}`, 'commit-tree', tree, '-m', 'old'],
+      { encoding: 'utf8' },
+    ).trim();
+    for (let i = 0; i < 20; i += 1)
+      execFileSync('git', [`--git-dir=${dir}`, 'update-ref', `refs/snapshots/${1000000000000 + i}-old`, commit]);
     return workspace;
   });
   expect(status, output).toBe(0);
   const refs = snapshotRefs(cwd);
   expect(refs).toHaveLength(20);
-  expect(refs).not.toContain('refs/term2/snapshots/1000000000000-old');
+  expect(refs).not.toContain('refs/snapshots/1000000000000-old');
   expect(refs.filter((ref) => !ref.endsWith('-old'))).toHaveLength(1);
 });
 

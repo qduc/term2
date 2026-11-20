@@ -37,23 +37,30 @@ boundary: the limit and the refusal route revert together with
 Owner: `takeWorkspaceSnapshot` / `describeWorkspaceSnapshot` in
 `src/tools/workspace/workspace-snapshot.ts`; per-turn timing in
 `src/session/approval/unattended-snapshot.ts`. Class: admission limit (cost)
-and retention bound. Harm prevented: a snapshot copies untracked files into the
-repository's object store and runs before the turn's first model request, so an
-unbounded one could fill a disk or stall every unattended turn; unbounded refs
-would keep every copy alive. Signals: untracked bytes from `git ls-files -o
---exclude-standard` (256 MiB, checked before the snapshot and again before the
-end-of-turn listing stages what the turn left), each git step's wall time (30 s,
-with 60 s for the whole snapshot; 10 s per step for the synchronous end-of-turn
-listing, which blocks the event loop for at most that long per step), and the count of `refs/term2/snapshots/*`
-refs (keep 20, ordered by the millisecond timestamp the name starts with).
-Legitimate look-alike: a repository with large generated but unignored files,
-which gets no snapshot and one notice instead of a slow turn. Action: skip the
-snapshot (never fail or block the turn) and say so in the turn's notice; delete
-refs beyond the newest 20 after writing a new one, leaving the objects to git's
-own garbage collection. Values are fixed, not settings; they are starting
-points, not measured on Term2 users' repositories. Rollback boundary: the
-snapshot module, the session holder and the app port revert together; approval
-routing does not depend on them.
+and retention bound. Harm prevented: a snapshot stores new and changed files in
+a shadow git repository under the sandbox user state root and runs before the
+turn's first model request, so an unbounded one could fill a disk or stall
+every unattended turn; unbounded refs would keep every copy alive. Signals: the
+bytes `git add -A` would store, from the shadow index's untracked (`ls-files -o
+--exclude-standard`) and modified (`ls-files -m`) files (256 MiB, checked before
+the snapshot and again before the end-of-turn listing stages what the turn
+left); each git step's wall time (30 s, with 60 s for the whole snapshot; 10 s
+per step for the synchronous end-of-turn listing, which blocks the event loop
+for at most that long per step); and the count of the shadow repository's
+`refs/snapshots/*` (keep 20, ordered by the millisecond timestamp the name
+starts with). In a git project the shadow index is seeded from the project's
+index and the project's objects are an alternate, so the first snapshot does
+not count or store committed files. Legitimate look-alike: a folder with large
+unignored files (a non-git folder has no ignore rules unless it carries
+`.gitignore` files), which gets no snapshot and one notice instead of a slow
+turn. Action: skip the snapshot (never fail or block the turn) and say so in the
+turn's notice; after writing a snapshot, delete refs beyond the newest 20 and
+run `git gc --auto`. Values are fixed, not settings; they are starting points,
+not measured on Term2 users' repositories. Known residual: the alternates link
+means a snapshot's committed files live in the project's object store, so a
+history rewrite plus an aggressive `git gc --prune=now` there can break an older
+snapshot. Rollback boundary: the snapshot module, the session holder and the
+app port revert together; approval routing does not depend on them.
 
 ## Provider transport timeouts handed to the stream-idle guard (2026-11-18)
 

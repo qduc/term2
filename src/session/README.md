@@ -76,12 +76,15 @@ so that parent finishing does not reset the in-a-row count.
 
 An unattended root turn (not a compaction) also takes a workspace snapshot
 through the app's `workspaceSnapshot` port (`WorkspaceSnapshotPort` in
-`types.ts`; the git implementation is `tools/workspace/workspace-snapshot.ts`).
+`types.ts`; the implementation is `tools/workspace/workspace-snapshot.ts`, a
+shadow git repository per work tree under the sandbox user state root, with the
+project's object store as an alternate and its index as the seed, so nothing is
+written to the workspace or its repository).
 `approval/unattended-snapshot.ts` holds it per turn: the turn's
 `prepareRequest` awaits `take()` when the arbiter reports unattended, so the
 snapshot precedes the first model request and therefore every tool call, and is
-taken at most once. `take` never rejects: no repository, an SSH workspace, the
-size bound or a git failure is `{ kind: 'none', reason }`. At settlement the turn
+taken at most once. `take` never rejects: an SSH workspace, the size bound, a
+deadline or a git failure is `{ kind: 'none', reason }`. At settlement the turn
 owner appends `describe(snapshot)` (bounded and synchronous) to the
 `turn_ended` notice, after the refusal list. Headless plain output writes a
 completed turn's notice to stderr.

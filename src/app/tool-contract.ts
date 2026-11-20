@@ -97,10 +97,13 @@ export type AgentSurface = {
     dispose?(): void | Promise<void>;
   };
   /**
-   * The shared route with this generation's live mode: `decide` reviews and may answer, `advise`
-   * reviews only to inform the person, `ask_user` asks at once.
+   * The shared route with this generation's live mode (session/approval/approval-route.ts `ApprovalRoute`):
+   * `decide` reviews and may answer, `advise` reviews only to inform the person, `judge` reviews and
+   * refuses a non-approval, `refuse` refuses without a review, `ask_user` asks at once.
    */
-  approvalRoute?(request: InteractionRequest): 'decide' | 'advise' | 'ask_user';
+  approvalRoute?(request: InteractionRequest): import('../session/approval/approval-route.js').ApprovalRoute;
+  /** This generation's live mode is `unattended`: no request waits for a person except a question. */
+  unattended?(): boolean;
   /** Review an open approval through the shared decision table (session/approval/approval-route.ts). */
   reviewApproval?(
     request: InteractionRequest,

@@ -73,7 +73,7 @@ export type DirectSessionConfiguration = {
   readonly model: ModelRef;
   readonly reasoningEffort: DirectConfigurationIntent['reasoningEffort'];
   readonly profileId: string;
-  readonly approvalMode: DirectApprovalMode | 'advisory';
+  readonly approvalMode: DirectApprovalMode | 'advisory' | 'unattended';
 };
 
 export type DirectApplication = {

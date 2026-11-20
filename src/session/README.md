@@ -44,6 +44,29 @@ approved review commits the policy close in the same step and answers with the
 request's one-time grant when it offers one. Only this path records
 `automaticApproval: true`; `answer` rejects it from any caller.
 
+### Unattended refusals
+
+In `shell.autoApproveMode: unattended` the port's route (`ApprovalRoute` in
+`approval/approval-route.ts`) is `judge` where `auto` would be `decide`, and
+`refuse` for what `auto` would send to a person: hard gates other than a
+question, tools the reviewer may not grant, and an outside-sandbox escape unless
+`shell.unattendedEscapeReview` is on. A question still opens for a person (or the
+headless stop marker). The owner asks `ApprovalReviews.refusal(request)` when
+`begin` declines, and a review that does not approve goes to `owner.refuse`
+instead of `settle` when the generation is unattended at settle time, so a
+mode change during the review follows the current mode. A refusal commits
+`interaction_opened` (or `task_interaction_opened`) with the review marked
+`refused: true` and the policy close `{ kind: 'deny', reason }` in one step; the
+wire projection publishes neither as an open request, so no client is asked, and
+a reopened session sees the request closed. The reason
+(`unattended-refusals.ts`) names the request and why, and asks the model to take
+another approach. `UnattendedRefusals` counts per turn and per task; the refusal
+that reaches 3 consecutive or 10 total carries `stopAfterApprovalResolution`,
+and the turn's `turn_ended` gets `terminalCause: 'approval_refusal_limit'` and a
+notice listing every refusal (a task gets the list in that last refusal). An
+unattended turn declines every run check-in (`budget_closed` stop, source
+`system`). Failure to read the route or mode refuses rather than waits.
+
 ## Background notices across reopen
 
 A background notice (a child's or shell job's completion, a "moved to

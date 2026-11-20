@@ -91,6 +91,7 @@ const SETTINGS_SOURCE_KEYS = {
     maxOutputLines: 'shell.maxOutputLines',
     maxOutputChars: 'shell.maxOutputChars',
     autoApproveMode: 'shell.autoApproveMode',
+    unattendedEscapeReview: 'shell.unattendedEscapeReview',
   },
   sandbox: {
     enabled: 'sandbox.enabled',

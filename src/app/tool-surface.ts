@@ -19,7 +19,7 @@ import type { AnyToolDefinition } from '../tools/types.js';
 import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import { formatApprovalReview } from '../shared/contracts/approval-review.js';
-import { describeApproval, routeApproval } from '../session/approval/approval-route.js';
+import { approvalRouteFor, describeApproval } from '../session/approval/approval-route.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';
@@ -218,7 +218,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     // Read the mode per call: a mode change must apply to the next command, not the next surface.
     confirmSandboxedShell: options.shellEscapeApproval
       ? (command) =>
-          settings.get('shell.autoApproveMode') === 'auto' &&
+          (settings.get('shell.autoApproveMode') === 'auto' ||
+            settings.get('shell.autoApproveMode') === 'unattended') &&
           withWorkspace(() => isMutatingCommand(command, executionContext.getCwd(), logger))
       : undefined,
   });
@@ -314,12 +315,14 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     },
     reviewApproval,
     approvalRoute: (request) => {
-      const mode = settings.get('shell.autoApproveMode');
       const profile = describeApproval(request, {
         isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
       });
-      return routeApproval(mode, profile) !== 'review' ? 'ask_user' : mode === 'auto' ? 'decide' : 'advise';
+      return approvalRouteFor(settings.get('shell.autoApproveMode'), profile, {
+        reviewEscapes: settings.get('shell.unattendedEscapeReview') === true,
+      });
     },
+    unattended: () => settings.get('shell.autoApproveMode') === 'unattended',
     async decideInteraction(request, history, review) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };

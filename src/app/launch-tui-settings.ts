@@ -61,7 +61,7 @@ function settingsBrowse(
 }
 
 // Legacy source/commands/mode-commands.ts and use-app-commands.ts (React modules, so copied, not imported).
-const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
+const APPROVAL_MODES = ['off', 'advisory', 'auto', 'unattended', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
 
 /** Hidden compatibility inputs can only acknowledge the default experience. */

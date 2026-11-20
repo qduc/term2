@@ -82,8 +82,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Twelve lines since then: the edit tools' nearest-line hint read gate (createHintReadAccess, built beside the tools that take it) and the one web_search availability decision that the prompt wording and the tool list share. Lower the ceiling when the agent assembly is split."
     },
     "src/app/application-runtime.ts": {
-      "lines": 515,
-      "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here. Three lines wire the session's approval reviewer: the import of sessionApprovalReview (lib/approval-model.ts holds it), the approvalReview dependency the Session's arbiter reads per request, and stripping the surface's approvalRoute from the request so it never reaches the session as turn settings. Nine lines wire the foreground reasoning_started publisher (application-models.ts holds createForegroundReasoningPublisher) between the model registry and session attach/dispose."
+      "lines": 516,
+      "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here. Three lines wire the session's approval reviewer: the import of sessionApprovalReview (lib/approval-model.ts holds it), the approvalReview dependency the Session's arbiter reads per request, and stripping the surface's approvalRoute from the request so it never reaches the session as turn settings. Nine lines wire the foreground reasoning_started publisher (application-models.ts holds createForegroundReasoningPublisher) between the model registry and session attach/dispose. One line strips the surface's `unattended` mode probe from the request, beside `approvalRoute`, for the same reason."
     },
     "src/model/provider.ts": {
       "lines": 502,
@@ -114,8 +114,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-schema.ts": {
-      "lines": 1367,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list)."
+      "lines": 1377,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list). Ten lines add the `unattended` approval mode value and declare `shell.unattendedEscapeReview` through the same mandatory touchpoints."
     },
     "src/app/source-tools.ts": {
       "lines": 502,
@@ -126,8 +126,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-ui-metadata.ts": {
-      "lines": 542,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One line labels `agent.cachePreservingEffort`."
+      "lines": 543,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One line labels `agent.cachePreservingEffort`. One line labels `shell.unattendedEscapeReview`."
     },
     "src/session/agent-runtime/permission-boundary.ts": {
       "lines": 630,
@@ -272,6 +272,10 @@
     "src/shared/utils/ai/token-usage.ts": {
       "lines": 521,
       "reason": "The shared usage boundary now preserves cache creation and one-hour counts and disambiguates raw inclusive input from canonical split counters before existing renderers consume them. Separating only the new counters would scatter that normalization contract. Retire this ceiling when the complete public usage normalizer and its compatibility entry points are consolidated."
+    },
+    "src/session/conversation-turn.ts": {
+      "lines": 571,
+      "reason": "The turn owner is the one reader of an engine handle: every accepted event, interaction answer and terminal settlement for a foreground turn passes through one closure, which is why it was already at 496 lines. Unattended approval (unattended-approval.md) adds about 75 lines that must sit inside that closure because they act on its private request map, journal commits, token acceptance and cancel path: refusing a request with its open and policy close in one commit, answering after the token is accepted, declining a run check-in, and resetting the refusal count on a finished execution. The counting, refusal text and terminal report are already outside, in approval/unattended-refusals.ts. Splitting the closure along another seam would hand its private state to a second file. Lower the ceiling when the turn owner's interaction handling (approval, budget, refusal) can move behind one owner object."
     }
   },
   "messagePath": {

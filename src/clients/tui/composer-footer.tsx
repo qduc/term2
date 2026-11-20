@@ -23,7 +23,13 @@ export function formatContextUsage(usedTokens: number, contextWindow?: number): 
   return `${formatCompactTokens(usedTokens)}/${formatCompactTokens(contextWindow)}`;
 }
 
-const APPROVAL_LABEL = { off: '', advisory: 'Advisory', auto: 'Auto', always: 'YOLO' } as const;
+const APPROVAL_LABEL = {
+  off: '',
+  advisory: 'Advisory',
+  auto: 'Auto',
+  unattended: 'Unattended',
+  always: 'YOLO',
+} as const;
 
 /** Legacy StatusBar's `formatStatusBarTokens`. */
 const formatStatusBarTokens = (tokens: number): string =>

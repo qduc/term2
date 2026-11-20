@@ -11,6 +11,7 @@ import { directTaskAbortError, directTaskError } from './background-types.js';
 import { grantOffered } from './conversation-turn.js';
 import { REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
 import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
+import { UnattendedRefusals } from './approval/unattended-refusals.js';
 
 type Pending = {
   readonly request: DirectTaskInteraction;
@@ -29,6 +30,8 @@ export class DirectBackgroundInteractions {
   readonly #pending = new Map<InteractionRequestId, Pending>();
   readonly #used = new Set<InteractionRequestId>();
   #reviews: ApprovalReviews | undefined;
+  /** Unattended refusals per background task (approval/unattended-refusals.ts). */
+  readonly #refusals = new Map<DirectTaskId, UnattendedRefusals>();
 
   constructor(accept: (fact: DirectBackgroundFact) => void) {
     this.#accept = accept;
@@ -78,8 +81,37 @@ export class DirectBackgroundInteractions {
       this.poison(new Error(directTaskError(error).message));
       return;
     }
+    this.#refusals.get(entry.request.taskId)?.reset();
     this.#remove(entry);
     entry.resolve(automatic);
+  }
+
+  /**
+   * Unattended: open with the review and close by policy with a refusal the task's model reads. At the
+   * limit the denial stops the task's run and carries the list of the task's refusals.
+   */
+  #refuse(entry: Pending, review: ApprovalReviewResult, unreviewed?: string): void {
+    if (this.#pending.get(entry.request.requestId) !== entry) return;
+    const taskId = entry.request.taskId;
+    const refusals = this.#refusals.get(taskId) ?? new UnattendedRefusals();
+    this.#refusals.set(taskId, refusals);
+    const refused = refusals.refuse(entry.request, review, unreviewed, true);
+    const decision: InteractionDecision = refused.denial;
+    try {
+      this.#accept({ type: 'task_interaction_opened', request: entry.request, review: refused.review });
+      this.#accept({
+        type: 'task_interaction_closed',
+        taskId,
+        requestId: entry.request.requestId,
+        resolution: { kind: 'decision', decision },
+        resolutionSource: 'policy',
+      });
+    } catch (error) {
+      this.poison(new Error(directTaskError(error).message));
+      return;
+    }
+    this.#remove(entry);
+    entry.resolve(decision);
   }
 
   /** Allocate a globally unique ID for tool pauses without an engine-supplied ID. */
@@ -123,8 +155,14 @@ export class DirectBackgroundInteractions {
         // A reviewable request stays unopened until its review settles or a person steps in.
         const reviewing =
           acceptedRequest.kind === 'approval' &&
-          this.#reviews?.begin(acceptedRequest, { settle: (_request, review) => this.#settleReview(entry, review) });
-        if (!reviewing) this.#accept({ type: 'task_interaction_opened', request: acceptedRequest });
+          this.#reviews?.begin(acceptedRequest, {
+            settle: (_request, review) => this.#settleReview(entry, review),
+            refuse: (_request, review) => this.#refuse(entry, review),
+          });
+        const unreviewed =
+          !reviewing && acceptedRequest.kind === 'approval' ? this.#reviews?.refusal(acceptedRequest) : undefined;
+        if (unreviewed !== undefined) this.#refuse(entry, { kind: 'not_reviewed', approved: false }, unreviewed);
+        else if (!reviewing) this.#accept({ type: 'task_interaction_opened', request: acceptedRequest });
         signal.addEventListener('abort', onAbort, { once: true });
         if (signal.aborted) onAbort();
       } catch (error) {
@@ -179,6 +217,7 @@ export class DirectBackgroundInteractions {
       // The owner poisons the writer; never release the decision on append failure.
       return { kind: 'failed', error: directTaskError(error) };
     }
+    this.#refusals.get(entry.request.taskId)?.reset();
     this.#remove(entry);
     entry.resolve(acceptedDecision);
     return { kind: 'accepted' };

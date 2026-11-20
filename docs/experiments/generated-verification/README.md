@@ -39,6 +39,15 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
 
 ## Current scope
 
+- `approval.decision-table` and `approval.arbiter-settle` (`--target approvals`)
+  include `unattended`: nothing but a question waits for a person, hard gates,
+  unreviewable tools and (unless `reviewEscapes`) sandbox escapes are refused
+  without a review, the surface route agrees with the table, and a non-approval
+  follows the mode current at settle. `approval.unattended-task-limit` drives
+  generated refusal/approval sequences through `DirectBackgroundInteractions`:
+  each refusal is opened and closed by policy in one step, and the denial stops
+  the task exactly at 3 consecutive or 10 total.
+
 - `native-log.single-source` (`--target native`): generated identity-specific
   tool bodies and escaped arguments through actual log create/read/reopen and
   continuation segments, including ordinary/structured provider results, user

@@ -25,7 +25,11 @@ export { decideHeadlessApproval } from './approvals.js';
 const DEFAULT_BACKGROUND_WAIT_MS = 60 * 60 * 1000;
 const MAX_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
 /** Old non-interactive exit 2 terminal causes that are not context pauses. */
-const BLOCKED_TERMINAL_CAUSES = new Set(['goal_check_unresolved', 'completion_verification_blocked']);
+const BLOCKED_TERMINAL_CAUSES = new Set([
+  'goal_check_unresolved',
+  'completion_verification_blocked',
+  'approval_refusal_limit',
+]);
 /** Identity carried by the one cursor-addressable admission/turn-start frame. */
 function admissionIdentity(
   admission: WireAdmission,

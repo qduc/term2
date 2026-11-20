@@ -61,17 +61,82 @@ export function describeApproval(
   };
 }
 
-/** Review only in `auto` (may answer) and `advisory` (shows the verdict); everything else asks a person. */
-export function routeApproval(mode: AutoApproveMode | undefined, profile: ApprovalProfile): 'review' | 'ask_user' {
+/** Options the route reads from settings besides the mode. */
+export type ApprovalRouteOptions = {
+  /** `shell.unattendedEscapeReview`: in `unattended`, let the reviewer decide an outside-sandbox escape. */
+  readonly reviewEscapes?: boolean;
+};
+
+/**
+ * Where an open request goes. `review` asks the reviewer first; `ask_user` waits
+ * for a person; `refuse` closes it by policy with no model call (`unattended`
+ * only). In `auto` and `advisory` a request the reviewer cannot take goes to a
+ * person; in `unattended` it is refused, except a question, which is not an
+ * authority decision. An outside-sandbox escape is refused in `unattended`
+ * unless `reviewEscapes` is set (docs/plans/approvals-and-sandbox/unattended-approval.md, decision 4).
+ */
+function routeApproval(
+  mode: AutoApproveMode | undefined,
+  profile: ApprovalProfile,
+  options: ApprovalRouteOptions = {},
+): 'review' | 'ask_user' | 'refuse' {
+  if (mode === 'unattended') {
+    if (profile.hardGate === 'question') return 'ask_user';
+    if (profile.hardGate || !profile.reviewable) return 'refuse';
+    if (profile.autoGrant === 'unsandboxed-once' && options.reviewEscapes !== true) return 'refuse';
+    return 'review';
+  }
   if (mode !== 'auto' && mode !== 'advisory') return 'ask_user';
   if (profile.hardGate || !profile.reviewable) return 'ask_user';
   return 'review';
 }
 
+/**
+ * The route with what it means for a surface: `decide` reviews and a pass answers;
+ * `advise` reviews only to inform a person; `judge` reviews, a pass answers and
+ * anything else is refused (`unattended`); `ask_user` waits for a person; `refuse`
+ * closes the request by policy without a review.
+ */
+export type ApprovalRoute =
+  | { readonly kind: 'decide' | 'advise' | 'judge' | 'ask_user' }
+  | { readonly kind: 'refuse'; readonly reason: string };
+
+export function approvalRouteFor(
+  mode: AutoApproveMode | undefined,
+  profile: ApprovalProfile,
+  options: ApprovalRouteOptions = {},
+): ApprovalRoute {
+  const route = routeApproval(mode, profile, options);
+  if (route === 'refuse') return { kind: 'refuse', reason: unreviewedRefusalReason(profile) };
+  if (route === 'ask_user') return { kind: 'ask_user' };
+  return { kind: mode === 'unattended' ? 'judge' : mode === 'auto' ? 'decide' : 'advise' };
+}
+
+/** Why `unattended` refuses a request without asking the reviewer. */
+function unreviewedRefusalReason(profile: ApprovalProfile): string {
+  switch (profile.hardGate) {
+    case 'explicit-user':
+      return 'this decision requires an explicit answer from the user';
+    case 'denied-read':
+      return 'it retries a read the sandbox denied, which only the user may grant';
+    case 'docker-host':
+      return 'it controls the Docker host, which only the user may grant';
+    default:
+      break;
+  }
+  if (!profile.reviewable) return 'this tool is not one the approval reviewer may grant';
+  return 'it would run outside the sandbox, which unattended mode does not allow';
+}
+
+/** The modes in which a passing review answers the request. */
+function reviewMayApprove(mode: AutoApproveMode | undefined): boolean {
+  return mode === 'auto' || mode === 'unattended';
+}
+
 /** The one threshold a review must clear to answer a request without a person. */
 function acceptVerdict(advisory: LLMAdvisory | undefined, mode: AutoApproveMode | undefined): boolean {
   return (
-    mode === 'auto' &&
+    reviewMayApprove(mode) &&
     advisory !== undefined &&
     !advisory.isError &&
     advisory.approved === true &&
@@ -93,11 +158,13 @@ export async function decideApproval(input: {
   readonly request: ApprovalRequestShape;
   readonly profile: ApprovalProfile;
   readonly currentMode: () => AutoApproveMode | undefined;
+  /** Read with the mode, before the review; defaults to none. */
+  readonly routeOptions?: () => ApprovalRouteOptions;
   readonly review: () => Promise<LLMAdvisory | undefined>;
   readonly signal: AbortSignal;
 }): Promise<ApprovalDecision> {
   const mode = input.currentMode();
-  if (input.signal.aborted || routeApproval(mode, input.profile) !== 'review')
+  if (input.signal.aborted || routeApproval(mode, input.profile, input.routeOptions?.()) !== 'review')
     return { kind: 'not_reviewed', approved: false };
   let advisory: LLMAdvisory | undefined;
   try {

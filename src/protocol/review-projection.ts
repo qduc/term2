@@ -24,12 +24,12 @@ export function approvalReviewEvent(sessionId: string, event: DirectApprovalRevi
   };
 }
 
-/** The opened interaction, or nothing when the review approved it (its close follows at once). */
+/** The opened interaction, or nothing when the review approved it or unattended refused it (its close follows at once). */
 export function reviewedInteraction(
   interaction: WireInteraction,
   review: WireApprovalReview | undefined,
 ): WireInteraction | undefined {
-  if (review?.approved) return undefined;
+  if (review?.approved || review?.refused) return undefined;
   return review ? { ...interaction, review } : interaction;
 }
 

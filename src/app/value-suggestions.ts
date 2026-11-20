@@ -22,6 +22,8 @@ const AUTO_APPROVE_MODE_DESCRIPTIONS = {
   advisory:
     'Use an LLM to assess shell-command risk, but do not auto-approve based on that assessment; in-workspace apply-patch edits remain automatic.',
   auto: 'Auto-approve explicitly or implicitly authorized shell commands rated low or medium risk with high confidence by the LLM; in-workspace apply-patch edits remain automatic.',
+  unattended:
+    'Never ask: the LLM reviewer approves as in auto, and anything it does not approve is refused to the agent, which continues. Repeated refusals end the turn; sandbox escapes are refused.',
   always:
     'Bypass tool approval prompts; ask_user still pauses for your answer. In-workspace apply-patch edits are automatic in every mode.',
 } as const;
@@ -169,6 +171,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'off', description: AUTO_APPROVE_MODE_DESCRIPTIONS.off },
     { value: 'advisory', description: AUTO_APPROVE_MODE_DESCRIPTIONS.advisory },
     { value: 'auto', description: AUTO_APPROVE_MODE_DESCRIPTIONS.auto },
+    { value: 'unattended', description: AUTO_APPROVE_MODE_DESCRIPTIONS.unattended },
     { value: 'always', description: AUTO_APPROVE_MODE_DESCRIPTIONS.always },
   ],
   'sandbox.readPolicy': [

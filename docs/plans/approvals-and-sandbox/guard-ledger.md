@@ -7,6 +7,31 @@ implementation establishes current behavior. Routine task and test-run accountin
 was retired on 2026-10-31; old ledger references below describe archived evidence,
 not instructions to recreate it.
 
+## Unattended approval refusal limit (2026-11-20)
+
+Owner: `UnattendedRefusals` in `src/session/approval/unattended-refusals.ts`,
+counted by the turn owner (`ownConversationTurn`) and, per task, by
+`DirectBackgroundInteractions`. Plan: `unattended-approval.md` (decision 3).
+Class: runaway detector over repeated policy refusals. Harm prevented: with no
+person to notice, a model that keeps asking for what unattended mode refuses
+would loop until a budget or the user stops it. Signal: refusals this turn (or
+task), measured where the refusal is committed; a tool execution that finishes
+and was not refused resets the consecutive count (for a task, an approved or
+answered request does, because task tool results do not pass this owner).
+Legitimate look-alike: a model probing alternatives after a refusal, which the
+refusal text asks it to do; three in a row with nothing run in between is the
+point where probing has stopped working. Effective values: 3 consecutive or 10
+total, fixed (Codex and Claude Code ship 3 consecutive; not calibrated on Term2
+runs, no setting). Action: the refusal that reaches the limit is a denial with
+`stopAfterApprovalResolution`, so the engine settles the batch and makes no
+further model request; the turn ends `completed` with terminal cause
+`approval_refusal_limit` and a notice listing every refusal and its reason.
+Headless treats the cause as blocked and exits 2. Partial work: earlier results
+stay in history; nothing is rolled back. Recovery owner: the user, who reads the
+list and resubmits or changes mode; a new turn starts with fresh counts. Rollback
+boundary: the limit and the refusal route revert together with
+`unattended-refusals.ts`; the other modes never reach this code.
+
 ## Provider transport timeouts handed to the stream-idle guard (2026-11-18)
 
 Owner: `withGenerationGuard` opts guarded stream reads into the dispatcher in

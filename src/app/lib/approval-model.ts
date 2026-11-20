@@ -96,6 +96,7 @@ export function createAssistedApprovalReview({
       profile,
       signal,
       currentMode: () => settings.get('shell.autoApproveMode'),
+      routeOptions: () => ({ reviewEscapes: settings.get('shell.unattendedEscapeReview') === true }),
       review: () => {
         const resolver = new ShellAutoApprovalResolver({
           record: { getHistory: () => approvalHistory(history) },
@@ -163,8 +164,16 @@ export function sessionApprovalReview(
   record: () => Pick<DirectRuntimeRecord, 'surface' | 'scope'> | undefined,
 ): import('../../session/approval/approval-arbiter.js').ApprovalReviewPort {
   return {
-    willReview: (request) => (record()?.surface.approvalRoute?.(request) ?? 'ask_user') !== 'ask_user',
-    mayApprove: (request) => record()?.surface.approvalRoute?.(request) === 'decide',
+    willReview: (request) => {
+      const kind = record()?.surface.approvalRoute?.(request).kind;
+      return kind === 'decide' || kind === 'advise' || kind === 'judge';
+    },
+    mayApprove: (request) => {
+      const kind = record()?.surface.approvalRoute?.(request).kind;
+      return kind === 'decide' || kind === 'judge';
+    },
+    route: (request) => record()?.surface.approvalRoute?.(request) ?? { kind: 'ask_user' },
+    unattended: () => record()?.surface.unattended?.() === true,
     async review(request, history, signal) {
       const current = record();
       const review = current?.surface.reviewApproval;

@@ -82,6 +82,8 @@ bridge restart. See the guide for tested scope and remaining limits.
 
 Interactive sessions default to shell auto-approval `off` and an enabled shell sandbox. You can change these settings, so the active configuration matters. The sandbox constrains shell commands; it does not cover providers, external MCP servers, or every tool.
 
+The `unattended` approval mode never asks a person: the LLM reviewer approves what it would approve in `auto`, and everything else, including sandbox escapes, is refused to the agent, with repeated refusals ending the turn. The reviewer is a convenience that catches mistakes, not a security boundary. With the sandbox off or unavailable, or over SSH, it is the only layer between the agent and your machine. The approvals page lists what unattended does not defend.
+
 Read-only gateway sessions require sandboxed shell execution: disabling the sandbox, requesting an unsandboxed command, or using an SSH execution context does not bypass the read-only restriction.
 
 See [approvals](https://qduc.github.io/term2/safety/approvals/) and [sandbox boundaries](https://qduc.github.io/term2/safety/sandbox/) for the policies and their limits.

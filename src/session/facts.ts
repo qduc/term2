@@ -159,7 +159,11 @@ export type DirectTurnFact =
       readonly finalWindow?: import('./final.js').DirectFinalWindow;
       readonly outcome: TurnOutcomeName;
       readonly error?: ModelError;
-      readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked' | 'budget_exhausted';
+      readonly terminalCause?:
+        | 'goal_check_unresolved'
+        | 'completion_verification_blocked'
+        | 'budget_exhausted'
+        | 'approval_refusal_limit';
       readonly notice?: string;
     }
   | {

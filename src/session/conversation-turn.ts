@@ -22,6 +22,7 @@ import { effortFallbackNotice } from './effort-timeline.js';
 import { isEffortUpdateItem } from '../model/effort-updates.js';
 import { REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
 import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
+import { UnattendedRefusals, withUnattendedReport } from './approval/unattended-refusals.js';
 
 /** Accept raw admission and memory facts before engine construction; timing is model-only. */
 export function admitConversationTurn(
@@ -89,6 +90,8 @@ export function ownConversationTurn(
     readonly publishNotice: ConversationDeps['publishNotice'];
     /** Reviews a request before it opens (src/session/approval/approval-arbiter.ts). */
     readonly reviews?: ApprovalReviews;
+    /** Unattended: the turn's workspace snapshot report for its terminal notice (bounded, synchronous). */
+    readonly snapshotReport?: () => string | undefined;
     released(): void;
   },
 ): OwnedConversationTurn {
@@ -101,6 +104,9 @@ export function ownConversationTurn(
   let released = false;
   let terminal: TurnResult | null = null;
   let streamFailure: ModelError | null = null;
+  // Unattended approval: this turn's refusals and the limit that ends it (approval/unattended-refusals.ts).
+  const refusals = new UnattendedRefusals();
+  const refusedExecutions = new Set<string>();
 
   const closeInteractions = (): void => {
     // A request still under review never opened, so it has nothing to close.
@@ -135,7 +141,10 @@ export function ownConversationTurn(
       // Live settlement knows the handle has drained, unlike crash recovery.
       // Preserve known outcomes and distinguish unadmitted calls from possible effects.
       const repairs = journal.settledReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
-      const ended = withFallbackNotice(terminalFact(turnId, outcome), effortFallbackNotice(journal.facts, turnId));
+      const ended = withFallbackNotice(
+        withUnattendedReport(terminalFact(turnId, outcome), refusals, options.snapshotReport?.()),
+        effortFallbackNotice(journal.facts, turnId),
+      );
       journal.commit([...repairs, ended]);
     }
     terminal = journal.failure ? { kind: 'failed', error: journal.failure } : outcome;
@@ -181,6 +190,45 @@ export function ownConversationTurn(
     requests.delete(request.requestId);
     handle.answer(request.requestId, automatic);
   }
+  /**
+   * Unattended: open the request with its review and close it by policy with a refusal the model reads.
+   * At the refusal limit the denial stops the turn: no further model request follows.
+   */
+  function refuse(
+    request: InteractionRequest,
+    review: ApprovalReviewResult,
+    unreviewed?: string,
+  ): InteractionDecision | undefined {
+    if (released || cancelled || terminal || !requests.has(request.requestId)) return undefined;
+    const refused = refusals.refuse(request, review, unreviewed);
+    const decision: InteractionDecision = refused.denial;
+    let committed = false;
+    try {
+      committed = journal.commit([
+        openFact(request, refused.review),
+        {
+          type: 'interaction_closed',
+          turnId,
+          requestId: request.requestId,
+          resolution: decision,
+          resolutionSource: 'policy',
+        },
+      ]);
+    } catch {
+      committed = false;
+    }
+    if (!committed) {
+      cancel();
+      return undefined;
+    }
+    if (request.executionId) refusedExecutions.add(request.executionId);
+    requests.delete(request.requestId);
+    return decision;
+  }
+  const refuseLater = (request: InteractionRequest, review: ApprovalReviewResult): void => {
+    const decision = refuse(request, review);
+    if (decision) handle.answer(request.requestId, decision);
+  };
   const consume = ({ token, event }: AcceptedTurnEvent, draining: boolean): TurnEvent | null => {
     if (event.type === 'turn_ended') {
       settle(event.result);
@@ -201,12 +249,39 @@ export function ownConversationTurn(
     // A reviewable request stays unopened until its review settles or a person steps in.
     if (event.type === 'interaction_required' && !cancelled && !draining && options.reviews) {
       requests.set(event.request.requestId, event.request);
-      if (options.reviews.begin(event.request, { settle: settleReview })) {
+      if (options.reviews.begin(event.request, { settle: settleReview, refuse: refuseLater })) {
         handle.accept(token);
+        return null;
+      }
+      const unreviewed = options.reviews.refusal(event.request);
+      if (unreviewed !== undefined) {
+        // Refused without a review: no client is asked. The engine admits an answer only after the accept.
+        const decision = refuse(event.request, { kind: 'not_reviewed', approved: false }, unreviewed);
+        if (decision) {
+          handle.accept(token);
+          handle.answer(event.request.requestId, decision);
+        }
         return null;
       }
       requests.delete(event.request.requestId);
     }
+    // Unattended never grants budget or turns: a run check-in is declined, as a person choosing stop would.
+    if (event.type === 'budget_required' && !cancelled && !draining && options.reviews?.unattended()) {
+      const opened = factFor(turnId, event);
+      if (
+        !journal.commit([
+          ...(opened ? [opened] : []),
+          { type: 'budget_closed', turnId, requestId: event.requestId, decision: { kind: 'stop' }, source: 'system' },
+        ])
+      ) {
+        cancel();
+        return null;
+      }
+      handle.accept(token);
+      handle.answerBudget(event.requestId, { kind: 'stop' });
+      return null;
+    }
+    if (event.type === 'tool_execution_finished' && !refusedExecutions.has(event.executionId)) refusals.reset();
     // Cost is a fact, never a client event: its views come from the accepted fact.
     const fact = event.type === 'request_cost' ? options.requestCost(event.record) : factFor(turnId, event);
     if (fact && !journal.commit([fact])) {

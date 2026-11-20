@@ -281,6 +281,7 @@ export function createDirectRuntimes(
         decideInteraction: _decide,
         reviewApproval: _review,
         approvalRoute: _route,
+        unattended: _unattended,
         ...request
       } = surface;
       let tasks: DirectBackgroundTasks | undefined;

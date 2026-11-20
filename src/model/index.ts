@@ -17,7 +17,7 @@ export type {
   Usage,
   StopReason,
   ToolCallArgumentProgress,
-  CodexWeeklyQuota,
+  ProviderStatus,
   ModelEvent,
   ModelErrorKind,
   ModelError,
@@ -25,3 +25,6 @@ export type {
   Model,
   ModelRegistry,
 } from '@qduc/agent-core';
+
+/** A Codex rate-limit window as Term2 shows it: percent used and the epoch second it resets. */
+export type CodexWeeklyQuota = { readonly usedPercent: number; readonly resetAt: number };

@@ -1,4 +1,4 @@
-/** Term2 pricing composition above the portable harness boundary. */
+/** Term2 pricing and host-policy composition above the portable harness boundary. */
 import {
   startTurn as coreStartTurn,
   startCompaction as coreStartCompaction,
@@ -9,10 +9,11 @@ import {
 } from '@qduc/agent-core';
 import { getModelPricing, getModelPricingVersion } from '../model/cost/pricing.js';
 import { isSubscriptionProvider } from '../model/cost/subscription-providers.js';
+import { withTerm2Host } from './harness-host/index.js';
 export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from '@qduc/agent-core';
 function withAccounting<AppCtx>(deps: TurnDeps<AppCtx>): TurnDeps<AppCtx> {
   return {
-    ...deps,
+    ...withTerm2Host(deps),
     accounting: deps.accounting ?? {
       getPrice: getModelPricing,
       getPricingVersion: getModelPricingVersion,

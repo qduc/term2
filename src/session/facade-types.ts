@@ -188,7 +188,10 @@ export type DirectSessionUpdate =
             readonly quota: import('../model/index.js').CodexWeeklyQuota | null;
             readonly fiveHourQuota?: import('../model/index.js').CodexWeeklyQuota | null;
           }
-        | Extract<import('../engine/index.js').TurnEvent, { readonly type: 'retrying' }>
+        | (Extract<import('../engine/index.js').TurnEvent, { readonly type: 'retrying' }> & {
+            /** Term2's retry DTO names the retried scope: `turn` for upstream, `conversation` for a cut connection. */
+            readonly toolName: 'turn' | 'conversation';
+          })
         | { readonly type: 'reasoning_started' }
         | { readonly type: 'reasoning_delta'; readonly delta: string }
         | { readonly type: 'tool_progress'; readonly executionId: ExecutionId; readonly chunk: string };

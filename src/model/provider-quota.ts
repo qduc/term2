@@ -1,4 +1,32 @@
-import type { CodexWeeklyQuota } from './index.js';
+import type { CodexWeeklyQuota, ProviderStatus } from './index.js';
+
+/** The `provider_status` the Codex adapter emits; Session reads it back with `codexQuotaEvent`. */
+export function codexQuotaStatus(
+  quota: CodexWeeklyQuota | null,
+  fiveHourQuota: CodexWeeklyQuota | null,
+): ProviderStatus {
+  return { type: 'provider_status', provider: 'codex', status: { quota, fiveHourQuota } };
+}
+
+/** Session's Codex quota event from a harness `provider_status`, or undefined for any other provider. */
+export function codexQuotaEvent(event: ProviderStatus):
+  | {
+      readonly type: 'codex_quota';
+      readonly quota: CodexWeeklyQuota | null;
+      readonly fiveHourQuota?: CodexWeeklyQuota | null;
+    }
+  | undefined {
+  if (event.provider !== 'codex') return undefined;
+  const status = event.status as {
+    readonly quota?: CodexWeeklyQuota | null;
+    readonly fiveHourQuota?: CodexWeeklyQuota | null;
+  };
+  return {
+    type: 'codex_quota',
+    quota: status.quota ?? null,
+    ...('fiveHourQuota' in status ? { fiveHourQuota: status.fiveHourQuota ?? null } : {}),
+  };
+}
 
 type Window = { readonly window_minutes: number; readonly used_percent: number; readonly reset_at: number };
 

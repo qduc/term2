@@ -1,4 +1,5 @@
 /** The sole reader of an engine handle: durable acceptance, human answers and physical cleanup. */
+import { runTerminationCause } from '../shared/contracts/run-termination.js';
 import type {
   AcceptedTurnEvent,
   InteractionDecision,
@@ -490,7 +491,9 @@ export function terminalFact(turnId: TurnId, result: TurnResult): Extract<Fact, 
     turnId,
     outcome: result.kind,
     ...(result.kind === 'failed' ? { error: result.error } : {}),
-    ...('terminalCause' in result && result.terminalCause ? { terminalCause: result.terminalCause } : {}),
+    ...('terminalCause' in result && runTerminationCause(result.terminalCause)
+      ? { terminalCause: runTerminationCause(result.terminalCause) }
+      : {}),
     ...('notice' in result && result.notice ? { notice: result.notice } : {}),
   };
 }

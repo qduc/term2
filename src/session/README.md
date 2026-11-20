@@ -8,7 +8,11 @@ answer contracts live in `types.ts`; durable facts live in `facts.ts`.
 The Session reader persists engine events before accepting their tokens. Replay,
 queue admission, task/branch IDs, approvals, cancellation and completion delivery
 stay Session-owned. `harness.ts` composes Term2 pricing and root-only child tool
-policy above the portable package. `tool-context.ts` binds workspace/settings
+policy above the portable package, and applies `harness-host/` to every turn:
+the host seams through which Term2 keeps its own notice wording and
+`[Mode Notice]` prefix, compaction prompts, legacy-shape context estimate,
+background-delivery predicate and OpenAI compaction checkpoint. The package
+itself ships neutral defaults for each. `tool-context.ts` binds workspace/settings
 and task capabilities to a physical execution.
 
 `agent-runtime/` contains the existing Term2 model/agent resolution, permission

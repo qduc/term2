@@ -189,6 +189,8 @@ The arbiter plan notes that metrics are not recorded beyond the review on the op
 
 ## Open decisions for the owner
 
+The build brief, [`docs/plans/approvals-and-sandbox/unattended-approval.md`](../plans/approvals-and-sandbox/unattended-approval.md), proposes a default for each of these and is where a changed answer is recorded.
+
 1. **A fifth mode value, or `auto` with no person attached?** A separate value is clearer: people who choose `auto` expect to be asked.
 2. **Does `ask_user` still reach a person in an interactive unattended session?** It is a question, not an authority decision; `always` keeps it.
 3. **Limit values and scope** (turn or session).

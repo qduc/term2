@@ -12,8 +12,9 @@
  *
  * Guard: cost and retention bounds. A snapshot stores new and changed non-ignored files, so it is skipped
  * (with a notice) when those exceed CHANGED_BYTES_LIMIT, and every git step and the whole snapshot have a
- * deadline. Only the newest SNAPSHOT_KEEP snapshot refs of a workspace are kept; `git gc --auto` then reclaims
- * what older ones held. A snapshot never fails or blocks a turn: every failure becomes `{ kind: 'none' }`.
+ * deadline. Only the newest SNAPSHOT_KEEP snapshot refs of a workspace are kept, and `git gc --auto` (at 256
+ * loose objects) reclaims what older ones held. At most daily, a sweep deletes shadow repositories whose work
+ * tree is gone, that sat unused for 30 days, or that fall beyond the 50 most recently used. A snapshot never fails or blocks a turn: every failure becomes `{ kind: 'none' }`.
  */
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -35,6 +36,13 @@ const TAKE_TIMEOUT_MS = 60_000;
 /** The end-of-turn listing runs synchronously at turn end, so its deadline is shorter. */
 const REPORT_TIMEOUT_MS = 10_000;
 const REPORT_MAX_FILES = 20;
+/** Shadow repositories: removed when their work tree is gone or unused this long, and beyond this many. */
+const SHADOW_MAX_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
+const SHADOW_KEEP = 50;
+/** The sweep across shadow repositories runs at most this often. */
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** In each shadow repository: the work tree it snapshots; its mtime is the repository's last use. */
+const WORK_TREE_FILE = 'term2-work-tree';
 const SIZE_REASON = `new and changed files exceed ${CHANGED_BYTES_LIMIT / (1024 * 1024)} MiB, the snapshot size bound`;
 
 export type WorkspaceSnapshot =
@@ -159,6 +167,10 @@ async function* initShadow(
   project: Project | undefined,
 ): AsyncGenerator<readonly string[], void, string> {
   yield ['init', '-q', '--bare', shadow.gitDir];
+  // Reclaim dropped snapshots soon: gc at 256 loose objects instead of 6,700; an hour's grace covers a
+  // concurrent snapshot whose objects are not referenced yet.
+  yield [`--git-dir=${shadow.gitDir}`, 'config', 'gc.auto', '256'];
+  yield [`--git-dir=${shadow.gitDir}`, 'config', 'gc.pruneExpire', '1.hour.ago'];
   if (!project) return;
   fs.writeFileSync(path.join(shadow.gitDir, 'objects', 'info', 'alternates'), `${project.objects}\n`);
   if (!fs.existsSync(project.index)) return;
@@ -251,11 +263,44 @@ export async function takeWorkspaceSnapshot(
     const ref = `${SNAPSHOT_REF_PREFIX}${Date.now()}-${refLabel(label)}`;
     await shadowStep(['update-ref', ref, commit]);
     await prune(shadowStep).catch(() => undefined);
+    // Record the work tree and mark this repository used, then let stale ones go.
+    fs.writeFileSync(path.join(shadow.gitDir, WORK_TREE_FILE), workTree);
+    try {
+      sweepShadowRepositories(path.dirname(shadow.gitDir), shadow.gitDir);
+    } catch {
+      // Housekeeping never affects the snapshot.
+    }
     return { kind: 'taken', gitDir: shadow.gitDir, workTree, cwd: workspace, ref, commit };
   } catch (error) {
     const message = error instanceof Error ? error.message.split('\n')[0] : String(error);
     return { kind: 'none', reason: `the snapshot failed (${message})` };
   }
+}
+
+/**
+ * At most once per SWEEP_INTERVAL_MS, delete shadow repositories whose work tree no longer exists, that have
+ * not been used for SHADOW_MAX_IDLE_MS, or that fall beyond the SHADOW_KEEP most recently used. Only entries
+ * that look like shadow repositories (a 24-hex-digit directory, not a link) are touched; `current` is kept.
+ */
+function sweepShadowRepositories(base: string, current: string, now: number = Date.now()): void {
+  const marker = path.join(base, '.last-sweep');
+  const last = fs.statSync(marker, { throwIfNoEntry: false });
+  if (last && now - last.mtimeMs < SWEEP_INTERVAL_MS) return;
+  fs.writeFileSync(marker, '');
+  const live: { readonly dir: string; readonly usedAt: number }[] = [];
+  for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[0-9a-f]{24}$/.test(entry.name)) continue;
+    const dir = path.join(base, entry.name);
+    if (dir === current) continue;
+    const recorded = fs.statSync(path.join(dir, WORK_TREE_FILE), { throwIfNoEntry: false });
+    const workTree = recorded ? fs.readFileSync(path.join(dir, WORK_TREE_FILE), 'utf8') : '';
+    const usedAt = recorded?.mtimeMs ?? fs.statSync(dir).mtimeMs;
+    if (!workTree || !fs.existsSync(workTree) || now - usedAt > SHADOW_MAX_IDLE_MS)
+      fs.rmSync(dir, { recursive: true, force: true });
+    else live.push({ dir, usedAt });
+  }
+  live.sort((a, b) => b.usedAt - a.usedAt);
+  for (const { dir } of live.slice(SHADOW_KEEP - 1)) fs.rmSync(dir, { recursive: true, force: true });
 }
 
 /**

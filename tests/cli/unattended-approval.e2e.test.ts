@@ -473,6 +473,45 @@ it('keeps only the newest 20 snapshot refs', { timeout: TIMEOUT_MS }, async () =
   expect(refs.filter((ref) => !ref.endsWith('-old'))).toHaveLength(1);
 });
 
+it(
+  'sweeps shadow repositories whose workspace is gone or that sat unused for 30 days',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    const { baseUrl } = await startProvider([{ text: 'UNATTENDED_DONE' }], []);
+    let base = '';
+    const kept: string[] = [];
+    const removed: string[] = [];
+    const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
+      base = path.dirname(shadowDir(workspace));
+      fs.mkdirSync(base, { recursive: true });
+      const shadow = (name: string, workTree: string, ageDays: number): string => {
+        const dir = path.join(base, name);
+        fs.mkdirSync(dir);
+        const file = path.join(dir, 'term2-work-tree');
+        fs.writeFileSync(file, workTree);
+        const when = new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000);
+        fs.utimesSync(file, when, when);
+        return dir;
+      };
+      const live = path.join(root, 'live-project');
+      fs.mkdirSync(live);
+      removed.push(shadow('a'.repeat(24), path.join(root, 'deleted-project'), 1));
+      removed.push(shadow('b'.repeat(24), live, 31));
+      kept.push(shadow('c'.repeat(24), live, 2));
+      // Not a shadow repository's name: never touched.
+      fs.mkdirSync(path.join(base, 'not-a-snapshot'));
+      kept.push(path.join(base, 'not-a-snapshot'));
+      return workspace;
+    });
+    expect(status, output).toBe(0);
+    for (const dir of removed) expect(fs.existsSync(dir), dir).toBe(false);
+    for (const dir of kept) expect(fs.existsSync(dir), dir).toBe(true);
+    expect(snapshotRefs(cwd)).toHaveLength(1);
+    // Dropped snapshots are reclaimed early.
+    expect(shadowGit(cwd, 'config', 'gc.auto').trim()).toBe('256');
+  },
+);
+
 // Decision 4: where the sandbox is on, a request to leave it is refused without a review. The TUI and headless
 // ask with no `unsandboxed-once` grant and run an allowed escape outside the sandbox, so the route must
 // recognise the call itself. Stand-in `bwrap`/`socat` make the sandbox report available; they exit 97 if run,

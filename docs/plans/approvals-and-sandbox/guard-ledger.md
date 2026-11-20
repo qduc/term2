@@ -55,7 +55,12 @@ unignored files (a non-git folder has no ignore rules unless it carries
 `.gitignore` files), which gets no snapshot and one notice instead of a slow
 turn. Action: skip the snapshot (never fail or block the turn) and say so in the
 turn's notice; after writing a snapshot, delete refs beyond the newest 20 and
-run `git gc --auto`. Values are fixed, not settings; they are starting points,
+run `git gc --auto` (configured at 256 loose objects with a one-hour prune grace
+for a concurrent snapshot). Across workspaces, a sweep at most once a day
+(`.last-sweep` marker) deletes shadow repositories whose recorded work tree no
+longer exists, unused for 30 days (the mtime of `term2-work-tree`, rewritten on
+each snapshot), or beyond the 50 most recently used; it touches only
+24-hex-digit directories. A work tree on an unmounted drive counts as gone. Values are fixed, not settings; they are starting points,
 not measured on Term2 users' repositories. Known residual: the alternates link
 means a snapshot's committed files live in the project's object store, so a
 history rewrite plus an aggressive `git gc --prune=now` there can break an older

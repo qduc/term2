@@ -15,13 +15,13 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 1. The mode is a new setting value, not `auto` with no person attached.
 2. `ask_user` still asks in an interactive client. Headless keeps its stop marker.
 3. The refusal limit is 3 consecutive or 10 total per turn or background task.
-4. A sandbox escape (`unsandboxed-once`) is refused without a review. A setting, off by default, lets the reviewer decide it as in `auto`.
-5. A shell request that exists only because no sandbox contains the command (sandbox disabled or unavailable, or an SSH execution context) is refused without a review. Unattended does not make the reviewer the only layer.
+4. Where a sandbox is enforcing, an escape from it (`unsandboxed-once`) is refused without a review. A setting, off by default, lets the reviewer decide it as in `auto`. The person chose the sandbox; the agent does not leave it on a reviewer's word.
+5. Unattended works without a sandbox (owner decision, 2026-11-20). When no sandbox contains the command (sandbox disabled or unavailable, or an SSH execution context), a shell request goes to the reviewer as it does in `auto`. The reviewer is then the only layer, and the user-facing documentation says so.
 6. The snapshot is taken in `unattended` only.
 
 ## Constraints
 
-- **The threshold does not move.** `acceptVerdict`, `SHELL_AUTO_APPROVAL_INSTRUCTIONS` and its prompt version stay as they are. Unattended changes where a non-approval goes, with decisions 4 and 5 as the only stricter rules.
+- **The threshold does not move.** `acceptVerdict`, `SHELL_AUTO_APPROVAL_INSTRUCTIONS` and its prompt version stay as they are. Unattended changes where a non-approval goes, with decision 4 as the only stricter rule.
 - **The other four modes do not change.** Nor do headless without `unattended`, or the worker policy in `SubagentToolPolicy`.
 - **One owner.** The route, the refusal and the limit are decided in `src/session/approval/`. Clients render a state; none decides. No new branch on a tool name outside `describeApproval`. The import rules and gates in `docs/architecture/layers.md` hold.
 - **Fail closed.** In `unattended`, an error, timeout, abort or ambiguous state refuses. It never allows and never waits.
@@ -41,13 +41,14 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 2. In `unattended`, no approval prompt reaches any client for a turn-owned, task-owned or nested `run_code` request. `ask_user` follows decision 2.
 3. A request whose review passes `acceptVerdict` runs with the same grant and the same durable record as in `auto`.
 4. A request whose review does not pass, or is unavailable, returns a refusal as the call's result. The refusal names what was refused, gives the reason (the reviewer's reasoning, or that the review was unavailable) and tells the model to take a different approach. The turn continues.
-5. These are refused with no model call: the `explicit-user`, `denied-read` and `docker-host` gates, a tool that is not reviewable, `propose_goal`, and the cases in decisions 4 and 5. A run check-in is declined; unattended never grants budget or turns.
+5. These are refused with no model call: the `explicit-user`, `denied-read` and `docker-host` gates, a tool that is not reviewable, `propose_goal`, and the escape in decision 4. A run check-in is declined; unattended never grants budget or turns.
 6. With the setting from decision 4 on, an escape follows criteria 3 and 4.
 7. At the refusal limit the turn ends with no further model request. Its final output lists each refusal of the turn with its reason. Headless exits non-zero. A result that is not a refusal resets the consecutive count. The session accepts a new user turn afterwards.
 8. Each refusal is a durable fact with policy provenance and the review attached. A reopened session shows it as refused, never as pending. A client cannot record a refusal or an approval as automatic.
 9. A mode change while a review runs never yields an answer under the old mode; the request follows the current mode. A request already open for a person when the mode becomes `unattended` stays open.
 10. Headless without `--auto-approve` is unchanged. With `--auto-approve` and `unattended`, criteria 3 to 7 apply before the `NonInteractiveApprovalPolicy` fallback.
 11. A behaviour matrix (surface × mode × tool × gate → outcome), captured before the change for `off`, `advisory`, `auto` and `always`, is identical after it.
+12. With the sandbox disabled or unavailable, or over SSH, a shell request in `unattended` is routed to the reviewer as in `auto`, and criteria 3, 4 and 7 apply to it.
 
 ### B. The snapshot
 
@@ -63,5 +64,5 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 - Every criterion is demonstrated by a committed integration or e2e test, or by recorded evidence where a test cannot reach it.
 - `pnpm typecheck`, `pnpm lint`, `pnpm check:no-unit-tests`, `pnpm verify:generated`, `pnpm test:integration` and `pnpm test:e2e` pass on the reported revision.
 - The independent verifier's report is in `.handoff/`.
-- The user-facing approvals page (`website/src/content/docs/safety/approvals.md`), the README's approvals section and the session module's interface document describe the mode. The approvals page states what unattended does not defend, as the research document lists it.
+- The user-facing approvals page (`website/src/content/docs/safety/approvals.md`), the README's approvals section and the session module's interface document describe the mode. The approvals page states what unattended does not defend, as the research document lists it, and that without a sandbox the reviewer is the only layer.
 - A and B land as separate commits, A first.

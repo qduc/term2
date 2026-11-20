@@ -175,7 +175,7 @@ The snapshot covers what can be undone. Steps 1 to 3 confine what cannot. It als
 
 ## What stays true
 
-- Unattended requires an available sandbox. Without one the reviewer would be the only layer, which the evidence above does not support.
+- Unattended also runs without a sandbox; the owner decided this and the build brief records it. The reviewer is then the only layer. The evidence above does not support that as a security claim, so the user-facing documentation has to say it plainly.
 - The reviewer is not a security boundary. Vendors describe theirs the same way.
 - Workers keep their stricter rule: no escape at all.
 

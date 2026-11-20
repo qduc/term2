@@ -48,6 +48,53 @@ approved review commits the policy close in the same step and answers with the
 request's one-time grant when it offers one. Only this path records
 `automaticApproval: true`; `answer` rejects it from any caller.
 
+### Unattended refusals
+
+In `shell.autoApproveMode: unattended` the port's route (`ApprovalRoute` in
+`approval/approval-route.ts`) is `judge` where `auto` would be `decide`, and
+`refuse` for what `auto` would send to a person: hard gates other than a
+question, tools the reviewer may not grant, and an outside-sandbox escape unless
+`shell.unattendedEscapeReview` is on. An escape is a request offering
+`unsandboxed-once` (ACP) or, through the app's `isSandboxEscape`, a shell call
+with `sandbox: 'unsandboxed'` while the sandbox is on and not known to be
+unavailable (decision 5 hands an unavailable sandbox's escapes to the reviewer): the TUI and headless ask
+for those with no grant, and a plain allow runs them outside the sandbox. A question still opens for a person (or the
+headless stop marker). The owner asks `ApprovalReviews.refusal(request)` when
+`begin` declines, and a review that does not approve goes to `owner.refuse`
+instead of `settle` when the generation is unattended at settle time, so a
+mode change during the review follows the current mode. A refusal commits
+`interaction_opened` (or `task_interaction_opened`) with the review marked
+`refused: true` and the policy close `{ kind: 'deny', reason }` in one step; the
+wire projection publishes neither as an open request, so no client is asked, and
+a reopened session sees the request closed. The reason
+(`unattended-refusals.ts`) names the request and why, and asks the model to take
+another approach. `UnattendedRefusals` counts per turn and per task; the refusal
+that reaches 3 consecutive or 10 total carries `stopAfterApprovalResolution`,
+and the turn's `turn_ended` gets `terminalCause: 'approval_refusal_limit'` and a
+notice listing every refusal. A nested task includes the list in its completion
+report and tracks refusals independently. An
+unattended turn declines every run check-in (`budget_closed` stop, source
+`system`). Failure to read the route or mode refuses rather than waits, as do a
+review that routed but could not start and an approval whose decision the
+request does not accept. A nested (run_code) refusal marks its parent execution,
+so that parent finishing preserves the streak. An unrelated tool execution that
+finishes resets the consecutive count for the turn or task that owns it.
+
+An unattended root turn (not a compaction) also takes a workspace snapshot
+through the app's `workspaceSnapshot` port (`WorkspaceSnapshotPort` in
+`types.ts`; the implementation is `tools/workspace/workspace-snapshot.ts`, a
+shadow git repository per work tree under the sandbox user state root, with the
+project's object store as an alternate and its index as the seed). Each capture
+and report has a private index. Snapshot operations leave the project intact.
+`approval/unattended-snapshot.ts` holds it per turn: the turn's
+`prepareRequest` awaits `take()` when the arbiter reports unattended, so the
+snapshot precedes the first model request and therefore every tool call, and is
+taken at most once. `take` never rejects: an SSH workspace, the size bound, a
+deadline or a git failure is `{ kind: 'none', reason }`. At settlement the turn
+owner appends `describe(snapshot)` (bounded and synchronous) to the
+`turn_ended` notice, after the refusal list. Headless plain output writes a
+completed turn's notice to stderr.
+
 ## Background notices across reopen
 
 A background notice (a child's or shell job's completion, a "moved to

@@ -23,6 +23,7 @@ const validateReview = (fact: Record<string, unknown>, check: FactValidation): v
   if (typeof review['approved'] !== 'boolean') check.fail('review.approved');
   if (review['kind'] !== 'reviewed' && review['approved'] !== false) check.fail('review.approved');
   if ('grant' in review && typeof review['grant'] !== 'string') check.fail('review.grant');
+  if ('refused' in review && (review['refused'] !== true || review['approved'] !== false)) check.fail('review.refused');
   if (review['kind'] === 'reviewed') {
     const advisory = check.object(review['advisory'], 'review.advisory');
     if (typeof advisory['reasoning'] !== 'string') check.fail('review.advisory.reasoning');
@@ -330,9 +331,12 @@ export const nativeSchemas: Record<string, FactSchema> = {
     if (!['completed', 'cancelled', 'failed', 'interrupted'].includes(fact['outcome'] as string)) check.fail('outcome');
     if (
       'terminalCause' in fact &&
-      !['goal_check_unresolved', 'completion_verification_blocked', 'budget_exhausted'].includes(
-        fact['terminalCause'] as string,
-      )
+      ![
+        'goal_check_unresolved',
+        'completion_verification_blocked',
+        'budget_exhausted',
+        'approval_refusal_limit',
+      ].includes(fact['terminalCause'] as string)
     )
       check.fail('terminalCause');
     if ('notice' in fact && typeof fact['notice'] !== 'string') check.fail('notice');

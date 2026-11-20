@@ -436,7 +436,7 @@ export function createMemoryToolDefinitions(
       },
       () => {
         const mode = options?.settingsService?.get('shell.autoApproveMode');
-        return mode !== 'auto' && mode !== 'always';
+        return mode !== 'auto' && mode !== 'unattended' && mode !== 'always';
       },
     ),
     definition(
@@ -449,7 +449,7 @@ export function createMemoryToolDefinitions(
       },
       () => {
         const mode = options?.settingsService?.get('shell.autoApproveMode');
-        return mode !== 'auto' && mode !== 'always';
+        return mode !== 'auto' && mode !== 'unattended' && mode !== 'always';
       },
     ),
   ];

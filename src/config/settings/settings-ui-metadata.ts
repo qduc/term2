@@ -86,6 +86,7 @@ const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Shell output lines',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Shell output chars',
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell auto-approval',
+  [SETTING_KEYS.SHELL_UNATTENDED_ESCAPE_REVIEW]: 'Unattended sandbox escapes',
   [SETTING_KEYS.SANDBOX_ENABLED]: 'Sandbox',
   [SETTING_KEYS.SANDBOX_READ_POLICY]: 'Sandbox read policy',
   [SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA]: 'Sandbox extra read paths',
@@ -312,7 +313,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
     'Enable code-context tools for the main agent (true|false). Applies on the next model request.',
   [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations to disk (true|false)',
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]:
-    'Shell command auto-approval mode (off|advisory|auto|always); `always` disables sandbox.enabled',
+    'Shell command auto-approval mode (off|advisory|auto|unattended|always); `unattended` never asks you and refuses what the reviewer does not approve; `always` disables sandbox.enabled',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]:
     'Reasoning effort for risky shell auto-approval reviews (none|minimal|low|medium|high|xhigh)',
   [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',

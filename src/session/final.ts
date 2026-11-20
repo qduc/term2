@@ -38,7 +38,11 @@ export type DirectFinalWindow = {
     readonly commandMessages: readonly CommandMessage[];
     /** Stable request IDs, root+descendants+summary, latest accepted value at THIS terminal cut. */
     readonly costRecords: readonly ModelRequestCost[];
-    readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked' | 'budget_exhausted';
+    readonly terminalCause?:
+      | 'goal_check_unresolved'
+      | 'completion_verification_blocked'
+      | 'budget_exhausted'
+      | 'approval_refusal_limit';
   };
   /** Available in accepted tool_finished publication, not proof of delivery to any particular client. */
   readonly liveEligibleCommandMessageIds: readonly string[];

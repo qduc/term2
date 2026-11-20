@@ -2,6 +2,7 @@ import type { InteractionRequest, InteractionRequestId } from '../../engine/inde
 import type { Item } from '../../model/index.js';
 import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { DirectTaskId, DirectTaskInteraction } from '../background-types.js';
+import type { ApprovalRoute } from './approval-route.js';
 
 /**
  * The app-supplied reviewer. `willReview` is the synchronous route (the shared
@@ -14,6 +15,10 @@ export type ApprovalReviewPort = {
   willReview(request: InteractionRequest | DirectTaskInteraction): boolean;
   /** The current generation would let a passing review answer this request (mode `auto`), not just inform. */
   mayApprove(request: InteractionRequest | DirectTaskInteraction): boolean;
+  /** The current generation's full route; `refuse` and `judge` occur only in `unattended`. */
+  route(request: InteractionRequest | DirectTaskInteraction): ApprovalRoute;
+  /** The current generation is `unattended`: nothing may wait for a person except a question. */
+  unattended(): boolean;
   review(
     request: InteractionRequest | DirectTaskInteraction,
     history: readonly Item[],
@@ -35,6 +40,8 @@ export type DirectApprovalReviewTransient = {
 type Owner = {
   /** Commit the open (and, when approved, the close) and release the waiter. */
   settle(request: InteractionRequest | DirectTaskInteraction, review: ApprovalReviewResult): void;
+  /** Unattended: commit the open with the review and a policy close that refuses it. */
+  refuse(request: InteractionRequest | DirectTaskInteraction, review: ApprovalReviewResult, reason?: string): void;
 };
 
 /**
@@ -75,7 +82,10 @@ export class ApprovalReviews {
         if (controller.signal.aborted || this.#reviews.get(request.requestId)?.controller !== controller) return;
         this.#reviews.delete(request.requestId);
         this.#announce(request, 'settled');
-        owner.settle(request, review.approved && !this.#stillRouted(request) ? { ...review, approved: false } : review);
+        const judged = review.approved && !this.#stillRouted(request) ? { ...review, approved: false } : review;
+        // A non-approval follows the current mode: refused in `unattended`, opened for a person otherwise.
+        if (!judged.approved && this.unattended()) owner.refuse(request, judged);
+        else owner.settle(request, judged);
       })
       // A settle that cannot commit has already failed its owner; never leave an unhandled rejection.
       .catch(() => undefined);
@@ -92,6 +102,30 @@ export class ApprovalReviews {
       return this.port?.mayApprove(request) === true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Why the current generation refuses this request without a review, or undefined when it does not.
+   * Called by an owner when `begin` returned false. Fails closed: a route that throws refuses in `unattended`.
+   */
+  refusal(request: InteractionRequest | DirectTaskInteraction): string | undefined {
+    try {
+      const route = this.port?.route(request);
+      if (route?.kind === 'refuse') return route.reason;
+      // Routed to a review that `begin` could not start: unattended refuses rather than ask a person.
+      return route?.kind === 'judge' ? 'the approval review could not start' : undefined;
+    } catch {
+      return this.unattended() ? 'the approval route could not be read' : undefined;
+    }
+  }
+
+  /** The current generation is `unattended`. Fails closed: an unreadable mode counts as unattended. */
+  unattended(): boolean {
+    try {
+      return this.port?.unattended() === true;
+    } catch {
+      return true;
     }
   }
 
@@ -136,6 +170,8 @@ export function conversationApprovalReviews(
     {
       willReview: (request) => port()?.willReview(request) === true,
       mayApprove: (request) => port()?.mayApprove(request) === true,
+      route: (request) => port()?.route(request) ?? { kind: 'ask_user' },
+      unattended: () => port()?.unattended() === true,
       review: (request, accepted, signal) =>
         port()?.review(request, accepted, signal) ?? Promise.resolve({ kind: 'not_reviewed', approved: false }),
     },

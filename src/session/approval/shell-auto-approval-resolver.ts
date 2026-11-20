@@ -11,7 +11,7 @@ import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.
 import { TOOL_NAME_ASK_USER, TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
 import { extractPatchPaths } from '../../shared/utils/upstream-apply-patch.js';
 
-export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
+export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'unattended' | 'always';
 
 const FILE_READ_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
   'read_file',
@@ -164,7 +164,7 @@ export class ShellAutoApprovalResolver {
     // In 'always' mode every shell command runs unrestricted, so unsandboxed
     // escapes and Docker host control are not forced to a human prompt.
     if (mode === 'always') return true;
-    return sandboxEnabled && (mode === 'advisory' || mode === 'auto');
+    return sandboxEnabled && (mode === 'advisory' || mode === 'auto' || mode === 'unattended');
   }
 
   shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {
@@ -173,7 +173,7 @@ export class ShellAutoApprovalResolver {
       return true;
     }
     return (
-      this.getAutoApproveMode() === 'auto' &&
+      (this.getAutoApproveMode() === 'auto' || this.getAutoApproveMode() === 'unattended') &&
       advisory?.approved === true &&
       advisory.source === 'llm' &&
       (advisory.riskLevel === 'low' || advisory.riskLevel === 'medium') &&

@@ -21,7 +21,7 @@ import type { DirectVerificationOperations } from '../session/goal-verification.
 import { DEFAULT_BUDGETS } from '../session/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/store.js';
 import { createToolSurface } from './tool-surface.js';
-import { sessionApprovalReview } from './lib/approval-model.js';
+import { sessionApprovalReview, workspaceSnapshotPort } from './lib/approval-model.js';
 import type { DirectHookRuntime } from './application-hooks.js';
 import {
   withSessionScope,
@@ -281,6 +281,7 @@ export function createDirectRuntimes(
         decideInteraction: _decide,
         reviewApproval: _review,
         approvalRoute: _route,
+        unattended: _unattended,
         ...request
       } = surface;
       let tasks: DirectBackgroundTasks | undefined;
@@ -475,6 +476,7 @@ export function createDirectRuntimes(
           rollover,
           configure,
           approvalReview: sessionApprovalReview(() => records.get(context.id)),
+          workspaceSnapshot: workspaceSnapshotPort(context.workspace),
         },
         request: {
           ...request,

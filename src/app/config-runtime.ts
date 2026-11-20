@@ -125,6 +125,7 @@ export async function prepareDirectConfiguration(
       decideInteraction: _decide,
       reviewApproval: _review,
       approvalRoute: _route,
+      unattended: _unattended,
       ...request
     } = surface;
     let disposed = false;

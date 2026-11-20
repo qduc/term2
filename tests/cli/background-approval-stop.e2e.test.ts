@@ -8,9 +8,8 @@ import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } 
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { getProviderIds } from '../../src/model/providers/index.js';
 
-// Built direct CLI, loopback provider. A background child can't ask the user, so a call that needs approval ends
-// its run. Legacy reports that run as "completed" with an empty result, which hides the stop from the model: a
-// confirmed legacy bug (#136 item 11, #150). Next reports a failed run that names the call.
+// Built direct CLI and loopback provider. A background child can't ask a person. An unattended child can
+// keep going after a refused call, up to the refusal limit.
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 
@@ -18,6 +17,7 @@ let session: TerminalSession | null = null;
 let root = '';
 let server: http.Server | null = null;
 const parentMessages: string[] = [];
+const childResults: string[] = [];
 let childPosts = 0;
 
 afterEach(async () => {
@@ -27,18 +27,19 @@ afterEach(async () => {
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
   server = null;
   parentMessages.length = 0;
+  childResults.length = 0;
   childPosts = 0;
   if (root) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   root = '';
 });
 
 type Delta = Record<string, unknown>;
-const toolCall = (name: string, args: Record<string, unknown>): Delta => ({
+const toolCall = (name: string, args: Record<string, unknown>, id = name): Delta => ({
   role: 'assistant',
-  tool_calls: [{ index: 0, id: `call_${name}`, type: 'function', function: { name, arguments: JSON.stringify(args) } }],
+  tool_calls: [{ index: 0, id: `call_${id}`, type: 'function', function: { name, arguments: JSON.stringify(args) } }],
 });
 
-function startProvider(): Promise<string> {
+function startProvider(mode: 'off' | 'unattended'): Promise<string> {
   let parentPosts = 0;
   server = http.createServer((req, res) => {
     if (req.method === 'GET') {
@@ -56,10 +57,13 @@ function startProvider(): Promise<string> {
       let delta: Delta;
       if (child) {
         childPosts += 1;
-        // A read outside the workspace needs approval; a second child request would mean it ran anyway.
+        const latestToolResult = messages.filter((message) => message.role === 'tool').at(-1);
+        if (latestToolResult) childResults.push(String(latestToolResult.content));
+        const outsideRead = `/etc/term2-approval-fixture-${childPosts}`;
+        const readPath = mode === 'unattended' && childPosts === 3 ? 'LOCAL.txt' : outsideRead;
         delta =
-          childPosts === 1
-            ? toolCall('read_file', { path: '/etc/hostname' })
+          childPosts <= (mode === 'unattended' ? 6 : 1)
+            ? toolCall('read_file', { path: readPath }, `child_${childPosts}`)
             : { role: 'assistant', content: 'CHILD-RAN' };
       } else {
         parentPosts += 1;
@@ -88,17 +92,23 @@ function startProvider(): Promise<string> {
   });
 }
 
-it(
-  'a background child stopped by an approval reports a failed run that names the call',
+it.each(['off', 'unattended'] as const)(
+  'settles a background child that needs approval in %s mode',
   { timeout: 120_000 },
-  async () => {
+  async (mode) => {
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-bg-approval-stop-')));
     const home = path.join(root, 'home');
     fs.mkdirSync(home);
     fs.mkdirSync(path.join(root, 'w'));
-    const baseUrl = await startProvider();
+    fs.writeFileSync(path.join(root, 'w', 'LOCAL.txt'), 'LOCAL-MARKER');
+    const tmp = path.join(root, 'tmp');
+    fs.mkdirSync(tmp);
+    const baseUrl = await startProvider(mode);
     const env = createTestChildEnv({
       HOME: home,
+      TMPDIR: tmp,
+      TEMP: tmp,
+      TMP: tmp,
       XDG_CONFIG_HOME: path.join(home, '.config'),
       XDG_STATE_HOME: path.join(home, '.local', 'state'),
       XDG_CACHE_HOME: path.join(home, '.cache'),
@@ -118,7 +128,7 @@ it(
         agent: { retryAttempts: 0, disabledProviders: getProviderIds() },
         providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
         sandbox: { enabled: false },
-        shell: { autoApproveMode: 'off' },
+        shell: { autoApproveMode: mode },
       }),
     );
 
@@ -132,13 +142,22 @@ it(
     session.write('delegate it');
     await new Promise((resolve) => setTimeout(resolve, 200));
     session.write('\r');
-    await session.waitForOutput('Failed (read_file needed approval', 60_000);
-    await session.waitForOutput('NOTED', 30_000);
+    await session.waitForOutput('NOTED', 60_000);
 
-    // The read never ran: the child sent one request and got no second turn.
-    expect(childPosts).toBe(1);
     const notice = parentMessages.find((message) => message.includes('Background subagent run finished'));
     expect(notice, parentMessages.join('\n')).toBeDefined();
+    if (mode === 'unattended') {
+      // The local read breaks the first refusal streak. The next three stop the child without another request.
+      expect(childPosts, childResults.join('\n')).toBe(6);
+      expect(childResults[2]).toContain('LOCAL-MARKER');
+      expect(childResults.filter((result) => result.includes('Refused by unattended approval'))).toHaveLength(4);
+      expect(notice).toContain('status: interrupted');
+      expect(notice).toContain('Unattended approval stopped this run after refusing 5 requests');
+      for (const index of [1, 2, 4, 5, 6]) expect(notice).toContain(`/etc/term2-approval-fixture-${index}`);
+      return;
+    }
+
+    expect(childPosts).toBe(1);
     expect(notice).toContain('status: failed');
     expect(notice).toContain("read_file needed approval; a background run can't ask");
     expect(notice).not.toContain('status: completed');

@@ -185,7 +185,12 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       approval: {
         async get(sessionId): Promise<AcpApprovalMode> {
           const { approvalMode } = await app.sessionConfiguration(sessionId);
-          return approvalMode === 'always' ? 'always' : approvalMode === 'auto' ? 'assisted' : 'ask';
+          // ACP has no unattended mode; its reviewer-decides mode is the nearest.
+          return approvalMode === 'always'
+            ? 'always'
+            : approvalMode === 'auto' || approvalMode === 'unattended'
+            ? 'assisted'
+            : 'ask';
         },
         async set(sessionId, mode) {
           if (protocolVersion !== 1) throw new Error('Approval mode is available only in ACP v1.');

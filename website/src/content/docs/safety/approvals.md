@@ -5,7 +5,7 @@ description: Interactive tool approvals, auto-approve modes, and execution budge
 
 When term2 wants to run a shell command in an interactive session, it normally asks for your approval. Read the proposed action and choose from the options in the prompt. Valid edits inside the local workspace can apply without a prompt; file tools have their own authorization and boundary checks.
 
-To change how often shell commands need your approval, run `/auto-approve` in a session. Keep `off` if you want to review each command, choose `advisory` for an explanation with each prompt, or choose `auto` to approve commands classified as safe while still reviewing risky ones. The `always` mode disables the shell sandbox and skips tool approval prompts; use it only in an isolated, disposable environment.
+To change how often shell commands need your approval, run `/auto-approve` in a session. Keep `off` if you want to review each command, choose `advisory` for an explanation with each prompt, or choose `auto` to approve commands classified as safe while still reviewing risky ones. Choose `unattended` when nobody will be at the keyboard: term2 never asks you, and whatever the reviewer does not approve is refused to the agent instead. The `always` mode disables the shell sandbox and skips tool approval prompts; use it only in an isolated, disposable environment.
 
 For a non-interactive prompt, `--auto-approve` is a separate option. See [non-interactive use](/term2/using-term2/non-interactive/) before enabling tool execution there.
 
@@ -18,9 +18,34 @@ Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. 
 | **`off`** *(Default)* | `/auto-approve off` | Shell commands prompt for interactive confirmation. Valid local workspace edits can apply without a prompt; file tools have separate boundary and authorization checks. |
 | **`advisory`** | `/auto-approve advisory` | Prompts before each command and shows a safety explanation. |
 | **`auto`** | `/auto-approve auto` | Approves commands classified as safe, such as read-only commands and workspace edits. Commands classified as risky still require approval. |
+| **`unattended`** | `/auto-approve unattended` | Never asks you. A request the reviewer approves runs as in `auto`; anything else is refused to the agent with the reason, and the agent continues. Repeated refusals end the turn. See [Unattended mode](#unattended-mode). |
 | **`always`** | `/auto-approve always` | Disables the shell sandbox and skips tool approval prompts. `ask_user` can still ask questions. Use only in an isolated, disposable environment. |
 
 > **Sandbox Interaction:** `always` and `sandbox.enabled` are mutually exclusive: selecting `always` disables the shell sandbox, and enabling the sandbox (`/sandbox` or `sandbox.enabled = true`) immediately demotes `always` to `auto`.
+
+## Unattended mode
+
+`unattended` is for runs nobody is watching. The reviewer's approval threshold is the same as in `auto`; what changes is where a request goes when the reviewer does not approve it.
+
+- **Refused, not asked.** The request is closed and the agent receives a refusal as the tool's result: what was refused, why (the reviewer's reasoning, or that the review was unavailable), and an instruction to try a different approach. It is recorded in the conversation as refused by policy.
+- **Refused without a review:** running a command outside the sandbox while the sandbox is on and available, Docker host control, retrying a read the sandbox denied, anything that needs an explicit answer from you, tools the reviewer is not allowed to grant (such as `propose_goal`), and run budget check-ins. To let the reviewer decide sandbox escapes as in `auto`, set `shell.unattendedEscapeReview` to `true`.
+- **Questions still ask.** In an interactive session `ask_user` still waits for your answer; a non-interactive run stops on a question as before.
+- **Refusal limit.** Three refusals in a row, or ten in one turn or task, stop that run before its next model request. The turn's final output lists every refusal and its reason. A non-interactive foreground run exits with code 2. A tool execution that finishes between refusals resets the consecutive count. A `run_code` script that contained a refusal preserves the streak. Each background task tracks its own refusals.
+
+### Workspace snapshot
+
+Before an unattended turn's first model request, and so before any of its tool calls, term2 records the workspace in a private snapshot repository of its own, kept under term2's state directory (`~/.local/state/term2-nodejs/workspace-snapshots/` on Linux) rather than in your project. The snapshot holds every file git does not ignore: tracked, staged, modified and untracked. Nothing in your project changes: no branch, ref, index entry, stash entry or object is added, and nothing appears in `git status` or `git log --all`. In a git project, the snapshot repository reads the project's own object store, so files that are already committed are not stored twice. A folder that is not a git repository gets a snapshot too, and no `.git` is created in it.
+
+When the turn ends, its output names the snapshot, lists the changed files in your workspace directory, and prints a Bash command that restores modified and deleted files to their pre-turn contents. Stop other activity in the workspace before running it. The command leaves newly created files in place and stops if a directory or parent path blocks a restore. It leaves your Git index and submodule working trees alone. Existing files marked `assume-unchanged` or `skip-worktree` are recorded as they are on disk, including local edits.
+
+Snapshot capture skips SSH workspaces and worktrees that contain Term2's state directory. It also skips capture when new and changed files exceed 256 MiB, a Git step fails or takes longer than 30 seconds, or capture exceeds 60 seconds. The turn continues and reports the reason at the end. The changed-file listing has the same size bound and a 10-second limit per Git step. If listing fails, the turn still prints the restore command. Term2 keeps the 20 newest snapshots per workspace and lets Git reclaim older data. Snapshot repositories for retired workspaces remain in the state directory. The snapshot repository sits outside the sandbox's writable paths. With the sandbox disabled, a command can remove it.
+
+What unattended does not defend:
+
+- **The reviewer is a model, not a security boundary.** It catches mistakes; it can be wrong, and it reads text the agent, a web page, or a file can write. Published results for comparable reviewers miss a meaningful share of overeager or injected actions.
+- **Without the sandbox, the reviewer is the only layer.** With `sandbox.enabled` off, the sandbox unavailable, or an SSH workspace, every shell command goes to the reviewer, and whatever it approves runs with your permissions.
+- **Network hosts.** The reviewer may approve a network destination. Content the agent read could steer it into sending workspace files, a `.env` included, to an approved host. The sandbox's credential denials cover paths under your home directory, not files in the workspace.
+- **An agent working against its reviewer** is not something unattended tries to stop.
 
 ## Manage a long run
 

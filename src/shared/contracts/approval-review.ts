@@ -1,5 +1,11 @@
-/** Result of reviewing a pending approval; absence of review never grants permission. */
-export type ApprovalReviewResult =
+/**
+ * Result of reviewing a pending approval; absence of review never grants permission.
+ * `refused` marks a request unattended approval closed by policy in the same batch as its open:
+ * like an approved one, it never waited for a person and is never published as open.
+ */
+export type ApprovalReviewResult = ApprovalReviewOutcome & { readonly refused?: true };
+
+type ApprovalReviewOutcome =
   | { readonly kind: 'not_reviewed'; readonly approved: false }
   | { readonly kind: 'unavailable'; readonly approved: false }
   | {

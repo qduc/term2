@@ -9,6 +9,9 @@ import type { Item, ModelAffinity, ModelRegistry, ItemId } from '../../model/ind
 import type { ShellAutoApprovalAgentClient } from '../../session/conversation-agent-client.js';
 import type { AgentSurface, ProfileSelection } from '../tool-contract.js';
 import type { DirectRuntimeRecord } from '../application-runtime.js';
+import type { WorkspaceSnapshotPort } from '../../session/types.js';
+import type { Workspace } from '../../tools/index.js';
+import { describeWorkspaceSnapshot, takeWorkspaceSnapshot } from '../../tools/workspace/workspace-snapshot.js';
 
 /** One tool-free model request for the existing approval evaluator; never starts an agent loop. */
 export function createApprovalModelClient(
@@ -79,7 +82,9 @@ export function createAssistedApprovalReview({
   sessionContext,
   sessionAccess,
   withWorkspace,
+  isSandboxEscape,
 }: {
+  isSandboxEscape?: (toolName: string, input: unknown) => boolean;
   agentClient: ShellAutoApprovalAgentClient;
   settings: ISettingsService;
   logger: ILoggingService;
@@ -90,12 +95,14 @@ export function createAssistedApprovalReview({
   return async (request, history, signal) => {
     const profile = describeApproval(request, {
       isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
+      ...(isSandboxEscape ? { isSandboxEscape } : {}),
     });
     return decideApproval({
       request,
       profile,
       signal,
       currentMode: () => settings.get('shell.autoApproveMode'),
+      routeOptions: () => ({ reviewEscapes: settings.get('shell.unattendedEscapeReview') === true }),
       review: () => {
         const resolver = new ShellAutoApprovalResolver({
           record: { getHistory: () => approvalHistory(history) },
@@ -163,13 +170,32 @@ export function sessionApprovalReview(
   record: () => Pick<DirectRuntimeRecord, 'surface' | 'scope'> | undefined,
 ): import('../../session/approval/approval-arbiter.js').ApprovalReviewPort {
   return {
-    willReview: (request) => (record()?.surface.approvalRoute?.(request) ?? 'ask_user') !== 'ask_user',
-    mayApprove: (request) => record()?.surface.approvalRoute?.(request) === 'decide',
+    willReview: (request) => {
+      const kind = record()?.surface.approvalRoute?.(request).kind;
+      return kind === 'decide' || kind === 'advise' || kind === 'judge';
+    },
+    mayApprove: (request) => {
+      const kind = record()?.surface.approvalRoute?.(request).kind;
+      return kind === 'decide' || kind === 'judge';
+    },
+    route: (request) => record()?.surface.approvalRoute?.(request) ?? { kind: 'ask_user' },
+    unattended: () => record()?.surface.unattended?.() === true,
     async review(request, history, signal) {
       const current = record();
       const review = current?.surface.reviewApproval;
       if (!current || !review) return { kind: 'not_reviewed', approved: false };
       return current.scope(() => review(request, history, signal));
     },
+  };
+}
+
+/** Unattended turns snapshot a local workspace; an SSH workspace has no snapshot, and the turn says so. */
+export function workspaceSnapshotPort(workspace: Workspace): WorkspaceSnapshotPort {
+  return {
+    take: (label) =>
+      workspace.target === 'local'
+        ? takeWorkspaceSnapshot(workspace.root, label)
+        : Promise.resolve({ kind: 'none', reason: 'the workspace is on an SSH host' }),
+    describe: describeWorkspaceSnapshot,
   };
 }

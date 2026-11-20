@@ -8,17 +8,19 @@ export type RunTerminationCause =
   /** An active durable goal's stop check stayed unresolved; control returned to the user. */
   | 'goal_check_unresolved'
   /** The completion gate could not authorize a durable goal's completion. */
-  | 'completion_verification_blocked';
+  | 'completion_verification_blocked'
+  /** Unattended approval refused too many requests; the turn stopped with each refusal listed. */
+  | 'approval_refusal_limit';
 
 const RUN_TERMINATION_CAUSES: ReadonlySet<string> = new Set<RunTerminationCause>([
   'budget_exhausted',
   'goal_check_unresolved',
   'completion_verification_blocked',
+  'approval_refusal_limit',
 ]);
 
 /**
- * Narrow a harness terminal cause. The harness reports `budget_exhausted` itself and otherwise echoes the
- * cause Term2's own normal-stop policy returned, so any other value cannot occur and is dropped.
+ * Persist the harness and application terminal causes that Term2 recognizes.
  */
 export function runTerminationCause(cause: string | undefined): RunTerminationCause | undefined {
   return cause !== undefined && RUN_TERMINATION_CAUSES.has(cause) ? (cause as RunTerminationCause) : undefined;

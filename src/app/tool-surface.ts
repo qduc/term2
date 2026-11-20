@@ -18,8 +18,9 @@ import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/script-surface.js';
 import type { AnyToolDefinition } from '../tools/types.js';
 import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
+import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { formatApprovalReview } from '../shared/contracts/approval-review.js';
-import { describeApproval, routeApproval } from '../session/approval/approval-route.js';
+import { approvalRouteFor, describeApproval } from '../session/approval/approval-route.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';
@@ -218,7 +219,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     // Read the mode per call: a mode change must apply to the next command, not the next surface.
     confirmSandboxedShell: options.shellEscapeApproval
       ? (command) =>
-          settings.get('shell.autoApproveMode') === 'auto' &&
+          (settings.get('shell.autoApproveMode') === 'auto' ||
+            settings.get('shell.autoApproveMode') === 'unattended') &&
           withWorkspace(() => isMutatingCommand(command, executionContext.getCwd(), logger))
       : undefined,
   });
@@ -236,8 +238,34 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     advisoryAbort.signal,
     options.affinity ?? { conversationKey: sessionId, cacheKey: sessionId },
   );
+  // A local shell call asking to leave an enforcing sandbox; a plain allow runs it unsandboxed. The route is
+  // synchronous, so availability is cached and refreshed per check. Only a sandbox known to be unavailable
+  // stops counting (decision 5: the reviewer decides); an unknown state counts as enforcing (fail closed).
+  let sandboxAvailable: boolean | undefined;
+  const refreshSandbox = (): void =>
+    void getDefaultShellSandboxRunner()
+      .availability()
+      .then(
+        (availability) => void (sandboxAvailable = availability.type === 'available'),
+        () => void (sandboxAvailable = undefined),
+      );
+  if (!remote) refreshSandbox();
+  const isSandboxEscape = (toolName: string, input: unknown): boolean => {
+    if (
+      remote ||
+      settings.get('sandbox.enabled') === false ||
+      (toolName !== 'shell' && toolName !== 'bash') ||
+      !input ||
+      typeof input !== 'object' ||
+      (input as { sandbox?: unknown }).sandbox !== 'unsandboxed'
+    )
+      return false;
+    refreshSandbox();
+    return sandboxAvailable !== false;
+  };
   // The one review path every surface uses (src/session/approval/approval-route.ts).
   const reviewApproval = createAssistedApprovalReview({
+    isSandboxEscape,
     agentClient,
     settings,
     logger,
@@ -314,12 +342,15 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     },
     reviewApproval,
     approvalRoute: (request) => {
-      const mode = settings.get('shell.autoApproveMode');
       const profile = describeApproval(request, {
         isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
+        isSandboxEscape,
       });
-      return routeApproval(mode, profile) !== 'review' ? 'ask_user' : mode === 'auto' ? 'decide' : 'advise';
+      return approvalRouteFor(settings.get('shell.autoApproveMode'), profile, {
+        reviewEscapes: settings.get('shell.unattendedEscapeReview') === true,
+      });
     },
+    unattended: () => settings.get('shell.autoApproveMode') === 'unattended',
     async decideInteraction(request, history, review) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };

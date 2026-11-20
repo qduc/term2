@@ -414,6 +414,11 @@ export class DirectBackgroundTasks {
           throw error;
         }
       },
+      toolFinished: (executionId) => {
+        if (entry.controller.signal.aborted || entry.outcome || this.#failure) return;
+        this.#interactions.toolFinished(entry.task.taskId, executionId);
+      },
+      refusalLimitReport: () => this.#interactions.refusalLimitReport(entry.task.taskId),
       askOrchestrator: (question) => {
         if (entry.controller.signal.aborted) return Promise.reject(directTaskAbortError());
         this.#context(entry).observe({ kind: 'question_asked' });
@@ -421,7 +426,7 @@ export class DirectBackgroundTasks {
           return Promise.reject(new Error('Task cannot ask its orchestrator.'));
         return this.#questions.ask(entry.task.taskId, question);
       },
-      interact: (input) => {
+      interact: (input, unattendedOnly) => {
         if (entry.outcome || this.#failure)
           return Promise.reject(new Error('Task is no longer accepting interactions.'));
         return this.#interactions.open(
@@ -435,6 +440,7 @@ export class DirectBackgroundTasks {
             origin: entry.task.origin,
           },
           entry.controller.signal,
+          unattendedOnly,
         );
       },
     };
@@ -455,6 +461,7 @@ export class DirectBackgroundTasks {
     } catch (error) {
       this.poison(error);
     }
+    this.#interactions.releaseRefusals(entry.task.taskId);
     if (this.#failure) result = { kind: 'failed', error: this.#failure, value: observed.value };
     entry.outcome = result;
     entry.status = result.kind;

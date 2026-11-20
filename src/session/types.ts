@@ -131,7 +131,15 @@ export type ConversationDeps = Omit<TurnDeps<Term2ToolAppContext>, 'toolContext'
     readonly publishReview?: (event: import('./approval/approval-arbiter.js').DirectApprovalReviewTransient) => void;
     /** App reviewer for open approvals; absent means every request opens at once. */
     readonly approvalReview?: import('./approval/approval-arbiter.js').ApprovalReviewPort;
+    /** Unattended turns: the workspace snapshot taken before the first tool call, and its end-of-turn report. */
+    readonly workspaceSnapshot?: WorkspaceSnapshotPort;
   };
+
+/** App-supplied: `take` never rejects (a failure is `kind: 'none'`); `describe` is bounded and synchronous. */
+export type WorkspaceSnapshotPort = {
+  take(label: string): Promise<import('../tools/workspace/workspace-snapshot.js').WorkspaceSnapshot>;
+  describe(snapshot: import('../tools/workspace/workspace-snapshot.js').WorkspaceSnapshot): string;
+};
 export type ReplayedConversation = {
   readonly status: 'idle' | 'interrupted';
   readonly history: readonly import('../model/index.js').Item[];

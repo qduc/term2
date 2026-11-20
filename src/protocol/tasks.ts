@@ -114,9 +114,11 @@ function publicTaskOwner(task: WireTask): WireTaskOwner {
 export function publicTaskInteraction(request: DirectTaskInteraction, task: WireTask) {
   return { ...publicInteraction(request), taskOwner: publicTaskOwner(task) };
 }
-/** An accepted task fact's events; a request the session's review approved is never published as open. */
+/** An accepted task fact's events; a request the session's review approved or refused is never published as open. */
 export function taskFactEvents(fact: DirectBackgroundFact, state: WireSnapshot, seq: number): readonly WireEvent[] {
-  return fact.type === 'task_interaction_opened' && fact.review?.approved ? [] : [taskFactEvent(fact, state, seq)];
+  return fact.type === 'task_interaction_opened' && (fact.review?.approved || fact.review?.refused)
+    ? []
+    : [taskFactEvent(fact, state, seq)];
 }
 /** One accepted task fact maps to one cursor-addressable event, never a root answer. */
 function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, seq: number): WireEvent {

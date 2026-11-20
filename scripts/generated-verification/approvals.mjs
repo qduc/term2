@@ -5,8 +5,9 @@ import path from 'node:path';
 import fc from 'fast-check';
 import { canonicalPath, expandHome, lexicalPath } from '../../src/tools/workspace/path-identity.ts';
 import { SessionAccessState } from '../../src/session/session/session-access-state.ts';
-import { decideApproval, describeApproval, routeApproval } from '../../src/session/approval/approval-route.ts';
+import { approvalRouteFor, decideApproval, describeApproval } from '../../src/session/approval/approval-route.ts';
 import { ApprovalReviews } from '../../src/session/approval/approval-arbiter.ts';
+import { DirectBackgroundInteractions } from '../../src/session/background-interactions.ts';
 
 // Contract (src/tools/workspace/path-identity.ts, SessionAccessState): a session grant is
 // stored and matched under one identity, so any spelling of a granted folder
@@ -127,10 +128,12 @@ export const approvalProperties = [
         explicitUser: fc.boolean(),
         deniedRead: fc.boolean(),
         docker: fc.boolean(),
+        // The app reports a shell call asking to leave an enabled sandbox (TUI/headless offer no grant for it).
+        inputEscape: fc.boolean(),
         grants: fc.subarray(['unsandboxed-once', 'network-allow-once', 'allow-project', 'allow-folder-session']),
       }),
-      fc.constantFrom('off', 'advisory', 'auto', 'always', undefined),
-      fc.constantFrom('off', 'advisory', 'auto', 'always', undefined),
+      fc.constantFrom('off', 'advisory', 'auto', 'unattended', 'always', undefined),
+      fc.constantFrom('off', 'advisory', 'auto', 'unattended', 'always', undefined),
       fc.oneof(
         fc.constant('throws'),
         fc.constant('none'),
@@ -146,7 +149,8 @@ export const approvalProperties = [
         }),
       ),
       fc.boolean(),
-      async (shape, mode, modeAfter, verdict, abort) => {
+      fc.boolean(),
+      async (shape, mode, modeAfter, verdict, abort, reviewEscapes) => {
         const request = {
           kind: shape.kind,
           toolName: shape.toolName,
@@ -157,10 +161,35 @@ export const approvalProperties = [
             ...(shape.deniedRead ? { deniedRead: { path: '/x' } } : {}),
           },
         };
-        const profile = describeApproval(request, { isDockerHostControl: () => shape.docker });
-        const route = routeApproval(mode, profile);
-        if (profile.hardGate) assert.equal(route, 'ask_user', 'a hard gate was routed to review');
-        if (mode !== 'auto' && mode !== 'advisory') assert.equal(route, 'ask_user', 'reviewed outside auto/advisory');
+        const profile = describeApproval(request, {
+          isDockerHostControl: () => shape.docker,
+          isSandboxEscape: () => shape.inputEscape,
+        });
+        const surfaceRoute = approvalRouteFor(mode, profile, { reviewEscapes });
+        const route = ['decide', 'advise', 'judge'].includes(surfaceRoute.kind) ? 'review' : surfaceRoute.kind;
+        const escape = shape.kind !== 'question' && (shape.grants.includes('unsandboxed-once') || shape.inputEscape);
+        if (mode === 'unattended') {
+          // Unattended (unattended-approval.md): nothing waits for a person except a question.
+          if (shape.kind === 'question') assert.equal(route, 'ask_user', 'unattended did not ask a question');
+          else assert.notEqual(route, 'ask_user', 'unattended left a request waiting for a person');
+          if (profile.hardGate && shape.kind !== 'question') assert.equal(route, 'refuse', 'a hard gate was reviewed');
+          if (!profile.reviewable && shape.kind !== 'question')
+            assert.equal(route, 'refuse', 'an unreviewable tool was reviewed');
+          if (escape && !reviewEscapes) assert.equal(route, 'refuse', 'an escape was reviewed with the setting off');
+          if (escape && reviewEscapes && !profile.hardGate && profile.reviewable)
+            assert.equal(route, 'review', 'the escape setting did not hand the escape to the reviewer');
+        } else {
+          assert.notEqual(route, 'refuse', 'a mode other than unattended refused');
+          if (profile.hardGate) assert.equal(route, 'ask_user', 'a hard gate was routed to review');
+          if (mode !== 'auto' && mode !== 'advisory') assert.equal(route, 'ask_user', 'reviewed outside auto/advisory');
+        }
+        if (route === 'review')
+          assert.equal(
+            surfaceRoute.kind,
+            mode === 'unattended' ? 'judge' : mode === 'auto' ? 'decide' : 'advise',
+            'a reviewed request has the wrong meaning for its mode',
+          );
+        if (surfaceRoute.kind === 'refuse') assert.ok(surfaceRoute.reason.length > 0, 'refusal without a reason');
         const controller = new AbortController();
         let calls = 0;
         const result = await decideApproval({
@@ -168,6 +197,7 @@ export const approvalProperties = [
           profile,
           signal: controller.signal,
           currentMode: () => (calls === 0 ? mode : modeAfter),
+          routeOptions: () => ({ reviewEscapes }),
           review: async () => {
             calls += 1;
             if (abort) controller.abort();
@@ -178,7 +208,7 @@ export const approvalProperties = [
         if (route !== 'review') assert.equal(calls, 0, 'reviewed a request routed to a person');
         if (!result.approved) return;
         assert.equal(route, 'review');
-        assert.equal(mode, 'auto', 'approved outside auto mode');
+        assert.ok(mode === 'auto' || mode === 'unattended', 'approved outside auto or unattended mode');
         assert.equal(modeAfter, mode, 'approved although the mode changed during review');
         assert.equal(abort, false, 'approved after abort');
         assert.ok(typeof verdict === 'object' && !verdict.isError, 'approved without a usable verdict');
@@ -207,8 +237,10 @@ export const approvalProperties = [
         decidesAtSettle: fc.boolean(),
         outcome: fc.constantFrom('approved', 'rejected', 'throws'),
         stopBeforeResult: fc.boolean(),
+        unattendedAtSettle: fc.boolean(),
       }),
-      async ({ routedAtOpen, routedAtSettle, decidesAtSettle, outcome, stopBeforeResult }) => {
+      async ({ routedAtOpen, routedAtSettle, decidesAtSettle, outcome, stopBeforeResult, unattendedAtSettle }) => {
+        let unattended = false;
         let routed = routedAtOpen;
         let decides = true;
         let release;
@@ -220,6 +252,8 @@ export const approvalProperties = [
             willReview: () => routed,
             // `advisory` still reviews but may not answer; only `auto` decides.
             mayApprove: () => routed && decides,
+            route: () => ({ kind: routed ? (decides ? 'decide' : 'advise') : 'ask_user' }),
+            unattended: () => unattended,
             review: async () => {
               await gate;
               if (outcome === 'throws') throw new Error('model down');
@@ -232,27 +266,126 @@ export const approvalProperties = [
           (event) => events.push(event.phase),
         );
         const request = { requestId: 'r', turnId: 't', kind: 'approval', toolName: 'shell', input: {}, summary: 's' };
-        const began = reviews.begin(request, { settle: (_request, review) => settles.push(review) });
+        const refusals = [];
+        const began = reviews.begin(request, {
+          settle: (_request, review) => settles.push(review),
+          refuse: (_request, review) => refusals.push(review),
+        });
         assert.equal(began, routedAtOpen, 'began a review the route did not ask for');
         if (!began) return assert.equal(settles.length, 0);
         assert.equal(reviews.has('r'), true);
         if (stopBeforeResult) assert.ok(reviews.stop('r'), 'stop did not return the held request');
         routed = routedAtSettle;
         decides = decidesAtSettle;
+        unattended = unattendedAtSettle;
         release();
         for (let i = 0; i < 5; i += 1) await Promise.resolve();
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(reviews.has('r'), false, 'request still held after settle or stop');
         assert.deepEqual(events, ['started', 'settled'], 'review transient not started then settled exactly once');
-        if (stopBeforeResult) return assert.equal(settles.length, 0, 'settled after a person stopped the review');
-        assert.equal(settles.length, 1, 'settled other than exactly once');
-        const approved = settles[0].approved;
+        if (stopBeforeResult)
+          return assert.equal(settles.length + refusals.length, 0, 'settled after a person stopped the review');
+        assert.equal(settles.length + refusals.length, 1, 'settled other than exactly once');
+        const approves = outcome === 'approved' && routedAtSettle && decidesAtSettle;
+        // A non-approval follows the mode current at settle: refused in unattended, opened otherwise.
         assert.equal(
-          approved,
-          outcome === 'approved' && routedAtSettle && decidesAtSettle,
+          refusals.length,
+          !approves && unattendedAtSettle ? 1 : 0,
+          'refusal did not follow the current mode',
+        );
+        const result = settles[0] ?? refusals[0];
+        assert.equal(
+          result.approved,
+          approves,
           'approval did not follow the result and the current generation deciding',
         );
-        if (outcome === 'throws') assert.equal(settles[0].kind, 'unavailable');
+        if (outcome === 'throws') assert.equal(result.kind, 'unavailable');
+      },
+    ),
+  },
+  {
+    // Unattended refusals for a background task (background-interactions.ts): every refused request is
+    // opened and closed by policy in one step and never left waiting; the denial stops the task's run
+    // exactly when 3 in a row or 10 in total are reached. Only an unrelated completion resets the streak.
+    name: 'approval.unattended-task-limit',
+    property: fc.asyncProperty(
+      fc.array(fc.constantFrom('refuse-unreviewed', 'refuse-reviewed', 'approve', 'finish-other'), {
+        minLength: 1,
+        maxLength: 30,
+      }),
+      async (steps) => {
+        const facts = [];
+        const interactions = new DirectBackgroundInteractions((fact) => facts.push(fact));
+        let next = 'approve';
+        interactions.useReviews(
+          new ApprovalReviews(
+            {
+              willReview: () => next !== 'refuse-unreviewed',
+              mayApprove: () => true,
+              route: () =>
+                next === 'refuse-unreviewed' ? { kind: 'refuse', reason: 'fixture gate' } : { kind: 'judge' },
+              unattended: () => true,
+              review: async () =>
+                next === 'approve'
+                  ? { kind: 'reviewed', approved: true, advisory: { approved: true, reasoning: 'ok', model: 'm' } }
+                  : { kind: 'reviewed', approved: false, advisory: { approved: false, reasoning: 'no', model: 'm' } },
+            },
+            () => [],
+            undefined,
+          ),
+        );
+        let consecutive = 0;
+        let total = 0;
+        let stopped = false;
+        for (const [index, step] of steps.entries()) {
+          if (stopped) break;
+          if (step === 'finish-other') {
+            consecutive = 0;
+            interactions.toolFinished('task', `other${index}`);
+            continue;
+          }
+          next = step;
+          const request = {
+            requestId: `r${index}`,
+            executionId: `execution${index}`,
+            ...(step === 'refuse-reviewed' ? { parentExecutionId: `parent${index}` } : {}),
+            turnId: 't',
+            taskId: 'task',
+            kind: 'approval',
+            toolName: 'shell',
+            input: {},
+            summary: `step ${index}`,
+            sessionId: 's',
+          };
+          const decision = await interactions.open(request, new AbortController().signal, true);
+          assert.equal(interactions.pending().length, 0, 'a request was left waiting for a person');
+          const closed = facts.filter(
+            (fact) => fact.type === 'task_interaction_closed' && fact.requestId === request.requestId,
+          );
+          assert.equal(closed.length, 1, 'request not closed exactly once');
+          if (step === 'approve') {
+            assert.equal(decision.kind, 'allow');
+            continue;
+          }
+          consecutive += 1;
+          total += 1;
+          const opened = facts.find(
+            (fact) => fact.type === 'task_interaction_opened' && fact.request.requestId === request.requestId,
+          );
+          assert.equal(opened?.review?.refused, true, 'refused open not marked refused');
+          assert.equal(closed[0].resolutionSource, 'policy');
+          assert.equal(decision.kind, 'deny');
+          assert.match(decision.reason, /Refused by unattended approval/);
+          // The build brief's values (decision 3), stated independently of the implementation.
+          const limit = consecutive >= 3 || total >= 10;
+          assert.equal(decision.stopAfterApprovalResolution === true, limit, 'stop did not match the limit');
+          interactions.toolFinished('task', request.executionId);
+          if (request.parentExecutionId) interactions.toolFinished('task', request.parentExecutionId);
+          if (limit) {
+            assert.match(decision.reason, /Unattended approval stopped this run/);
+            stopped = true;
+          }
+        }
       },
     ),
   },

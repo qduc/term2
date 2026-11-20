@@ -7,6 +7,64 @@ implementation establishes current behavior. Routine task and test-run accountin
 was retired on 2026-10-31; old ledger references below describe archived evidence,
 not instructions to recreate it.
 
+## Unattended approval refusal limit (2026-11-20)
+
+Owner: `UnattendedRefusals` in `src/session/approval/unattended-refusals.ts`,
+counted by the turn owner (`ownConversationTurn`) and, per task, by
+`DirectBackgroundInteractions`. Plan: `unattended-approval.md` (decision 3).
+Class: runaway detector over repeated policy refusals. Harm prevented: with no
+person to notice, a model that keeps asking for what unattended mode refuses
+would loop until a budget or the user stops it. Signal: refusals this turn (or
+task), measured where the refusal is committed; a tool execution that finishes
+and did not contain a refusal resets its owner's consecutive count. The nested
+branch forwards execution completions to the task owner for this purpose.
+Legitimate look-alike: a model probing alternatives after a refusal, which the
+refusal text asks it to do; three in a row with nothing run in between is the
+point where probing has stopped working. Effective values: 3 consecutive or 10
+total, fixed (Codex and Claude Code ship 3 consecutive; not calibrated on Term2
+runs, no setting). Action: the refusal that reaches the limit is a denial with
+`stopAfterApprovalResolution`, so the engine settles the batch and makes no
+further model request; the turn ends `completed` with terminal cause
+`approval_refusal_limit` and a notice listing every refusal and its reason.
+Headless treats the cause as blocked and exits 2. Partial work: earlier results
+stay in history; nothing is rolled back. Recovery owner: the user, who reads the
+list and resubmits or changes mode; a new turn starts with fresh counts. Rollback
+boundary: the limit and the refusal route revert together with
+`unattended-refusals.ts`; the other modes never reach this code.
+
+## Unattended workspace snapshot bounds (2026-11-20)
+
+Owner: `takeWorkspaceSnapshot` / `describeWorkspaceSnapshot` in
+`src/tools/workspace/workspace-snapshot.ts`; per-turn timing in
+`src/session/approval/unattended-snapshot.ts`. Class: admission limit (cost)
+and retention bound. Harm prevented: a snapshot stores new and changed files in
+a shadow git repository under the sandbox user state root and runs before the
+turn's first model request, so an unbounded one could fill a disk or stall
+every unattended turn; unbounded refs would keep every copy alive. Signals: the
+bytes `git add -A` would store, from the shadow index's untracked (`ls-files -o
+--exclude-standard`) and modified (`ls-files -m`) files (256 MiB, checked before
+the snapshot and again before the end-of-turn listing stages what the turn
+left in its private index); each git step's wall time (30 s, with 60 s for the whole snapshot; 10 s
+per step for the synchronous end-of-turn listing, which blocks the event loop
+for at most that long per step); and the count of the shadow repository's
+`refs/snapshots/*` (keep 20, ordered by the millisecond timestamp the name
+starts with). In a git project the shadow index is seeded from the project's
+index and the project's objects are an alternate, so the first snapshot does
+not count or store committed files. Legitimate look-alike: a folder with large
+unignored files (a non-git folder has no ignore rules unless it carries
+`.gitignore` files), which gets no snapshot and one notice instead of a slow
+turn. Action: skip the snapshot (never fail or block the turn) and say so in the
+turn's notice; after writing a snapshot, delete refs beyond the newest 20 and
+run `git gc --auto` (configured at 256 loose objects with a one-hour prune grace
+for a concurrent snapshot). Separate indexes keep overlapping Git operations
+from mixing staged contents. Whole repositories remain in the state directory
+so one workspace's capture cannot evict another's recovery data. Values are fixed, not settings; they are starting points,
+not measured on Term2 users' repositories. Known residual: the alternates link
+means a snapshot's committed files live in the project's object store, so a
+history rewrite plus an aggressive `git gc --prune=now` there can break an older
+snapshot. Rollback boundary: the snapshot module, the session holder and the
+app port revert together; approval routing does not depend on them.
+
 ## Provider transport timeouts handed to the stream-idle guard (2026-11-18)
 
 Owner: `withGenerationGuard` opts guarded stream reads into the dispatcher in

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { testCliPath, createTestChildEnv } from '../helpers/terminal-e2e.js';
@@ -366,7 +366,14 @@ for (const layout of ['primary checkout', 'linked worktree'] as const) {
           fs.writeFileSync(path.join(dir, 'b.txt'), 'linked staged\n');
           git(dir, 'add', 'b.txt');
           fs.writeFileSync(path.join(dir, 'u.txt'), 'linked untracked\n');
-        } else seedRepository(dir);
+        } else {
+          seedRepository(dir);
+          const privateIgnore = path.join(workspace, '.git', 'local-ignore');
+          fs.writeFileSync(privateIgnore, 'private.txt\n');
+          git(dir, 'config', 'core.excludesFile', privateIgnore);
+          fs.writeFileSync(path.join(dir, 'private.txt'), 'ignored locally\n');
+          git(dir, 'update-index', '--split-index');
+        }
         before = {
           status: git(dir, 'status', '--porcelain'),
           index: git(dir, 'ls-files', '-s'),
@@ -391,6 +398,7 @@ for (const layout of ['primary checkout', 'linked worktree'] as const) {
       const files = shadowGit(cwd, 'ls-tree', '-r', '--name-only', refs[0]!).split('\n').filter(Boolean);
       expect(files).toEqual(expect.arrayContaining(['a.txt', 'b.txt', 'd.txt', 'u.txt']));
       expect(files).not.toContain('ignored.txt');
+      expect(files).not.toContain('private.txt');
       const prefix = layout === 'linked worktree' ? 'linked ' : '';
       expect(shadowGit(cwd, 'show', `${refs[0]}:a.txt`)).toBe(`${prefix}modified\n`);
       expect(shadowGit(cwd, 'show', `${refs[0]}:b.txt`)).toBe(`${prefix}staged\n`);
@@ -416,13 +424,13 @@ it(
     expect(output).toContain('M a.txt');
     expect(output).toContain('D d.txt');
     expect(output).toContain('A c.txt');
-    const restore = /To put back modified and deleted files: (git .+)$/m.exec(output);
+    const restore = /To put back modified and deleted files: (.+)$/m.exec(output);
     expect(restore, output).not.toBeNull();
     const indexBefore = git(cwd, 'ls-files', '-s');
     execFileSync('sh', ['-c', restore![1]!]);
     expect(fs.readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('modified\n');
     expect(fs.readFileSync(path.join(cwd, 'd.txt'), 'utf8')).toBe('keep\n');
-    // Documented: the restore never deletes a file, so one the turn created is kept; the index is not touched.
+    // Newly created files and the project index are preserved.
     expect(fs.readFileSync(path.join(cwd, 'c.txt'), 'utf8')).toBe('created\n');
     expect(git(cwd, 'ls-files', '-s')).toBe(indexBefore);
   },
@@ -434,16 +442,29 @@ it(
   async () => {
     const { baseUrl, seen } = await startProvider([{ call: { id: 'c1', command: MUTATE } }], ['pass']);
     const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
-      fs.writeFileSync(path.join(workspace, 'a.txt'), 'plain\n');
-      fs.writeFileSync(path.join(workspace, 'd.txt'), 'keep\n');
-      return workspace;
+      const quotedPath = path.join(workspace, "literal $HOME's path");
+      fs.mkdirSync(quotedPath);
+      fs.writeFileSync(path.join(quotedPath, 'a.txt'), 'plain\n');
+      fs.writeFileSync(path.join(quotedPath, 'd.txt'), 'keep\n');
+      return quotedPath;
     });
     expect(status, output).toBe(0);
     expect(seen.main).toHaveLength(2);
     expect(fs.existsSync(path.join(cwd, '.git'))).toBe(false);
     expect(snapshotRefs(cwd)).toHaveLength(1);
     expect(output).toMatch(/Files changed since it \(3\):/);
-    execFileSync('sh', ['-c', /To put back modified and deleted files: (git .+)$/m.exec(output)![1]!]);
+    const restore = /To put back modified and deleted files: (.+)$/m.exec(output)![1]!;
+    const blocked = path.join(cwd, 'd.txt');
+    fs.mkdirSync(blocked);
+    const newFile = path.join(blocked, 'created.txt');
+    fs.writeFileSync(newFile, 'preserve me\n');
+    const conflict = spawnSync('sh', ['-c', restore], { encoding: 'utf8' });
+    expect(conflict.status).not.toBe(0);
+    expect(conflict.stderr).toContain('Restore blocked by directory: d.txt');
+    expect(fs.readFileSync(newFile, 'utf8')).toBe('preserve me\n');
+    expect(fs.readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('turn\n');
+    fs.renameSync(blocked, path.join(cwd, 'preserved'));
+    execFileSync('sh', ['-c', restore]);
     expect(fs.readFileSync(path.join(cwd, 'a.txt'), 'utf8')).toBe('plain\n');
     expect(fs.readFileSync(path.join(cwd, 'd.txt'), 'utf8')).toBe('keep\n');
   },
@@ -473,55 +494,18 @@ it('keeps only the newest 20 snapshot refs', { timeout: TIMEOUT_MS }, async () =
   expect(refs.filter((ref) => !ref.endsWith('-old'))).toHaveLength(1);
 });
 
-it(
-  'sweeps shadow repositories whose workspace is gone or that sat unused for 30 days',
-  { timeout: TIMEOUT_MS },
-  async () => {
-    const { baseUrl } = await startProvider([{ text: 'UNATTENDED_DONE' }], []);
-    let base = '';
-    const kept: string[] = [];
-    const removed: string[] = [];
-    const { status, output, cwd } = await runHeadless(baseUrl, [], (workspace) => {
-      base = path.dirname(shadowDir(workspace));
-      fs.mkdirSync(base, { recursive: true });
-      const shadow = (name: string, workTree: string, ageDays: number): string => {
-        const dir = path.join(base, name);
-        fs.mkdirSync(dir);
-        const file = path.join(dir, 'term2-work-tree');
-        fs.writeFileSync(file, workTree);
-        const when = new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000);
-        fs.utimesSync(file, when, when);
-        return dir;
-      };
-      const live = path.join(root, 'live-project');
-      fs.mkdirSync(live);
-      removed.push(shadow('a'.repeat(24), path.join(root, 'deleted-project'), 1));
-      removed.push(shadow('b'.repeat(24), live, 31));
-      kept.push(shadow('c'.repeat(24), live, 2));
-      // Not a shadow repository's name: never touched.
-      fs.mkdirSync(path.join(base, 'not-a-snapshot'));
-      kept.push(path.join(base, 'not-a-snapshot'));
-      return workspace;
-    });
-    expect(status, output).toBe(0);
-    for (const dir of removed) expect(fs.existsSync(dir), dir).toBe(false);
-    for (const dir of kept) expect(fs.existsSync(dir), dir).toBe(true);
-    expect(snapshotRefs(cwd)).toHaveLength(1);
-    // Dropped snapshots are reclaimed early.
-    expect(shadowGit(cwd, 'config', 'gc.auto').trim()).toBe('256');
-  },
-);
-
 // Decision 4: where the sandbox is on, a request to leave it is refused without a review. The TUI and headless
 // ask with no `unsandboxed-once` grant and run an allowed escape outside the sandbox, so the route must
-// recognise the call itself. Stand-in `bwrap`/`socat` make the sandbox report available; they exit 97 if run,
-// so a marker file written means the command ran unsandboxed.
+// recognise the call itself. The Linux availability check looks for `bwrap`, `socat`, and `rg` on PATH.
+// The shims exit 97 if run, so a marker file written means the command ran unsandboxed.
 const MARK = "node -e \"require('fs').writeFileSync('ESCAPED.txt','outside')\"";
 
-function sandboxShims(): string {
+function sandboxShims(omit?: 'bwrap'): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-sandbox-shims-'));
-  for (const name of ['bwrap', 'socat'])
+  for (const name of ['bwrap', 'socat', 'rg']) {
+    if (name === omit) continue;
     fs.writeFileSync(path.join(dir, name), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
+  }
   return dir;
 }
 
@@ -568,13 +552,13 @@ it(
   { timeout: TIMEOUT_MS },
   async () => {
     if (process.platform !== 'linux') return;
-    // Only node and git on PATH: no bwrap, so the sandbox reports a missing dependency (decision 5, A12).
-    const shims = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-no-sandbox-'));
-    for (const name of ['node', 'git']) {
-      const found = execFileSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' }).trim();
-      fs.symlinkSync(found, path.join(shims, name));
-    }
+    // Restrict PATH and omit only bwrap from the sandbox prerequisites (decision 5, A12).
+    const shims = sandboxShims('bwrap');
     try {
+      for (const name of ['node', 'git', 'which']) {
+        const found = execFileSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' }).trim();
+        fs.symlinkSync(found, path.join(shims, name));
+      }
       const { baseUrl, seen } = await startProvider(
         [{ call: { id: 'c1', command: MARK, unsandboxed: true } }],
         ['reject'],

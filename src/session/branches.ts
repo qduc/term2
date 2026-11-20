@@ -84,29 +84,26 @@ export function createDirectBranchDriver(options: {
       context.signal.addEventListener('abort', cancel, { once: true });
       if (context.signal.aborted) cancel();
       let terminal: TurnResult | undefined;
+      let refusalReport: string | undefined;
       let readFailure: unknown;
       const items: Item[] = [];
-      // A child launched in the background never asks. A call that still needs an answer ends its run. Legacy
-      // settles that as completed with an empty result, which hides the stop from the model: a confirmed legacy
-      // bug (#136 item 11, accepted-differences). Next reports a failed run that names the call.
+      // A child launched in the background can use unattended approval, but cannot ask a person.
+      // A call that still needs an answer ends the run with a failure naming the call (#136 item 11).
       let settledOnInteraction: { readonly kind: 'approval' | 'question'; readonly toolName: string } | undefined;
       const toolNames = new Map<string, string>();
       try {
         for await (const { token, event } of handle.events) {
-          if (event.type === 'interaction_required' && request.mode === 'background') {
-            settledOnInteraction ??= { kind: event.request.kind, toolName: event.request.toolName };
-            handle.accept(token);
-            handle.cancel();
-            continue;
-          }
           if (event.type === 'interaction_required') {
-            context.observe({ kind: 'approval_requested' });
+            const unattendedOnly = request.mode === 'background';
+            if (!unattendedOnly) context.observe({ kind: 'approval_requested' });
             try {
-              const decision = context.interact(event.request);
+              const decision = context.interact(event.request, unattendedOnly);
               // interact synchronously appends the task-owned open before yielding.
               handle.accept(token);
               handle.answer(event.request.requestId, await decision);
             } catch {
+              if (unattendedOnly)
+                settledOnInteraction ??= { kind: event.request.kind, toolName: event.request.toolName };
               handle.cancel();
             }
             continue;
@@ -137,7 +134,8 @@ export function createDirectBranchDriver(options: {
             continue;
           }
           if (event.type === 'turn_ended') {
-            terminal = event.result;
+            refusalReport = event.result.kind === 'completed' ? context.refusalLimitReport() : undefined;
+            terminal = refusalReport ? { kind: 'interrupted', notice: refusalReport } : event.result;
             const repairs = replay(local, { recoverQueue: false }).recoveryFacts.filter(
               (fact) => fact.type !== 'turn_ended',
             );
@@ -150,10 +148,12 @@ export function createDirectBranchDriver(options: {
             const fact: DirectTurnFact = {
               type: 'turn_ended',
               turnId,
-              outcome: event.result.kind,
-              ...(event.result.kind === 'failed' ? { error: event.result.error } : {}),
-              ...(event.result.kind === 'interrupted' ? { terminalCause: event.result.terminalCause } : {}),
-              ...('notice' in event.result && event.result.notice ? { notice: event.result.notice } : {}),
+              outcome: terminal.kind,
+              ...(terminal.kind === 'failed' ? { error: terminal.error } : {}),
+              ...(terminal.kind === 'interrupted'
+                ? { terminalCause: refusalReport ? 'approval_refusal_limit' : terminal.terminalCause }
+                : {}),
+              ...('notice' in terminal && terminal.notice ? { notice: terminal.notice } : {}),
             };
             options.accept({ type: 'branch_event', branchId, fact });
             local.push(fact);
@@ -215,6 +215,7 @@ export function createDirectBranchDriver(options: {
             local.push(fact);
             if (fact.type === 'item') items.push(fact.item);
           }
+          if (event.type === 'tool_execution_finished') context.toolFinished(event.executionId);
           handle.accept(token);
         }
       } catch (error) {
@@ -247,7 +248,8 @@ export function createDirectBranchDriver(options: {
       const toolUseCounts = [...counts].map(([toolName, count]) => ({ toolName, count }));
       const result: NestedRunResult = { items: produced, outcome, toolsUsed: [...counts.keys()], toolUseCounts };
       const report = await options.authority.report?.({ ...result, runId: context.runId });
-      return report === undefined ? result : { ...result, report };
+      const completionReport = report && refusalReport ? `${report}\n\n${refusalReport}` : refusalReport ?? report;
+      return completionReport === undefined ? result : { ...result, report: completionReport };
     },
   };
 }

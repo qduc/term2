@@ -62,6 +62,8 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 5. A documented restore command is exercised by a test: after a turn that modifies, deletes and creates files, it returns the modified and deleted files to their pre-turn content. The documentation says what it does with files the turn created.
 6. Old snapshots are pruned by a stated rule.
 
+The Linux approval test supplies `bwrap`, `socat`, and `rg` stand-ins because all three affect sandbox availability, even when a refusal prevents the sandbox from running. Its unavailable control omits only `bwrap`. The restore regression test covers a deleted file whose path now holds a directory with new data. Git's overlay restore can remove that directory, so the printed command checks for path conflicts before invoking Git.
+
 ## Done when
 
 - Every criterion is demonstrated by a committed integration or e2e test, or by recorded evidence where a test cannot reach it.

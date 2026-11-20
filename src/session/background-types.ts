@@ -172,8 +172,12 @@ export type DirectTaskContext = {
   progress(chunk: string, kind?: DirectBackgroundProgress['kind'], executionId?: ExecutionId): void;
   /** Record what legacy's activity tracker would observe (a tool start, a retry, an approval ...). */
   observe(observation: DistributiveOmit<NonNullable<DirectBackgroundProgress['observation']>, 'at'>): void;
+  /** Report an admitted execution's completion to the task's approval owner. */
+  toolFinished(executionId: ExecutionId): void;
+  /** If the approval owner stopped the task, return its refusal list for settlement. */
+  refusalLimitReport(): string | undefined;
   /** No decision reaches the operation until Session has accepted its closure. */
-  interact(request: DirectTaskInteractionInput): Promise<InteractionDecision>;
+  interact(request: DirectTaskInteractionInput, unattendedOnly?: boolean): Promise<InteractionDecision>;
   /** Pauses the exact child call until its orchestrator replies or the task stops. */
   askOrchestrator(question: string): Promise<string>;
 };

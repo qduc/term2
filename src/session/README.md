@@ -67,19 +67,21 @@ a reopened session sees the request closed. The reason
 another approach. `UnattendedRefusals` counts per turn and per task; the refusal
 that reaches 3 consecutive or 10 total carries `stopAfterApprovalResolution`,
 and the turn's `turn_ended` gets `terminalCause: 'approval_refusal_limit'` and a
-notice listing every refusal (a task gets the list in that last refusal). An
+notice listing every refusal. A nested task includes the list in its completion
+report and tracks refusals independently. An
 unattended turn declines every run check-in (`budget_closed` stop, source
 `system`). Failure to read the route or mode refuses rather than waits, as do a
 review that routed but could not start and an approval whose decision the
 request does not accept. A nested (run_code) refusal marks its parent execution,
-so that parent finishing does not reset the in-a-row count.
+so that parent finishing preserves the streak. An unrelated tool execution that
+finishes resets the consecutive count for the turn or task that owns it.
 
 An unattended root turn (not a compaction) also takes a workspace snapshot
 through the app's `workspaceSnapshot` port (`WorkspaceSnapshotPort` in
 `types.ts`; the implementation is `tools/workspace/workspace-snapshot.ts`, a
 shadow git repository per work tree under the sandbox user state root, with the
-project's object store as an alternate and its index as the seed, so nothing is
-written to the workspace or its repository).
+project's object store as an alternate and its index as the seed). Each capture
+and report has a private index. Snapshot operations leave the project intact.
 `approval/unattended-snapshot.ts` holds it per turn: the turn's
 `prepareRequest` awaits `take()` when the arbiter reports unattended, so the
 snapshot precedes the first model request and therefore every tool call, and is

@@ -306,10 +306,13 @@ export const approvalProperties = [
   {
     // Unattended refusals for a background task (background-interactions.ts): every refused request is
     // opened and closed by policy in one step and never left waiting; the denial stops the task's run
-    // exactly when 3 in a row or 10 in total are reached; an approval resets the consecutive count.
+    // exactly when 3 in a row or 10 in total are reached. Only an unrelated completion resets the streak.
     name: 'approval.unattended-task-limit',
     property: fc.asyncProperty(
-      fc.array(fc.constantFrom('refuse-unreviewed', 'refuse-reviewed', 'approve'), { minLength: 1, maxLength: 30 }),
+      fc.array(fc.constantFrom('refuse-unreviewed', 'refuse-reviewed', 'approve', 'finish-other'), {
+        minLength: 1,
+        maxLength: 30,
+      }),
       async (steps) => {
         const facts = [];
         const interactions = new DirectBackgroundInteractions((fact) => facts.push(fact));
@@ -336,9 +339,16 @@ export const approvalProperties = [
         let stopped = false;
         for (const [index, step] of steps.entries()) {
           if (stopped) break;
+          if (step === 'finish-other') {
+            consecutive = 0;
+            interactions.toolFinished('task', `other${index}`);
+            continue;
+          }
           next = step;
           const request = {
             requestId: `r${index}`,
+            executionId: `execution${index}`,
+            ...(step === 'refuse-reviewed' ? { parentExecutionId: `parent${index}` } : {}),
             turnId: 't',
             taskId: 'task',
             kind: 'approval',
@@ -347,14 +357,13 @@ export const approvalProperties = [
             summary: `step ${index}`,
             sessionId: 's',
           };
-          const decision = await interactions.open(request, new AbortController().signal);
+          const decision = await interactions.open(request, new AbortController().signal, true);
           assert.equal(interactions.pending().length, 0, 'a request was left waiting for a person');
           const closed = facts.filter(
             (fact) => fact.type === 'task_interaction_closed' && fact.requestId === request.requestId,
           );
           assert.equal(closed.length, 1, 'request not closed exactly once');
           if (step === 'approve') {
-            consecutive = 0;
             assert.equal(decision.kind, 'allow');
             continue;
           }
@@ -370,6 +379,8 @@ export const approvalProperties = [
           // The build brief's values (decision 3), stated independently of the implementation.
           const limit = consecutive >= 3 || total >= 10;
           assert.equal(decision.stopAfterApprovalResolution === true, limit, 'stop did not match the limit');
+          interactions.toolFinished('task', request.executionId);
+          if (request.parentExecutionId) interactions.toolFinished('task', request.parentExecutionId);
           if (limit) {
             assert.match(decision.reason, /Unattended approval stopped this run/);
             stopped = true;

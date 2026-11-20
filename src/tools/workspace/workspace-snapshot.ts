@@ -13,15 +13,16 @@
  * Guard: cost and retention bounds. A snapshot stores new and changed non-ignored files, so it is skipped
  * (with a notice) when those exceed CHANGED_BYTES_LIMIT, and every git step and the whole snapshot have a
  * deadline. Only the newest SNAPSHOT_KEEP snapshot refs of a workspace are kept, and `git gc --auto` (at 256
- * loose objects) reclaims what older ones held. At most daily, a sweep deletes shadow repositories whose work
- * tree is gone, that sat unused for 30 days, or that fall beyond the 50 most recently used. A snapshot never fails or blocks a turn: every failure becomes `{ kind: 'none' }`.
+ * loose objects) reclaims what older ones held. Each capture and report uses a private index so concurrent
+ * operations cannot stage changes into each other's snapshots. Failures become `{ kind: 'none' }`.
  */
 import { execFile, execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { sandboxUserStateRoot } from '../shell/sandbox/sandbox-project.js';
+import { quoteShellArg } from '../ssh-service.js';
 
 const run = promisify(execFile);
 
@@ -36,13 +37,6 @@ const TAKE_TIMEOUT_MS = 60_000;
 /** The end-of-turn listing runs synchronously at turn end, so its deadline is shorter. */
 const REPORT_TIMEOUT_MS = 10_000;
 const REPORT_MAX_FILES = 20;
-/** Shadow repositories: removed when their work tree is gone or unused this long, and beyond this many. */
-const SHADOW_MAX_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
-const SHADOW_KEEP = 50;
-/** The sweep across shadow repositories runs at most this often. */
-const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
-/** In each shadow repository: the work tree it snapshots; its mtime is the repository's last use. */
-const WORK_TREE_FILE = 'term2-work-tree';
 const SIZE_REASON = `new and changed files exceed ${CHANGED_BYTES_LIMIT / (1024 * 1024)} MiB, the snapshot size bound`;
 
 export type WorkspaceSnapshot =
@@ -56,13 +50,14 @@ export type WorkspaceSnapshot =
       readonly cwd: string;
       readonly ref: string;
       readonly commit: string;
+      readonly excludesFile?: string;
     }
   | { readonly kind: 'none'; readonly reason: string };
 
-type Shadow = { readonly gitDir: string; readonly workTree: string };
+type Shadow = { readonly gitDir: string; readonly workTree: string; readonly excludesFile?: string };
 
 /** Never prompt, never take optional locks, and never depend on the user's identity or signing setup. */
-function gitEnv(): NodeJS.ProcessEnv {
+function gitEnv(index?: string): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const key of [
     'GIT_DIR',
@@ -74,6 +69,7 @@ function gitEnv(): NodeJS.ProcessEnv {
     delete env[key];
   return {
     ...env,
+    ...(index ? { GIT_INDEX_FILE: index } : {}),
     GIT_TERMINAL_PROMPT: '0',
     GIT_OPTIONAL_LOCKS: '0',
     GIT_AUTHOR_NAME: 'term2',
@@ -86,15 +82,16 @@ function gitEnv(): NodeJS.ProcessEnv {
 const shadowArgs = (shadow: Shadow, args: readonly string[]): string[] => [
   `--git-dir=${shadow.gitDir}`,
   `--work-tree=${shadow.workTree}`,
+  ...(shadow.excludesFile !== undefined ? ['-c', `core.excludesFile=${shadow.excludesFile}`] : []),
   ...args,
 ];
 
-async function git(cwd: string, args: readonly string[], deadline: number): Promise<string> {
+async function git(cwd: string, args: readonly string[], deadline: number, index?: string): Promise<string> {
   const remaining = deadline - Date.now();
   if (remaining <= 0) throw new Error(`exceeded ${TAKE_TIMEOUT_MS / 1000} s`);
   const { stdout } = await run('git', [...args], {
     cwd,
-    env: gitEnv(),
+    env: gitEnv(index),
     timeout: Math.min(STEP_TIMEOUT_MS, remaining),
     maxBuffer: 64 * 1024 * 1024,
     encoding: 'utf8',
@@ -102,10 +99,10 @@ async function git(cwd: string, args: readonly string[], deadline: number): Prom
   return stdout;
 }
 
-function gitSync(cwd: string, args: readonly string[]): string {
+function gitSync(cwd: string, args: readonly string[], index: string): string {
   return execFileSync('git', [...args], {
     cwd,
-    env: gitEnv(),
+    env: gitEnv(index),
     timeout: REPORT_TIMEOUT_MS,
     maxBuffer: 16 * 1024 * 1024,
     encoding: 'utf8',
@@ -150,37 +147,60 @@ function* changesWithinBound(workTree: string): Steps<boolean> {
 function shadowDirectory(stateRoot: string, workTree: string): string {
   const key = createHash('sha256').update(workTree).digest('hex').slice(0, 24);
   const directory = path.join(stateRoot, 'workspace-snapshots', key);
+  const relative = path.relative(workTree, directory);
+  if (!relative || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)))
+    throw new Error('the snapshot directory is inside the work tree');
   let parent = directory;
   while (!fs.existsSync(parent)) parent = path.dirname(parent);
   if (fs.realpathSync(parent) !== parent) throw new Error('the snapshot directory is behind a symbolic link');
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(path.dirname(directory), { recursive: true, mode: 0o700 });
   return directory;
 }
 
+/** Publish a fully initialized repository in one rename, even if two turns start together. */
+async function initShadow(shadow: Shadow, project: Project | undefined, deadline: number): Promise<void> {
+  if (fs.existsSync(shadow.gitDir)) return;
+  const building = fs.mkdtempSync(path.join(path.dirname(shadow.gitDir), '.init-'));
+  try {
+    await git(
+      shadow.workTree,
+      ['init', '-q', '--bare', `--object-format=${project?.objectFormat ?? 'sha1'}`, building],
+      deadline,
+    );
+    await git(shadow.workTree, [`--git-dir=${building}`, 'config', 'gc.auto', '256'], deadline);
+    await git(shadow.workTree, [`--git-dir=${building}`, 'config', 'gc.pruneExpire', '1.hour.ago'], deadline);
+    if (project) fs.writeFileSync(path.join(building, 'objects', 'info', 'alternates'), `${project.objects}\n`);
+    try {
+      fs.renameSync(building, shadow.gitDir);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EEXIST' && code !== 'ENOTEMPTY') throw error;
+    }
+  } finally {
+    fs.rmSync(building, { recursive: true, force: true });
+  }
+}
+
 /**
- * Create the shadow repository the first time. In a git project: borrow its object store, copy its index
+ * In a git project copy its index
  * (keeping the index's mtime, so git's racy-clean check still rechecks same-second edits) with
  * `assume-unchanged` and present `skip-worktree` entries cleared, so the snapshot holds what is on disk.
  */
-async function* initShadow(
-  shadow: Shadow,
-  project: Project | undefined,
-): AsyncGenerator<readonly string[], void, string> {
-  yield ['init', '-q', '--bare', shadow.gitDir];
-  // Reclaim dropped snapshots soon: gc at 256 loose objects instead of 6,700; an hour's grace covers a
-  // concurrent snapshot whose objects are not referenced yet.
-  yield [`--git-dir=${shadow.gitDir}`, 'config', 'gc.auto', '256'];
-  yield [`--git-dir=${shadow.gitDir}`, 'config', 'gc.pruneExpire', '1.hour.ago'];
-  if (!project) return;
-  fs.writeFileSync(path.join(shadow.gitDir, 'objects', 'info', 'alternates'), `${project.objects}\n`);
+function* seedIndex(shadow: Shadow, project: Project, index: string): Steps<void> {
   if (!fs.existsSync(project.index)) return;
-  const index = path.join(shadow.gitDir, 'index');
   fs.copyFileSync(project.index, index);
   const { atime, mtime } = fs.statSync(project.index);
   fs.utimesSync(index, atime, mtime);
+  if (project.sharedIndex) {
+    const companion = path.join(shadow.gitDir, path.basename(project.sharedIndex));
+    const temporary = path.join(path.dirname(index), 'shared-index');
+    fs.copyFileSync(project.sharedIndex, temporary);
+    fs.renameSync(temporary, companion);
+    yield ['update-index', '--no-split-index'];
+  }
   const assume: string[] = [];
   const skip: string[] = [];
-  for (const entry of (yield shadowArgs(shadow, ['ls-files', '-v', '-z'])).split('\0').filter(Boolean)) {
+  for (const entry of (yield ['ls-files', '-v', '-z']).split('\0').filter(Boolean)) {
     const tag = entry[0]!;
     const file = entry.slice(2);
     if (tag >= 'a' && tag <= 'z') assume.push(file);
@@ -190,8 +210,7 @@ async function* initShadow(
     ['--no-assume-unchanged', assume],
     ['--no-skip-worktree', skip],
   ] as const)
-    for (let at = 0; at < files.length; at += 500)
-      yield shadowArgs(shadow, ['update-index', flag, '--', ...files.slice(at, at + 500)]);
+    for (let at = 0; at < files.length; at += 500) yield ['update-index', flag, '--', ...files.slice(at, at + 500)];
 }
 
 type Project = {
@@ -199,26 +218,53 @@ type Project = {
   readonly objects: string;
   readonly index: string;
   readonly exclude: string;
+  readonly objectFormat: string;
+  readonly sharedIndex?: string;
+  readonly excludesFile?: string;
 };
 
 /** The git project containing `cwd`, or undefined when there is none. */
 async function findProject(cwd: string, deadline: number): Promise<Project | undefined> {
   let lines: string[];
   try {
-    lines = (await git(cwd, ['rev-parse', '--show-toplevel', '--git-common-dir', '--git-path', 'index'], deadline))
-      .split('\n')
-      .filter(Boolean);
+    const args = [
+      'rev-parse',
+      '--path-format=absolute',
+      '--show-toplevel',
+      '--git-path',
+      'objects',
+      '--git-path',
+      'index',
+      '--git-path',
+      'info/exclude',
+      '--show-object-format',
+      '--shared-index-path',
+    ];
+    lines = (await git(cwd, args, deadline)).trimEnd().split('\n');
   } catch {
     return undefined;
   }
-  const [topLevel, commonDir, index] = lines;
-  if (!topLevel || !commonDir || !index) return undefined;
-  const common = path.resolve(cwd, commonDir);
+  const [topLevel, objects, index, exclude, objectFormat, sharedIndex] = lines;
+  if (!topLevel || !objects || !index || !exclude || !objectFormat) return undefined;
+  const workTree = fs.realpathSync(topLevel);
+  let excludesFile: string | undefined;
+  try {
+    const value = (await git(workTree, ['config', '--path', '--get', 'core.excludesFile'], deadline)).replace(
+      /\n$/,
+      '',
+    );
+    excludesFile = value ? path.resolve(workTree, value) : '';
+  } catch (error) {
+    if ((error as { code?: string | number }).code !== 1) throw error;
+  }
   return {
-    topLevel: fs.realpathSync(topLevel),
-    objects: path.join(common, 'objects'),
-    index: path.resolve(cwd, index),
-    exclude: path.join(common, 'info', 'exclude'),
+    topLevel: workTree,
+    objects,
+    index,
+    exclude,
+    objectFormat,
+    sharedIndex,
+    excludesFile,
   };
 }
 
@@ -238,69 +284,52 @@ export async function takeWorkspaceSnapshot(
   stateRoot: string = sandboxUserStateRoot(),
 ): Promise<WorkspaceSnapshot> {
   const deadline = Date.now() + TAKE_TIMEOUT_MS;
+  let scratch: string | undefined;
   try {
     const workspace = fs.realpathSync(cwd);
     const project = await findProject(workspace, deadline);
     const workTree = project?.topLevel ?? workspace;
-    const shadow: Shadow = { gitDir: shadowDirectory(stateRoot, workTree), workTree };
-    const step = (args: readonly string[]): Promise<string> => git(workTree, args, deadline);
-    const shadowStep = (args: readonly string[]): Promise<string> => step(shadowArgs(shadow, args));
-    if (!fs.existsSync(path.join(shadow.gitDir, 'HEAD'))) {
-      const init = initShadow(shadow, project);
-      let next = await init.next();
-      while (!next.done) next = await init.next(await step(next.value));
-    }
+    const shadow: Shadow = {
+      gitDir: shadowDirectory(stateRoot, workTree),
+      workTree,
+      excludesFile: project?.excludesFile,
+    };
+    await initShadow(shadow, project, deadline);
+    scratch = fs.mkdtempSync(path.join(shadow.gitDir, '.index-'));
+    const index = path.join(scratch, 'index');
+    const shadowStep = (args: readonly string[]): Promise<string> =>
+      git(workTree, shadowArgs(shadow, args), deadline, index);
+    if (project) await runSteps(seedIndex(shadow, project, index), shadowStep);
     // The project's own exclude file applies to the shadow too; refreshed each time it may have changed.
     const exclude = project && fs.existsSync(project.exclude) ? fs.readFileSync(project.exclude, 'utf8') : '';
-    fs.mkdirSync(path.join(shadow.gitDir, 'info'), { recursive: true });
-    fs.writeFileSync(path.join(shadow.gitDir, 'info', 'exclude'), exclude);
+    const stagedExclude = path.join(scratch, 'exclude');
+    fs.writeFileSync(stagedExclude, exclude);
+    fs.renameSync(stagedExclude, path.join(shadow.gitDir, 'info', 'exclude'));
     if (!(await runSteps(changesWithinBound(workTree), shadowStep))) return { kind: 'none', reason: SIZE_REASON };
     await shadowStep(['add', '-A', '--', '.']);
     const tree = (await shadowStep(['write-tree'])).trim();
     const commit = (
       await shadowStep(['commit-tree', '--no-gpg-sign', tree, '-m', `term2 unattended snapshot before ${label}`])
     ).trim();
-    const ref = `${SNAPSHOT_REF_PREFIX}${Date.now()}-${refLabel(label)}`;
+    const ref = `${SNAPSHOT_REF_PREFIX}${Date.now()}-${refLabel(label)}-${randomUUID()}`;
     await shadowStep(['update-ref', ref, commit]);
     await prune(shadowStep).catch(() => undefined);
-    // Record the work tree and mark this repository used, then let stale ones go.
-    fs.writeFileSync(path.join(shadow.gitDir, WORK_TREE_FILE), workTree);
-    try {
-      sweepShadowRepositories(path.dirname(shadow.gitDir), shadow.gitDir);
-    } catch {
-      // Housekeeping never affects the snapshot.
-    }
-    return { kind: 'taken', gitDir: shadow.gitDir, workTree, cwd: workspace, ref, commit };
+    return { kind: 'taken', ...shadow, cwd: workspace, ref, commit };
   } catch (error) {
     const message = error instanceof Error ? error.message.split('\n')[0] : String(error);
     return { kind: 'none', reason: `the snapshot failed (${message})` };
+  } finally {
+    discardIndex(scratch);
   }
 }
 
-/**
- * At most once per SWEEP_INTERVAL_MS, delete shadow repositories whose work tree no longer exists, that have
- * not been used for SHADOW_MAX_IDLE_MS, or that fall beyond the SHADOW_KEEP most recently used. Only entries
- * that look like shadow repositories (a 24-hex-digit directory, not a link) are touched; `current` is kept.
- */
-function sweepShadowRepositories(base: string, current: string, now: number = Date.now()): void {
-  const marker = path.join(base, '.last-sweep');
-  const last = fs.statSync(marker, { throwIfNoEntry: false });
-  if (last && now - last.mtimeMs < SWEEP_INTERVAL_MS) return;
-  fs.writeFileSync(marker, '');
-  const live: { readonly dir: string; readonly usedAt: number }[] = [];
-  for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !/^[0-9a-f]{24}$/.test(entry.name)) continue;
-    const dir = path.join(base, entry.name);
-    if (dir === current) continue;
-    const recorded = fs.statSync(path.join(dir, WORK_TREE_FILE), { throwIfNoEntry: false });
-    const workTree = recorded ? fs.readFileSync(path.join(dir, WORK_TREE_FILE), 'utf8') : '';
-    const usedAt = recorded?.mtimeMs ?? fs.statSync(dir).mtimeMs;
-    if (!workTree || !fs.existsSync(workTree) || now - usedAt > SHADOW_MAX_IDLE_MS)
-      fs.rmSync(dir, { recursive: true, force: true });
-    else live.push({ dir, usedAt });
+function discardIndex(scratch: string | undefined): void {
+  if (!scratch) return;
+  try {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  } catch {
+    // Cleanup cannot change the capture or report result.
   }
-  live.sort((a, b) => b.usedAt - a.usedAt);
-  for (const { dir } of live.slice(SHADOW_KEEP - 1)) fs.rmSync(dir, { recursive: true, force: true });
 }
 
 /**
@@ -315,15 +344,28 @@ async function prune(step: (args: readonly string[]) => Promise<string>): Promis
   await step(['gc', '--auto', '--quiet']);
 }
 
-/** Puts modified and deleted files under the workspace back as they were; `--overlay` never removes a file. */
+/** Refuse directory and ancestor conflicts before Git can remove files to make room for a restored path. */
 function restoreCommand(snapshot: Extract<WorkspaceSnapshot, { kind: 'taken' }>): string {
-  return [
-    'git',
-    `-C ${JSON.stringify(snapshot.cwd)}`,
-    `--git-dir=${JSON.stringify(snapshot.gitDir)}`,
-    `--work-tree=${JSON.stringify(snapshot.workTree)}`,
-    `restore --overlay --source=${snapshot.ref} --worktree -- .`,
+  const git = ['git', ...shadowArgs(snapshot, [])].map(quoteShellArg).join(' ');
+  const check = [
+    'tab=$(printf "\\t"); for entry do',
+    'case $entry in "160000 "*) continue;; esac;',
+    'path=${entry#*"$tab"};',
+    'target=./$path;',
+    'if [ -d "$target" ]; then printf "Restore blocked by directory: %s\\n" "$path" >&2; exit 1; fi;',
+    'parent=${target%/*};',
+    'while [ "$parent" != . ]; do',
+    'if [ -L "$parent" ] || { [ -e "$parent" ] && [ ! -d "$parent" ]; }; then',
+    'printf "Restore blocked by parent path: %s\\n" "$parent" >&2; exit 1; fi;',
+    'parent=${parent%/*}; done; done',
   ].join(' ');
+  const script = [
+    `cd ${quoteShellArg(snapshot.cwd)}`,
+    `test "$(pwd -P)" = ${quoteShellArg(snapshot.cwd)}`,
+    `${git} ls-tree -rz ${quoteShellArg(snapshot.ref)} -- . | xargs -0 sh -c ${quoteShellArg(check)} sh`,
+    `${git} restore --overlay --no-recurse-submodules --source=${quoteShellArg(snapshot.ref)} --worktree -- .`,
+  ].join(' && ');
+  return `bash -o pipefail -c ${quoteShellArg(script)}`;
 }
 
 /**
@@ -332,17 +374,20 @@ function restoreCommand(snapshot: Extract<WorkspaceSnapshot, { kind: 'taken' }>)
  */
 export function describeWorkspaceSnapshot(snapshot: WorkspaceSnapshot): string {
   if (snapshot.kind === 'none') return `No workspace snapshot for this turn: ${snapshot.reason}.`;
-  const shadow: Shadow = { gitDir: snapshot.gitDir, workTree: snapshot.workTree };
+  let scratch: string | undefined;
   let changes: string;
   try {
-    const step = (args: readonly string[]): string => gitSync(snapshot.workTree, shadowArgs(shadow, args));
-    // Stages what the turn left in the shadow index, so the next snapshot starts from it; same size bound.
+    scratch = fs.mkdtempSync(path.join(snapshot.gitDir, '.index-'));
+    const index = path.join(scratch, 'index');
+    const step = (args: readonly string[]): string => gitSync(snapshot.workTree, shadowArgs(snapshot, args), index);
+    step(['read-tree', snapshot.commit]);
+    step(['update-index', '-q', '--refresh']);
     if (!runStepsSync(changesWithinBound(snapshot.workTree), step)) throw new Error(SIZE_REASON);
     step(['add', '-A', '--', '.']);
     // From the workspace directory with `--relative`, as the restore command runs.
     const lines = gitSync(
       snapshot.cwd,
-      shadowArgs(shadow, [
+      shadowArgs(snapshot, [
         'diff',
         '--cached',
         '--no-renames',
@@ -352,6 +397,7 @@ export function describeWorkspaceSnapshot(snapshot: WorkspaceSnapshot): string {
         '--',
         '.',
       ]),
+      index,
     )
       .split('\n')
       .filter(Boolean)
@@ -366,6 +412,8 @@ export function describeWorkspaceSnapshot(snapshot: WorkspaceSnapshot): string {
           ].join('\n');
   } catch {
     changes = 'The files changed since it could not be listed.';
+  } finally {
+    discardIndex(scratch);
   }
   return [
     `Workspace snapshot before this turn: ${snapshot.ref} (${snapshot.commit.slice(
@@ -374,6 +422,6 @@ export function describeWorkspaceSnapshot(snapshot: WorkspaceSnapshot): string {
     )}), kept outside the workspace.`,
     changes,
     `To put back modified and deleted files: ${restoreCommand(snapshot)}`,
-    'The restore never deletes a file: files the turn created (A above) stay until you remove them.',
+    'Stop other workspace activity before restoring. The command leaves newly created files in place and stops if a directory or parent path blocks a restore.',
   ].join('\n');
 }

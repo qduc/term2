@@ -266,8 +266,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ratcheted down after the unknown-tool hint helpers moved to run-code-unknown-tool-hints.ts."
     },
     "src/session/background.ts": {
-      "lines": 512,
-      "reason": "Session task lifecycle remains one coordinator; ACP answer provenance adds four signature lines to the existing answer forwarding method (497 to 501). Interaction validation and persistence already live in background-interactions.ts. Splitting this forwarding check into another file would add a boundary without moving an independent responsibility. Remove this ceiling when lifecycle work yields a substantive extraction. Eleven lines forward the approval arbiter to background-interactions.ts (useApprovalReviews) and route a take-over to it, mirroring the existing answer forwarding; the review state lives in the interactions owner, not here."
+      "lines": 519,
+      "reason": "Session task lifecycle remains one coordinator; ACP answer provenance adds four signature lines to the existing answer forwarding method (497 to 501). Interaction validation and persistence already live in background-interactions.ts. Eleven lines forward the approval arbiter and take-over to that owner. Seven lines forward execution completions, expose the limit notice to the branch, and clear refusal state when the task owner settles its admitted entry. Moving that wiring would duplicate task lifetime checks or give a second module access to the private entry. Remove the ceiling when the lifecycle yields a substantive extraction."
     },
     "src/shared/utils/ai/token-usage.ts": {
       "lines": 521,

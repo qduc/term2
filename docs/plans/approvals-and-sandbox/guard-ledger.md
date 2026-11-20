@@ -16,8 +16,8 @@ Class: runaway detector over repeated policy refusals. Harm prevented: with no
 person to notice, a model that keeps asking for what unattended mode refuses
 would loop until a budget or the user stops it. Signal: refusals this turn (or
 task), measured where the refusal is committed; a tool execution that finishes
-and was not refused resets the consecutive count (for a task, an approved or
-answered request does, because task tool results do not pass this owner).
+and did not contain a refusal resets its owner's consecutive count. The nested
+branch forwards execution completions to the task owner for this purpose.
 Legitimate look-alike: a model probing alternatives after a refusal, which the
 refusal text asks it to do; three in a row with nothing run in between is the
 point where probing has stopped working. Effective values: 3 consecutive or 10
@@ -44,7 +44,7 @@ every unattended turn; unbounded refs would keep every copy alive. Signals: the
 bytes `git add -A` would store, from the shadow index's untracked (`ls-files -o
 --exclude-standard`) and modified (`ls-files -m`) files (256 MiB, checked before
 the snapshot and again before the end-of-turn listing stages what the turn
-left); each git step's wall time (30 s, with 60 s for the whole snapshot; 10 s
+left in its private index); each git step's wall time (30 s, with 60 s for the whole snapshot; 10 s
 per step for the synchronous end-of-turn listing, which blocks the event loop
 for at most that long per step); and the count of the shadow repository's
 `refs/snapshots/*` (keep 20, ordered by the millisecond timestamp the name
@@ -56,11 +56,9 @@ unignored files (a non-git folder has no ignore rules unless it carries
 turn. Action: skip the snapshot (never fail or block the turn) and say so in the
 turn's notice; after writing a snapshot, delete refs beyond the newest 20 and
 run `git gc --auto` (configured at 256 loose objects with a one-hour prune grace
-for a concurrent snapshot). Across workspaces, a sweep at most once a day
-(`.last-sweep` marker) deletes shadow repositories whose recorded work tree no
-longer exists, unused for 30 days (the mtime of `term2-work-tree`, rewritten on
-each snapshot), or beyond the 50 most recently used; it touches only
-24-hex-digit directories. A work tree on an unmounted drive counts as gone. Values are fixed, not settings; they are starting points,
+for a concurrent snapshot). Separate indexes keep overlapping Git operations
+from mixing staged contents. Whole repositories remain in the state directory
+so one workspace's capture cannot evict another's recovery data. Values are fixed, not settings; they are starting points,
 not measured on Term2 users' repositories. Known residual: the alternates link
 means a snapshot's committed files live in the project's object store, so a
 history rewrite plus an aggressive `git gc --prune=now` there can break an older

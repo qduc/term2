@@ -15,6 +15,15 @@ import {
 } from '../../src/shared/lib/harness-input-idle.js';
 import { createTestChildEnv, spawnTerminal, testCliPath } from '../helpers/terminal-e2e.js';
 
+// Opt-in: runs only with RUN_SHELL_SANDBOX_INTEGRATION=1, which no CI job sets. This file belongs to the
+// `e2e` lane (ubuntu-latest), which installs neither bubblewrap nor socat, so it is skipped there. It needs
+// a PTY only for the approval prompt ("Allow once" / "Always allow host for this project"); to run it
+// locally you need bwrap and socat on PATH and a kernel with IPv6 (the sandbox's in-namespace proxy bridge
+// is `socat TCP-LISTEN:3128`, which opens an AF_INET6 socket; without IPv6 the fetch fails with "Failed to
+// connect to localhost port 3128" and the prompt never appears). The core promise it relies on (blocked
+// without approval, reachable after `sandbox-network allow`, closed by `allowNetworking: false` or a
+// revoke) is checked on every `integration` job by sandbox-network.integration.test.ts; only the prompt
+// flow and the linked-worktree reuse are unique to this file.
 const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
 const enabled = ['darwin', 'linux'].includes(process.platform) && process.env.RUN_SHELL_SANDBOX_INTEGRATION === '1';
 

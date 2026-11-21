@@ -202,6 +202,10 @@ jobs:
           web-client: 'true'
           lane: integration
       - name: Run remaining integration and stateless provider cases
+        # This job installs bubblewrap and socat, so the ACP shell cases must run their command in the
+        # sandbox instead of accepting a sandbox refusal (see tests/clients/acp/v1.integration.test.ts).
+        env:
+          TERM2_ACP_REQUIRE_SHELL_SUCCESS: '1'
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
 
   # The benches ran after the integration cases on that runner, adding ~19s to

@@ -32,6 +32,19 @@ describe('committed fixture security', () => {
       expect(result.findings, file).toEqual([]);
     }
   });
+
+  // A fixture's frames hold stable placeholders in place of the provider's request, response and call
+  // ids. The table that lists them must not bring the live ids back as its keys.
+  it('keys every placeholders table by the placeholder, not by the live identifier', async () => {
+    const root = join(process.cwd(), 'scripts/provider-black-box/fixtures');
+    for (const file of await jsonFiles(root)) {
+      const { placeholders = {} } = JSON.parse(await readFile(file, 'utf8')) as {
+        placeholders?: Record<string, string>;
+      };
+      const live = Object.entries(placeholders).filter(([key, value]) => key !== value);
+      expect(live.length, `${file} has ${live.length} placeholder key(s) that are not the placeholder`).toBe(0);
+    }
+  });
 });
 
 async function jsonFiles(root: string): Promise<string[]> {

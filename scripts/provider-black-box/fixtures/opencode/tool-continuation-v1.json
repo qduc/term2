@@ -746,6 +746,6 @@
     }
   ],
   "placeholders": {
-    "call_00_OX1kAOQKecegCrES3CAQ0971": "call_<1>"
+    "call_<1>": "call_<1>"
   }
 }

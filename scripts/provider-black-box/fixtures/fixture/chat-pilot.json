@@ -103,6 +103,6 @@
     }
   ],
   "placeholders": {
-    "chatcmpl_fake": "chatcmpl_<1>"
+    "chatcmpl_<1>": "chatcmpl_<1>"
   }
 }

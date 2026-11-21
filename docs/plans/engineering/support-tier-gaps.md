@@ -292,10 +292,24 @@ section is a real recording behind every provider, replayed offline.
     turns and tool result reach the provider, checks the saved settings take
     effect and survive, and checks each credential file is read. A committed
     snapshot is never edited; `tests/fixtures/release-data/README.md` gives the
-    rule and the capture command. Still missing: a snapshot of the memory store,
-    and a conversation containing a compaction or rollover fact, which could not
-    be produced from a headless run. A snapshot has to be added at each release
-    that changes a persisted format, and nothing enforces that yet.
+    rule and the capture command.
+
+    The 1.4.0 snapshot also holds a conversation with a completed automatic
+    compaction and one more turn after it, under `conversations-compacted/`.
+    It was written by the release itself: a worktree of tag `v1.4.0`, built,
+    and its CLI named to the capture script with `--cli` and
+    `--only compacted-conversation`, which adds that one directory and refuses
+    to touch a file that exists. The test resumes it with the current build
+    and checks that the request carries the recorded summary, does not carry
+    the assistant text and tool results the summary replaced, and still
+    carries what came after. User prompts stay in the request through a
+    compaction, so the test asserts their presence, not their absence.
+
+    Still missing: a rotated session, which needs the TUI driven through a PTY
+    and two linked logs; a log compacted by `/compact` or by a provider's
+    native compaction; and the memory store, which is Supported, not Core. A
+    snapshot has to be added at each release that changes a persisted format,
+    and nothing enforces that yet.
 15. **The version rejection is tested on the headless paths.** A log whose
     lines carry an unknown `v` is refused by `--resume <id>` with "unsupported
     log version", exit 1, no provider request and the file unchanged.

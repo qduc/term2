@@ -56,7 +56,7 @@
     "provider:record": "tsx scripts/provider-record.ts",
     "release:smoke": "tsx scripts/release-smoke.ts",
     "provider:fixture:prepare": "tsx scripts/provider-fixture-prepare.ts",
-    "provider:fixture:scan": "cross-env NODE_ENV=test vitest run --reporter=minimal scripts/provider-black-box/fixture-security.test.ts",
+    "provider:fixture:scan": "cross-env NODE_ENV=test vitest run --config vitest.provider-black-box.config.ts --reporter=minimal scripts/provider-black-box/fixture-security.test.ts",
     "test:docker-host-control-integration": "cross-env NODE_ENV=test RUN_DOCKER_HOST_CONTROL_INTEGRATION=1 vitest run --reporter=minimal tests/tools/system/docker-host-control.integration.test.ts",
     "fake:codex": "tsx scripts/fake-codex-server.ts",
     "test:verbose": "cross-env NODE_ENV=test vitest run",

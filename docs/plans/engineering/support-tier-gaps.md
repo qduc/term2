@@ -56,7 +56,7 @@ Ordered by what a miss costs, then by how likely the miss is.
 
 ### 2. Providers
 
-Every built-in provider and custom type is Core. No automated check contacts a
+Every built-in provider and custom type except `opencode` is Core. No automated check contacts a
 real provider: pull-request CI is offline, `publish.yml` runs the static guards
 and `pnpm test:integration`, and the one scheduled workflow,
 `model-catalog-update.yml`, fetches the OpenRouter model list without sending a
@@ -72,10 +72,11 @@ section is a real recording behind every provider, replayed offline.
    Grok can break without a Term2 change.
 7. **Record what has only been faked.** Recorded fixtures exist for OpenAI over
    HTTP, Google, and OpenCode's Chat and Anthropic protocols. Codex, the
-   `anthropic` custom type, `openai-compatible`, OpenAI over WebSocket and
-   OpenCode's Responses protocol are checked against hand-written servers only.
-   Each needs a live recording through `pnpm provider:record`, which spends
-   credits and needs the maintainer's credentials.
+   `anthropic` custom type, `openai-compatible` and OpenAI over WebSocket are
+   checked against hand-written servers only. Each needs a live recording
+   through `pnpm provider:record`, which spends credits and needs the
+   maintainer's credentials. OpenCode's Responses protocol is also unrecorded;
+   `opencode` is Supported and the maintainer has no account, so it stays so.
    `scripts/provider-black-box/fixtures/PROVENANCE.md` already lists the Codex
    and OpenAI WebSocket captures as outstanding.
 8. **Re-record the OpenRouter request side.** `PROVENANCE.md` states that the
@@ -91,7 +92,8 @@ section is a real recording behind every provider, replayed offline.
     capability matrix marks `native-error` and `incomplete-stream` as excluded
     for `runtime-openai-chat`, `runtime-llama-cpp-chat` and both OpenCode rows,
     on the grounds that a representative route covers the protocol. That was a
-    reasonable economy when those types were not each Core.
+    reasonable economy when those types were not each Core. It still is for the
+    OpenCode rows, which are Supported; the first two are Core types.
 11. **Derive the capability ledger from what ran.** The executed-scenario lists
     in `provider-session-capability-manifest.ts` are hand-written constants, so
     deleting a scenario test does not fail `provider-capability-matrix.test.ts`.

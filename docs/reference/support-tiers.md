@@ -77,9 +77,9 @@ items are stable and depended on by old conversation logs; they are not unfinish
 
 ## Models and providers
 
-Every built-in provider and every custom provider type is Core, by the
-maintainer's decision. The release gate therefore spans every wire protocol in
-this table, not a chosen subset. A preset in `provider-presets.json` is only a
+Every built-in provider and every custom provider type except `opencode` is
+Core, by the maintainer's decision. The release gate therefore spans every wire
+protocol in this table, not a chosen subset. A preset in `provider-presets.json` is only a
 name and a URL for one of the custom types, so it takes that type's tier; what
 needs a check is each protocol, not each of the 25 presets.
 
@@ -93,7 +93,7 @@ needs a check is each protocol, not each of the 25 presets.
 | Custom type `openai` | `providers[]` | Core | |
 | Custom type `anthropic` | `providers[]`, presets `anthropic`, `minimax` | Core | |
 | Custom type `google` | `providers[]`, preset `gemini` | Core | |
-| Custom type `opencode` | `providers[]` | Core | Picks a wire protocol from the model id, so one type covers several protocols. |
+| Custom type `opencode` | `providers[]` | Supported | The maintainer has no OpenCode account, so it cannot be used day to day or re-recorded. It picks a wire protocol from the model id (`selectOpencodeModelTransport`), so it is not interchangeable with `openai-compatible`. |
 | Custom type `llama.cpp` and local presets | `providers[]`, presets `llama-cpp`, `ollama`, `lm-studio`, `vllm` | Core | Behaviour depends on a locally installed server version, which a recorded fixture cannot track. |
 | Other presets | the remaining preset ids | Core, as the custom type they use | |
 | HTTP transport for OpenAI and Codex | `agent.transport` = `http` | Supported | A transport option, not a provider. |

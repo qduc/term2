@@ -25,29 +25,56 @@ Ordered by what a miss costs, then by how likely the miss is.
 
 ### 1. Safety checks that do not run
 
-1. **Run the real sandbox in CI.** The denied-read tests in
-   `tests/tools/system/run-code/shell.integration.test.ts` use a fake
-   `ShellSandboxRunner`. `tests/cli/sandbox-network.e2e.test.ts` runs only when
-   `RUN_SHELL_SANDBOX_INTEGRATION=1`, which no workflow, script or `package.json`
-   entry sets. No test shows the real sandbox refusing a write outside the
-   workspace or a read of a credential path. Add one Linux check of each against
-   the real runner, and set the gate variable in a lane that installs bubblewrap.
-2. **Find out what the sandboxed e2e tests do in CI.** `ci.yml` passes
-   `ripgrep: 'true'` to the setup action, which is what installs bubblewrap and
-   socat, in the `test`, `integration` and `bench` jobs only. The `e2e` and
-   `provider-black-box` jobs do not, yet `tests/cli/approval-mode.e2e.test.ts`
-   runs there with the sandbox enabled. Whether those cases exercise a sandbox,
-   skip, or pass for another reason is not known and should be established
-   before item 1 is designed.
-3. **Run the generated approval property in CI.** `approval.decision-table` in
-   `scripts/generated-verification/approvals.mjs` asserts the route for all four
-   `ApprovalHardGate` values in every approval mode. It runs only through
-   `pnpm verify:generated`, which no workflow calls. Behavioural tests cover four
-   of the sixteen gate and mode pairs: `question` and `denied-read` in `off`,
-   `docker-host` in `unattended`, and `docker-host` in `off` behind
-   `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS. Adding the generated run to
-   the `quality` job covers the other twelve at route level for the cost of one
-   step.
+1. **Strengthen and extend the real-sandbox checks.** One check does run the
+   real sandbox: the case "bare retains the outside-workspace edit approval
+   boundary without asking headlessly" in `tests/cli/cli.integration.scenarios.ts`
+   writes outside the workspace through the built CLI with default settings and
+   asserts the file is absent. `cli-headless.integration.test.ts` runs it in the
+   `test` lane, which installs bubblewrap, and `publish.yml` runs it again. An
+   earlier version of this plan said no such test existed; that was wrong. What
+   is still missing:
+   - Its other assertion is `toMatch(/exit [1-9]/)`, which a failure unrelated
+     to the sandbox would also satisfy. It should assert the denial itself.
+   - No test shows the real sandbox refusing a read of a credential path. The
+     denied-read tests in `tests/tools/system/run-code/shell.integration.test.ts`
+     use a stub `ShellSandboxRunner` that prints "Permission denied".
+   - The network policy is unchecked. `tests/cli/sandbox-network.e2e.test.ts`
+     runs only when `RUN_SHELL_SANDBOX_INTEGRATION=1`, which nothing sets, and
+     setting it is not enough: the file belongs to the `e2e` lane, which runs on
+     `ubuntu-latest` without bubblewrap or socat, and a comment in `publish.yml`
+     records that Ubuntu 24.04 runners reject bubblewrap's loopback setup. The
+     test has to move to a lane on `ubuntu-22.04` with the binaries installed.
+   - The ACP shell cases in `tests/clients/acp/v1.integration.test.ts` and
+     `tests/clients/acp-v2/serve.integration.test.ts` accept either a sandboxed
+     result or a refusal, so they pass whether or not the sandbox ran.
+     `TERM2_ACP_REQUIRE_SHELL_SUCCESS=1` makes success mandatory and nothing
+     sets it.
+2. **Answered: the `e2e` and `provider-black-box` lanes need no real sandbox.**
+   Those jobs install no sandbox binaries, and none of their tests depends on
+   one. `tests/cli/approval-mode.e2e.test.ts` and the provider scenarios call
+   the shell with `sandbox: 'unsandboxed'`, which goes to approval without
+   reaching the runner. `tests/cli/unattended-approval.e2e.test.ts` puts stub
+   `bwrap`, `socat` and `rg` executables on `PATH` (`sandboxShims`) so that
+   availability reports true. The remaining e2e files disable the sandbox. So
+   these lanes test approval routing around the sandbox setting, and the
+   sandbox itself is exercised only by the checks in item 1.
+3. **Decide whether the generated properties run in CI.** `pnpm verify:generated`
+   runs ten properties from `scripts/generated-verification/run.mjs`, six of
+   them about approvals, and no workflow calls it. The pilot's own `PLAN.md`
+   says not to enable CI for it without the maintainer's authority, so this is
+   a decision, not an oversight. For that decision: a full run with a fixed
+   seed took about 17 seconds in a cloud container with no build, passed at
+   `49edfe662`, and two runs with the same seed produced the same report apart
+   from timings. The `quality` job already has what it needs. Two limits on
+   what it would add. `approval.decision-table` does not assert a route per
+   gate: it generates request shapes at random and asserts on whether any hard
+   gate applies, so each pairing of an `ApprovalHardGate` with an approval mode
+   is covered only as often as 1,000 random cases happen to produce it. And
+   behavioural tests still cover four of the sixteen pairs: `question` and
+   `denied-read` in `off`, `docker-host` in `unattended`, and `docker-host` in
+   `off` behind `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS. The pilot's
+   `README.md` says the default samples sixteen properties; the runner
+   registers ten.
 4. **Check the workspace write boundary.** The home-directory warning is tested
    in `tests/cli/cli.integration.scenarios.ts`; nothing asserts that a write
    outside the launch directory is refused or asked about.

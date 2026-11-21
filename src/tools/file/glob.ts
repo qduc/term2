@@ -264,7 +264,7 @@ export const createFindFilesToolDefinition = (
       if (result.exitCode !== 0 && result.exitCode !== null) {
         const detail = result.stderr.trim() || `exit code ${result.exitCode}`;
         const globHint =
-          searchPath && looksLikeGlob(searchPath) && /no such file|not found|cannot find/i.test(detail)
+          searchPath && looksLikeGlob(searchPath) && /no such file|not found|cannot find|not a directory/i.test(detail)
             ? globGlobPathHint(searchPath, cwd)
             : '';
         throw new Error(`File search failed: ${detail}${globHint}`);

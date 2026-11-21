@@ -85,7 +85,14 @@ export function sanitizeFixtureEnvelope(input: FixtureEnvelopeV1): {
       sanitizeFrame(frame, `turns[${turnIndex}].frames[${frameIndex}]`, sanitize, mapDynamic, report),
     ),
   }));
-  const envelope: FixtureEnvelopeV1 = { ...input, turns: frames, placeholders: report.placeholders };
+  // The committed map is keyed by the stable placeholder, not the live identifier. Every live id has
+  // already been replaced inside the frames, so nothing in a replay can look the raw value up, and
+  // keeping it as a key would commit the very request/generation id the frames had canonicalized.
+  // `report.placeholders` keeps the live -> stable pairs for the private review artifact only.
+  const committedPlaceholders = Object.fromEntries(
+    Object.values(report.placeholders).map((stable) => [stable, stable]),
+  );
+  const envelope: FixtureEnvelopeV1 = { ...input, turns: frames, placeholders: committedPlaceholders };
   return { envelope, report };
 }
 

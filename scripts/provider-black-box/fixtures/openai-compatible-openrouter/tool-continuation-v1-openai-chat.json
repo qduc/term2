@@ -1,0 +1,598 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "openai-compatible-openrouter",
+  "wireFamily": "openai-chat",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "openai",
+    "apiSdkVersion": "6.37.0",
+    "model": "mistralai/mistral-nemo",
+    "modelFamily": "openai-compatible-openrouter",
+    "capturedAt": "2026-11-21T14:34:32.218Z",
+    "recorderVersion": "1",
+    "probeScenario": "tool-continuation-v1"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "x64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "Linux",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.22.3"
+          },
+          "body": {
+            "model": "mistralai/mistral-nemo",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "reasoning_effort": "medium"
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-cache",
+            "cf-ray": "[REDACTED]",
+            "connection": "close, keep-alive",
+            "content-type": "text/event-stream",
+            "date": "Sat, 21 Nov 2026 14:34:32 GMT",
+            "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+            "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-generation-id": "gen_<1>",
+            "x-openrouter-release": "[REDACTED]"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271672,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"DeepInfra\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"  \",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271672,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"DeepInfra\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_<2>\",\"type\":\"function\",\"function\":{\"name\":\"fixture\",\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271672,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"DeepInfra\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"a\\\":1}\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271672,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"DeepInfra\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\"}]}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271672,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"DeepInfra\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":80,\"completion_tokens\":21,\"total_tokens\":101,\"cost\":0.0000029205,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00000295,\"upstream_inference_prompt_cost\":0.00000232,\"upstream_inference_completions_cost\":6.3e-7},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "data": "[DONE]",
+          "seq": 7
+        }
+      ]
+    },
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "x64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "Linux",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.22.3"
+          },
+          "body": {
+            "model": "mistralai/mistral-nemo",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "id": "call_<2>",
+                    "type": "function",
+                    "function": {
+                      "name": "fixture",
+                      "arguments": "{\"a\":1}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_<2>",
+                "content": "{\"ok\":true,\"value\":1}"
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "The fixture tool returned its deterministic result. Give the final summary."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "reasoning_effort": "medium"
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-cache",
+            "cf-ray": "[REDACTED]",
+            "connection": "close, keep-alive",
+            "content-type": "text/event-stream",
+            "date": "Sat, 21 Nov 2026 14:34:35 GMT",
+            "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+            "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-generation-id": "gen_<3>",
+            "x-openrouter-release": "[REDACTED]"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" `\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"fi\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"xture\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"`\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" tool\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 7
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" was\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 8
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" called\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 9
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" with\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 10
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" the\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 11
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" input\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 12
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" `{\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 13
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" \\\"\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 14
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"a\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 15
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\\":\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 16
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" \",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 17
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 18
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" }\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 19
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"`,\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 20
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" and\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 21
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" it\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 22
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" returned\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 23
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" the\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 24
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" value\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 25
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" `\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 26
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 27
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"`.\\n\\n\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 28
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"###\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 29
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" Summary\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 30
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\":\\n\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 31
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 32
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" result\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 33
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" is\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 34
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" a\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 35
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" deterministic\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 36
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" output\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 37
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" where\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 38
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" the\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 39
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" input\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 40
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" `\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 41
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 42
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"`\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 43
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" was\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 44
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" processed\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 45
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 46
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" and\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 47
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" the\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 48
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" tool\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 49
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" returned\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 50
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" the\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 51
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" same\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 52
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" value\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 53
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" `\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 54
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 55
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"`\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 56
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" as\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 57
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" its\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 58
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" output\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 59
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 60
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" No\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 61
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" additional\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 62
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" transformations\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 63
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" or\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 64
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" changes\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 65
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" were\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 66
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" applied\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 67
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 68
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}]}",
+          "seq": 69
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<3>\",\"object\":\"chat.completion.chunk\",\"created\":1795271674,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Mistral\",\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":113,\"completion_tokens\":68,\"total_tokens\":181,\"cost\":0.0000268785,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00002715,\"upstream_inference_prompt_cost\":0.00001695,\"upstream_inference_completions_cost\":0.0000102},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}",
+          "seq": 70
+        },
+        {
+          "kind": "sse-event",
+          "data": "[DONE]",
+          "seq": 71
+        }
+      ]
+    }
+  ],
+  "placeholders": {
+    "gen_<1>": "gen_<1>",
+    "call_<2>": "call_<2>",
+    "gen_<3>": "gen_<3>"
+  }
+}

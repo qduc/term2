@@ -60,7 +60,8 @@ Every built-in provider and custom type is Core. No automated check contacts a
 real provider: pull-request CI is offline, `publish.yml` runs the static guards
 and `pnpm test:integration`, and the one scheduled workflow,
 `model-catalog-update.yml`, fetches the OpenRouter model list without sending a
-model request.
+model request. That stays the case by decision (item 13); the aim of this
+section is a real recording behind every provider, replayed offline.
 
 6. **Give Grok an adapter test.** `createGrokStreamedModel` is not run by any
    test. `tests/model/provider-affinity.integration.test.ts` exercises
@@ -96,12 +97,14 @@ model request.
     deleting a scenario test does not fail `provider-capability-matrix.test.ts`.
 12. **Check API keys from the environment.** Only `OPENAI_API_KEY` is asserted,
     in `tests/model/providers/openai-catalog.integration.test.ts`.
-13. **Add a scheduled check against the real services.** The only item that
-    detects a provider changing under an unchanged Term2. One small turn per
-    provider on a schedule, with the maintainer's credentials as repository
-    secrets. `llama.cpp` and the local presets cannot be reached from a hosted
-    runner; they need either a container running the server in CI or an explicit
-    statement that their check is manual.
+13. **Decided against: a scheduled check against the real services.** The
+    maintainer chose one-time recordings replayed in CI as sufficient. The
+    consequence is accepted, not solved: a replayed recording fails when Term2's
+    side changes, and cannot fail when a provider changes its wire format or
+    auth under an unchanged Term2. That kind of break is found by using the
+    provider. Recapture a fixture when such a break is found, and when
+    `fixture-drift.test.ts` reports that the SDK a fixture was recorded with has
+    moved.
 
 ### 3. Saved data across upgrades
 

@@ -66,6 +66,15 @@ export const STATELESS_CAPABILITY_EXECUTIONS = [
   { rowId: 'opencode-anthropic-messages', scenarioId: 'opencode-anthropic-messages.approval-reject' },
 ] as const satisfies readonly CapabilityExecution[];
 
+/** Executed by provider-session-grok.blackbox.ts: Grok's Responses-over-HTTP route, stateless by capability. */
+export const GROK_CAPABILITY_EXECUTIONS = [
+  { rowId: 'grok-http', scenarioId: 'grok-http.two-user-turn' },
+  { rowId: 'grok-http', scenarioId: 'grok-http.approval-approve' },
+  { rowId: 'grok-http', scenarioId: 'grok-http.approval-reject' },
+  { rowId: 'grok-http', scenarioId: 'grok-http.native-error' },
+  { rowId: 'grok-http', scenarioId: 'grok-http.incomplete-stream' },
+] as const satisfies readonly CapabilityExecution[];
+
 export const RESILIENCE_CAPABILITY_EXECUTIONS = [
   { rowId: 'openai-http', scenarioId: 'openai-http.native-error' },
   { rowId: 'openai-http', scenarioId: 'openai-http.incomplete-stream' },
@@ -91,5 +100,6 @@ export const RESILIENCE_CAPABILITY_EXECUTIONS = [
 export const ALL_PROVIDER_SESSION_CAPABILITY_EXECUTIONS = [
   ...RESPONSES_CAPABILITY_EXECUTIONS,
   ...STATELESS_CAPABILITY_EXECUTIONS,
+  ...GROK_CAPABILITY_EXECUTIONS,
   ...RESILIENCE_CAPABILITY_EXECUTIONS,
 ] as const satisfies readonly CapabilityExecution[];

@@ -90,13 +90,31 @@ and `pnpm test:integration`, and the one scheduled workflow,
 model request. That stays the case by decision (item 13); the aim of this
 section is a real recording behind every provider, replayed offline.
 
-6. **Give Grok an adapter test.** `createGrokStreamedModel` is not run by any
-   test. `tests/model/provider-affinity.integration.test.ts` exercises
-   `buildGrokFetch` and asserts two request fields. Grok has no row in
-   `provider-capability-matrix.ts`. Add a fake-server route that runs a turn
-   through the built CLI with `--provider grok`, and assert the client-version
-   header and the outdated-client rejection, since that rejection is the reason
-   Grok can break without a Term2 change.
+6. **Grok now has adapter tests; what they leave out.**
+   `provider-session-grok.blackbox.ts` and `provider-session-grok-client.blackbox.ts`
+   run the built CLI with `--provider grok` against a loopback server, with a
+   real `grok-auth.json` under an isolated config directory and the provider's
+   own client-version lookup running unmodified, and Grok has a `grok-http` row
+   in `provider-capability-matrix.ts`. They assert the `x-grok-client-version`
+   header and where its value comes from (cache, installed `grok`, built-in
+   constant), the conversation headers, `GROK_BASE_URL`, the lifecycle
+   scenarios, and that a 426 from the proxy fails the run after one request.
+   Grok does not chain responses, so its two-turn scenario asserts a full
+   history replay. Not covered: the live fetch of the current client version
+   and its cache write-back, token refresh through the provider, and credential
+   import from `GROK_HOME`. Grok still has no recorded traffic (item 7).
+   Writing the tests surfaced product behaviour worth a decision:
+   - A 426 reaches the user as the SDK's text, "426 Your Grok CLI version is
+     outdated", with nothing saying what to do about it. Term2 is the client
+     here, so the remedy is a Term2 or version-cache update, not a Grok CLI one.
+   - On the same failure a `--json` run emits a `final` event with empty
+     `finalText` before the `error` event.
+   - An incomplete Grok stream is reported as "OpenAI streamed response ended
+     without a completion."
+   - `GROK_BASE_URL` redirects model requests but not `fetchGrokModels`.
+   - A lead, not yet confirmed: when the 426 was temporarily made retryable
+     with `agent.retryAttempts` at 2, the server saw six requests, which
+     suggests two retry layers multiplying.
 7. **Record what has only been faked.** Recorded fixtures exist for OpenAI over
    HTTP, Google, OpenCode's Chat and Anthropic protocols, and, recorded through
    OpenRouter, the `openai-compatible`, custom `openai` and `anthropic` custom

@@ -114,8 +114,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-schema.ts": {
-      "lines": 1377,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list). Ten lines add the `unattended` approval mode value and declare `shell.unattendedEscapeReview` through the same mandatory touchpoints."
+      "lines": 1382,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list). Ten lines add the `unattended` approval mode value and declare `shell.unattendedEscapeReview` through the same mandatory touchpoints. Five lines move `shell.maxOutputChars` to `tools.maxOutputChars` with an exported minimum-1000 schema (reused by the legacy-value migration) and its model-facing description. The file is one schema of many small setting declarations; splitting it by settings group is the seam when it is next restructured."
     },
     "src/app/source-tools.ts": {
       "lines": 502,
@@ -242,8 +242,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/memory/memory-tools.ts": {
-      "lines": 590,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 591,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One comment line explains why memory results clamp to the tools.maxOutputChars cap themselves: they bypass the generic tool-result trim."
     },
     "src/tools/sandboxed-code-host/sandboxed-code-host.ts": {
       "lines": 523,

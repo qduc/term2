@@ -112,6 +112,9 @@ async function occupy(port: number): Promise<void> {
   held.push(server);
 }
 
+/** What the login printed on stderr, one entry per non-empty line. */
+const stderrLines = (run: { stderr: string }) => run.stderr.split('\n').filter((line) => line.trim() !== '');
+
 const describeRun = (run: { status: number | null; stdout: string; stderr: string }) =>
   `exit=${run.status}\nstdout=${run.stdout}\nstderr=${run.stderr}`;
 
@@ -234,7 +237,7 @@ describe.skipIf(process.platform === 'win32')('browser login through the built C
       expect(callback.body).not.toContain('Login complete');
       const run = await login.finished;
       expect(run.status, describeRun(run)).toBe(1);
-      expect(run.stderr).toContain(`${spec.label} login failed: OAuth state mismatch`);
+      expect(stderrLines(run)).toEqual([`${spec.label} login failed: OAuth state mismatch`]);
       expect(run.stdout).not.toContain('Logged in');
       expect(auth!.requests, 'a forged callback must not reach the token endpoint').toHaveLength(0);
       expect(fs.existsSync(credentialPath(provider))).toBe(false);
@@ -250,7 +253,7 @@ describe.skipIf(process.platform === 'win32')('browser login through the built C
       await visit(authorize.callback({ error: 'access_denied', state: authorize.param('state') }));
       const run = await login.finished;
       expect(run.status, describeRun(run)).toBe(1);
-      expect(run.stderr).toContain('Codex login was rejected: access_denied');
+      expect(stderrLines(run)).toEqual(['Codex login was rejected: access_denied']);
       expect(auth!.requests).toHaveLength(0);
       expect(fs.existsSync(credentialPath('codex'))).toBe(false);
     },
@@ -272,7 +275,7 @@ describe.skipIf(process.platform === 'win32')('browser login through the built C
         await visit(authorize.callback({ error: 'access_denied', state: authorize.param('state') }));
         const run = await login.finished;
         expect(run.status, describeRun(run)).toBe(1);
-        expect(run.stderr).toContain('Grok login was rejected: access_denied');
+        expect(stderrLines(run)).toEqual(['Grok login was rejected: access_denied']);
         await auth!.close();
         auth = undefined;
       }
@@ -297,11 +300,26 @@ describe.skipIf(process.platform === 'win32')('browser login through the built C
       expect(callback.body).toContain('Login complete');
       const run = await login.finished;
       expect(run.status, describeRun(run)).toBe(1);
-      expect(run.stderr).toContain(`${spec.label} login failed:`);
-      expect(run.stderr).toContain(`${spec.label} token exchange failed with status ${status}`);
-      expect(run.stderr).toContain(`retry ${spec.retryCommand}`);
+      expect(stderrLines(run)).toEqual([
+        `${spec.label} token exchange failed with status ${status} (the browser showed "Login complete" but the code could not be exchanged — retry ${spec.retryCommand})`,
+      ]);
       expect(run.stdout).not.toContain('Logged in');
       expect(auth!.requests).toHaveLength(1);
+      expect(fs.existsSync(credentialPath(provider))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it.each(providers)(
+    '%s: a token endpoint that drops the connection fails the login with the provider label added once',
+    async (provider) => {
+      const spec = LOGIN_PROVIDERS[provider];
+      const login = await startLogin(provider, (_request, response) => response.socket?.destroy());
+      const authorize = await login.authorizeUrl();
+      await visit(authorize.callback({ code: FAKE_CODE, state: authorize.param('state') }));
+      const run = await login.finished;
+      expect(run.status, describeRun(run)).toBe(1);
+      expect(stderrLines(run)).toEqual([`${spec.label} login failed: fetch failed`]);
       expect(fs.existsSync(credentialPath(provider))).toBe(false);
     },
     TIMEOUT,
@@ -318,7 +336,7 @@ describe.skipIf(process.platform === 'win32')('browser login through the built C
       await visit(authorize.callback({ code: FAKE_CODE, state: authorize.param('state') }));
       const run = await login.finished;
       expect(run.status, describeRun(run)).toBe(1);
-      expect(run.stderr).toContain('Codex token exchange response did not contain access_token');
+      expect(stderrLines(run)).toEqual(['Codex token exchange response did not contain access_token']);
       expect(fs.existsSync(credentialPath('codex'))).toBe(false);
     },
     TIMEOUT,
@@ -348,8 +366,11 @@ describe.skipIf(process.platform === 'win32')('browser login through the built C
       const login = await startLogin('codex');
       const run = await login.finished;
       expect(run.status, describeRun(run)).toBe(1);
-      expect(run.stderr).toContain('Codex login failed:');
-      expect(run.stderr).toContain('could not bind any of its registered redirect ports (1455, 1457)');
+      expect(stderrLines(run)).toEqual([
+        expect.stringMatching(
+          /^Codex login could not bind any of its registered redirect ports \(1455, 1457\)\..* and retry\.$/,
+        ),
+      ]);
       expect(run.stderr).toContain('codex login');
       expect(authorizeUrlFromOutput(run.stdout)).toBeNull();
       expect(sandbox.openedUrls()).toEqual([]);

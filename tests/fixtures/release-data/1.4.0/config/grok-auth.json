@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "activeAccountId": "snapshot-grok-user",
+  "accounts": [
+    {
+      "id": "snapshot-grok-user",
+      "label": "snapshot-grok@example.test",
+      "tokens": {
+        "access_token": "grok-snapshot-fake-access-token",
+        "refresh_token": "grok-snapshot-fake-refresh-token",
+        "expires_at": 4102444800000,
+        "email": "snapshot-grok@example.test",
+        "user_id": "snapshot-grok-user"
+      },
+      "addedAt": "2026-11-21T15:56:00.940Z"
+    }
+  ]
+}

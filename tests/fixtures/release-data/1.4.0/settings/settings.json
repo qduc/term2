@@ -1,0 +1,200 @@
+{
+  "providers": [],
+  "enable_agent_workflow": false,
+  "verifier": {
+    "model": ""
+  },
+  "agent": {
+    "modelSelection": {
+      "model": "release-data-model",
+      "provider": "openai"
+    },
+    "reasoningEffort": "default",
+    "cachePreservingEffort": "off",
+    "backgroundWaitTimeoutMs": 3600000,
+    "maxTurns": 37,
+    "maxRequestInputTokens": null,
+    "maxStreamOutputChars": 100000,
+    "maxModelRequestDurationMs": 0,
+    "maxModelStreamIdleMs": 600000,
+    "retryAttempts": 0,
+    "transport": "http",
+    "maxParallelToolCalls": 3,
+    "runBudget": {
+      "maxUsdMicros": 5000000,
+      "maxUnpricedTokens": 5000000,
+      "maxActiveTimeMs": 3600000,
+      "warningHeadroomUsdMicros": 1000000,
+      "warningHeadroomUnpricedTokens": 1000000,
+      "warningHeadroomActiveTimeMs": 900000,
+      "softHeadroomUsdMicros": 250000,
+      "softHeadroomUnpricedTokens": 250000,
+      "softHeadroomActiveTimeMs": 300000,
+      "turnBackstop": 150,
+      "extensionPercent": 50,
+      "maxParentExtensions": 2,
+      "identicalToolCallThreshold": 3,
+      "escalation": "warn"
+    },
+    "backgroundCheckIn": {
+      "enabled": true,
+      "intervalMs": 300000
+    },
+    "sessionRollover": {
+      "enabled": true,
+      "milestones": [
+        200000,
+        300000,
+        400000
+      ],
+      "autoBrief": true
+    },
+    "favoriteModels": [],
+    "modelNicknames": {},
+    "disabledProviders": [],
+    "openai": {},
+    "codex": {
+      "websocketFirstFrameTimeoutMs": 90000,
+      "websocketInterFrameTimeoutMs": 600000
+    },
+    "mentorReasoningEffort": "default",
+    "mentorSamples": 1,
+    "mentorPool": [],
+    "useFlexServiceTier": false,
+    "contextCompaction": {
+      "enabled": true,
+      "mode": "auto",
+      "compactThreshold": 0.8,
+      "compactThresholdTokens": null
+    },
+    "autoApproveReasoningEffort": "low",
+    "completionVerification": true,
+    "verificationMaxRepairs": 3
+  },
+  "shell": {
+    "timeout": 120000,
+    "backgroundTimeout": 1800000,
+    "maxOutputLines": 1000,
+    "showReview": false,
+    "autoApproveMode": "off",
+    "unattendedEscapeReview": false
+  },
+  "sandbox": {
+    "enabled": false,
+    "readPolicy": "standard",
+    "allowReadExtra": [],
+    "dockerHostControlProjects": [],
+    "allowNetworking": true
+  },
+  "agentWorkflow": {
+    "timeoutMs": 120000,
+    "maxRuns": 8,
+    "maxConcurrency": 3,
+    "maxCodeBytes": 16384,
+    "maxOutputBytes": 65536,
+    "maxConsoleBytes": 16384
+  },
+  "subagent": {
+    "asyncSessionTtlMs": 1800000,
+    "asyncMessageCap": 50
+  },
+  "ui": {
+    "historySize": 1000,
+    "pasteThreshold": 3000,
+    "displayMode": "concise",
+    "theme": "auto",
+    "skin": "classic"
+  },
+  "logging": {
+    "logLevel": "info",
+    "disableLogging": false,
+    "debugLogging": false,
+    "suppressConsoleOutput": true
+  },
+  "environment": {},
+  "app": {
+    "activeProfileId": "builtin:bare",
+    "mentorMode": false,
+    "liteMode": false,
+    "planMode": false,
+    "orchestratorMode": false,
+    "notifications": true,
+    "notificationsOnApproval": true,
+    "notificationsOnComplete": true,
+    "searchViaShell": "auto"
+  },
+  "tools": {
+    "logFileOperations": true,
+    "maxOutputChars": 20000,
+    "shell": {
+      "enabled": true
+    },
+    "web": {
+      "enabled": true
+    },
+    "fileRead": {
+      "enabled": true
+    },
+    "fileWrite": {
+      "enabled": true
+    },
+    "memory": {
+      "enabled": true
+    },
+    "sessions": {
+      "enabled": true
+    },
+    "skills": {
+      "enabled": true
+    },
+    "mentor": {
+      "enabled": true
+    },
+    "subagents": {
+      "enabled": true
+    },
+    "backgroundTasks": {
+      "enabled": true
+    },
+    "userInteraction": {
+      "enabled": true
+    },
+    "codeContext": {
+      "enabled": true
+    }
+  },
+  "debug": {
+    "debugBashTool": false
+  },
+  "ssh": {
+    "enabled": false,
+    "port": 22
+  },
+  "webSearch": {
+    "provider": "tavily",
+    "tavily": {},
+    "exa": {},
+    "firecrawl": {},
+    "searxng": {}
+  },
+  "memory": {
+    "enabled": true,
+    "directory": "/term2-release-data/data/term2-nodejs/memory",
+    "contextBudgetChars": 8000,
+    "searchDefaultLimit": 10,
+    "searchMaxLimit": 50
+  },
+  "hooks": {
+    "user": {
+      "enabled": true
+    },
+    "project": {
+      "enabled": false
+    },
+    "trustedProjectRoots": [],
+    "includeUserText": false,
+    "includeToolArguments": false,
+    "includeToolResults": false,
+    "timeoutMs": 5000
+  }
+}

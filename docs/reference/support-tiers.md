@@ -77,23 +77,26 @@ items are stable and depended on by old conversation logs; they are not unfinish
 
 ## Models and providers
 
-Tiered by wire protocol first, because the 25 presets in `provider-presets.json`
-resolve to a small number of protocols and a preset is only a name and a URL.
+Every built-in provider and every custom provider type is Core, by the
+maintainer's decision. The release gate therefore spans every wire protocol in
+this table, not a chosen subset. A preset in `provider-presets.json` is only a
+name and a URL for one of the custom types, so it takes that type's tier; what
+needs a check is each protocol, not each of the 25 presets.
 
 | Item | Reached by | Tier | Reason |
 | --- | --- | --- | --- |
-| Codex | provider `codex` | Core | Proposed as one of the two providers held to the release gate. |
-| OpenRouter | provider `openrouter` | Core | Proposed as the second; also the source of the vendored catalogue. |
-| OpenAI | provider `openai` | Supported | |
-| Grok | provider `grok` | Supported | Its upstream proxy rejects outdated client versions, so it can break without a Term2 change. |
-| Custom type `openai-compatible` | `providers[]` | Supported | Covers most presets. |
-| Custom type `openai` | `providers[]` | Supported | |
-| Custom type `anthropic` | `providers[]`, presets `anthropic`, `minimax` | Supported | |
-| Custom type `google` | `providers[]`, preset `gemini` | Supported | |
-| Custom type `opencode` | `providers[]` | Experimental | Picks a wire protocol from the model id. |
-| Custom type `llama.cpp` and local presets | `providers[]`, presets `llama-cpp`, `ollama`, `lm-studio`, `vllm` | Experimental | Behaviour depends on a locally installed server version. |
-| Other presets | the remaining preset ids | Tier of the custom type they use | |
-| HTTP transport for OpenAI and Codex | `agent.transport` = `http` | Supported | |
+| Codex | provider `codex` | Core | |
+| OpenRouter | provider `openrouter` | Core | Also the source of the vendored catalogue. |
+| OpenAI | provider `openai` | Core | |
+| Grok | provider `grok` | Core | Its upstream proxy rejects outdated client versions, so it can break without a Term2 change. |
+| Custom type `openai-compatible` | `providers[]` | Core | Covers most presets. |
+| Custom type `openai` | `providers[]` | Core | |
+| Custom type `anthropic` | `providers[]`, presets `anthropic`, `minimax` | Core | |
+| Custom type `google` | `providers[]`, preset `gemini` | Core | |
+| Custom type `opencode` | `providers[]` | Core | Picks a wire protocol from the model id, so one type covers several protocols. |
+| Custom type `llama.cpp` and local presets | `providers[]`, presets `llama-cpp`, `ollama`, `lm-studio`, `vllm` | Core | Behaviour depends on a locally installed server version, which a recorded fixture cannot track. |
+| Other presets | the remaining preset ids | Core, as the custom type they use | |
+| HTTP transport for OpenAI and Codex | `agent.transport` = `http` | Supported | A transport option, not a provider. |
 | Grok chat-completions lane | env `TERM2_GROK_API=chat` | Experimental | An emergency switch. |
 | Model selection syntax | `provider/id:effort` | Core | |
 | Reasoning effort | `-r`, `/effort`, `agent.reasoningEffort` | Core | |
@@ -109,8 +112,8 @@ resolve to a small number of protocols and a preset is only a name and a URL.
 
 Recorded wire fixtures under `scripts/provider-black-box/fixtures/` exist for
 `openai`, `openrouter`, `google` and `opencode`. There is none for `codex`,
-`grok` or `anthropic`, so a Core tier for Codex is a promise the fixture set
-does not yet back.
+`grok` or `anthropic`, so the Core tier for those three is a promise the fixture
+set does not yet back.
 
 ## Tools, approvals and delegation
 

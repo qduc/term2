@@ -304,12 +304,15 @@ section is a real recording behind every provider, replayed offline.
     - Automatic compaction in the TUI, and a rollover in the middle of a tool
       round.
 
-    Findings, none fixed here:
-    - The reminder is sent wherever `contextMilestones` runs, but
-      `session_rollover` is registered only when `sessionBrowser` is set, which
-      `src/app/launch-tui.tsx` alone does. In a headless run the model is told
-      to call a tool it does not have; one such call returned an unknown-tool
-      error. ACP and the server were not checked.
+    Findings:
+    - Fixed: the reminder was sent on every surface, but `session_rollover`
+      is offered only when `sessionBrowser` is set, which
+      `src/app/launch-tui.tsx` alone does, so a headless model was told to
+      call a tool it did not have. `src/session/conversation.ts` now passes
+      `contextMilestones` to the turn only when `modelRollover` is not false,
+      the signal `bindDirectCapabilities` uses to offer the tool. The headless
+      case is in `tests/cli/automatic-compaction.integration.test.ts`. ACP and
+      the server take the same path and were not run.
     - Compaction compares the trigger with the usage reported inside the
       current turn. The first request of a turn has only the engine's own
       estimate (bytes / 4), so usage reported at the end of one turn does not

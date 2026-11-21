@@ -27,8 +27,8 @@ type Props = {
   getDefaultValue?: (key: string) => unknown;
 };
 
-/** Marker, label/value gap, changed dot, restart glyph, scrollbar, and border. */
-const ROW_CHROME = 12;
+/** Side margins, frame, scrollbar, selection marker, label gap, and changed dot. */
+const ROW_CHROME = 15;
 const TAG_WIDTH = 12;
 
 /**
@@ -76,7 +76,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   const longestLabel = items.reduce((max, item) => Math.max(max, item.label.length), 0);
   const labelColWidth = Math.max(12, Math.min(30, longestLabel, Math.floor(columns * 0.4)));
   const tagWidth = isSearchingAll && columns >= 56 ? TAG_WIDTH : 0;
-  const valueColWidth = Math.max(8, columns - labelColWidth - tagWidth - ROW_CHROME);
+  const valueColWidth = Math.max(2, columns - labelColWidth - tagWidth - ROW_CHROME);
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
   const selectedItem = items[selectedIndex];
   const stateDescription = selectedItem ? describeSettingState(selectedItem, getDefaultValue) : undefined;
@@ -153,32 +153,32 @@ const SettingsSelectionMenu: FC<Props> = ({
         renderItem={(item, _actualIndex, isSelected) => {
           const valueObj = formatSettingDisplayValue(item.key, item.currentValue);
           const paddedLabel = truncateText(item.label, labelColWidth).padEnd(labelColWidth, ' ') + '  ';
+          const restart = item.requiresRestart ? ' ↻' : '';
+          const valueWidth = Math.max(1, valueColWidth - restart.length);
           // Paths are most meaningful at their end; everything else at its start.
           const valueText = valueObj.text.startsWith('/')
-            ? truncateStart(valueObj.text, valueColWidth)
-            : truncateText(valueObj.text, valueColWidth);
+            ? truncateStart(valueObj.text, valueWidth)
+            : truncateText(valueObj.text, valueWidth);
           const tag = tagWidth > 0 ? getSettingCategory(item.key).label : '';
 
           return (
             <Box key={item.key} width="100%">
               <SelectionMarker selected={isSelected} />
-              <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
-                {paddedLabel}
-              </Text>
-              <Text color={theme.warning}>{item.isModified ? '● ' : '  '}</Text>
-              <Box flexGrow={1}>
-                <Text color={theme[valueObj.tone ?? 'textSubtle']} bold={isSelected} wrap="truncate-end">
-                  {valueText}
-                  {item.requiresRestart && <Text color={theme.textSubtle}> ↻</Text>}
+              <Box flexGrow={1} flexShrink={1} flexBasis={0}>
+                <Text wrap="truncate-end">
+                  <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
+                    {paddedLabel}
+                  </Text>
+                  <Text color={theme.warning}>{item.isModified ? '● ' : '  '}</Text>
+                  <Text color={theme[valueObj.tone ?? 'textSubtle']} bold={isSelected}>
+                    {tag ? valueText.padEnd(valueWidth, ' ') : valueText}
+                  </Text>
+                  <Text color={theme.textSubtle}>
+                    {restart}
+                    {tag.padStart(tagWidth, ' ')}
+                  </Text>
                 </Text>
               </Box>
-              {tag && (
-                <Box width={tagWidth} flexShrink={0} justifyContent="flex-end">
-                  <Text color={theme.textSubtle} wrap="truncate-end">
-                    {tag}
-                  </Text>
-                </Box>
-              )}
             </Box>
           );
         }}

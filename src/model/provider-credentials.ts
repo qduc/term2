@@ -44,11 +44,30 @@ export type ProviderCredentialResolution = {
 
 const isConfigured = hasConfiguredCredential;
 
-const isLoopbackBaseUrl = (baseUrl: string | undefined): boolean => {
+const isPrivateIpv4 = (hostname: string): boolean => {
+  const octets = hostname.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+  return (
+    octets[0] === 10 ||
+    (octets[0] === 172 && octets[1]! >= 16 && octets[1]! <= 31) ||
+    (octets[0] === 192 && octets[1] === 168) ||
+    (octets[0] === 169 && octets[1] === 254)
+  );
+};
+
+const isLocalBaseUrl = (baseUrl: string | undefined): boolean => {
   if (!baseUrl) return false;
   try {
     const hostname = new URL(baseUrl).hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' ||
+      hostname === '::1' ||
+      isPrivateIpv4(hostname)
+    );
   } catch {
     return false;
   }
@@ -144,8 +163,13 @@ export const resolveProviderCredentials = (
       : { required: false, configured: true, source: 'external' };
   }
 
-  if (custom.type === 'llama.cpp' || isLoopbackBaseUrl(custom.baseUrl)) {
-    return { required: false, configured: true, source: 'local' };
+  if (custom.type === 'llama.cpp' || isLocalBaseUrl(custom.baseUrl)) {
+    return {
+      required: false,
+      configured: true,
+      source: 'local',
+      environmentKey: CUSTOM_PROVIDER_ENV_KEYS[custom.type],
+    };
   }
 
   return resolveCredentialSources(settingsService, undefined, custom.apiKey, CUSTOM_PROVIDER_ENV_KEYS[custom.type]);
@@ -166,7 +190,7 @@ export const resolveProviderCredentialValue = (
     const value = settingsService.getDynamic(resolution.settingKey);
     return typeof value === 'string' ? value : undefined;
   }
-  if (resolution.source === 'environment' && resolution.environmentKey) {
+  if ((resolution.source === 'environment' || resolution.source === 'local') && resolution.environmentKey) {
     return process.env[resolution.environmentKey];
   }
   if (resolution.source === 'stored') {

@@ -278,7 +278,7 @@ describe.concurrent('API keys from the environment, through the built CLI', () =
           settings: customProvider('fixture-provider', entry.type, `http://${host}${entry.base}`, options.settingsKey),
           extraEnv: (root) => redirectHostsEnv(root, wire.baseUrl, [host]),
         });
-        return { run, requests: modelRequests(wire) };
+        return { run, requests: modelRequests(wire), all: [...wire.requests] };
       });
     }
 
@@ -291,6 +291,23 @@ describe.concurrent('API keys from the environment, through the built CLI', () =
         expected(entry.type, 'env-custom-key'),
       ]);
     });
+
+    it(
+      'google: lists models with the key in x-goog-api-key, and no request URL carries the key',
+      { timeout: TIMEOUT },
+      async () => {
+        const entry = cases[1];
+        const { run, all } = await custom(entry, { env: { [entry.variable]: 'env-custom-key' } });
+        expect(run.status, describeRun(run)).toBe(0);
+        const lists = all.filter((request) => request.method === 'GET');
+        expect(
+          lists.map((request) => request.url),
+          'no model-list request was made',
+        ).toEqual(['/v1beta/models']);
+        expect(lists.map((request) => header(request, 'x-goog-api-key'))).toEqual(['env-custom-key']);
+        expect(all.map((request) => request.url).join('\n')).not.toContain('env-custom-key');
+      },
+    );
 
     it.each(cases)(
       '$type: when settings.json also has an apiKey for the provider, that one is sent, not $variable',

@@ -24,6 +24,7 @@ import { isEffortUpdateItem } from '../model/effort-updates.js';
 import { REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
 import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
 import { UnattendedRefusals, withUnattendedReport } from './approval/unattended-refusals.js';
+import { terminalNotice } from './harness-host/index.js';
 
 /** Accept raw admission and memory facts before engine construction; timing is model-only. */
 export function admitConversationTurn(
@@ -575,6 +576,6 @@ export function terminalFact(turnId: TurnId, result: TurnResult): Extract<Fact, 
     outcome: result.kind,
     ...(result.kind === 'failed' ? { error: result.error } : {}),
     ...(terminalCause !== undefined ? { terminalCause } : {}),
-    ...('notice' in result && result.notice ? { notice: result.notice } : {}),
+    ...('notice' in result && result.notice ? { notice: terminalNotice(result) } : {}),
   };
 }

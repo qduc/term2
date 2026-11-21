@@ -37,6 +37,8 @@ function owner(tier, file) {
     // heaviest files run in the test lane. Not provider-black-box: its heavy cases have ~40s
     // deadlines that PTY-driven e2e load pushed over. See the testing skill before rebalancing.
     if (/^tests\/cli\/(?:slash-commands|coalesced-enter|resume-picker)\.e2e\.test\.ts$/.test(file)) return 'test';
+    // Needs the real sandbox (bubblewrap, socat), which the e2e job does not install and the test job does.
+    if (file === 'tests/cli/sandbox-network.e2e.test.ts') return 'test';
     return 'e2e';
   }
   if (file.endsWith('/provider-session-stateless.blackbox.ts')) return 'integration';

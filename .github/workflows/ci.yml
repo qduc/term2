@@ -106,6 +106,10 @@ jobs:
           lane: test
       - name: Run CLI integration, safety and responses provider cases
         if: needs.changes.outputs.run != 'false'
+        # This job installs bubblewrap and socat, so the sandbox network approval test, which is opt-in
+        # because it needs them, runs here (scripts/run-ci-lane.mjs places it in this lane).
+        env:
+          RUN_SHELL_SANDBOX_INTEGRATION: '1'
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
   quality:
     runs-on: ubuntu-22.04

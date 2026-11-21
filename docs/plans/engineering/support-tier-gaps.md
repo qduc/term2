@@ -146,11 +146,26 @@ section is a real recording behind every provider, replayed offline.
    credentials. Fixtures are never edited by hand, so removing them means
    running `pnpm provider:fixture:prepare --accept` again on the raw recordings,
    which are kept outside the repository.
-9. **Test the login flows.** No test references `--codex-login`, `--grok-login`
-   or the PKCE code. Token refresh and account pinning are covered by
-   `tests/model/oauth-refresh.integration.test.ts` and
-   `oauth-account-ownership.integration.test.ts`. A loopback authorization
-   server, as the refresh tests already use, would cover login.
+9. **Login flows now have tests; what they leave out.**
+   `tests/cli/oauth-login.integration.test.ts` runs the built CLI with
+   `--codex-login` and `--grok-login`, and `tests/cli/oauth-login-paste.e2e.test.ts`
+   drives the pasted-code entry over a PTY, both with
+   `tests/helpers/oauth-login-fixture.ts`. They assert the authorization URL
+   and its PKCE challenge against the verifier later sent, the state check, the
+   token request, the credential file and its mode, the failure paths, and
+   Codex's fallback from its first registered port to its second. The
+   authorization hosts are constants with no override, so the tests leave the
+   CLI unmodified and redirect `fetch` for those two hosts to loopback with a
+   Node `--import` preload; certificate and name handling for the real hosts is
+   therefore not exercised. The Codex cases bind ports 1455 and 1457 and fail
+   with a message saying so when another process holds them. Not covered: the
+   browser launcher on macOS and Windows, the pasted entry for Codex, logging in
+   again to a stored account, and credential import from `CODEX_HOME` and
+   `GROK_HOME`. Findings:
+   - A refused callback prints the label twice: "Codex login failed: Codex
+     login failed: OAuth state mismatch". The tests assert the single label.
+   - `tokenRequestEncoding: 'json'` in `PkceLoginConfig` is set by neither
+     provider.
 10. **Remove the error-scenario exclusions or justify them per type.** The
     capability matrix marks `native-error` and `incomplete-stream` as excluded
     for `runtime-openai-chat`, `runtime-llama-cpp-chat` and both OpenCode rows,
@@ -160,8 +175,24 @@ section is a real recording behind every provider, replayed offline.
 11. **Derive the capability ledger from what ran.** The executed-scenario lists
     in `provider-session-capability-manifest.ts` are hand-written constants, so
     deleting a scenario test does not fail `provider-capability-matrix.test.ts`.
-12. **Check API keys from the environment.** Only `OPENAI_API_KEY` is asserted,
-    in `tests/model/providers/openai-catalog.integration.test.ts`.
+12. **API keys from the environment are now checked.**
+    `tests/cli/api-key-environment.integration.test.ts` runs the built CLI
+    against loopback servers and asserts which key reaches the wire, in which
+    header, for `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, the `anthropic`,
+    `google` and `opencode` custom types' variables, and the web-search
+    variables in `SETTING_ENV_VARIABLES`. Not covered: web-search keys given
+    only in `settings.json`, and the "configured" state the provider picker
+    derives from `CUSTOM_PROVIDER_ENV_KEYS`. Findings:
+    - Precedence differs by provider. For OpenAI, OpenRouter and web search the
+      environment wins over `settings.json`; for the custom types a stored
+      `apiKey` wins over the environment. The tests pin both.
+    - With no OpenAI key anywhere the request is sent with the bearer value
+      `placeholder` (`openai.provider.ts`), where OpenRouter stops before any
+      request and says the key is not configured.
+    - For a custom `google` provider the model-list request puts the key in
+      the URL as `?key=` (`fetchModels` in `openai-compatible.provider.ts`);
+      the model request sends it in a header. A key in a URL is written to
+      proxy and server logs.
 13. **Decided against: a scheduled check against the real services.** The
     maintainer chose one-time recordings replayed in CI as sufficient. The
     consequence is accepted, not solved: a replayed recording fails when Term2's

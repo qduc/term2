@@ -142,8 +142,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/failure/retry-error-classification.ts": {
-      "lines": 542,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 550,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Eight lines since: UND_ERR_SOCKET joined UNDICI_RETRYABLE_CODES, which put the set on one entry per line, with a comment on why the code is the signal. One more entry in an existing table, not a second job."
     },
     "src/model/models/model-resolution.ts": {
       "lines": 696,

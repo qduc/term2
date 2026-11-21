@@ -249,18 +249,28 @@ section is a real recording behind every provider, replayed offline.
       scenario: exit 1, one provider request, stderr equal to `error` plus the
       persisted message, stdout empty or the partial text the stream
       delivered, and a log whose turn ended `failed` with no response and no
-      assistant item. Three things the table leaves open, each marked where
-      it is left out:
-      - A connection dropped before any response is `network` and retryable,
-        with a `/retry turn` notice, on the OpenAI, Codex, OpenRouter and chat
-        routes, and `provider`, not retryable and without a notice on the
-        Anthropic and Google routes.
-      - A WebSocket closed before the terminal event is `network` and
-        retryable on the OpenAI lane and `provider` and not retryable on the
-        Codex lane. Neither offers `/retry turn`.
-      - The Google route shows only `Internal Server Error` for an HTTP 500
-        whose body names the failure. The fixture's body is not Google-shaped,
-        so this may be the fixture.
+      assistant item. What that showed:
+      - Fixed: a connection dropped before any response was `network` and
+        retryable, with a `/retry turn` notice, on the OpenAI, Codex,
+        OpenRouter and chat routes, and `provider`, not retryable and without
+        a notice on the Anthropic and Google routes, so it was never retried
+        there. The AI SDK wraps undici's `SocketError` (`UND_ERR_SOCKET`) as
+        the cause of an error with no status, and the classifier did not know
+        that code. It is now in `UNDICI_RETRYABLE_CODES`, and the
+        `early-close-retry` scenarios show the dropped request retried and the
+        turn completing on both routes.
+      - Fixed in the fixture: the Google route showed only `Internal Server
+        Error` because the fixture's HTTP 500 body was not Google-shaped. With
+        `{error: {code, status, message}}` the product shows the message.
+      - Open, a decision: a WebSocket closed before the terminal event is
+        persisted as `network` and retryable on the OpenAI lane and as
+        `provider` and not retryable on the Codex lane, which wraps the close
+        in `AmbiguousModelOutcomeError` so the request is not replayed on the
+        same chain. The engine decides recovery from the close evidence, which
+        is the same on both lanes, so only the persisted `kind` and
+        `retryable` differ; neither lane offers `/retry turn` after partial
+        text. No doc says which the persisted fields should be. The four rows
+        stay unasserted.
 11. **Done: the ledger is checked against the tests.**
     `reconcileExecutionsWithTests`, run by `provider-capability-matrix.test.ts`,
     compares the executed-scenario lists with the titles Vitest collects from

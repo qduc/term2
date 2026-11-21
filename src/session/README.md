@@ -48,6 +48,23 @@ approved review commits the policy close in the same step and answers with the
 request's one-time grant when it offers one. Only this path records
 `automaticApproval: true`; `answer` rejects it from any caller.
 
+The shared table has four policies: `off` uses no automatic reviewer and asks a
+person; `auto` reviews then asks; `unattended` reviews then refuses; `always`
+bypasses eligible requests without a model call. `shell.showReview` requests
+advisory-only review in `off` and controls assessment visibility in human prompts;
+it does not grant authority or remove durable review evidence. Saved `advisory`
+settings migrate to `off` plus `showReview: true` before validation. Mode changes
+preserve `sandbox.enabled`.
+
+The `bypass` route handles requests raised during execution, including scoped
+network access and supported ACP foreground sandbox escapes. It returns
+`{ kind: 'bypassed', approved: true, grant? }`; settlement records the policy
+approval and uses the exact scoped grant (`unsandboxed-once` or
+`network-allow-once`) when offered. Questions and hard gates do not route to
+bypass: `propose_goal` is explicitly human-only. Unsupported background and
+Docker host-control escapes are rejected before this route. Existing tool
+approval checks can also bypass eligible calls before an interaction is needed.
+
 ### Unattended refusals
 
 In `shell.autoApproveMode: unattended` the port's route (`ApprovalRoute` in

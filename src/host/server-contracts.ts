@@ -137,7 +137,8 @@ export type SettingsProjection = {
     oauthAccounts: Record<string, readonly { id: string; label: string; isSelected: boolean; isInUse: boolean }[]>;
     safety: {
       sandbox: 'enabled' | 'disabled' | 'unavailable';
-      approval: 'off' | 'advisory' | 'auto' | 'unsafe-active' | 'hidden';
+      showReview: boolean;
+      approval: 'off' | 'auto' | 'unattended' | 'unsafe-active' | 'hidden';
       backgroundShell: 'disabled-by-gateway';
       workspaceAccess: 'read' | 'read_write';
       network: 'denied' | 'configured' | 'confirmation-required';

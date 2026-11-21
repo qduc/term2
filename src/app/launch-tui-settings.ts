@@ -61,7 +61,7 @@ function settingsBrowse(
 }
 
 // Legacy source/commands/mode-commands.ts and use-app-commands.ts (React modules, so copied, not imported).
-const APPROVAL_MODES = ['off', 'advisory', 'auto', 'unattended', 'always'];
+const APPROVAL_MODES = ['off', 'auto', 'unattended', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
 
 /** Hidden compatibility inputs can only acknowledge the default experience. */
@@ -107,11 +107,14 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     apply: () => void,
     undo: () => void,
     done: string,
-    key: 'shell.autoApproveMode' | 'sandbox.enabled',
+    key: 'shell.autoApproveMode' | 'sandbox.enabled' | readonly ('shell.autoApproveMode' | 'shell.showReview')[],
   ): Promise<CommandResult> => {
     apply();
     const save = (): CommandResult => {
-      const result = app.saveApprovalPreference(connection.sessionId, key);
+      const results = (typeof key === 'string' ? [key] : key).map((item) =>
+        app.saveApprovalPreference(connection.sessionId, item),
+      );
+      const result = results.find((item) => item.status !== 'saved') ?? results[0]!;
       return {
         message: result.status === 'saved' ? done : `${done} Could not save preference (${result.reason}).`,
         applied: true,
@@ -237,22 +240,33 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
       );
     },
 
-    autoApprove(connection: TuiConnection, mode: string | undefined): Promise<CommandResult> {
-      if (!mode)
-        return Promise.resolve({
-          message: `Tool auto-approval is ${detailsOf(connection.sessionId).settings.get(
-            'shell.autoApproveMode',
-          )}. Use /auto-approve <mode>: ${APPROVAL_MODES.join(', ')}.`,
-        });
+    autoApprove(connection: TuiConnection, args: string | undefined): Promise<CommandResult> {
       const { settings } = detailsOf(connection.sessionId);
+      if (!args)
+        return Promise.resolve({
+          message: `Tool auto-approval is ${settings.get(
+            'shell.autoApproveMode',
+          )}. Use /auto-approve <mode> [--show-review]: ${APPROVAL_MODES.join(', ')}.`,
+        });
+      const [mode, ...flags] = args.trim().split(/\s+/);
+      if (mode === 'advisory') throw new Error('advisory was removed; use /auto-approve off --show-review');
+      if (!mode || !APPROVAL_MODES.includes(mode) || flags.some((flag) => flag !== '--show-review'))
+        throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')} [--show-review].`);
+      const showReview = flags.includes('--show-review');
       const previous = settings.get('shell.autoApproveMode');
-      if (!APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);
+      const previousReview = settings.get('shell.showReview');
       return write(
         connection,
-        () => settings.set('shell.autoApproveMode', mode as never, { persist: false }),
-        () => settings.set('shell.autoApproveMode', previous, { persist: false }),
-        `Tool auto-approval set to ${mode}.`,
-        'shell.autoApproveMode',
+        () => {
+          settings.set('shell.autoApproveMode', mode as never, { persist: false });
+          if (showReview) settings.set('shell.showReview', true, { persist: false });
+        },
+        () => {
+          settings.set('shell.autoApproveMode', previous, { persist: false });
+          if (showReview) settings.set('shell.showReview', previousReview, { persist: false });
+        },
+        `Tool auto-approval set to ${mode}.${showReview ? ' Approval review display enabled.' : ''}`,
+        showReview ? ['shell.autoApproveMode', 'shell.showReview'] : 'shell.autoApproveMode',
       );
     },
   };

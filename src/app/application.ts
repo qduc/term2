@@ -73,7 +73,7 @@ export type DirectSessionConfiguration = {
   readonly model: ModelRef;
   readonly reasoningEffort: DirectConfigurationIntent['reasoningEffort'];
   readonly profileId: string;
-  readonly approvalMode: DirectApprovalMode | 'advisory' | 'unattended';
+  readonly approvalMode: DirectApprovalMode;
 };
 
 export type DirectApplication = {
@@ -113,7 +113,7 @@ export type DirectApplication = {
    */
   saveApprovalPreference(
     sessionId: string,
-    key: 'shell.autoApproveMode' | 'sandbox.enabled' | 'agent.modelSelection',
+    key: 'shell.autoApproveMode' | 'shell.showReview' | 'sandbox.enabled' | 'agent.modelSelection',
   ): DurableWriteResult;
   /** The skills under a local workspace root, read fresh so a new one shows up without a restart. */
   skills(root: string): readonly SkillInfo[];

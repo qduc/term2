@@ -347,6 +347,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         isSandboxEscape,
       });
       return approvalRouteFor(settings.get('shell.autoApproveMode'), profile, {
+        showReview: settings.get('shell.showReview') === true,
         reviewEscapes: settings.get('shell.unattendedEscapeReview') === true,
       });
     },

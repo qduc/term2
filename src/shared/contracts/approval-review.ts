@@ -3,17 +3,22 @@
  * `refused` marks a request unattended approval closed by policy in the same batch as its open:
  * like an approved one, it never waited for a person and is never published as open.
  */
-export type ApprovalReviewResult = ApprovalReviewOutcome & { readonly refused?: true };
+export type ApprovalReviewResult = ApprovalReviewOutcome & {
+  readonly refused?: true;
+  /** Human-prompt visibility; absent on historical records. Raw evidence remains recorded. */
+  readonly showReview?: boolean;
+};
 
 type ApprovalReviewOutcome =
   | { readonly kind: 'not_reviewed'; readonly approved: false }
   | { readonly kind: 'unavailable'; readonly approved: false }
+  | { readonly kind: 'bypassed'; readonly approved: true; readonly grant?: string }
   | {
       readonly kind: 'reviewed';
       readonly approved: boolean;
       /** The grant an approved review answers with; absent means a plain allow. */
       readonly grant?: string;
-      /** Reviewed in `advisory` mode: the verdict informs the person and never answers the request. */
+      /** Advisory assessment only: the verdict informs the person and never answers the request. */
       readonly advisoryOnly?: true;
       readonly advisory: {
         readonly approved: boolean;
@@ -39,6 +44,7 @@ export function sanitizeApprovalReviewText(text: string): string {
 export function formatApprovalReview(result: ApprovalReviewResult): string {
   if (result.kind === 'not_reviewed') return 'Not reviewed automatically.';
   if (result.kind === 'unavailable') return 'Approval review unavailable.';
+  if (result.kind === 'bypassed') return 'Approval bypassed by always mode.';
   const advisory = result.advisory;
   const reasoning = sanitizeApprovalReviewText(advisory.reasoning);
   const details = [

@@ -355,7 +355,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'sandbox':
           return configuration.sandbox(connection);
         case 'auto-approve':
-          return configuration.autoApprove(connection, argument);
+          return configuration.autoApprove(connection, rest.join(' '));
         case 'settings':
           return configuration.settings(connection, rest.join(' '));
         case 'bare':

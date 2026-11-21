@@ -9,6 +9,7 @@ interface RestartContext {
   profile: string;
   approval: string;
   sandbox: boolean;
+  showReview?: boolean;
   ssh?: { target: string; directory?: string; port: number };
   control?: { name: string; discordInput: boolean };
 }
@@ -33,6 +34,7 @@ export function createRestartPlan(context: RestartContext) {
   const policy = {
     SHELL_AUTO_APPROVE_MODE: context.approval,
     SANDBOX_ENABLED: String(context.sandbox),
+    TERM2_SHOW_REVIEW: String(context.showReview ?? false),
   };
   const env = Object.fromEntries(
     Object.entries({ ...process.env, ...policy }).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -42,7 +44,7 @@ export function createRestartPlan(context: RestartContext) {
     process.execPath,
     ...args,
   ]
-    .map((value, index) => (index < 2 ? value : quote(value)))
+    .map((value, index) => (index < Object.keys(policy).length ? value : quote(value)))
     .join(' ');
   return { args, env, manualCommand };
 }

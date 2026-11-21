@@ -11,7 +11,7 @@ import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.
 import { TOOL_NAME_ASK_USER, TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
 import { extractPatchPaths } from '../../shared/utils/upstream-apply-patch.js';
 
-export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'unattended' | 'always';
+export type AutoApproveMode = 'off' | 'auto' | 'unattended' | 'always';
 
 const FILE_READ_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
   'read_file',
@@ -155,7 +155,7 @@ export class ShellAutoApprovalResolver {
    * Whether an unsandboxed shell request may be evaluated by the LLM
    * auto-approval path instead of being forced to a human prompt. Requires the
    * sandbox to be enabled (escape is meaningful) and auto-approval mode to be
-   * advisory or auto. Read per call so mid-session setting toggles apply
+   * auto, unattended or off with advisory assessment enabled. Read per call so mid-session setting toggles apply
    * immediately.
    */
   isUnsandboxedApprovalEligible(): boolean {
@@ -164,7 +164,10 @@ export class ShellAutoApprovalResolver {
     // In 'always' mode every shell command runs unrestricted, so unsandboxed
     // escapes and Docker host control are not forced to a human prompt.
     if (mode === 'always') return true;
-    return sandboxEnabled && (mode === 'advisory' || mode === 'auto' || mode === 'unattended');
+    return (
+      sandboxEnabled &&
+      (mode === 'auto' || mode === 'unattended' || this.deps.settingsService?.get('shell.showReview') === true)
+    );
   }
 
   shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {

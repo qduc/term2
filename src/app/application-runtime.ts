@@ -153,6 +153,10 @@ function sessionSettings(
     }
   }
   keepLoadTimeMigrations(settings, defaults);
+  // Launch-only policy flags keep their CLI precedence when each session reads its own settings.
+  for (const key of ['shell.autoApproveMode', 'shell.showReview'] as const) {
+    if (defaults.getSource?.(key) === 'cli') settings.setDynamic(key, defaults.get(key), { persist: false });
+  }
   // The latest configuration, where there is one, outranks the session's start fact.
   const stored = configuration?.profile ?? metadata?.profile;
   // A saved dropped workflow is historical data, not authority to reactivate it (#149).

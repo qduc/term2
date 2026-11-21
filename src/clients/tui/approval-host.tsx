@@ -258,9 +258,7 @@ function ReviewingHost({
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" marginBottom={1}>
-        <Text color={theme.textSubtle}>
-          {`Reviewing ${review.toolName} for automatic approval… (Esc to review manually, n to deny)`}
-        </Text>
+        <Text color={theme.textSubtle}>{`Reviewing ${review.toolName}… (Esc to review manually, n to deny)`}</Text>
         {panel}
       </Box>
     </Box>
@@ -286,10 +284,13 @@ function Host({
   const { columns, rows } = useTerminalSize();
   const { InputFrame, PromptMarker } = useSkin();
   const { interaction, owner } = request;
-  const approval = approvalDescriptor(interaction, request.agentName, owner);
+  const approval = {
+    ...approvalDescriptor(interaction, request.agentName, owner),
+    ...(interaction.review?.showReview === false ? { llmAdvisory: undefined } : {}),
+  };
   const isAskUser = approval.toolName === 'ask_user';
   // The session's review, recorded before this request reached a person.
-  const reviewResult = interaction.review;
+  const reviewResult = interaction.review?.showReview === false ? undefined : interaction.review;
   const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -439,7 +440,9 @@ function Host({
               ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
             }}
             reviewStatus={
-              reviewResult?.kind === 'reviewed' && reviewResult.advisoryOnly
+              interaction.review?.showReview === false
+                ? 'Manual approval required.'
+                : reviewResult?.kind === 'reviewed' && reviewResult.advisoryOnly
                 ? 'AI review is advisory; manual approval required.'
                 : reviewResult?.kind === 'reviewed' && !reviewResult.approved
                 ? 'Automatic approval not granted; manual approval required.'

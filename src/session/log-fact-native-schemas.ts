@@ -19,10 +19,14 @@ const directSessionId = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[
 const validateReview = (fact: Record<string, unknown>, check: FactValidation): void => {
   if (!('review' in fact)) return;
   const review = check.object(fact['review'], 'review');
-  if (!['not_reviewed', 'unavailable', 'reviewed'].includes(review['kind'] as string)) check.fail('review.kind');
+  if (!['not_reviewed', 'unavailable', 'reviewed', 'bypassed'].includes(review['kind'] as string))
+    check.fail('review.kind');
   if (typeof review['approved'] !== 'boolean') check.fail('review.approved');
-  if (review['kind'] !== 'reviewed' && review['approved'] !== false) check.fail('review.approved');
+  if (review['kind'] === 'bypassed' && review['approved'] !== true) check.fail('review.approved');
+  if (review['kind'] !== 'reviewed' && review['kind'] !== 'bypassed' && review['approved'] !== false)
+    check.fail('review.approved');
   if ('grant' in review && typeof review['grant'] !== 'string') check.fail('review.grant');
+  if ('showReview' in review && typeof review['showReview'] !== 'boolean') check.fail('review.showReview');
   if ('refused' in review && (review['refused'] !== true || review['approved'] !== false)) check.fail('review.refused');
   if (review['kind'] === 'reviewed') {
     const advisory = check.object(review['advisory'], 'review.advisory');

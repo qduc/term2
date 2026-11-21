@@ -25,7 +25,6 @@ export function formatContextUsage(usedTokens: number, contextWindow?: number): 
 
 const APPROVAL_LABEL = {
   off: '',
-  advisory: 'Advisory',
   auto: 'Auto',
   unattended: 'Unattended',
   always: 'YOLO',

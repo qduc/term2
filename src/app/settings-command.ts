@@ -309,6 +309,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.shell.autoApproveMode.source,
     },
     {
+      key: SETTING_KEYS.SHELL_SHOW_REVIEW,
+      value: settings.shell.showReview.value,
+      source: settings.shell.showReview.source,
+    },
+    {
       key: SETTING_KEYS.SANDBOX_ENABLED,
       value: settings.sandbox.enabled.value,
       source: settings.sandbox.enabled.source,

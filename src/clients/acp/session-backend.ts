@@ -11,12 +11,21 @@ import { promptInput } from './input.js';
 import { AcpModels } from './models.js';
 
 const approvalModes = [
-  { value: 'ask', name: 'Ask', description: 'Keep the sandbox on and ask when an action requires approval.' },
-  { value: 'assisted', name: 'Assisted', description: 'Keep the sandbox on and review eligible low-risk approvals.' },
+  { value: 'ask', name: 'Ask', description: 'Ask when an action requires approval.' },
+  {
+    value: 'assisted',
+    name: 'Assisted',
+    description: 'Review eligible approvals and ask when review does not approve.',
+  },
+  {
+    value: 'unattended',
+    name: 'Unattended',
+    description: 'Review eligible approvals and refuse actions that review does not approve.',
+  },
   {
     value: 'always',
-    name: 'Always · Sandbox off',
-    description: 'Run shell commands outside the sandbox and skip routine approvals.',
+    name: 'Always',
+    description: 'Skip eligible approval prompts; keep the current sandbox preference.',
   },
 ] as const satisfies readonly { value: AcpApprovalMode; name: string; description: string }[];
 

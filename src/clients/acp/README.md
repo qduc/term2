@@ -116,17 +116,19 @@ rename the conversation; both v1 and v2 clients receive the metadata update.
 
 ACP v1 adds one **Approval mode** selector alongside model and thinking level.
 **Ask** is the default. Ordinary shell commands run sandboxed; a missing or
-failed sandbox stops the command. **Assisted** keeps confinement and uses
-Term2's approval evaluator for eligible foreground approvals, including
-sandboxed shell mutations flagged by the command safety classifier. Only a
-high-confidence, authorized, low-risk result auto-approves; other results
-fall back to the client's permission request. **Always · Sandbox off** runs
-shell commands outside the sandbox and skips routine approval prompts.
+failed sandbox stops the command. **Assisted** uses Term2's approval evaluator
+for eligible foreground approvals, including sandboxed shell mutations flagged
+by the command safety classifier. Authorized low- or medium-risk results with
+high confidence auto-approve; other results fall back to client permission.
+**Unattended** uses the same review threshold and refuses actions that review
+does not approve. **Always** skips eligible approval prompts. These choices
+preserve the current sandbox preference; they do not disable confinement.
 Questions and explicitly scoped capabilities, including forwarded MCP calls,
-retain their own approval policy.
+retain their own approval policy. Human permission requests show the assessment
+only when `shell.showReview` is enabled; recorded review evidence remains intact.
 
 Changes use native idle configuration admission and install the tool policy and
-sandbox setting together. Mode changes also require background work to settle.
+current sandbox setting unchanged. Mode changes also require background work to settle.
 A live session retains the selection across attachment changes and model or
 effort updates. Closing or reopening the runtime resets it to Ask. Global
 preferences and persisted configuration omit the approval selection.
@@ -137,7 +139,8 @@ The request includes the exact command and working directory. The distinct
 `unsandboxed-once` grant applies to that invocation and directory. A plain Allow
 once has no escape authority. Rejection, cancellation, and a directory change
 prevent the retry. The resulting process uses the Term2 user's OS permissions.
-ACP v2 continues to require confinement for every shell execution.
+In Always, an eligible foreground ACP v1 retry receives the same invocation-scoped
+grant automatically. ACP v2 continues to require confinement for every shell execution.
 
 App keeps diagnostics off stdout, supplies process shutdown signals and disposes
 Host after serving returns.

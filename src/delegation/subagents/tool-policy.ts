@@ -539,7 +539,9 @@ export class SubagentToolPolicy {
   }
 
   async reviewYellowCommand(command: string, taskContext: string): Promise<ApprovalReviewResult> {
-    if (this.#settings.get('shell.autoApproveMode') === 'off') return { kind: 'not_reviewed', approved: false };
+    const mode = this.#settings.get('shell.autoApproveMode');
+    if (mode === 'off' && this.#settings.get('shell.showReview') !== true)
+      return { kind: 'not_reviewed', approved: false };
     if (!this.#agentClient) return { kind: 'unavailable', approved: false };
     try {
       const advisories = await evaluateShellAutoApprovalAdvisories({
@@ -554,7 +556,13 @@ export class SubagentToolPolicy {
       });
       const advisory = advisories.get('__subagent_worker_shell__');
       if (!advisory || advisory.isError) return { kind: 'unavailable', approved: false };
-      return { kind: 'reviewed', approved: advisory.approved === true, advisory };
+      return {
+        kind: 'reviewed',
+        approved: (mode === 'auto' || mode === 'unattended') && advisory.approved === true,
+        advisory,
+        showReview: this.#settings.get('shell.showReview') === true,
+        ...(mode === 'off' ? { advisoryOnly: true as const } : {}),
+      };
     } catch (error: any) {
       this.#logger.warn('Worker shell YELLOW auto-approval evaluation failed', {
         error: error?.message || String(error),

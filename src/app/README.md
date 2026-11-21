@@ -33,7 +33,7 @@ shell auto-approval mode to `off`; `requireSandbox` pins `sandbox.enabled:true`
 after restoring session configuration. ACP sets both options. These overrides
 are in-memory policy and do not rewrite user preferences. ACP v1 can select
 another approval mode through the app's idle configuration scope. It rebuilds
-the session's policy and sandbox settings together. The choice stays in the
+the session's approval policy while preserving its sandbox preference. The choice stays in the
 live runtime. In Ask and Assisted, a local foreground shell receives its
 invocation-scoped escape capability only after the distinct one-time grant.
 `persistSessionConfiguration:false` also keeps native configuration changes
@@ -68,7 +68,13 @@ not claim success. A failed file write leaves the applied session value visible
 and reports that saving failed. Other direct TUI setting changes remain
 session-only. The sandbox preference is retained configuration, not a claim of
 direct sandbox execution support. Restart still explicitly carries the live
-approval/sandbox values in its exec environment.
+approval, review-display and sandbox values in its exec environment.
+`--approval-mode off|auto|unattended|always` supplies a session policy override,
+and `--show-review` independently enables assessment display. The existing
+`--auto-approve` flag still controls whether headless runs may execute tools.
+The TUI accepts `/auto-approve <mode> [--show-review]`; omitting the flag leaves
+the independent display setting unchanged. Saved `advisory` preferences migrate
+to `off` with review display enabled.
 Interactive startup enables the source settings owner's ordinary file creation,
 recovery and schema/default migrations as well as explicit preference saves.
 CLI profile/model/reasoning overrides still opt out of persistence. Headless,

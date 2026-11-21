@@ -7,8 +7,8 @@ import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../m
  *
  * The accepted set is deliberately minimal — `--provider`, `--model` and
  * `--effort` are the only knobs the launcher exposes. There is no
- * `--auto-approve`: ACP sessions stay fail-closed in this milestone, so the
- * CLI's interactive auto-approve flag is rejected as an unknown option rather
+ * `--auto-approve`: ACP starts in Ask mode and v1 clients select modes through
+ * the session configuration API, so the headless tool-execution flag is rejected rather
  * than silently ignored.
  */
 

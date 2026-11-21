@@ -265,11 +265,12 @@ export class DirectGlobalConfiguration {
       providers,
       oauthAccounts,
       safety: {
+        showReview: this.settings.get('shell.showReview') === true,
         sandbox: this.settings.get('sandbox.enabled') === true ? ('enabled' as const) : ('disabled' as const),
         approval:
           approval === 'always'
             ? ('unsafe-active' as const)
-            : approval === 'auto' || approval === 'advisory' || approval === 'off'
+            : approval === 'auto' || approval === 'unattended' || approval === 'off'
             ? approval
             : ('hidden' as const),
         backgroundShell: 'disabled-by-gateway' as const,

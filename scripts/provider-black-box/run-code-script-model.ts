@@ -17,6 +17,12 @@ export type ScriptedCall =
 export async function runScriptedRunCode(options: {
   readonly scripts: readonly ScriptedCall[];
   readonly files?: Readonly<Record<string, string>>;
+  /**
+   * `auto-approve` (the default) runs with --auto-approve, which also approves reads outside the workspace.
+   * `default` runs with the product's own approval policy: a call that needs approval is refused, because a
+   * headless run cannot ask.
+   */
+  readonly approval?: 'auto-approve' | 'default';
   /** Runs while the isolated workspace still exists, e.g. to read a spooled file the result names. */
   readonly beforeCleanup?: (results: string[], workspaceRoot: string) => Promise<void>;
 }): Promise<string[]> {
@@ -92,7 +98,11 @@ export async function runScriptedRunCode(options: {
   try {
     const result = await workspace.runCli({
       cwd: join(workspace.root, 'project'),
-      args: ['--auto-approve', '--json', 'Run the scripted run_code scenarios.'],
+      args: [
+        ...(options.approval === 'default' ? [] : ['--auto-approve']),
+        '--json',
+        'Run the scripted run_code scenarios.',
+      ],
       deadlineMs: 30000,
     });
     if (result.exitCode !== 0) throw new Error(`CLI exited ${result.exitCode}: ${result.stderr}${result.stdout}`);

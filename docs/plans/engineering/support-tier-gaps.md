@@ -109,9 +109,12 @@ Ordered by what a miss costs, then by how likely the miss is.
    exist only in the TUI. `agent.maxStreamOutputChars` turned out to limit the
    model's streamed text per request, not tool output: text past it fails the
    turn, the limit is inclusive, and reasoning past it is cut without failing.
-   Tool output is cut by `tools.maxOutputChars`, which has no test. Not
-   covered: Windows, and a foreground command moved to the background in the
-   TUI.
+   Tool output is cut by `tools.maxOutputChars`, checked in
+   `tests/cli/tool-output-limit.integration.test.ts`: `shell` keeps both ends
+   and says how much went, `run_code` and `read_file` keep the start, each cut
+   names a file holding the whole output, and the same calls under three
+   limits are cut or passed whole as the setting says. Not covered: Windows,
+   and a foreground command moved to the background in the TUI.
 
 ### 2. Providers
 
@@ -374,12 +377,39 @@ section is a real recording behind every provider, replayed offline.
 
 ### 5. Small Core items without a check
 
-- `/settings reset`, the `-r` short flag and `--show-reasoning`: not run by a test.
-- `grep` and `glob`: only their error paths are asserted.
-- Environment overrides: three of the entries in `SETTING_ENV_VARIABLES` are
-  asserted, in `tests/config/approval-restart.integration.test.ts`.
-- Skins: `tests/cli/cli.e2e.test.ts` waits for the composer under each skin and
-  asserts nothing about layout.
+**Each now has a check through the built CLI.**
+
+- `/settings reset <key>`: `tests/cli/settings-reset.e2e.test.ts` resets a
+  changed setting in the TUI and reads the default back from disk, from the
+  running session and from the next model request. The TUI has no reset-all
+  form; `reset()` without a key exists only in the settings service.
+- `-r` and `--show-reasoning`: `tests/cli/reasoning-flags.integration.test.ts`
+  reads the effort off the model request and the stream the reasoning arrives
+  on. `--show-reasoning` does nothing in `--json` mode, where reasoning is
+  always a stdout event, and the TUI ignores it.
+- `grep` and `glob`: `scripts/provider-black-box/run-code-file-search.blackbox.ts`
+  asserts what the model reads when they succeed, and that a path outside the
+  workspace is refused under the default approvals. The model reaches both
+  only inside `run_code`.
+- Environment overrides: `tests/cli/settings-environment.integration.test.ts`
+  runs each variable against settings.json, and fails when an entry of
+  `SETTING_ENV_VARIABLES` is in none of its three lists. `DEBUG_LOGGING` and
+  `DEBUG_BASH_TOOL` are listed there as not observed, with the reason.
+- Skins: `tests/cli/cli.e2e.test.ts` now compares the idle screen with a
+  layout record per skin (`LAYOUTS`). Tool and approval frames are not read.
+
+Found while writing them, and not changed:
+
+- `-r` with a value outside `VALID_REASONING_EFFORTS` (`-r bogus`, `-r HIGH`)
+  is ignored without a word: exit 0 and no effort on the request.
+- `DISABLE_LOGGING=1` turns logging off (`parseBooleanEnv`) while the settings
+  override reads only `true`, so the setting shows `false` with source `env`.
+- `grep` on a single file returns `line:text` without the path its
+  description promises.
+- `read_file` cut by a small limit still heads the result with the full line
+  range; only the saved-output note says the rest is missing.
+- `glob` with `..` inside the pattern (`../*.txt`) searches the workspace and
+  returns its own files under the `find` backend. Nothing outside is returned.
 
 ## Supported items with no check found
 

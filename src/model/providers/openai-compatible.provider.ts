@@ -16,6 +16,7 @@ import {
   type CustomProviderConfig,
   type CustomProviderRuntimeDeps,
 } from './custom-provider-runtime.js';
+import type { FetchMiddleware } from './fetch/compose.js';
 export type { CustomProviderConfig, CustomProviderRuntimeDeps } from './custom-provider-runtime.js';
 import {
   createOpenAICompatibleMiddleware,
@@ -77,6 +78,16 @@ function toLabel(name: string): string {
 
 export { sanitizeResponsesApiBody };
 
+/** Omit the SDK's placeholder bearer token when a custom endpoint has no key. */
+function createOptionalApiKeyMiddleware(): FetchMiddleware {
+  return async (ctx, next) => {
+    const headers = new Headers(ctx.url instanceof Request ? ctx.url.headers : undefined);
+    new Headers(ctx.init?.headers).forEach((value, key) => headers.set(key, value));
+    headers.delete('authorization');
+    return next({ ...ctx, init: { ...ctx.init, headers } });
+  };
+}
+
 export function createCustomProviderModelProvider(config: CustomProviderConfig, deps: CustomProviderRuntimeDeps): any {
   const normalizedDeps = { ...deps, defaultModel: (deps.defaultModel || '').trim() };
   const providerType = config.type || 'openai-compatible';
@@ -90,11 +101,14 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
   switch (providerType) {
     case 'openai': {
       const openAIClient = new OpenAI({
-        apiKey: config.apiKey,
+        apiKey: config.apiKey || 'no-key',
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
         // RetryingModel or the engine owns retries; SDK retries hide physical attempts.
         maxRetries: 0,
-        fetch: buildProviderFetch(config, normalizedDeps, [createOpenAIResponsesMiddleware()]),
+        fetch: buildProviderFetch(config, normalizedDeps, [
+          ...(!config.apiKey ? [createOptionalApiKeyMiddleware()] : []),
+          createOpenAIResponsesMiddleware(),
+        ]),
       });
       return new OpenAIChatCompletionsModel(
         openAIClient,
@@ -144,6 +158,7 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
         apiKey: runtimeConfig.apiKey || 'no-key',
         maxRetries: 0,
         fetch: buildProviderFetch(config, normalizedDeps, [
+          ...(!runtimeConfig.apiKey ? [createOptionalApiKeyMiddleware()] : []),
           createOpenAICompatibleMiddleware(),
           createAnthropicChatCachingMiddleware(),
           createLlamaCppMiddleware(providerType),

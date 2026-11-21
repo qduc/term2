@@ -81,8 +81,14 @@ section is a real recording behind every provider, replayed offline.
    probe the two chat types send identical requests, so the pair does not yet
    exercise anything that differs between them. Still checked against
    hand-written servers only: Codex and OpenAI over WebSocket, which wait on the
-   WebSocket capture adapter `PROVENANCE.md` lists as outstanding; Grok; a direct
-   `api.anthropic.com` capture; and `llama.cpp` with the local presets. OpenCode's
+   WebSocket capture adapter `PROVENANCE.md` lists as outstanding; Grok; and
+   `llama.cpp` with the local presets. A direct `api.anthropic.com` capture now
+   exists (`fixtures/anthropic/`), but the model produced no thinking block in
+   it, and the capture that does contain thinking blocks came through
+   OpenRouter. No fixture therefore shows whether Anthropic's own API accepts a
+   tool continuation whose request omits the preceding thinking block, which is
+   what the `anthropic` adapter sends. That needs a probe that makes the model
+   think before it calls the tool. OpenCode's
    Responses protocol is also unrecorded; `opencode` is Supported and the
    maintainer has no account, so it stays so.
 8. **Re-prepare the older fixtures.** `openrouter/tool-continuation-v1.json` was

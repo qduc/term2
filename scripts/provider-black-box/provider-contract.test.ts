@@ -671,86 +671,113 @@ describe('provider boundary contracts through the registry', () => {
     },
   );
 
-  it('real OpenRouter Messages capture replays tool continuation through a custom anthropic provider', async () => {
-    const fixture = await readFixtureEnvelope(
-      new URL('./fixtures/anthropic-openrouter/tool-continuation-v2-anthropic.json', import.meta.url).pathname,
-    );
-    expect(fixture.provider).toBe('anthropic-openrouter');
-    const probe = getProbeScenario(fixture.capture.probeScenario);
-    server = await startFakeProviderHttpServer({ fixture });
-    // The recorded path is `/api/v1/messages`, so the base URL carries OpenRouter's `/api/v1` prefix.
-    const providerCase: ProviderCase = {
-      ...providerCases[2]!,
-      name: 'OpenRouter Messages via custom anthropic',
+  it.each([
+    {
+      origin: 'OpenRouter Messages',
+      fixturePath: './fixtures/anthropic-openrouter/tool-continuation-v2-anthropic.json',
       registryId: 'anthropic-openrouter',
-      model: fixture.capture.model,
-      runtimeType: 'anthropic',
       basePath: '/api/v1',
-      providerOptions: {},
-    };
-    const settings = createSettings(providerCase);
-    // The lazy definition is the one production registers for settings-defined providers.
-    upsertProvider(
-      createLazyOpenAICompatibleProviderDefinition({
-        name: providerCase.registryId,
-        label: providerCase.name,
-        type: 'anthropic',
-        baseUrl: fixtureBaseUrl(providerCase),
-        apiKey: 'fixture-key',
-      }),
-    );
-    runtimeProviderIds.add(providerCase.registryId);
-    expect(settings.getDynamic('providers')).toEqual([
-      expect.objectContaining({ id: providerCase.registryId, type: 'anthropic' }),
-    ]);
-    const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
-      settingsService: settings,
-      loggingService: quietLogging,
-    });
-    const initial = {
-      ...fixtureRequest,
-      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: probe.prompt }] }],
-    } as any;
-    const firstEvents = await collect(model.stream(initial));
-    const call =
-      (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
-      firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
-    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+      messagesPath: '/api/v1/messages',
+      // Extended thinking with a budget: the recording has thinking blocks.
+      expectedSse: ['thinking_delta', 'message_stop'],
+      assertFirstRequest: (body: Record<string, any>) =>
+        expect(body.thinking).toMatchObject({ type: 'enabled', budget_tokens: expect.any(Number) }),
+    },
+    {
+      origin: 'Anthropic API',
+      fixturePath: './fixtures/anthropic/tool-continuation-v2-anthropic.json',
+      registryId: 'anthropic',
+      basePath: '/v1',
+      messagesPath: '/v1/messages',
+      // The model did not think in this recording, so there is no thinking block to replay; what the
+      // fixture adds is the adaptive-thinking request shape this model family gets.
+      expectedSse: ['tool_use', 'message_stop'],
+      assertFirstRequest: (body: Record<string, any>) => {
+        expect(body.thinking).toEqual({ type: 'adaptive' });
+        expect(body.output_config).toMatchObject({ effort: expect.any(String) });
+      },
+    },
+  ])(
+    'real $origin capture replays tool continuation through a custom anthropic provider',
+    async ({ fixturePath, registryId, basePath, messagesPath, expectedSse, assertFirstRequest }) => {
+      const fixture = await readFixtureEnvelope(new URL(fixturePath, import.meta.url).pathname);
+      expect(fixture.provider).toBe(registryId);
+      const probe = getProbeScenario(fixture.capture.probeScenario);
+      server = await startFakeProviderHttpServer({ fixture });
+      // The base URL carries the recorded path's prefix, so `messagesPath` is compared as recorded.
+      const providerCase: ProviderCase = {
+        ...providerCases[2]!,
+        name: `${registryId} via custom anthropic`,
+        registryId,
+        model: fixture.capture.model,
+        runtimeType: 'anthropic',
+        basePath,
+        providerOptions: {},
+      };
+      const settings = createSettings(providerCase);
+      // The lazy definition is the one production registers for settings-defined providers.
+      upsertProvider(
+        createLazyOpenAICompatibleProviderDefinition({
+          name: providerCase.registryId,
+          label: providerCase.name,
+          type: 'anthropic',
+          baseUrl: fixtureBaseUrl(providerCase),
+          apiKey: 'fixture-key',
+        }),
+      );
+      runtimeProviderIds.add(providerCase.registryId);
+      expect(settings.getDynamic('providers')).toEqual([
+        expect.objectContaining({ id: providerCase.registryId, type: 'anthropic' }),
+      ]);
+      const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+        settingsService: settings,
+        loggingService: quietLogging,
+      });
+      const initial = {
+        ...fixtureRequest,
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: probe.prompt }] }],
+      } as any;
+      const firstEvents = await collect(model.stream(initial));
+      const call =
+        (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+        firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+      expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
 
-    const continuation = {
-      ...initial,
-      input: [
-        ...initial.input,
-        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
-        { type: 'tool_result', id: call.id, output: JSON.stringify(probe.toolResult) },
-        { type: 'message', role: 'user', content: [{ type: 'text', text: probe.followUp }] },
-      ],
-    } as any;
-    const secondEvents = await collect(model.stream(continuation));
-    const allEvents = [...firstEvents, ...secondEvents];
-    const toolCalls = allEvents
-      .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
-      .filter((event: any) => event.type === 'tool_call');
-    expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
-    expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
-    expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
-    expect(
-      fixture.turns.flatMap((turn) =>
-        turn.frames.filter((frame) => frame.kind === 'sse-event').map((frame) => frame.data),
-      ),
-    ).toEqual(
-      expect.arrayContaining([expect.stringContaining('thinking_delta'), expect.stringContaining('message_stop')]),
-    );
-    server.assertReplayValid();
+      const continuation = {
+        ...initial,
+        input: [
+          ...initial.input,
+          { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+          { type: 'tool_result', id: call.id, output: JSON.stringify(probe.toolResult) },
+          { type: 'message', role: 'user', content: [{ type: 'text', text: probe.followUp }] },
+        ],
+      } as any;
+      const secondEvents = await collect(model.stream(continuation));
+      const allEvents = [...firstEvents, ...secondEvents];
+      const toolCalls = allEvents
+        .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+        .filter((event: any) => event.type === 'tool_call');
+      expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
+      expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+      expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+      expect(
+        fixture.turns.flatMap((turn) =>
+          turn.frames.filter((frame) => frame.kind === 'sse-event').map((frame) => frame.data),
+        ),
+      ).toEqual(expect.arrayContaining(expectedSse.map((marker) => expect.stringContaining(marker))));
+      server.assertReplayValid();
+      assertFirstRequest(server.requests[0]!.body as Record<string, any>);
+      assertFirstRequest(fixture.turns[0]!.frames.find((frame) => frame.kind === 'http-request')!.body as any);
 
-    // This type's own wire behaviour: the key travels in `x-api-key`, never as a bearer token.
-    expect(server.requests).toHaveLength(2);
-    for (const request of server.requests) {
-      expect(request.url).toBe('/api/v1/messages');
-      expect(request.headers['x-api-key']).toBe('fixture-key');
-      expect(request.headers.authorization).toBeUndefined();
-    }
-  });
+      // This type's own wire behaviour: the key travels in `x-api-key`, never as a bearer token.
+      expect(server.requests).toHaveLength(2);
+      for (const request of server.requests) {
+        expect(request.url).toBe(messagesPath);
+        expect(request.headers['x-api-key']).toBe('fixture-key');
+        expect(request.headers.authorization).toBeUndefined();
+      }
+    },
+  );
 
   it('real OpenCode Anthropic capture replays tool continuation through the registry', async () => {
     const fixture = await readFixtureEnvelope(

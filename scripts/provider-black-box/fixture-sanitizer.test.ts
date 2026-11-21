@@ -239,6 +239,46 @@ describe('fixture sanitizer', () => {
     expect(result.report.placeholders).toMatchObject({ [live1]: 'gen_<1>', [live2]: 'gen_<2>' });
   });
 
+  it('redacts Anthropic account, trace and rate-limit headers and canonicalizes request ids', () => {
+    const result = sanitizeFixtureEnvelope({
+      ...envelope,
+      turns: [
+        {
+          frames: [
+            {
+              seq: 0,
+              kind: 'http-response-head',
+              status: 200,
+              headers: {
+                'anthropic-organization-id': 'aaaaaaaa-0000-4000-8000-000000000000',
+                'anthropic-workspace-id': 'wrkspc_made_up_value',
+                'anthropic-ratelimit-requests-limit': '4000',
+                'anthropic-ratelimit-input-tokens-remaining': '3999000',
+                'anthropic-ratelimit-tokens-reset': '2026-01-01T00:00:00Z',
+                traceresponse: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+                'request-id': 'req_made_up_value',
+                'cf-cache-status': 'DYNAMIC',
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.envelope.turns[0]!.frames[0]).toMatchObject({
+      headers: {
+        'anthropic-organization-id': '[REDACTED]',
+        'anthropic-workspace-id': '[REDACTED]',
+        'anthropic-ratelimit-requests-limit': '[REDACTED]',
+        'anthropic-ratelimit-input-tokens-remaining': '[REDACTED]',
+        'anthropic-ratelimit-tokens-reset': '[REDACTED]',
+        traceresponse: '[REDACTED]',
+        'request-id': 'req_<1>',
+        'cf-cache-status': 'DYNAMIC',
+      },
+    });
+    expect(scanFixtureSecrets(result.envelope).safe).toBe(true);
+  });
+
   it('canonicalizes Responses reasoning and function item IDs and removes encrypted content', () => {
     const result = sanitizeFixtureEnvelope({
       ...envelope,

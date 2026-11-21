@@ -126,7 +126,14 @@ function sanitizeFrame(
       Object.entries(headers).map(([key, value]) => {
         // `x-openrouter-release` is OpenRouter's build identifier: no replay value, and long enough
         // that the secret scan reads it as a token.
-        if (/organization|project|account|cf-ray|^x-openrouter-release$/i.test(key)) {
+        // Anthropic's `anthropic-workspace-id`, W3C `traceresponse` (a trace id) and every
+        // `anthropic-ratelimit-*` value (limits, remaining, reset: the account's rate tier) are
+        // account-specific and have no replay value.
+        if (
+          /organization|project|account|workspace|cf-ray|^traceresponse$|^anthropic-ratelimit-|^x-openrouter-release$/i.test(
+            key,
+          )
+        ) {
           report.redactions.push({ path: `${path}.headers.${key}`, reason: 'provider identifier redacted' });
           return [key, '[REDACTED]'];
         }

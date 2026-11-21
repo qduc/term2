@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "anthropic",
+  "wireFamily": "anthropic",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "@ai-sdk/anthropic",
+    "apiSdkVersion": "3.0.76",
+    "model": "claude-haiku-5-5",
+    "modelFamily": "anthropic",
+    "capturedAt": "2026-11-21T15:13:22.169Z",
+    "recorderVersion": "1",
+    "probeScenario": "tool-continuation-v2"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1/messages",
+          "headers": {
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            "user-agent": "ai-sdk/anthropic/3.0.76 ai-sdk/provider-utils/4.0.27 runtime/node.js/24",
+            "x-api-key": "[REDACTED]"
+          },
+          "body": {
+            "model": "claude-haiku-5-5",
+            "max_tokens": 65536,
+            "thinking": {
+              "type": "adaptive"
+            },
+            "output_config": {
+              "effort": "medium"
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Call the fixture tool with a = 1, then summarize its result.",
+                    "cache_control": {
+                      "type": "ephemeral"
+                    }
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "fixture",
+                "description": "Returns deterministic fixture data.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["a"],
+                  "additionalProperties": false
+                },
+                "cache_control": {
+                  "type": "ephemeral"
+                },
+                "eager_input_streaming": true
+              }
+            ],
+            "stream": true
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "anthropic-organization-id": "[REDACTED]",
+            "anthropic-ratelimit-input-tokens-limit": "[REDACTED]",
+            "anthropic-ratelimit-input-tokens-remaining": "[REDACTED]",
+            "anthropic-ratelimit-input-tokens-reset": "[REDACTED]",
+            "anthropic-ratelimit-output-tokens-limit": "[REDACTED]",
+            "anthropic-ratelimit-output-tokens-remaining": "[REDACTED]",
+            "anthropic-ratelimit-output-tokens-reset": "[REDACTED]",
+            "anthropic-ratelimit-requests-limit": "[REDACTED]",
+            "anthropic-ratelimit-requests-remaining": "[REDACTED]",
+            "anthropic-ratelimit-requests-reset": "[REDACTED]",
+            "anthropic-ratelimit-tokens-limit": "[REDACTED]",
+            "anthropic-ratelimit-tokens-remaining": "[REDACTED]",
+            "anthropic-ratelimit-tokens-reset": "[REDACTED]",
+            "anthropic-workspace-id": "[REDACTED]",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "cf-ray": "[REDACTED]",
+            "connection": "keep-alive",
+            "content-encoding": "gzip",
+            "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+            "content-type": "text/event-stream; charset=utf-8",
+            "date": "Sat, 21 Nov 2026 15:13:23 GMT",
+            "request-id": "req_<1>",
+            "server": "cloudflare",
+            "server-timing": "x-originResponse;dur=177",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "traceresponse": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "vary": "Accept-Encoding",
+            "x-robots-tag": "none"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "event": "message_start",
+          "data": "{\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-5-5\",\"id\":\"msg_<2>\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":398,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":16,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_start",
+          "data": "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01SvucR7Q4hCeU4WFQAZAHH8\",\"name\":\"fixture\",\"input\":{},\"caller\":{\"type\":\"direct\"}}}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "event": "ping",
+          "data": "{\"type\":\"ping\"}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"a\\\": 1\"}}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"}\"}}",
+          "seq": 7
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_stop",
+          "data": "{\"type\":\"content_block_stop\",\"index\":0}",
+          "seq": 8
+        },
+        {
+          "kind": "sse-event",
+          "event": "message_delta",
+          "data": "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":398,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":47,\"output_tokens_details\":{\"thinking_tokens\":0}}}",
+          "seq": 9
+        },
+        {
+          "kind": "sse-event",
+          "event": "message_stop",
+          "data": "{\"type\":\"message_stop\"}",
+          "seq": 10
+        }
+      ]
+    },
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1/messages",
+          "headers": {
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            "user-agent": "ai-sdk/anthropic/3.0.76 ai-sdk/provider-utils/4.0.27 runtime/node.js/24",
+            "x-api-key": "[REDACTED]"
+          },
+          "body": {
+            "model": "claude-haiku-5-5",
+            "max_tokens": 65536,
+            "thinking": {
+              "type": "adaptive"
+            },
+            "output_config": {
+              "effort": "medium"
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Call the fixture tool with a = 1, then summarize its result."
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool_use",
+                    "id": "toolu_01SvucR7Q4hCeU4WFQAZAHH8",
+                    "name": "fixture",
+                    "input": {
+                      "a": 1
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_01SvucR7Q4hCeU4WFQAZAHH8",
+                    "content": "{\"ok\":true,\"value\":1}",
+                    "cache_control": {
+                      "type": "ephemeral"
+                    }
+                  },
+                  {
+                    "type": "text",
+                    "text": "The fixture tool returned its deterministic result. Give the final summary.",
+                    "cache_control": {
+                      "type": "ephemeral"
+                    }
+                  }
+                ]
+              }
+            ],
+            "tools": [
+              {
+                "name": "fixture",
+                "description": "Returns deterministic fixture data.",
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["a"],
+                  "additionalProperties": false
+                },
+                "cache_control": {
+                  "type": "ephemeral"
+                },
+                "eager_input_streaming": true
+              }
+            ],
+            "stream": true
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "anthropic-organization-id": "[REDACTED]",
+            "anthropic-ratelimit-input-tokens-limit": "[REDACTED]",
+            "anthropic-ratelimit-input-tokens-remaining": "[REDACTED]",
+            "anthropic-ratelimit-input-tokens-reset": "[REDACTED]",
+            "anthropic-ratelimit-output-tokens-limit": "[REDACTED]",
+            "anthropic-ratelimit-output-tokens-remaining": "[REDACTED]",
+            "anthropic-ratelimit-output-tokens-reset": "[REDACTED]",
+            "anthropic-ratelimit-requests-limit": "[REDACTED]",
+            "anthropic-ratelimit-requests-remaining": "[REDACTED]",
+            "anthropic-ratelimit-requests-reset": "[REDACTED]",
+            "anthropic-ratelimit-tokens-limit": "[REDACTED]",
+            "anthropic-ratelimit-tokens-remaining": "[REDACTED]",
+            "anthropic-ratelimit-tokens-reset": "[REDACTED]",
+            "anthropic-workspace-id": "[REDACTED]",
+            "cache-control": "no-cache",
+            "cf-cache-status": "DYNAMIC",
+            "cf-ray": "[REDACTED]",
+            "connection": "keep-alive",
+            "content-encoding": "gzip",
+            "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+            "content-type": "text/event-stream; charset=utf-8",
+            "date": "Sat, 21 Nov 2026 15:13:24 GMT",
+            "request-id": "req_<3>",
+            "server": "cloudflare",
+            "server-timing": "x-originResponse;dur=70",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "traceresponse": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "vary": "Accept-Encoding",
+            "x-robots-tag": "none"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "event": "message_start",
+          "data": "{\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-5-5\",\"id\":\"msg_<4>\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":488,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":8,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_start",
+          "data": "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "event": "ping",
+          "data": "{\"type\":\"ping\"}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The fixture tool returned\"}}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" `{\\\"ok\\\": true,\"}}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" \\\"value\\\": 1}`\"}}",
+          "seq": 7
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\". The\"}}",
+          "seq": 8
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" call succeeded, and\"}}",
+          "seq": 9
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" the value came\"}}",
+          "seq": 10
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" back as 1, mat\"}}",
+          "seq": 11
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ching the input `\"}}",
+          "seq": 12
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_delta",
+          "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"a = 1`.\"}}",
+          "seq": 13
+        },
+        {
+          "kind": "sse-event",
+          "event": "content_block_stop",
+          "data": "{\"type\":\"content_block_stop\",\"index\":0}",
+          "seq": 14
+        },
+        {
+          "kind": "sse-event",
+          "event": "message_delta",
+          "data": "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":488,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":53,\"output_tokens_details\":{\"thinking_tokens\":0}}}",
+          "seq": 15
+        },
+        {
+          "kind": "sse-event",
+          "event": "message_stop",
+          "data": "{\"type\":\"message_stop\"}",
+          "seq": 16
+        }
+      ]
+    }
+  ],
+  "placeholders": {
+    "req_<1>": "req_<1>",
+    "msg_<2>": "msg_<2>",
+    "req_<3>": "req_<3>",
+    "msg_<4>": "msg_<4>"
+  }
+}

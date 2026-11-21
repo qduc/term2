@@ -24,6 +24,7 @@ import {
   formatFullOutputSavedNote,
   saveOutputArtifact,
 } from '../../../shared/utils/shell/shell-output.js';
+import { getTrimConfig } from '../../../shared/utils/output/output-trim.js';
 import {
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
@@ -41,7 +42,8 @@ export {
 } from './script-surface.js';
 export type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
 
-const MAX_OUTPUT_CHARS = 30_000;
+/** The model-facing cap: tools.maxOutputChars, through the session's trim config. */
+const maxOutputChars = (): number => getTrimConfig().maxCharacters;
 
 // Model-facing contract. Several sentences exist because of observed failures
 // (docs/research/tool-real-world-log-audit-2026-09-05.md,
@@ -155,12 +157,12 @@ const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
  * inside a script is an object ({content, ...}) that carries the whole file, which is
  * how a script ends up returning far more than it meant to.
  */
-const clipNote = (text: string): string => {
+const clipNote = (text: string, limit: number): string => {
   const readFileShaped = text.includes('"content":"') || text.includes('"totalLines":');
   return (
     `[truncated: output was ${text.length} characters, ${
-      text.length - MAX_OUTPUT_CHARS
-    } over the ${MAX_OUTPUT_CHARS} limit, so the end was cut. ` +
+      text.length - limit
+    } over the ${limit} limit, so the end was cut. ` +
     'Have the script return a slice or only the matching lines' +
     (readFileShaped
       ? ', e.g. result.content.split("\\n").filter(...).join("\\n"), instead of the whole read_file result'
@@ -173,7 +175,8 @@ const clip = async (
   text: string,
   protectedAction?: { prefix: string; full: string; compact: string },
 ): Promise<string> => {
-  if (text.length <= MAX_OUTPUT_CHARS) return text;
+  const limit = maxOutputChars();
+  if (text.length <= limit) return text;
   let retrieval: string;
   try {
     retrieval = formatFullOutputSavedNote(
@@ -185,10 +188,10 @@ const clip = async (
     retrieval =
       'Full output could not be saved; the omitted text is unavailable. Do not repeat completed tool effects.';
   }
-  const marker = `\n${clipNote(text)}\n${retrieval}`;
+  const marker = `\n${clipNote(text, limit)}\n${retrieval}`;
   // Preserve the lifecycle heading as well as host evidence. Script-authored
   // output may consume the entire budget; it must not hide action outcomes.
-  const available = MAX_OUTPUT_CHARS - marker.length;
+  const available = limit - marker.length;
   const action = protectedAction
     ? `\n\n${protectedAction.full.length + 2 <= available - 64 ? protectedAction.full : protectedAction.compact}`
     : '';

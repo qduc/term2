@@ -230,11 +230,11 @@ export function createDirectRuntimes(
       );
       const providerModels = createProviderRegistry(selection);
       const trimConfig = {
-        maxCharacters: settings.get('shell.maxOutputChars'),
+        maxCharacters: settings.get('tools.maxOutputChars'),
         maxLines: settings.get('shell.maxOutputLines'),
       };
       const stopTrimUpdates = settings.onChange((key) => {
-        if (key === 'shell.maxOutputChars') trimConfig.maxCharacters = settings.get('shell.maxOutputChars');
+        if (key === 'tools.maxOutputChars') trimConfig.maxCharacters = settings.get('tools.maxOutputChars');
         if (key === 'shell.maxOutputLines') trimConfig.maxLines = settings.get('shell.maxOutputLines');
       });
       const suppliedSurfaceOptions = { ...options.surface(context.id), trimConfig: () => trimConfig };

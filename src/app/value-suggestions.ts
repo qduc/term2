@@ -62,7 +62,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: '3600000', description: '1h' },
   ],
   'shell.maxOutputLines': [{ value: '200' }, { value: '500' }, { value: '1000' }],
-  'shell.maxOutputChars': [{ value: '20000' }, { value: '50000' }, { value: '100000' }],
+  'tools.maxOutputChars': [{ value: '10000' }, { value: '20000' }, { value: '40000' }],
   'ui.historySize': [{ value: '50' }, { value: '100' }, { value: '200' }],
   // The setting's own description has two screen lines; what each option means is shown here, once chosen.
   'agent.cachePreservingEffort': [

@@ -88,7 +88,7 @@ it('says how much was cut and how to return less when a read_file result fills t
       { code: `return await Promise.all(['a.txt', 'b.txt', 'c.txt'].map((path) => tools.read_file({path})));` },
     ],
   });
-  expect(result).toMatch(/\[truncated: output was \d+ characters, \d+ over the 30000 limit, so the end was cut\./);
+  expect(result).toMatch(/\[truncated: output was \d+ characters, \d+ over the 20000 limit, so the end was cut\./);
   expect(result).toContain('Have the script return a slice or only the matching lines');
   expect(result).toContain('instead of the whole read_file result');
   expect(result).toContain('Full output saved to');

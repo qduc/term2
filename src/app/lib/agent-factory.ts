@@ -11,7 +11,7 @@ import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from '../.
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import type { ListWorktreesSync } from '../../tools/workspace/worktree-inventory.js';
 import { ExecutionContext } from '../../tools/execution-context.js';
-import { trimToolOutput } from '../../shared/utils/output/trim-tool-output.js';
+import { boundModelToolOutput, trimToolOutput } from '../../shared/utils/output/trim-tool-output.js';
 import { isScriptedToolCall } from '../../shared/utils/output/bound-tool-result.js';
 import { SkillsService } from '../../tools/skills/skills-service.js';
 import { injectRunBudgetWarning } from '../../session/inject-warning-into-tool-output.js';
@@ -253,7 +253,7 @@ export function buildAgentTools({
           if (deps.readOnly && READ_ONLY_FILE_MUTATING_TOOLS.has(definition.name)) {
             return 'Error: file-mutating tool ' + definition.name + ' is unavailable in a read-only gateway session.';
           }
-          const maxOutputLengthValue = deps.settings.get('shell.maxOutputChars');
+          const maxOutputLengthValue = deps.settings.get('tools.maxOutputChars');
           const toolCallId = getToolCallId(details);
           // Check if this execution should be intercepted
           const rejectionMessage = await deps.checkToolInterceptors(definition.name, normalizedParams, toolCallId);
@@ -313,9 +313,8 @@ export function buildAgentTools({
             return String(finalResult ?? '');
           }
           const execution = getRunCodeExecutionResult(finalResult);
-          const trimmedResult = trimToolOutput(
+          const trimmedResult = await boundModelToolOutput(
             execution && !Array.isArray(finalResult) ? String(finalResult) : finalResult,
-            undefined,
             maxOutputLengthValue ?? undefined,
           );
           // Structured content-part results (read_file images) carry no single

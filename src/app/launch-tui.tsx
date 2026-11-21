@@ -155,7 +155,7 @@ function DirectTuiSession({
           stderr: result.stderr,
           exitCode: result.exitCode,
           timedOut: result.timedOut,
-          maxOutputLength: settings.get('shell.maxOutputChars') ?? undefined,
+          maxOutputLength: settings.get('tools.maxOutputChars') ?? undefined,
           maxOutputLines: settings.get('shell.maxOutputLines') ?? undefined,
           durationMs: Date.now() - startedAt,
         });

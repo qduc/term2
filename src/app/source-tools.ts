@@ -424,7 +424,7 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
       try {
         result = await withNestedApprovals(definition, context, options, owners, () =>
           withTrimConfig(
-            () => options.trimConfig?.() ?? { maxLines: 1_000, maxCharacters: 40_000 },
+            () => options.trimConfig?.() ?? { maxLines: 1_000, maxCharacters: 20_000 },
             () =>
               options.withAnswer(answer, async () => definition.execute(input, invocation, { toolCall: { callId } })),
           ),

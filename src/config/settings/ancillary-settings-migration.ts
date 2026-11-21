@@ -3,6 +3,11 @@ import { type SettingsData } from './settings-schema.js';
 type Migration = {
   target: string;
   legacy: string[];
+  /**
+   * Legacy values that only record an old default. Settings files store every value, defaults included,
+   * so carrying one of these over would keep the old default in force instead of the target's new one.
+   */
+  ignoredLegacyValues?: unknown[];
 };
 
 const MIGRATIONS: Migration[] = [
@@ -13,6 +18,8 @@ const MIGRATIONS: Migration[] = [
     legacy: ['agent.subagentExplorerReasoningEffort', 'agent.subagentLibrarianReasoningEffort'],
   },
   { target: 'agent.decisionModel', legacy: ['agent.decisionShadowModel', 'agent.autoApproveDecisionShadowModel'] },
+  // The limit now bounds every tool result, not only shell output, and its default fell from 40,000 to 20,000.
+  { target: 'tools.maxOutputChars', legacy: ['shell.maxOutputChars'], ignoredLegacyValues: [40000] },
 ];
 
 function getOwnValue(object: unknown, path: string): { found: boolean; value?: unknown } {
@@ -51,7 +58,13 @@ export function migrateLegacyAncillarySettings(
 
     const legacyValue = migration.legacy
       .map((path) => ({ ...getOwnValue(rawConfig, path), path }))
-      .find((candidate) => candidate.found && candidate.value !== undefined && candidate.value !== null);
+      .find(
+        (candidate) =>
+          candidate.found &&
+          candidate.value !== undefined &&
+          candidate.value !== null &&
+          !migration.ignoredLegacyValues?.includes(candidate.value),
+      );
     if (!legacyValue) continue;
 
     setValue(migratedConfig, migration.target, legacyValue.value);

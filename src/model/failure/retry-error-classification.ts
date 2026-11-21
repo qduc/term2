@@ -24,7 +24,15 @@ const TRANSIENT_SYSTEM_ERROR_CODES = new Set([
   'ENETUNREACH',
 ]);
 
-const UNDICI_RETRYABLE_CODES = new Set(['UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT']);
+// UND_ERR_SOCKET is undici's SocketError ("other side closed"): the peer closed the socket. The AI SDK routes
+// (Anthropic, Google) surface it only as the `cause` of an `APICallError` named "Cannot connect to API", with no
+// status, so the code is the structural signal; `isNetworkProtocolError` reaches it by walking `cause`.
+const UNDICI_RETRYABLE_CODES = new Set([
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
 
 // WebSocket close codes that indicate temporary conditions worth retrying.
 // Keep all retryable codes in one place.

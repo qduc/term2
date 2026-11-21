@@ -32,6 +32,7 @@ type HttpWireFamily =
 type HttpScenario =
   | 'native-error'
   | 'early-close'
+  | 'early-close-once'
   | 'incomplete'
   | 'reasoning'
   | 'restart-completed'
@@ -540,13 +541,19 @@ async function startResilienceHttpServer(options: {
     requests.push(captured);
     const frames = responseFramesFor(options.family, options.scenario, requests.length, captured.body);
     responseFrames.push(frames);
-    if (options.scenario === 'early-close') {
+    if (options.scenario === 'early-close' || (options.scenario === 'early-close-once' && requests.length === 1)) {
       response.destroy();
       return;
     }
     if (options.scenario === 'native-error' && nativeErrorUsesHttpStatus(options.family)) {
       response.writeHead(500, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: { type: 'fixture_error', message: 'Injected native provider failure' } }));
+      response.end(
+        JSON.stringify(
+          options.family === 'google-generate-content'
+            ? { error: { code: 500, status: 'INTERNAL', message: 'Injected native provider failure' } }
+            : { error: { type: 'fixture_error', message: 'Injected native provider failure' } },
+        ),
+      );
       return;
     }
     response.writeHead(200, { 'content-type': contentTypeFor(), connection: 'close' });
@@ -1189,6 +1196,31 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
             );
           });
         }
+      }
+    });
+
+    describe('application-owned provider HTTP dropped-connection retry', () => {
+      for (const { family, route } of HTTP_ROUTES.filter(
+        (entry) => entry.route.type === 'anthropic' || entry.route.type === 'google',
+      )) {
+        it(`${route.rowId}.early-close-retry retries a connection dropped before any response and completes`, async () => {
+          const server = await startResilienceHttpServer({ family, scenario: 'early-close-once' });
+          activeHttpServers.push(server);
+          const workspace = await createWorkspace(route, server);
+          activeWorkspaces.push(workspace);
+          await enableTransientRetries(workspace.paths.logDir);
+          const result = await workspace.runCli({
+            cwd: process.cwd(),
+            args: [PROMPT, '--provider', route.provider, '--model', route.model],
+            deadlineMs: 20_000,
+          });
+          const context = JSON.stringify({ stdout: result.stdout, stderr: result.stderr });
+          expect(result.timedOut, context).toBe(false);
+          expect(result.exitCode, context).toBe(0);
+          expect(result.stdout, context).toContain(ANSWER);
+          // Not an exact count: two retry layers currently multiply attempts, which this must not pin.
+          expect(server.requests.length, context).toBeGreaterThanOrEqual(2);
+        });
       }
     });
 

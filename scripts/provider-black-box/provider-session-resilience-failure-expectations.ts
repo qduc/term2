@@ -41,6 +41,8 @@ const answeredWithError = (provider: string) => ({
   lead: `${provider} answered with an error after 1 attempt, so no model response was produced.`,
 });
 
+const SDK_CONNECT_FAILURE = /^Cannot connect to API/;
+
 const dropped: Pick<FailureExpectation, 'kind' | 'partial'> = { kind: 'network', partial: undefined };
 
 const wsClose = (code: number, reason: string) =>
@@ -125,36 +127,29 @@ export const FAILURE_EXPECTATIONS: Record<string, Partial<Record<FailureScenario
       notice: answeredWithError('fixture-anthropic-resilience'),
       partial: undefined,
     },
-    // FINDING: a connection dropped before any response is `network`/retryable with a `/retry turn` notice on
-    // every other HTTP route, but `provider`/non-retryable with no notice on the AI SDK routes (anthropic, google).
-    // Only the kind-independent facts are asserted; the wording is undici's, hence the prefix.
+    // The wording is undici's behind the AI SDK's "Cannot connect to API:" prefix, hence the regex; kind, retryable
+    // and the notice are the same as on every other HTTP route.
     'early-close': {
-      kind: undefined,
-      message: /^Cannot connect to API/,
-      retryable: undefined,
-      notice: undefined,
-      partial: undefined,
+      ...dropped,
+      message: SDK_CONNECT_FAILURE,
+      retryable: true,
+      notice: unreached('fixture-anthropic-resilience'),
     },
     incomplete: incompleteStream('AI SDK streamed response ended without a finish event'),
   },
   'runtime-google-generate-content': {
-    // FINDING: the fixture's HTTP 500 body carries "Injected native provider failure", but the user sees only the
-    // status text ("Internal Server Error"); the provider's message is lost. The fixture body is not Google-shaped
-    // ({error:{type,message}} rather than {error:{code,status,message}}), so this may be a fixture artifact. Wording
-    // left unasserted until that is settled.
     'native-error': {
       kind: 'provider',
-      message: undefined,
+      message: 'Injected native provider failure',
       retryable: true,
       notice: answeredWithError('fixture-google-resilience'),
       partial: undefined,
     },
     'early-close': {
-      kind: undefined,
-      message: /^Cannot connect to API/,
-      retryable: undefined,
-      notice: undefined,
-      partial: undefined,
+      ...dropped,
+      message: SDK_CONNECT_FAILURE,
+      retryable: true,
+      notice: unreached('fixture-google-resilience'),
     },
     incomplete: incompleteStream('AI SDK streamed response ended without an authoritative native finish reason'),
   },

@@ -172,8 +172,42 @@ function grokHeadersMiddleware(sessionContextService?: ISessionContextService): 
       // undocumented `x-grok-session-id` we used to send bought no affinity.
       ...(sessionId ? { 'x-grok-conv-id': cacheAffinity, 'x-grok-session-id': sessionId } : {}),
     });
-    return next({ url: ctx.url, init: { ...ctx.init, headers } });
+    const response = await next({ url: ctx.url, init: { ...ctx.init, headers } });
+    return response.status === 426 ? explainOutdatedClient(response, clientVersion) : response;
   };
+}
+
+/**
+ * The proxy's 426 text blames "your Grok CLI", but the client here is Term2.
+ * Keep the proxy's own message first (the SDK prefixes the status) and say what
+ * Term2 sent and what refreshes it: the version is looked up online at most every
+ * `GROK_VERSION_CACHE_TTL_MS` and held for the process, so a fresh-but-rejected
+ * cache needs deleting, and a Term2 whose built-in fallback is stale needs updating.
+ */
+async function explainOutdatedClient(response: Response, clientVersion: string): Promise<Response> {
+  let body: any = {};
+  try {
+    body = await response.json();
+  } catch {
+    // an unreadable body keeps the generic proxy text below
+  }
+  const original =
+    (typeof body?.error?.message === 'string' && body.error.message) ||
+    (typeof body?.message === 'string' && body.message) ||
+    'Your Grok CLI version is outdated';
+  const message =
+    `${original}. Grok rejected the client version Term2 sent (Term2 sent ${clientVersion}). ` +
+    `Term2 looks up the current version from x.ai and keeps it for ${GROK_VERSION_CACHE_TTL_MS / 3_600_000} hours. ` +
+    `Make sure x.ai is reachable, delete ${grokVersionCachePath()} to force a fresh lookup, and try again. ` +
+    'If Grok still rejects it, update Term2.';
+  const headers = new Headers(response.headers);
+  headers.set('content-type', 'application/json');
+  headers.delete('content-length');
+  return new Response(JSON.stringify({ ...body, error: { ...(body?.error ?? {}), message } }), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 export function buildGrokFetch(deps: ProviderDeps, tokenManager: GrokTokenManager, defaultModel: string): typeof fetch {

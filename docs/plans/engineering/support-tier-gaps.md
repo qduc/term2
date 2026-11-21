@@ -207,10 +207,44 @@ section is a real recording behind every provider, replayed offline.
     path. Separately, a conversation log records its workspace as an absolute
     path and resume is refused from any other directory, so a moved or renamed
     project cannot resume its conversations.
-17. **Test the automatic triggers.** The compaction tests use `/compact` with
-    automatic compaction disabled, and no test sets `agent.sessionRollover.*`.
-    Both features are Core because they run unprompted, and the unprompted path
-    is the untested one.
+17. **Test the automatic triggers.** Done for a custom `openai-compatible`
+    provider: `tests/cli/automatic-compaction.integration.test.ts` (headless)
+    and `scripts/provider-black-box/automatic-rollover.blackbox.ts` (TUI). They
+    cover compaction when reported usage crosses
+    `agent.contextCompaction.compactThresholdTokens`, the `enabled` switch,
+    `native` mode refusing to fall back, `TERM2_SUPERVISED`, the rollover
+    reminder at each of `agent.sessionRollover.milestones`, the hand-off and
+    resume of a rotated session, and both firing on one request.
+
+    Writing them showed that rollover is not automatic. The engine sends the
+    model a reminder (`ContextMilestoneReminder`); the session rotates only if
+    the model calls `session_rollover`, so the tests' fixture plays the model.
+
+    Still untested:
+    - Codex's native compaction request at the trigger, and OpenAI's inline
+      `context_management`. Existing tests cover `/compact` and the threshold
+      sent in the request.
+    - The reminder deferring compaction (`canDefer`, in `@qduc/agent-core`),
+      which needs a model with a catalogued context window.
+    - Automatic compaction in the TUI, and a rollover in the middle of a tool
+      round.
+
+    Findings, none fixed here:
+    - The reminder is sent wherever `contextMilestones` runs, but
+      `session_rollover` is registered only when `sessionBrowser` is set, which
+      `src/app/launch-tui.tsx` alone does. In a headless run the model is told
+      to call a tool it does not have; one such call returned an unknown-tool
+      error. ACP and the server were not checked.
+    - Compaction compares the trigger with the usage reported inside the
+      current turn. The first request of a turn has only the engine's own
+      estimate (bytes / 4), so usage reported at the end of one turn does not
+      compact the start of the next.
+    - A summary larger than the span it replaces is discarded after the
+      summarising request has been paid for.
+    - `native` mode on a provider without a native endpoint records
+      `compaction_started` and no completion. Not asserted either way.
+    - Neither feature shows the user anything when it runs, except that a
+      rollover's briefing appears as a user message.
 
 ### 4. Release
 

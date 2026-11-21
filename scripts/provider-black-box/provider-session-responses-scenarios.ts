@@ -53,16 +53,32 @@ type FixtureMode =
   | 'runaway-output';
 
 interface ProviderTransportCase {
+  /** The capability-matrix row this case executes (`openai-http`, `codex-websocket`, ...). */
+  readonly rowId: string;
   readonly provider: ProviderId;
   readonly transport: Transport;
 }
 
 const providerTransportCases: readonly ProviderTransportCase[] = [
-  { provider: 'openai', transport: 'http' },
-  { provider: 'openai', transport: 'websocket' },
-  { provider: 'codex', transport: 'http' },
-  { provider: 'codex', transport: 'websocket' },
+  { rowId: 'openai-http', provider: 'openai', transport: 'http' },
+  { rowId: 'openai-websocket', provider: 'openai', transport: 'websocket' },
+  { rowId: 'codex-http', provider: 'codex', transport: 'http' },
+  { rowId: 'codex-websocket', provider: 'codex', transport: 'websocket' },
 ] as const;
+
+/**
+ * `it.each` over the provider cases, with the ledger id `<rowId>.<scenario>` leading the title.
+ * provider-capability-matrix.test.ts matches the capability manifest against collected titles, and
+ * `it.each`'s `$rowId` would quote the row id and cannot be followed by `.scenario`.
+ */
+function eachCase(
+  scenario: string,
+  title: string,
+  body: (providerCase: ProviderTransportCase) => Promise<void>,
+  cases: readonly ProviderTransportCase[] = providerTransportCases,
+): void {
+  for (const providerCase of cases) it(`${providerCase.rowId}.${scenario} ${title}`, () => body(providerCase));
+}
 
 interface CapturedResponsesRequest {
   readonly transport: Transport;
@@ -118,60 +134,57 @@ afterEach(async () => {
 
 export function registerResponsesContinuityScenarios(): void {
   describe('application-owned Responses lifecycle through the shipped CLI', () => {
-    it.each(providerTransportCases)(
-      '$provider $transport preserves two-turn response chaining',
-      async (providerCase) => {
-        const server = await startResponsesFixtureServer({
-          mode: 'multi-turn',
-          retainWebSocket: providerCase.provider === 'codex',
-        });
-        activeServer = server;
-        const workspace = await createWorkspace(server, providerCase);
-        activeWorkspace = workspace;
-        const child = await startCli(workspace);
-        activeChild = child;
+    eachCase('two-user-turn', 'preserves two-turn response chaining', async (providerCase) => {
+      const server = await startResponsesFixtureServer({
+        mode: 'multi-turn',
+        retainWebSocket: providerCase.provider === 'codex',
+      });
+      activeServer = server;
+      const workspace = await createWorkspace(server, providerCase);
+      activeWorkspace = workspace;
+      const child = await startCli(workspace);
+      activeChild = child;
 
-        const firstIdle = await child.waitForIdleInput();
-        await writePrompt(child, 'first user turn');
-        await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
-        await waitForIdleAfterResponse(child, firstIdle, 'FIRST-RESPONSE');
-        await waitForRequests(server, child, () => server.served.some((item) => item.responseId === FIRST_RESPONSE_ID));
+      const firstIdle = await child.waitForIdleInput();
+      await writePrompt(child, 'first user turn');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
+      await waitForIdleAfterResponse(child, firstIdle, 'FIRST-RESPONSE');
+      await waitForRequests(server, child, () => server.served.some((item) => item.responseId === FIRST_RESPONSE_ID));
 
-        await writePrompt(child, 'second user turn');
-        await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
-        await child.waitForVisibleOutput('SECOND-RESPONSE');
+      await writePrompt(child, 'second user turn');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
+      await child.waitForVisibleOutput('SECOND-RESPONSE');
 
-        const requests = normalRequests(server.requests);
-        expect(requests).toHaveLength(2);
-        // The opening turn is cold for every provider and transport: nothing to chain onto.
-        expect(requests[0]?.body.previous_response_id).toBeUndefined();
-        expect(requests[1]?.body.previous_response_id).toBe(FIRST_RESPONSE_ID);
-        expect(
-          server.served
-            .filter((item) => item.request.body.generate !== false && item.terminalType === 'response.completed')
-            .map((item) => item.responseId),
-        ).toEqual([FIRST_RESPONSE_ID, SECOND_RESPONSE_ID]);
-        expect(requests.every((request) => request.body.model === MODEL)).toBe(true);
-        if (providerCase.provider === 'codex') {
-          // This is the production CLI → configuration → application-loop →
-          // registry seam. Both Codex transports must retain the session-scoped
-          // request options, while OpenAI cases above prove they are not generic
-          // Responses fields.
-          for (const request of requests) {
-            expect(request.body.prompt_cache_key).toEqual(expect.any(String));
-            expect(request.body.prompt_cache_key).not.toBe('');
-            expect(request.body.include).toEqual(expect.arrayContaining(['reasoning.encrypted_content']));
-          }
-        } else {
-          expect(
-            requests.every(
-              (request) =>
-                Array.isArray(request.body.include) && request.body.include.includes('reasoning.encrypted_content'),
-            ),
-          ).toBe(true);
+      const requests = normalRequests(server.requests);
+      expect(requests).toHaveLength(2);
+      // The opening turn is cold for every provider and transport: nothing to chain onto.
+      expect(requests[0]?.body.previous_response_id).toBeUndefined();
+      expect(requests[1]?.body.previous_response_id).toBe(FIRST_RESPONSE_ID);
+      expect(
+        server.served
+          .filter((item) => item.request.body.generate !== false && item.terminalType === 'response.completed')
+          .map((item) => item.responseId),
+      ).toEqual([FIRST_RESPONSE_ID, SECOND_RESPONSE_ID]);
+      expect(requests.every((request) => request.body.model === MODEL)).toBe(true);
+      if (providerCase.provider === 'codex') {
+        // This is the production CLI → configuration → application-loop →
+        // registry seam. Both Codex transports must retain the session-scoped
+        // request options, while OpenAI cases above prove they are not generic
+        // Responses fields.
+        for (const request of requests) {
+          expect(request.body.prompt_cache_key).toEqual(expect.any(String));
+          expect(request.body.prompt_cache_key).not.toBe('');
+          expect(request.body.include).toEqual(expect.arrayContaining(['reasoning.encrypted_content']));
         }
-      },
-    );
+      } else {
+        expect(
+          requests.every(
+            (request) =>
+              Array.isArray(request.body.include) && request.body.include.includes('reasoning.encrypted_content'),
+          ),
+        ).toBe(true);
+      }
+    });
 
     it('codex websocket replays full history when the completed response socket is replaced', async () => {
       const server = await startResponsesFixtureServer({ mode: 'multi-turn' });
@@ -290,59 +303,53 @@ export function registerResponsesContinuityScenarios(): void {
 
 export function registerResponsesToolScenarios(): void {
   describe('application-owned Responses lifecycle through the shipped CLI', () => {
-    it.each(providerTransportCases)(
-      '$provider $transport resumes an approved tool from its producing response',
-      async (providerCase) => {
-        const server = await startResponsesFixtureServer({
-          mode: 'approval',
-          retainWebSocket: providerCase.provider === 'codex',
-        });
-        activeServer = server;
-        const workspace = await createWorkspace(server, providerCase);
-        activeWorkspace = workspace;
-        const child = await startCli(workspace);
-        activeChild = child;
+    eachCase('approval-approve', 'resumes an approved tool from its producing response', async (providerCase) => {
+      const server = await startResponsesFixtureServer({
+        mode: 'approval',
+        retainWebSocket: providerCase.provider === 'codex',
+      });
+      activeServer = server;
+      const workspace = await createWorkspace(server, providerCase);
+      activeWorkspace = workspace;
+      const child = await startCli(workspace);
+      activeChild = child;
 
-        await child.waitForIdleInput();
-        await writePrompt(child, 'run the approval fixture');
-        await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
-        await child.waitForVisibleOutput('Allow this action?');
-        await writeApprovalShortcut(child, 'y');
-        await waitForRequests(server, child, (requests) => toolResultRequests(requests).length >= 1);
-        await child.waitForVisibleOutput('APPROVED-FINAL');
+      await child.waitForIdleInput();
+      await writePrompt(child, 'run the approval fixture');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
+      await child.waitForVisibleOutput('Allow this action?');
+      await writeApprovalShortcut(child, 'y');
+      await waitForRequests(server, child, (requests) => toolResultRequests(requests).length >= 1);
+      await child.waitForVisibleOutput('APPROVED-FINAL');
 
-        assertApprovalResume(server, providerCase, 'approved');
-        expect(child.getVisibleOutput()).not.toContain('Approval Rejected');
-      },
-    );
+      assertApprovalResume(server, providerCase, 'approved');
+      expect(child.getVisibleOutput()).not.toContain('Approval Rejected');
+    });
 
-    it.each(providerTransportCases)(
-      '$provider $transport resumes a rejected tool exactly once',
-      async (providerCase) => {
-        const server = await startResponsesFixtureServer({
-          mode: 'approval',
-          retainWebSocket: providerCase.provider === 'codex',
-        });
-        activeServer = server;
-        const workspace = await createWorkspace(server, providerCase);
-        activeWorkspace = workspace;
-        const child = await startCli(workspace);
-        activeChild = child;
+    eachCase('approval-reject', 'resumes a rejected tool exactly once', async (providerCase) => {
+      const server = await startResponsesFixtureServer({
+        mode: 'approval',
+        retainWebSocket: providerCase.provider === 'codex',
+      });
+      activeServer = server;
+      const workspace = await createWorkspace(server, providerCase);
+      activeWorkspace = workspace;
+      const child = await startCli(workspace);
+      activeChild = child;
 
-        await child.waitForIdleInput();
-        await writePrompt(child, 'run the rejection fixture');
-        await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
-        await child.waitForVisibleOutput('Allow this action?');
-        await writeApprovalShortcut(child, 'n');
-        await child.waitForVisibleOutput('Why?');
-        await writePrompt(child, 'fixture rejection');
-        await waitForRequests(server, child, (requests) => toolResultRequests(requests).length >= 1);
-        await child.waitForVisibleOutput('REJECTED-FINAL');
+      await child.waitForIdleInput();
+      await writePrompt(child, 'run the rejection fixture');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
+      await child.waitForVisibleOutput('Allow this action?');
+      await writeApprovalShortcut(child, 'n');
+      await child.waitForVisibleOutput('Why?');
+      await writePrompt(child, 'fixture rejection');
+      await waitForRequests(server, child, (requests) => toolResultRequests(requests).length >= 1);
+      await child.waitForVisibleOutput('REJECTED-FINAL');
 
-        assertApprovalResume(server, providerCase, 'rejected');
-        expect(child.getVisibleOutput()).toContain('fixture rejection');
-      },
-    );
+      assertApprovalResume(server, providerCase, 'rejected');
+      expect(child.getVisibleOutput()).toContain('fixture rejection');
+    });
 
     it.each(['y', 'n'] as const)(
       'shipped CLI resolves nested shell approval %s and returns one outer tool result',
@@ -378,7 +385,7 @@ export function registerResponsesToolScenarios(): void {
     );
 
     it('OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification', async () => {
-      const providerCase: ProviderTransportCase = { provider: 'openai', transport: 'http' };
+      const providerCase: ProviderTransportCase = { rowId: 'openai-http', provider: 'openai', transport: 'http' };
       const server = await startResponsesFixtureServer({ mode: 'background-shell' });
       activeServer = server;
       const workspace = await createWorkspace(server, providerCase, 'background-shell');
@@ -417,11 +424,11 @@ export function registerResponsesToolScenarios(): void {
 
 export function registerResponsesFailureScenarios(): void {
   describe('application-owned Responses terminal failure lifecycle', () => {
-    it.each(providerTransportCases)('$provider $transport surfaces native terminal failure', async (providerCase) => {
+    eachCase('native-error', 'surfaces native terminal failure', async (providerCase) => {
       await runFailureScenario(providerCase, 'native-error');
     });
 
-    it.each(providerTransportCases)('$provider $transport rejects an incomplete stream', async (providerCase) => {
+    eachCase('incomplete-stream', 'rejects an incomplete stream', async (providerCase) => {
       await runFailureScenario(providerCase, 'incomplete');
     });
 
@@ -429,11 +436,13 @@ export function registerResponsesFailureScenarios(): void {
       await runFailureScenario(providerCase, 'runaway-output');
     });
 
-    it.each(providerTransportCases.filter(({ transport }) => transport === 'websocket'))(
-      '$provider websocket rejects an abnormal close without a fabricated completion',
+    eachCase(
+      'abnormal-close',
+      'rejects an abnormal close without a fabricated completion',
       async (providerCase) => {
         await runFailureScenario(providerCase, 'abnormal-close');
       },
+      providerTransportCases.filter(({ transport }) => transport === 'websocket'),
     );
 
     it.each(providerTransportCases.filter(({ transport }) => transport === 'websocket'))(

@@ -1,11 +1,31 @@
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import {
   accountProviderCapabilityMatrix,
   assertProviderCapabilityAccounting,
   PROVIDER_CAPABILITY_MATRIX,
+  reconcileExecutionsWithTests,
   type CapabilityExecution,
 } from './provider-capability-matrix.js';
 import { ALL_PROVIDER_SESSION_CAPABILITY_EXECUTIONS } from './provider-session-capability-manifest.js';
+
+/**
+ * The test titles Vitest collects (not runs) from the lifecycle files, `provider-session-*`, using this
+ * lane's own configuration. Same mechanism as `scripts/run-ci-lane.mjs`'s inventory.
+ */
+async function collectLifecycleTestTitles(): Promise<string[]> {
+  const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+  const vitest = fileURLToPath(new URL('../../node_modules/vitest/vitest.mjs', import.meta.url));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('VITEST')));
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    [vitest, 'list', 'provider-session-', '--config', 'vitest.provider-black-box.config.ts', '--json'],
+    { cwd: repoRoot, env: { ...env, NODE_ENV: 'test' }, encoding: 'utf8', timeout: 60_000, maxBuffer: 8 * 1024 * 1024 },
+  );
+  return (JSON.parse(stdout) as Array<{ name: string }>).map(({ name }) => name);
+}
 
 describe('provider capability matrix', () => {
   it('declares every target route with transport, lifecycle, and required scenarios', () => {
@@ -93,5 +113,14 @@ describe('provider capability matrix', () => {
         { rowId: PROVIDER_CAPABILITY_MATRIX[0]!.id, scenarioId: 'unrelated-scenario' },
       ]),
     ).toThrow(/unknown scenarios/i);
+  });
+
+  it('lists as executed exactly the scenarios whose tests exist', async () => {
+    const titles = await collectLifecycleTestTitles();
+    // A collection that found almost nothing would make the second direction vacuous.
+    expect(titles.length, 'collected lifecycle test titles').toBeGreaterThan(50);
+    expect(
+      reconcileExecutionsWithTests(PROVIDER_CAPABILITY_MATRIX, ALL_PROVIDER_SESSION_CAPABILITY_EXECUTIONS, titles),
+    ).toEqual([]);
   });
 });

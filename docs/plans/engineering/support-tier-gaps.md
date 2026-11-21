@@ -198,15 +198,27 @@ section is a real recording behind every provider, replayed offline.
      login failed: OAuth state mismatch". The tests assert the single label.
    - `tokenRequestEncoding: 'json'` in `PkceLoginConfig` is set by neither
      provider.
-10. **Remove the error-scenario exclusions or justify them per type.** The
-    capability matrix marks `native-error` and `incomplete-stream` as excluded
-    for `runtime-openai-chat`, `runtime-llama-cpp-chat` and both OpenCode rows,
-    on the grounds that a representative route covers the protocol. That was a
-    reasonable economy when those types were not each Core. It still is for the
-    OpenCode rows, which are Supported; the first two are Core types.
-11. **Derive the capability ledger from what ran.** The executed-scenario lists
-    in `provider-session-capability-manifest.ts` are hand-written constants, so
-    deleting a scenario test does not fail `provider-capability-matrix.test.ts`.
+10. **Done: the error-scenario exclusions are gone for the Core types.**
+    `provider-session-chat-terminal-errors.blackbox.ts` runs `native-error`
+    and `incomplete-stream` for `runtime-openai-chat` and
+    `runtime-llama-cpp-chat`, asserting the exit status, the error text, the
+    `--json` events and the persisted failed turn. The two OpenCode rows keep
+    their exclusion, and its reason now says the type is Supported. The three
+    chat types behaved identically. Findings:
+    - A stream that ends after partial text makes a `--json` run emit a
+      `final` event carrying the partial text, and then the `error` event.
+    - A provider that answered HTTP 500 is recorded as "Could not reach
+      <provider> after 1 attempts. No model response was received."
+    - The older scenarios in `provider-session-resilience-scenarios.ts` assert
+      only a non-zero exit and no answer text, which a CLI that failed to
+      start would also satisfy.
+11. **Done: the ledger is checked against the tests.**
+    `reconcileExecutionsWithTests`, run by `provider-capability-matrix.test.ts`,
+    compares the executed-scenario lists with the titles Vitest collects from
+    the `provider-session-*` files. An entry no title names fails, and so does
+    a required scenario whose test exists but is not listed. The link is a
+    convention: a test that executes a ledger scenario has the id
+    `<rowId>.<scenario>` in its title. The `provider-testing` skill records it.
 12. **API keys from the environment are now checked.**
     `tests/cli/api-key-environment.integration.test.ts` runs the built CLI
     against loopback servers and asserts which key reaches the wire, in which

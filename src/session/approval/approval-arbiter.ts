@@ -82,7 +82,12 @@ export class ApprovalReviews {
         if (controller.signal.aborted || this.#reviews.get(request.requestId)?.controller !== controller) return;
         this.#reviews.delete(request.requestId);
         this.#announce(request, 'settled');
-        const judged = review.approved && !this.#stillRouted(request) ? { ...review, approved: false } : review;
+        const judged: ApprovalReviewResult =
+          review.approved && !this.#stillRouted(request, review)
+            ? review.kind === 'bypassed'
+              ? { kind: 'not_reviewed', approved: false }
+              : { ...review, approved: false }
+            : review;
         // A non-approval follows the current mode: refused in `unattended`, opened for a person otherwise.
         if (!judged.approved && this.unattended()) owner.refuse(request, judged);
         else owner.settle(request, judged);
@@ -95,11 +100,14 @@ export class ApprovalReviews {
   /**
    * An approval stands only if the session's current generation would still let a review answer this
    * request: a rebuild that switched the mode while the review ran (an older generation's settings
-   * are a frozen snapshot) to `advisory`, `off` or `always` must not record an automatic approval.
+   * are a frozen snapshot) to `off` or `always` must not record an automatic approval.
    */
-  #stillRouted(request: InteractionRequest | DirectTaskInteraction): boolean {
+  #stillRouted(request: InteractionRequest | DirectTaskInteraction, review: ApprovalReviewResult): boolean {
     try {
-      return this.port?.mayApprove(request) === true;
+      const kind = this.port?.route(request).kind;
+      // Permission to review is not permission to reuse an unreviewed bypass after a mode change.
+      const sameAuthority = review.kind === 'bypassed' ? kind === 'bypass' : kind === 'decide' || kind === 'judge';
+      return sameAuthority && this.port?.mayApprove(request) === true;
     } catch {
       return false;
     }

@@ -55,7 +55,7 @@ export function describeApproval(
   const hardGate: ApprovalHardGate | undefined =
     request.kind === 'question'
       ? 'question'
-      : request.presentation?.requiresExplicitUser === true
+      : request.presentation?.requiresExplicitUser === true || request.toolName === 'propose_goal'
       ? 'explicit-user'
       : request.presentation?.deniedRead
       ? 'denied-read'
@@ -76,14 +76,24 @@ export function describeApproval(
 
 /** Options the route reads from settings besides the mode. */
 export type ApprovalRouteOptions = {
+  /** Request/display an advisory assessment when a person must decide. Never grants authority. */
+  readonly showReview?: boolean;
   /** `shell.unattendedEscapeReview`: in `unattended`, let the reviewer decide an outside-sandbox escape. */
   readonly reviewEscapes?: boolean;
 };
 
+/** Supported mode policies, including approval requests raised during tool execution. */
+const APPROVAL_POLICIES = {
+  off: { reviewer: 'none', fallback: 'human' },
+  auto: { reviewer: 'auto', fallback: 'human' },
+  unattended: { reviewer: 'auto', fallback: 'refuse' },
+  always: { reviewer: 'none', fallback: 'bypass' },
+} as const;
+
 /**
  * Where an open request goes. `review` asks the reviewer first; `ask_user` waits
  * for a person; `refuse` closes it by policy with no model call (`unattended`
- * only). In `auto` and `advisory` a request the reviewer cannot take goes to a
+ * only). In `auto` and `off` a request the reviewer cannot take goes to a
  * person; in `unattended` it is refused, except a question, which is not an
  * authority decision. An outside-sandbox escape is refused in `unattended`
  * unless `reviewEscapes` is set (docs/plans/approvals-and-sandbox/unattended-approval.md, decision 4).
@@ -92,16 +102,15 @@ function routeApproval(
   mode: AutoApproveMode | undefined,
   profile: ApprovalProfile,
   options: ApprovalRouteOptions = {},
-): 'review' | 'ask_user' | 'refuse' {
-  if (mode === 'unattended') {
-    if (profile.hardGate === 'question') return 'ask_user';
-    if (profile.hardGate || !profile.reviewable) return 'refuse';
-    if (profile.escape && options.reviewEscapes !== true) return 'refuse';
-    return 'review';
-  }
-  if (mode !== 'auto' && mode !== 'advisory') return 'ask_user';
-  if (profile.hardGate || !profile.reviewable) return 'ask_user';
-  return 'review';
+): 'review' | 'ask_user' | 'refuse' | 'bypass' {
+  const policy = APPROVAL_POLICIES[mode ?? 'off'];
+  if (profile.hardGate === 'question') return 'ask_user';
+  if (profile.hardGate) return policy.fallback === 'refuse' ? 'refuse' : 'ask_user';
+  if (policy.fallback === 'bypass') return 'bypass';
+  if (!profile.reviewable) return policy.fallback === 'refuse' ? 'refuse' : 'ask_user';
+  if (policy.fallback === 'refuse' && profile.escape && options.reviewEscapes !== true) return 'refuse';
+  if (policy.reviewer === 'auto' || (policy.fallback === 'human' && options.showReview === true)) return 'review';
+  return 'ask_user';
 }
 
 /**
@@ -111,7 +120,7 @@ function routeApproval(
  * closes the request by policy without a review.
  */
 export type ApprovalRoute =
-  | { readonly kind: 'decide' | 'advise' | 'judge' | 'ask_user' }
+  | { readonly kind: 'decide' | 'advise' | 'judge' | 'ask_user' | 'bypass' }
   | { readonly kind: 'refuse'; readonly reason: string };
 
 export function approvalRouteFor(
@@ -122,6 +131,7 @@ export function approvalRouteFor(
   const route = routeApproval(mode, profile, options);
   if (route === 'refuse') return { kind: 'refuse', reason: unreviewedRefusalReason(profile) };
   if (route === 'ask_user') return { kind: 'ask_user' };
+  if (route === 'bypass') return { kind: 'bypass' };
   return { kind: mode === 'unattended' ? 'judge' : mode === 'auto' ? 'decide' : 'advise' };
 }
 
@@ -143,7 +153,7 @@ function unreviewedRefusalReason(profile: ApprovalProfile): string {
 
 /** The modes in which a passing review answers the request. */
 function reviewMayApprove(mode: AutoApproveMode | undefined): boolean {
-  return mode === 'auto' || mode === 'unattended';
+  return APPROVAL_POLICIES[mode ?? 'off'].reviewer === 'auto';
 }
 
 /** The one threshold a review must clear to answer a request without a person. */
@@ -177,21 +187,27 @@ export async function decideApproval(input: {
   readonly signal: AbortSignal;
 }): Promise<ApprovalDecision> {
   const mode = input.currentMode();
-  if (input.signal.aborted || routeApproval(mode, input.profile, input.routeOptions?.()) !== 'review')
-    return { kind: 'not_reviewed', approved: false };
+  const options = input.routeOptions?.();
+  const showReview = options?.showReview === true;
+  if (input.signal.aborted) return { kind: 'not_reviewed', approved: false };
+  const route = routeApproval(mode, input.profile, options);
+  if (route === 'bypass')
+    return { kind: 'bypassed', approved: true, ...(input.profile.autoGrant ? { grant: input.profile.autoGrant } : {}) };
+  if (route !== 'review') return { kind: 'not_reviewed', approved: false };
   let advisory: LLMAdvisory | undefined;
   try {
     advisory = await input.review();
   } catch {
-    return { kind: 'unavailable', approved: false };
+    return { kind: 'unavailable', approved: false, showReview };
   }
-  if (!advisory || advisory.isError) return { kind: 'unavailable', approved: false };
+  if (!advisory || advisory.isError) return { kind: 'unavailable', approved: false, showReview };
   const approved = !input.signal.aborted && input.currentMode() === mode && acceptVerdict(advisory, mode);
   return {
     kind: 'reviewed',
     approved,
     advisory,
-    ...(mode === 'advisory' ? { advisoryOnly: true as const } : {}),
+    showReview,
+    ...(APPROVAL_POLICIES[mode ?? 'off'].reviewer === 'none' ? { advisoryOnly: true as const } : {}),
     ...(approved && input.profile.autoGrant ? { grant: input.profile.autoGrant } : {}),
   };
 }

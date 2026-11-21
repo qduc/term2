@@ -17,7 +17,10 @@ import type { DirectCommandConfiguration } from '../session/command-types.js';
 
 /** App preparation accepts selection intent. Native/protocol ingress must retain
  * both fields; effective accepted configuration remains source-resolved values. */
-export type DirectApprovalMode = Extract<SettingValue<'shell.autoApproveMode'>, 'off' | 'auto' | 'always'>;
+export type DirectApprovalMode = Extract<
+  SettingValue<'shell.autoApproveMode'>,
+  'off' | 'auto' | 'unattended' | 'always'
+>;
 
 export type DirectAppConfiguration = Omit<DirectCommandConfiguration, 'reasoning'> & {
   readonly reasoning?: SettingValue<'agent.reasoningEffort'>;
@@ -132,9 +135,7 @@ export function createDirectConfigSettings(
   }
   if (patch.approvalMode !== undefined) {
     (snapshot.shell as Record<string, unknown>).autoApproveMode = patch.approvalMode;
-    (snapshot.sandbox as Record<string, unknown>).enabled = patch.approvalMode !== 'always';
     sources.set('shell.autoApproveMode', 'cli');
-    sources.set('sandbox.enabled', 'cli');
   }
   const data = SettingsSchema.parse(snapshot);
   const read = (key: string): unknown => {
@@ -184,7 +185,6 @@ export function recordDirectConfigSettings(
   record('app.activeProfileId', profileId);
   if (options.approvalMode !== undefined) {
     settings.set('shell.autoApproveMode', options.approvalMode, { persist: false });
-    settings.set('sandbox.enabled', options.approvalMode !== 'always', { persist: false });
   }
   record('agent.modelSelection', intent.modelSelection);
   record('agent.reasoningEffort', intent.reasoningEffort);

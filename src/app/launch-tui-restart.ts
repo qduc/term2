@@ -67,6 +67,7 @@ function plan(
     profile: profileId,
     approval: String(settings.get('shell.autoApproveMode')),
     sandbox: settings.get('sandbox.enabled') === true,
+    showReview: settings.get('shell.showReview') === true,
     ...(ssh ? { ssh } : {}),
     ...(server ? { control: { name: server.name, discordInput: server.discordInputEnabled } } : {}),
   });

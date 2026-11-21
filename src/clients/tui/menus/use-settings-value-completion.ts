@@ -113,11 +113,16 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     useSelection(filteredEntries);
 
   // Controller-owned value menus do not call the legacy `open()` initializer.
-  // Initialize them from the active setting so `/effort` starts on the value
-  // that will actually be used, rather than always highlighting the first
-  // suggestion.
+  // Initialize them from the active setting when the query is empty so `/effort`
+  // or `/auto-approve` starts on the active value; when the user has typed a
+  // filter query, keep selection on the top-ranked match instead of snapping
+  // back to a lower-ranked description match for the current value.
   useEffect(() => {
     if (!isControllerOpen || !resolvedSettingKey) return;
+    if (query.trim()) {
+      setSelectedIndex(0);
+      return;
+    }
     try {
       const currentValue = settingsService.getDynamic(resolvedSettingKey);
       const currentValueText =
@@ -131,7 +136,15 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     } catch {
       setSelectedIndex(0);
     }
-  }, [isControllerOpen, controllerFrame?.id, resolvedSettingKey, filteredEntries, settingsService, setSelectedIndex]);
+  }, [
+    isControllerOpen,
+    controllerFrame?.id,
+    resolvedSettingKey,
+    query,
+    filteredEntries,
+    settingsService,
+    setSelectedIndex,
+  ]);
 
   const isNumericSettings = useMemo(() => {
     return resolvedSettingKey ? isNumberSetting(resolvedSettingKey) : false;

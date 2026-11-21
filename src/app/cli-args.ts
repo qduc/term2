@@ -25,6 +25,8 @@ export type SshTarget = { readonly target: string; readonly remoteDir: string | 
  */
 export type SessionOptions = {
   readonly autoApprove: boolean;
+  readonly approvalMode?: 'off' | 'auto' | 'unattended' | 'always';
+  readonly showReview?: boolean;
   readonly lite: boolean;
   readonly profile: string | null;
   readonly resumeId: string | null;
@@ -95,6 +97,8 @@ const FLAGS: readonly Flag[] = [
   opt(['--profile'], ' <name>', 'Select a profile (bare [default]; standard/full/lite = bare)', undefined, 'required'),
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
   opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
+  opt(['--approval-mode'], ' <mode>', 'Set approval policy: off, auto, unattended, always', undefined, 'required'),
+  opt(['--show-review'], '', 'Show AI assessments in human approval prompts'),
   // Quiet only changes the non-interactive runner; the TUI ignores it, as the current CLI does.
   opt(['-q', '--quiet'], '', 'Suppress non-error diagnostics on stderr in non-interactive mode'),
   opt(['--show-reasoning'], '', 'Stream reasoning deltas to stderr in non-interactive mode'),
@@ -191,6 +195,8 @@ export const helpText = (): string => `
         --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
         --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
         --auto-approve                   Allow tool execution for a non-interactive prompt
+        --approval-mode <mode>           Set approval policy: off, auto, unattended, always
+        --show-review                    Show AI assessments in human approval prompts
     -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
         --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
         --json                           Emit newline-delimited JSON (NDJSON) events in non-interactive mode
@@ -318,9 +324,15 @@ function buildSessionOptions(raw: ReadonlyMap<string, RawValue>): SessionOptions
   const lite = raw.has('--lite');
   if (sshTarget !== null && remoteDir === null && !lite) throw new Error('--remote-dir is required when using --ssh');
 
+  const approvalMode = textOf(raw, '--approval-mode');
+  if (approvalMode === 'advisory') throw new Error('advisory was removed; use --approval-mode off --show-review');
+  if (approvalMode !== null && !['off', 'auto', 'unattended', 'always'].includes(approvalMode))
+    throw new Error('--approval-mode must be off, auto, unattended, or always.');
   const control = raw.get('--control-socket');
   return {
     autoApprove: raw.has('--auto-approve'),
+    ...(approvalMode === null ? {} : { approvalMode: approvalMode as SessionOptions['approvalMode'] }),
+    ...(raw.has('--show-review') ? { showReview: true } : {}),
     lite,
     profile: textOf(raw, '--profile'),
     resumeId: resume === null || resume === 'ls' || resume === 'list' ? null : parseResumeId(resume || 'last'),
@@ -436,4 +448,16 @@ export function parseCommandLine(argv: readonly string[]): Command {
   }
   if (prompt === null) return { kind: 'interactive', options, refused: refusalFor(raw, 'interactive') };
   return { kind: 'headless', prompt, options, refused: refusalFor(raw, 'headless') };
+}
+
+/** Build launch-only CLI settings overrides from parsed session options. */
+export function cliSettingsOverrides(options: SessionOptions): {
+  shell: { autoApproveMode?: SessionOptions['approvalMode']; showReview?: boolean };
+} {
+  return {
+    shell: {
+      ...(options.approvalMode === undefined ? {} : { autoApproveMode: options.approvalMode }),
+      ...(options.showReview === undefined ? {} : { showReview: options.showReview }),
+    },
+  };
 }

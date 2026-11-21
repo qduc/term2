@@ -24,7 +24,7 @@ import { fetchModels, peekCachedModels } from '../../model/model-service.js';
 import type { WireModel } from '../../protocol/wire.js';
 import { createAcpSessions } from './acp-sessions.js';
 
-const nativeApprovalMode = { ask: 'off', assisted: 'auto', always: 'always' } as const;
+const nativeApprovalMode = { ask: 'off', assisted: 'auto', unattended: 'unattended', always: 'always' } as const;
 
 type AcpRequest = Extract<DirectLaunchRequest, { readonly kind: 'acp' }>;
 
@@ -185,10 +185,11 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       approval: {
         async get(sessionId): Promise<AcpApprovalMode> {
           const { approvalMode } = await app.sessionConfiguration(sessionId);
-          // ACP has no unattended mode; its reviewer-decides mode is the nearest.
           return approvalMode === 'always'
             ? 'always'
-            : approvalMode === 'auto' || approvalMode === 'unattended'
+            : approvalMode === 'unattended'
+            ? 'unattended'
+            : approvalMode === 'auto'
             ? 'assisted'
             : 'ask';
         },

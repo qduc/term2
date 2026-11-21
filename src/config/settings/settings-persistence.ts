@@ -173,6 +173,7 @@ export function loadSettingsFromFile(opts: {
   errorDetails?: string[];
   recovery?: SettingsFileRecovery;
   migratedSelections?: boolean;
+  migratedApprovalPolicy?: boolean;
 } {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
@@ -217,13 +218,20 @@ export function loadSettingsFromFile(opts: {
     }
 
     // Both startup and locked save reloads pass this file-only boundary.
-    // Keep raw bytes/values available for migration detection and diagnosis.
+    // Retired advisory is accepted here before validation, while raw input stays
+    // intact for migration detection and diagnosis.
+    const shell = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>).shell : undefined;
+    const migratedApprovalPolicy =
+      shell != null && typeof shell === 'object' && (shell as Record<string, unknown>).autoApproveMode === 'advisory';
+    const migratedInput = migratedApprovalPolicy
+      ? { ...(parsed as Record<string, unknown>), shell: { ...shell, autoApproveMode: 'off', showReview: true } }
+      : parsed;
     let migration: ReturnType<typeof migratePersistedSelections>;
     try {
-      migration = migratePersistedSelections(parsed);
+      migration = migratePersistedSelections(migratedInput);
     } catch (error: unknown) {
       return {
-        validated: parsePartialSections(parsed, opts.schema),
+        validated: parsePartialSections(migratedInput, opts.schema),
         raw: parsed,
         hadErrors: true,
         errorDetails: [...errorDetails, error instanceof Error ? error.message : String(error)],
@@ -263,6 +271,7 @@ export function loadSettingsFromFile(opts: {
       errorDetails: recovery ? errorDetails : undefined,
       recovery,
       migratedSelections: migration.migrated,
+      migratedApprovalPolicy,
     };
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);

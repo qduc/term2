@@ -734,6 +734,8 @@ fs.createWriteStream = (filename, options) => {
       expect(help).not.toContain('--lite');
       expect(help).not.toContain('--profile');
       expect(help).toContain('--auto-approve');
+      expect(help).toContain('--approval-mode <mode>');
+      expect(help).toContain('--show-review');
       expect(help).toContain('--ssh <user@host>');
       expect(help).toContain('--remote-dir <path>');
       expect(help).toContain('--ssh-port <port>');
@@ -744,6 +746,23 @@ fs.createWriteStream = (filename, options) => {
       expect(help).toContain('Log in to Grok in a browser');
       expect(help).not.toContain('ChatForge BFF');
       expect(help).not.toContain('exactly as before');
+    });
+
+    it('CLI rejects removed and invalid approval modes before startup', async () => {
+      const env = createTestChildEnv({
+        HOME: testDir,
+        TERM2_CONVERSATIONS_DIR: conversationsDir,
+        DISABLE_LOGGING: '1',
+      });
+      for (const mode of ['advisory', 'unknown']) {
+        const result = await spawnCli([cliPath(), '--approval-mode', mode, 'Reply'], env);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(
+          mode === 'advisory'
+            ? 'removed; use --approval-mode off --show-review'
+            : '--approval-mode must be off, auto, unattended, or always',
+        );
+      }
     });
 
     it('CLI validates goal flags before startup', async () => {

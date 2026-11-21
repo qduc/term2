@@ -102,7 +102,10 @@ export function createAssistedApprovalReview({
       profile,
       signal,
       currentMode: () => settings.get('shell.autoApproveMode'),
-      routeOptions: () => ({ reviewEscapes: settings.get('shell.unattendedEscapeReview') === true }),
+      routeOptions: () => ({
+        showReview: settings.get('shell.showReview') === true,
+        reviewEscapes: settings.get('shell.unattendedEscapeReview') === true,
+      }),
       review: () => {
         const resolver = new ShellAutoApprovalResolver({
           record: { getHistory: () => approvalHistory(history) },
@@ -172,11 +175,11 @@ export function sessionApprovalReview(
   return {
     willReview: (request) => {
       const kind = record()?.surface.approvalRoute?.(request).kind;
-      return kind === 'decide' || kind === 'advise' || kind === 'judge';
+      return kind === 'decide' || kind === 'advise' || kind === 'judge' || kind === 'bypass';
     },
     mayApprove: (request) => {
       const kind = record()?.surface.approvalRoute?.(request).kind;
-      return kind === 'decide' || kind === 'judge';
+      return kind === 'decide' || kind === 'judge' || kind === 'bypass';
     },
     route: (request) => record()?.surface.approvalRoute?.(request) ?? { kind: 'ask_user' },
     unattended: () => record()?.surface.unattended?.() === true,

@@ -5,23 +5,24 @@ description: Interactive tool approvals, auto-approve modes, and execution budge
 
 When term2 wants to run a shell command in an interactive session, it normally asks for your approval. Read the proposed action and choose from the options in the prompt. Valid edits inside the local workspace can apply without a prompt; file tools have their own authorization and boundary checks.
 
-To change how often shell commands need your approval, run `/auto-approve` in a session. Keep `off` if you want to review each command, choose `advisory` for an explanation with each prompt, or choose `auto` to approve commands classified as safe while still reviewing risky ones. Choose `unattended` when nobody will be at the keyboard: term2 never asks you, and whatever the reviewer does not approve is refused to the agent instead. The `always` mode disables the shell sandbox and skips tool approval prompts; use it only in an isolated, disposable environment.
-
-For a non-interactive prompt, `--auto-approve` is a separate option. See [non-interactive use](/term2/using-term2/non-interactive/) before enabling tool execution there.
+Choose the approval policy with `/auto-approve` or `shell.autoApproveMode`. The four modes decide who can grant permission and what happens when the reviewer does not approve. They do not change `sandbox.enabled`.
 
 ## Auto-Approval Modes (`/auto-approve`)
 
-Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. The CLI `--auto-approve` flag is separate and applies only to non-interactive prompts.
-
-| Mode | Command | Behavior |
+| Mode | Reviewer | When permission is still needed |
 | :--- | :--- | :--- |
-| **`off`** *(Default)* | `/auto-approve off` | Shell commands prompt for interactive confirmation. Valid local workspace edits can apply without a prompt; file tools have separate boundary and authorization checks. |
-| **`advisory`** | `/auto-approve advisory` | Prompts before each command and shows a safety explanation. |
-| **`auto`** | `/auto-approve auto` | Approves commands classified as safe, such as read-only commands and workspace edits. Commands classified as risky still require approval. |
-| **`unattended`** | `/auto-approve unattended` | Never asks you. A request the reviewer approves runs as in `auto`; anything else is refused to the agent with the reason, and the agent continues. Repeated refusals end the turn. See [Unattended mode](#unattended-mode). |
-| **`always`** | `/auto-approve always` | Disables the shell sandbox and skips tool approval prompts. `ask_user` can still ask questions. Use only in an isolated, disposable environment. |
+| **`off`** *(Default)* | No automatic approval. | Ask a person. |
+| **`auto`** | Approves eligible requests that pass the existing safety assessment. | Ask a person. |
+| **`unattended`** | Uses the same approval threshold as `auto`. | Refuse the request to the agent; repeated refusals end the run. |
+| **`always`** | No model review; bypasses eligible permission prompts. | Questions and human-only decisions still ask. Unsupported sandbox escapes remain restricted. |
 
-> **Sandbox Interaction:** `always` and `sandbox.enabled` are mutually exclusive: selecting `always` disables the shell sandbox, and enabling the sandbox (`/sandbox` or `sandbox.enabled = true`) immediately demotes `always` to `auto`.
+Use `/auto-approve off`, `/auto-approve auto`, `/auto-approve unattended`, or `/auto-approve always`. Valid local workspace edits can apply without a prompt; file tools have separate authorization and boundary checks. A passing automatic review requires low or medium assessed risk, explicit or implied authorization, and high confidence.
+
+`shell.showReview` is a separate setting, off by default. Enable it to show the assessment when a person must decide. With `off`, it also requests an advisory assessment for eligible requests, which cannot approve them. In `auto` and `unattended`, hiding the assessment does not disable the reviewer or remove recorded review evidence. Saved `advisory` settings migrate to `off` with `shell.showReview = true`; new commands must use the four modes above.
+
+The CLI options `--approval-mode` and `--show-review` select these settings separately. For a non-interactive prompt, the existing `--auto-approve` boolean is a separate execution option; see [non-interactive use](/term2/using-term2/non-interactive/).
+
+**Sandbox and approvals are independent.** Switching approval modes preserves your sandbox preference, including in `always`. With the sandbox enabled, `always` can grant an eligible one-time network destination or supported foreground sandbox escape without a model review; it uses the request's scoped grant rather than disabling the sandbox. Background and Docker host-control escapes remain unsupported. Questions, explicit-user decisions such as `propose_goal`, and hard-gated requests that reach the approval router still require a person (or are refused in `unattended`). Use `always` only where you accept its broad permission grants.
 
 ## Unattended mode
 

@@ -90,6 +90,7 @@ const SETTINGS_SOURCE_KEYS = {
     backgroundTimeout: 'shell.backgroundTimeout',
     maxOutputLines: 'shell.maxOutputLines',
     autoApproveMode: 'shell.autoApproveMode',
+    showReview: 'shell.showReview',
     unattendedEscapeReview: 'shell.unattendedEscapeReview',
   },
   sandbox: {

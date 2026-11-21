@@ -155,6 +155,8 @@ describe('crash after tool effect but before the tool result', () => {
                 maxTurns: 4,
               },
               app: { liteMode: true },
+              // The effect must run unsandboxed; 'always' no longer implies this.
+              sandbox: { enabled: false },
               providers: [
                 {
                   id: 'crash-window-fixture',
@@ -167,10 +169,9 @@ describe('crash after tool effect but before the tool result', () => {
             }),
             'utf8',
           );
-          // Verify the supported coupled settings through the real service:
-          // an auto-approve mode of 'always' must demote sandbox.enabled
-          // to false (the persisted raw 'always' + sandbox default true
-          // pair loads back as 'auto').
+          // Verify the approval and sandbox settings through the real service:
+          // an auto-approve mode of 'always' keeps the persisted sandbox
+          // preference (the approval policy and sandbox are independent).
           const settings = new SettingsService({
             settingsDir: paths.logDir,
             disableLogging: true,

@@ -147,14 +147,15 @@ export default function register(term2) { for (const type of ['session.start', '
         'Exit the application',
         'Changed compiled core B',
       );
-      await writePtyTextAndSubmit(child, '/auto-approve advisory');
+      // `advisory` was removed from the approval matrix; the replacement also sets showReview.
+      await writePtyTextAndSubmit(child, '/auto-approve off --show-review');
       await expect
         .poll(
           async () =>
-            JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).shell?.autoApproveMode,
+            JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).shell?.showReview,
           { timeout: READINESS_TIMEOUT_MS },
         )
-        .toBe('advisory');
+        .toBe(true);
       // Sandbox execution (and its /sandbox command) is an accepted difference: legacy only.
       const savedSettings = JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8'));
       expect(savedSettings.providers).toEqual(initialSettings.providers);
@@ -229,7 +230,7 @@ export default function register(term2) { for (const type of ['session.start', '
       ]);
       expect(new Set(hooks.map((event) => event.pid))).toEqual(new Set([Number(before.pid)]));
       expect(hooks.every((event) => event.herdr === 'restart-owned-fixture')).toBe(true);
-      expect(hooks[2]).toMatchObject({ approval: 'advisory' });
+      expect(hooks[2]).toMatchObject({ approval: 'off' });
     } finally {
       await workspace.cleanup();
       await new Promise<void>((done, reject) => server.close((error) => (error ? reject(error) : done())));

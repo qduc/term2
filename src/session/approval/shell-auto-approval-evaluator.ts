@@ -482,7 +482,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   if (!settingsService) return out;
 
   const mode = settingsService.get('shell.autoApproveMode');
-  if (mode === 'off') return out;
+  if (mode === 'off' && settingsService.get('shell.showReview') !== true) return out;
 
   const { model: autoApproveModel, provider: autoApproveProvider } = resolveAncillaryModelTier(
     'chore',

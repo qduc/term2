@@ -1,4 +1,4 @@
-import type { SettingsData } from './settings-schema.js';
+import { SettingsSchema, type SettingsData } from './settings-schema.js';
 
 export type DeepPartial<T> = T extends (...args: never[]) => unknown
   ? T
@@ -35,6 +35,22 @@ export function buildEnvOverrides(): Partial<SettingsData> {
 
   const tools: DeepPartial<SettingsData['tools']> = {};
   if (env.LOG_FILE_OPERATIONS !== undefined) tools.logFileOperations = String(env.LOG_FILE_OPERATIONS) !== 'false';
+
+  // createRestartPlan emits these policy values as env overrides. Consume them
+  // before settings layering so a restart cannot restore conflicting saved policy.
+  const shell: DeepPartial<SettingsData['shell']> = {};
+  if (env.SHELL_AUTO_APPROVE_MODE !== undefined) {
+    const parsed = SettingsSchema.shape.shell.unwrap().shape.autoApproveMode.safeParse(env.SHELL_AUTO_APPROVE_MODE);
+    if (!parsed.success) {
+      throw new Error(`Invalid SHELL_AUTO_APPROVE_MODE: ${parsed.error.issues[0]?.message}`);
+    }
+    shell.autoApproveMode = parsed.data;
+  }
+  if (env.TERM2_SHOW_REVIEW !== undefined)
+    shell.showReview = parseStrictBooleanEnv('TERM2_SHOW_REVIEW', env.TERM2_SHOW_REVIEW);
+  const sandbox: DeepPartial<SettingsData['sandbox']> = {};
+  if (env.SANDBOX_ENABLED !== undefined)
+    sandbox.enabled = parseStrictBooleanEnv('SANDBOX_ENABLED', env.SANDBOX_ENABLED);
 
   const debug: DeepPartial<SettingsData['debug']> = {};
   if (env.DEBUG_BASH_TOOL !== undefined) debug.debugBashTool = true;
@@ -75,6 +91,8 @@ export function buildEnvOverrides(): Partial<SettingsData> {
     tools,
     debug,
     webSearch,
+    shell,
+    sandbox,
   } as Partial<SettingsData>;
 }
 
@@ -83,6 +101,9 @@ export function buildEnvOverrides(): Partial<SettingsData> {
  * the user what overrides a saved value. Keep in step with buildEnvOverrides.
  */
 export const SETTING_ENV_VARIABLES: Record<string, string> = {
+  'shell.showReview': 'TERM2_SHOW_REVIEW',
+  'shell.autoApproveMode': 'SHELL_AUTO_APPROVE_MODE',
+  'sandbox.enabled': 'SANDBOX_ENABLED',
   'agent.openrouter.apiKey': 'OPENROUTER_API_KEY',
   'agent.openrouter.baseUrl': 'OPENROUTER_BASE_URL',
   'agent.openrouter.referrer': 'OPENROUTER_REFERRER',
@@ -100,6 +121,15 @@ export const SETTING_ENV_VARIABLES: Record<string, string> = {
   'webSearch.searxng.baseUrl': 'SEARXNG_BASE_URL',
   'webSearch.provider': 'WEB_SEARCH_PROVIDER',
 };
+
+function parseStrictBooleanEnv(name: string, value: unknown): boolean {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '1' || normalized === 'true' || normalized === 'yes') return true;
+    if (normalized === '0' || normalized === 'false' || normalized === 'no') return false;
+  }
+  throw new Error(`Invalid ${name}: expected true, false, 1, 0, yes, or no`);
+}
 
 export const parseBooleanEnv = (value: unknown): boolean => {
   if (typeof value !== 'string') {

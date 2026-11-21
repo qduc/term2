@@ -35,6 +35,7 @@ async function fixture(
     holdReply?: boolean;
     providerFailure?: { status: number; message: string };
     shell?: boolean;
+    showReview?: boolean;
     shellCalls?: readonly ({ command: string; sandbox?: 'unsandboxed'; background?: boolean } | undefined)[];
     approvalReviews?: readonly ('low' | 'high')[];
     beforeApprovalReview?: () => Promise<void>;
@@ -143,6 +144,7 @@ async function fixture(
     JSON.stringify({
       agent: { modelSelection: { provider: 'acpfixture', model: 'acp-model' }, retryAttempts: 0 },
       sandbox: { enabled: false },
+      shell: { showReview: options.showReview ?? false },
       providers: [
         {
           name: 'acpfixture',
@@ -844,97 +846,117 @@ describe('ACP v1 built CLI compatibility for Air', () => {
     });
   }, 30_000);
 
-  it('changes the live approval and sandbox policy together through one ACP selector', async () => {
-    const permissions: acp.RequestPermissionRequest[] = [];
-    const command = 'echo mode-test >> ../approval-mode.txt';
-    const configId = 'approval_mode';
-    await fixture(
-      async ({ context, workspace, requests, savedSettings }) => {
-        const setup: acp.NewSessionRequest = { cwd: workspace, mcpServers: [] };
-        const created = await context.request(acp.methods.agent.session.new, setup);
-        const { sessionId } = created;
-        const mode = (response: { configOptions?: acp.SessionConfigOption[] | null }) =>
-          response.configOptions?.find(({ id }) => id === configId);
-        const setMode = (value: string) =>
-          context.request(acp.methods.agent.session.setConfigOption, { sessionId, configId, value });
-        const prompt = (id: string) =>
-          context.request(acp.methods.agent.session.prompt, {
-            sessionId: id,
-            prompt: [{ type: 'text', text: 'Append mode-test to the scratch file beside the workspace.' }],
+  it.each([false, true])(
+    'changes live approval policy while preserving sandbox confinement (showReview=%s)',
+    async (showReview) => {
+      const permissions: acp.RequestPermissionRequest[] = [];
+      const command = 'echo mode-test >> ../approval-mode.txt';
+      const configId = 'approval_mode';
+      await fixture(
+        async ({ context, workspace, requests, savedSettings }) => {
+          const setup: acp.NewSessionRequest = { cwd: workspace, mcpServers: [] };
+          const created = await context.request(acp.methods.agent.session.new, setup);
+          const { sessionId } = created;
+          const mode = (response: { configOptions?: acp.SessionConfigOption[] | null }) =>
+            response.configOptions?.find(({ id }) => id === configId);
+          const setMode = (value: string) =>
+            context.request(acp.methods.agent.session.setConfigOption, { sessionId, configId, value });
+          const prompt = (id: string) =>
+            context.request(acp.methods.agent.session.prompt, {
+              sessionId: id,
+              prompt: [{ type: 'text', text: 'Append mode-test to the scratch file beside the workspace.' }],
+            });
+          const outside = path.resolve(workspace, '..', 'approval-mode.txt');
+          const expectConfined = () => expect(readFile(outside, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+          const reviews = () => requests.filter((request) => !request.tools?.length);
+          const original = await savedSettings();
+          expect(mode(created)).toMatchObject({
+            category: 'mode',
+            currentValue: 'ask',
+            options: [
+              { value: 'ask', name: 'Ask' },
+              { value: 'assisted', name: 'Assisted' },
+              { value: 'unattended', name: 'Unattended' },
+              { value: 'always', name: 'Always' },
+            ],
           });
-        const outside = path.resolve(workspace, '..', 'approval-mode.txt');
-        const expectConfined = () => expect(readFile(outside, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-        const reviews = () => requests.filter((request) => !request.tools?.length);
-        const original = await savedSettings();
-        expect(mode(created)).toMatchObject({
-          category: 'mode',
-          currentValue: 'ask',
-          options: [
-            { value: 'ask', name: 'Ask' },
-            { value: 'assisted', name: 'Assisted' },
-            { value: 'always', name: 'Always · Sandbox off' },
-          ],
-        });
-        await expect(setMode('invalid')).rejects.toMatchObject({ code: -32602 });
-        await prompt(sessionId);
-        await expectConfined();
-        expect(permissions).toHaveLength(0);
-        expect(reviews()).toHaveLength(0);
+          await expect(setMode('invalid')).rejects.toMatchObject({ code: -32602 });
+          await prompt(sessionId);
+          await expectConfined();
+          expect(permissions).toHaveLength(0);
+          expect(reviews()).toHaveLength(0);
 
-        expect(mode(await setMode('assisted'))).toMatchObject({ currentValue: 'assisted' });
-        await prompt(sessionId);
-        expect(await readFile(path.join(workspace, 'assisted.txt'), 'utf8')).toBe('mode-test\n');
-        await expectConfined();
-        expect(reviews()).toHaveLength(1);
-        expect(permissions).toHaveLength(0);
-        await prompt(sessionId);
-        await expectConfined();
-        expect(reviews()).toHaveLength(2);
-        expect(permissions).toHaveLength(1);
-        expect(permissions[0]!.toolCall.title).toContain('Deterministic approval review');
-        expect(permissions[0]!.toolCall.title).toContain('risk: high');
+          expect(mode(await setMode('assisted'))).toMatchObject({ currentValue: 'assisted' });
+          await prompt(sessionId);
+          expect(await readFile(path.join(workspace, 'assisted.txt'), 'utf8')).toBe('mode-test\n');
+          await expectConfined();
+          expect(reviews()).toHaveLength(1);
+          expect(permissions).toHaveLength(0);
+          await prompt(sessionId);
+          await expectConfined();
+          expect(reviews()).toHaveLength(2);
+          expect(permissions).toHaveLength(1);
+          expect(permissions[0]!.toolCall.title?.includes('Deterministic approval review') ?? false).toBe(showReview);
+          expect(permissions[0]!.toolCall.title?.includes('risk: high') ?? false).toBe(showReview);
 
-        expect(mode(await setMode('always'))).toMatchObject({ currentValue: 'always' });
-        const sibling = await context.request(acp.methods.agent.session.new, setup);
-        expect(mode(sibling)).toMatchObject({ currentValue: 'ask' });
-        await prompt(sibling.sessionId);
-        await expectConfined();
-        await prompt(sessionId);
-        expect(await readFile(outside, 'utf8')).toBe('mode-test\n');
-        expect(permissions).toHaveLength(1);
-        expect(reviews()).toHaveLength(2);
+          expect(mode(await setMode('unattended'))).toMatchObject({ currentValue: 'unattended' });
+          const reattached = await context.request(acp.methods.agent.session.load, { sessionId, ...setup });
+          expect(mode(reattached)).toMatchObject({ currentValue: 'unattended' });
+          await prompt(sessionId);
+          await expectConfined();
+          expect(permissions).toHaveLength(1);
+          expect(reviews()).toHaveLength(3);
+          expect(mode(await setMode('always'))).toMatchObject({ currentValue: 'always' });
+          const sibling = await context.request(acp.methods.agent.session.new, setup);
+          expect(mode(sibling)).toMatchObject({ currentValue: 'ask' });
+          await prompt(sibling.sessionId);
+          await expectConfined();
+          await prompt(sessionId);
+          await expectConfined();
+          expect(permissions).toHaveLength(1);
+          expect(reviews()).toHaveLength(3);
+          await prompt(sessionId);
+          expect(await readFile(outside, 'utf8')).toBe('mode-test\n');
+          expect(permissions).toHaveLength(1);
 
-        expect(mode(await setMode('ask'))).toMatchObject({ currentValue: 'ask' });
-        await prompt(sessionId);
-        expect(await readFile(outside, 'utf8')).toBe('mode-test\n');
-        expect(mode(await setMode('always'))).toMatchObject({ currentValue: 'always' });
-        await context.request(acp.methods.agent.session.close, { sessionId });
-        const loaded = await context.request(acp.methods.agent.session.load, { sessionId, ...setup });
-        expect(loaded.configOptions?.find(({ id }) => id === configId)).toMatchObject({ currentValue: 'ask' });
-        expect(await savedSettings()).toBe(original);
-      },
-      {
-        approvalReviews: ['low', 'high'],
-        shellCalls: [
-          { command },
-          undefined,
-          { command: 'echo mode-test | tee assisted.txt' },
-          undefined,
-          { command },
-          undefined,
-          { command },
-          undefined,
-          { command },
-          undefined,
-          { command },
-        ],
-        async permission(params) {
-          permissions.push(params);
-          return { outcome: { outcome: 'selected', optionId: 'reject' } };
+          expect(mode(await setMode('ask'))).toMatchObject({ currentValue: 'ask' });
+          await prompt(sessionId);
+          expect(await readFile(outside, 'utf8')).toBe('mode-test\n');
+          expect(mode(await setMode('always'))).toMatchObject({ currentValue: 'always' });
+          await context.request(acp.methods.agent.session.close, { sessionId });
+          const loaded = await context.request(acp.methods.agent.session.load, { sessionId, ...setup });
+          expect(loaded.configOptions?.find(({ id }) => id === configId)).toMatchObject({ currentValue: 'ask' });
+          expect(await savedSettings()).toBe(original);
         },
-      },
-    );
-  }, 45_000);
+        {
+          showReview,
+          approvalReviews: ['low', 'high', 'high'],
+          shellCalls: [
+            { command },
+            undefined,
+            { command: 'echo mode-test | tee assisted.txt' },
+            undefined,
+            { command },
+            undefined,
+            { command },
+            undefined,
+            { command },
+            undefined,
+            { command },
+            undefined,
+            { command, sandbox: 'unsandboxed' },
+            undefined,
+            { command },
+          ],
+          async permission(params) {
+            permissions.push(params);
+            return { outcome: { outcome: 'selected', optionId: 'reject' } };
+          },
+        },
+      );
+    },
+    45_000,
+  );
 
   it('cancels an in-flight Assisted review without requesting client permission', async () => {
     let releaseReview!: () => void;

@@ -85,7 +85,8 @@ const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT]: 'Background shell timeout',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Shell output lines',
   [SETTING_KEYS.TOOLS_MAX_OUTPUT_CHARS]: 'Tool output chars',
-  [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell auto-approval',
+  [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Approval mode',
+  [SETTING_KEYS.SHELL_SHOW_REVIEW]: 'Show approval review',
   [SETTING_KEYS.SHELL_UNATTENDED_ESCAPE_REVIEW]: 'Unattended sandbox escapes',
   [SETTING_KEYS.SANDBOX_ENABLED]: 'Sandbox',
   [SETTING_KEYS.SANDBOX_READ_POLICY]: 'Sandbox read policy',
@@ -313,7 +314,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
     'Enable code-context tools for the main agent (true|false). Applies on the next model request.',
   [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations to disk (true|false)',
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]:
-    'Shell command auto-approval mode (off|advisory|auto|unattended|always); `unattended` never asks you and refuses what the reviewer does not approve; `always` disables sandbox.enabled',
+    'Tool approval mode (off|auto|unattended|always); `unattended` never asks you and refuses what the reviewer does not approve; `always` bypasses eligible permission prompts while preserving sandbox settings',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]:
     'Reasoning effort for risky shell auto-approval reviews (none|minimal|low|medium|high|xhigh)',
   [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',

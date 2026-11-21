@@ -25,6 +25,7 @@ function refusalCause(review: ApprovalReviewResult | undefined, unreviewed?: str
   if (unreviewed) return unreviewed;
   if (!review || review.kind === 'not_reviewed') return 'it was not reviewed';
   if (review.kind === 'unavailable') return 'the approval review was unavailable, so it could not be approved';
+  if (review.kind === 'bypassed') return 'the approval mode changed before the bypass could be applied';
   const reasoning = sanitizeApprovalReviewText(review.advisory.reasoning).trim();
   return `the approval reviewer did not approve it${reasoning ? `: ${reasoning}` : ''}`;
 }

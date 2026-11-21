@@ -63,7 +63,7 @@ export async function requestPermission(input: {
         title: interaction.toolName,
         description: [
           interaction.detail ?? interaction.summary,
-          input.review ? formatApprovalReview(input.review) : undefined,
+          input.review?.showReview !== false && input.review ? formatApprovalReview(input.review) : undefined,
         ]
           .filter(Boolean)
           .join('\n'),

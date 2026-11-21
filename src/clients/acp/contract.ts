@@ -50,7 +50,7 @@ export type AcpLogger = {
   error(message: string, fields: Readonly<Record<string, unknown>>): void;
 };
 
-export type AcpApprovalMode = 'ask' | 'assisted' | 'always';
+export type AcpApprovalMode = 'ask' | 'assisted' | 'unattended' | 'always';
 
 export type BackendOptions = {
   readonly host: DirectHost;

@@ -320,11 +320,18 @@ const ShellSettingsSchema = z.object({
     .default(30 * 60 * 1000)
     .describe('Timeout for background shell jobs, in milliseconds. Capped: 0 or unbounded values are rejected.'),
   maxOutputLines: z.number().int().positive().default(1000),
+  showReview: z
+    .boolean()
+    .default(false)
+    .describe('Show the reviewer assessment when asking for permission; does not grant permission'),
   autoApproveMode: z
-    .enum(['off', 'advisory', 'auto', 'unattended', 'always'])
+    .enum(['off', 'auto', 'unattended', 'always'], {
+      error: (issue) =>
+        issue.input === 'advisory' ? 'advisory was removed; use off with shell.showReview=true' : undefined,
+    })
     .default('off')
     .describe(
-      'Mode for tool approval; unattended never asks a person and refuses what the reviewer does not approve; always bypasses permission prompts except ask_user and disables sandbox.enabled',
+      'Mode for tool approval; unattended never asks a person and refuses what the reviewer does not approve; always bypasses eligible permission prompts while preserving sandbox settings',
     ),
   unattendedEscapeReview: z
     .boolean()
@@ -817,7 +824,8 @@ export interface SettingsWithSources {
     timeout: SettingWithSource<number>;
     backgroundTimeout: SettingWithSource<number>;
     maxOutputLines: SettingWithSource<number>;
-    autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto' | 'unattended' | 'always'>;
+    showReview: SettingWithSource<boolean>;
+    autoApproveMode: SettingWithSource<'off' | 'auto' | 'unattended' | 'always'>;
     unattendedEscapeReview: SettingWithSource<boolean>;
   };
   sandbox: {
@@ -980,6 +988,7 @@ export const SETTING_KEYS = {
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   TOOLS_MAX_OUTPUT_CHARS: 'tools.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
+  SHELL_SHOW_REVIEW: 'shell.showReview',
   SHELL_UNATTENDED_ESCAPE_REVIEW: 'shell.unattendedEscapeReview',
   SANDBOX_ENABLED: 'sandbox.enabled',
   SANDBOX_READ_POLICY: 'sandbox.readPolicy',
@@ -1126,6 +1135,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+  SETTING_KEYS.SHELL_SHOW_REVIEW,
   SETTING_KEYS.SHELL_UNATTENDED_ESCAPE_REVIEW,
   SETTING_KEYS.SANDBOX_ENABLED,
   SETTING_KEYS.SANDBOX_READ_POLICY,
@@ -1260,6 +1270,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     backgroundTimeout: 30 * 60 * 1000,
     maxOutputLines: 1000,
     autoApproveMode: 'off',
+    showReview: false,
     unattendedEscapeReview: false,
   },
   sandbox: {

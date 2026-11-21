@@ -37,6 +37,9 @@ export const determineActiveMenu = (
     /^\/settings (?:reset )?app\.(?:activeProfileId|liteMode|planMode|mentorMode|orchestratorMode)(?:\s|$)/.test(value)
   )
     return { type: 'none' };
+  // Approval arguments belong to the command handler, not the one-value picker.
+  // Let the removed mode reach its replacement guidance too.
+  if (/^\/auto-approve\s+(?:advisory(?:\s|$)|\S+\s)/.test(value)) return { type: 'none' };
   const commandCompletions = getCommandCompletions(commands);
 
   // Priority 0: model selection. Settings-backed model keys stay in model-settings;

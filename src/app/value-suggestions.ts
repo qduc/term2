@@ -18,14 +18,12 @@ export type SettingValueSuggestion = {
 const MAX_RESULTS = 10;
 
 const AUTO_APPROVE_MODE_DESCRIPTIONS = {
-  off: 'Show approval prompts for tool calls; in-workspace apply-patch edits remain automatic.',
-  advisory:
-    'Use an LLM to assess shell-command risk, but do not auto-approve based on that assessment; in-workspace apply-patch edits remain automatic.',
-  auto: 'Auto-approve explicitly or implicitly authorized shell commands rated low or medium risk with high confidence by the LLM; in-workspace apply-patch edits remain automatic.',
+  off: 'Ask for required tool approvals. Enable shell.showReview to display an assessment without granting approval.',
+  auto: 'Approve eligible authorized low- or medium-risk actions with high confidence; ask when review does not approve.',
   unattended:
-    'Never ask: the LLM reviewer approves as in auto, and anything it does not approve is refused to the agent, which continues. Repeated refusals end the turn; sandbox escapes are refused.',
+    'Use the auto review threshold, then refuse other actions without waiting for approval. Questions still require an answer; sandbox escapes require shell.unattendedEscapeReview.',
   always:
-    'Bypass tool approval prompts; ask_user still pauses for your answer. In-workspace apply-patch edits are automatic in every mode.',
+    'Bypass eligible permission prompts. Questions and propose_goal still require an answer; sandbox preferences and unsupported escape restrictions remain.',
 } as const;
 
 // Curated suggestions for settings where the schema alone can't express them:
@@ -167,9 +165,18 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'http', description: 'HTTP transport with full-history requests' },
   ],
   'ssh.port': [{ value: '22', description: 'Default SSH port' }],
+  'shell.showReview': [
+    {
+      value: 'false',
+      description: 'Hide assessment text on human approval prompts; preserve recorded review evidence.',
+    },
+    {
+      value: 'true',
+      description: 'Show assessments on human approval prompts; in off mode, assess without automatically granting.',
+    },
+  ],
   'shell.autoApproveMode': [
     { value: 'off', description: AUTO_APPROVE_MODE_DESCRIPTIONS.off },
-    { value: 'advisory', description: AUTO_APPROVE_MODE_DESCRIPTIONS.advisory },
     { value: 'auto', description: AUTO_APPROVE_MODE_DESCRIPTIONS.auto },
     { value: 'unattended', description: AUTO_APPROVE_MODE_DESCRIPTIONS.unattended },
     { value: 'always', description: AUTO_APPROVE_MODE_DESCRIPTIONS.always },

@@ -30,7 +30,7 @@ import { exitAfterDrain, settledExitCode } from '../shared/lib/exit-after-drain.
 import { exitCodeForSignal, onStdioClosed } from '../shared/lib/exit-on-closed-pipe.js';
 import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
-import { createSettingsService, type SettingsService } from './settings.js';
+import { createSettingsService, type SettingsService, type AppSettingsOptions } from './settings.js';
 import { runSandboxNetworkCommand } from './lib/cli-sandbox-network.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
 import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './cli-conversations.js';
@@ -43,6 +43,7 @@ import {
 } from './launch.js';
 import type { HeadlessIo } from '../clients/headless/index.js';
 import {
+  cliSettingsOverrides,
   CONTROL_USAGE,
   DISCORD_HELP,
   helpText,
@@ -305,6 +306,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
   const sessionContext = new SessionContextService();
   const settings = createSettingsService({
     env: buildEnvOverrides(),
+    cli: cliSettingsOverrides(options) as AppSettingsOptions['cli'],
     disableFilePersistence: true,
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
@@ -366,6 +368,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
   const sessionContext = new SessionContextService();
   const settings = createSettingsService({
     env: buildEnvOverrides(),
+    cli: cliSettingsOverrides(options) as AppSettingsOptions['cli'],
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
   const logger = settings.getLoggingService();

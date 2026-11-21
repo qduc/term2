@@ -102,9 +102,10 @@ This page is generated from `src/config/settings/` by `pnpm --dir website build`
 | `shell.timeout` | `number` | `120000` | ✓ Yes | — | Shell command timeout in milliseconds |
 | `shell.backgroundTimeout` | `number` | `1800000` | ✓ Yes | — | Timeout for background shell jobs, in milliseconds. Capped: 0 or unbounded values are rejected. |
 | `shell.maxOutputLines` | `number` | `1000` | ✓ Yes | — | Maximum lines of shell output to capture |
-| `shell.maxOutputChars` | `number` | `40000` | ✓ Yes | — | Maximum characters of shell output to capture |
-| `shell.autoApproveMode` | `off \\| advisory \\| auto \\| always` | `"off"` | ✓ Yes | — | Mode for tool approval; always bypasses permission prompts except ask_user and disables sandbox.enabled |
-| `sandbox.enabled` | `boolean` | `true` | ✓ Yes | — | Enable sandbox mode for safer command execution (true\|false) |
+| `shell.autoApproveMode` | `off \\| auto \\| unattended \\| always` | `"off"` | ✓ Yes | `SHELL_AUTO_APPROVE_MODE` | Mode for tool approval; unattended never asks a person and refuses what the reviewer does not approve; always bypasses eligible permission prompts while preserving sandbox settings |
+| `shell.showReview` | `boolean` | `false` | ✓ Yes | `TERM2_SHOW_REVIEW` | Show the reviewer assessment when asking for permission; does not grant permission |
+| `shell.unattendedEscapeReview` | `boolean` | `false` | ✓ Yes | — | In unattended approval, let the reviewer approve running a command outside the sandbox. Off: such requests are refused |
+| `sandbox.enabled` | `boolean` | `true` | ✓ Yes | `SANDBOX_ENABLED` | Enable sandbox mode for safer command execution (true\|false) |
 | `sandbox.readPolicy` | `standard \\| strict` | `"standard"` | ✓ Yes | — | File read policy for sandbox (standard\|strict) |
 | `sandbox.allowReadExtra` | `array` | `[]` | ✓ Yes | — | Additional paths allowed for sandbox file reads (comma-separated) |
 | `sandbox.dockerHostControlProjects` | `array` | `[]` | ✓ Yes | — | Projects you allowed to control Docker on the host; remove a path to revoke its access (JSON array) |
@@ -126,6 +127,7 @@ This page is generated from `src/config/settings/` by `pnpm --dir website build`
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
+| `tools.maxOutputChars` | `number` | `20000` | ✓ Yes | — | Maximum characters of one tool result that enters model context (at least 1000); larger results keep the start and end, and the full output is saved to a file |
 | `tools.logFileOperations` | `boolean` | `true` | No | `LOG_FILE_OPERATIONS` | Log file operations to disk (true\|false) |
 | `tools.shell.enabled` | `boolean` | `true` | ✓ Yes | — | Enable shell tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.web.enabled` | `boolean` | `true` | ✓ Yes | — | Enable web_search and web_fetch tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |

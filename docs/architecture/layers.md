@@ -180,15 +180,18 @@ socket attach to the same host the same way.
    receives in order.
 
 **Where an approval waits.** When a tool needs approval, the engine emits
-`interaction_required` and waits in memory. `conversation-turn.ts` appends the
-pending interaction, so the session status and the client's snapshot show it.
-The client replies with an `answer` command, which `commands.ts` turns
-into an answer on the session, and `conversation-turn.ts` passes it to the
-waiting turn with `TurnHandle.answer`. Headless decides with the policy in
-`clients/headless/approvals.ts`: without `--auto-approve` it denies;
-with it, it allows everything except medium- or high-risk shell commands. The
-TUI asks the user. If the process dies while it waits, reopening the
-session records that turn as interrupted; nothing resumes on its own.
+`interaction_required` and waits in memory. The session's `ApprovalReviews`
+(`session/approval/approval-arbiter.ts`) first applies the shared route in
+`approval-route.ts`: review, scoped bypass, human prompt or unattended refusal.
+Under review the request is live-only; settlement records the open and any
+policy close. A human prompt is durable and reaches clients through the shared
+projection. The client replies with an `answer` command, which `commands.ts`
+turns into a session answer; `conversation-turn.ts` passes it to the waiting
+turn with `TurnHandle.answer`. The headless `--auto-approve` boolean controls
+execution separately from the four approval modes. Remaining unresolved
+requests use the configured headless decision policy;
+`clients/headless/approvals.ts` owns the client answer path. If the process dies while a turn waits,
+reopening records the turn as interrupted; nothing resumes on its own.
 
 ## Keeping it readable
 

@@ -139,7 +139,7 @@ reruns, through terminal workflow `updated_at`; job span uses first job start
 through last job completion. Queue, setup, build, test, cleanup and publication
 metadata are included. There is no separate GitHub publication timestamp, so these
 are bounded observations, not an exact UI notification measurement. Raw API and
-logs are retained in adjacent JSON files, including failed and slower experiments.
+logs were not retained; the raw JSON was deleted after the experiment closed.
 
 The all-warm candidate's build-plus-test stages used 284.06 CPU-seconds total
 (user + system), versus 289.18 in the preceding mixed-cache run; hosted-runner

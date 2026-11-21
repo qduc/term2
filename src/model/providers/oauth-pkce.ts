@@ -44,8 +44,6 @@ export type PkceLoginConfig = {
   scopes: string[];
   /** Provider-specific authorize parameters beyond the standard PKCE set. */
   extraAuthorizeParams?: Record<string, string>;
-  /** How the token endpoint wants the code exchange encoded. */
-  tokenRequestEncoding?: 'form' | 'json';
   /** Appended to the EADDRINUSE message; names the likely conflicting process. */
   portConflictHint?: string;
 };
@@ -145,7 +143,6 @@ export async function runPkceLoopbackLogin(config: PkceLoginConfig, options: Pkc
     code_verifier: verifier,
     client_id: config.clientId,
   };
-  const useJson = config.tokenRequestEncoding === 'json';
   // The browser already showed "Login complete" on the loopback callback, so
   // a later exchange failure must be explicit in the terminal — the code is
   // one-time and the user will need to retry the login.
@@ -163,8 +160,8 @@ export async function runPkceLoopbackLogin(config: PkceLoginConfig, options: Pkc
     : timeoutSignal;
   const response = await fetchImpl(config.tokenEndpoint, {
     method: 'POST',
-    headers: { 'Content-Type': useJson ? 'application/json' : 'application/x-www-form-urlencoded' },
-    body: useJson ? JSON.stringify(params) : new URLSearchParams(params).toString(),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params).toString(),
     ...(fetchSignal ? { signal: fetchSignal } : {}),
   });
   if (!response.ok) {

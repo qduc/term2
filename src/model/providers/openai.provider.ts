@@ -74,6 +74,11 @@ registerProvider(
       const defaultModel = settingsService.get('agent.modelSelection').model || 'gpt-4o';
       const resolvedModel = model || defaultModel;
       const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
+      // Only OpenAI's own endpoint needs a key; with OPENAI_BASE_URL set, a local proxy may take none.
+      if (!apiKey && !process.env.OPENAI_BASE_URL?.trim())
+        throw new Error(
+          'OpenAI API key is not configured (set OPENAI_API_KEY, or agent.openai.apiKey in settings.json)',
+        );
       const configuredRetries = retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2;
       const openAIClient = new OpenAI({
         apiKey: apiKey || 'placeholder',

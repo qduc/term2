@@ -194,10 +194,12 @@ section is a real recording behind every provider, replayed offline.
    browser launcher on macOS and Windows, the pasted entry for Codex, logging in
    again to a stored account, and credential import from `CODEX_HOME` and
    `GROK_HOME`. Findings:
-   - A refused callback prints the label twice: "Codex login failed: Codex
-     login failed: OAuth state mismatch". The tests assert the single label.
-   - `tokenRequestEncoding: 'json'` in `PkceLoginConfig` is set by neither
-     provider.
+   - Fixed: a refused callback printed the label twice, "Codex login failed:
+     Codex login failed: OAuth state mismatch". `loginFailure` in
+     `src/app/cli-account-commands.ts` adds the label only to a message that
+     does not already start with it, and the tests assert the exact line.
+   - Fixed: `tokenRequestEncoding` in `PkceLoginConfig` was set by neither
+     provider and is removed.
 10. **Done: the error-scenario exclusions are gone for the Core types.**
     `provider-session-chat-terminal-errors.blackbox.ts` runs `native-error`
     and `incomplete-stream` for `runtime-openai-chat` and
@@ -230,13 +232,15 @@ section is a real recording behind every provider, replayed offline.
     - Precedence differs by provider. For OpenAI, OpenRouter and web search the
       environment wins over `settings.json`; for the custom types a stored
       `apiKey` wins over the environment. The tests pin both.
-    - With no OpenAI key anywhere the request is sent with the bearer value
-      `placeholder` (`openai.provider.ts`), where OpenRouter stops before any
-      request and says the key is not configured.
-    - For a custom `google` provider the model-list request puts the key in
-      the URL as `?key=` (`fetchModels` in `openai-compatible.provider.ts`);
-      the model request sends it in a header. A key in a URL is written to
-      proxy and server logs.
+    - Fixed: with no OpenAI key anywhere the request was sent with the bearer
+      value `placeholder`. `openai.provider.ts` now stops before any model
+      request and says the key is not configured, as OpenRouter does, unless
+      `OPENAI_BASE_URL` is set, because a local proxy may take no key. The
+      model-list request to OpenAI's host is still made, without a credential.
+    - Fixed: for a custom `google` provider the model-list request put the key
+      in the URL as `?key=`, where proxies and servers log it. `fetchModels`
+      in `openai-compatible.provider.ts` now sends it in `x-goog-api-key`, as
+      the model request does.
 13. **Decided against: a scheduled check against the real services.** The
     maintainer chose one-time recordings replayed in CI as sufficient. The
     consequence is accepted, not solved: a replayed recording fails when Term2's

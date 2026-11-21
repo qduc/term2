@@ -236,7 +236,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         throw new Error(`Custom provider '${providerId}' requires a baseUrl to list models`);
       }
       const baseUrl = normalizeBaseUrl(effectiveBaseUrl);
-      let url = buildOpenAICompatibleUrl(baseUrl, '/models');
+      const url = buildOpenAICompatibleUrl(baseUrl, '/models');
 
       const resolvedApiKey =
         resolved.apiKey ??
@@ -253,7 +253,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         }
       } else if (resolved.type === 'google') {
         if (resolvedApiKey) {
-          url = `${url}${url.includes('?') ? '&' : '?'}key=${resolvedApiKey}`;
+          headers['x-goog-api-key'] = resolvedApiKey;
         }
       } else if (resolvedApiKey) {
         headers.Authorization = `Bearer ${resolvedApiKey}`;

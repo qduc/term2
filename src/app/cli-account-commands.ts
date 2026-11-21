@@ -23,6 +23,15 @@ import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/**
+ * The failure line for a login. The loopback and token-exchange errors already name the provider
+ * ("Codex login failed: OAuth state mismatch"); anything else (a network or file error) does not, so it gets the label.
+ */
+function loginFailure(label: 'Grok' | 'Codex', error: unknown): string {
+  const message = errorMessage(error);
+  return message.startsWith(`${label} `) ? message : `${label} login failed: ${message}`;
+}
+
 /** The browser login's prompts, written as the current CLI writes them (source/cli.tsx). */
 function oauthLoginIo(providerLabel: string) {
   return {
@@ -49,7 +58,7 @@ export async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
       console.log(`Logged in to Grok${tokens.email ? ` as ${tokens.email}` : ''}.`);
       return 0;
     } catch (error) {
-      console.error(`Grok login failed: ${errorMessage(error)}`);
+      console.error(loginFailure('Grok', error));
       return 1;
     }
   }
@@ -59,7 +68,7 @@ export async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
     console.log('Logged in to Codex.');
     return 0;
   } catch (error) {
-    console.error(`Codex login failed: ${errorMessage(error)}`);
+    console.error(loginFailure('Codex', error));
     return 1;
   }
 }

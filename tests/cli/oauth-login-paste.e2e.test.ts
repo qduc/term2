@@ -102,8 +102,13 @@ describe.skipIf(process.platform === 'win32')('Grok login with the redirect past
       terminal.write(`${authorize.callback({ code: 'forged-code', state: 'not-the-issued-state' })}\r`);
       const exit = await terminal.waitForExit();
       expect(exit.exitCode, terminal.getVisibleOutput()).toBe(1);
-      expect(terminal.getVisibleOutput()).toContain('Grok login failed:');
-      expect(terminal.getVisibleOutput()).toContain('OAuth state mismatch');
+      const lines = terminal
+        .getVisibleOutput()
+        .split('\n')
+        .map((line) => line.trim());
+      expect(lines.filter((line) => line.includes('login failed'))).toEqual([
+        'Grok login failed: OAuth state mismatch',
+      ]);
       expect(auth.requests).toHaveLength(0);
       expect(fs.existsSync(credentialFile())).toBe(false);
     },

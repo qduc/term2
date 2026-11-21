@@ -66,12 +66,11 @@ Ordered by what a miss costs, then by how likely the miss is.
      IPv6 socket. On a kernel without IPv6 the bridge never starts and every
      proxied command fails with "Failed to connect to localhost port 3128"
      and no explanation. The network test names this cause when it sees it.
-   - `tests/cli/sandbox-network.e2e.test.ts` still runs only with
-     `RUN_SHELL_SANDBOX_INTEGRATION=1`, which nothing sets, in a lane without
-     the tools. It is the only check of the approval prompt and of reuse
-     across linked worktrees. It passes where bubblewrap, socat and IPv6 are
-     present. Running it in CI needs `owner()` in `scripts/run-ci-lane.mjs`
-     to place it in the `test` lane and that job to set the variable.
+   - Done: `tests/cli/sandbox-network.e2e.test.ts`, the only check of the
+     approval prompt and of reuse across linked worktrees, ran only with
+     `RUN_SHELL_SANDBOX_INTEGRATION=1`, which nothing set, in a lane without
+     the tools. It had not rotted. `owner()` in `scripts/run-ci-lane.mjs` now
+     places it in the `test` lane, and that job sets the variable.
    - Two cases in `tests/session/logging/logging-failures.integration.test.ts`
      failed in a container running as root and pass in CI. They make a
      directory unwritable with `chmod`, which root ignores; that is the

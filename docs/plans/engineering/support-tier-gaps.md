@@ -242,9 +242,25 @@ section is a real recording behind every provider, replayed offline.
       `rate_limit` or `authentication`, and keeps the engine's wording for a
       `network` or unclassified failure.
       `provider-retries-exhausted-notice.blackbox.ts` covers both.
-    - The older scenarios in `provider-session-resilience-scenarios.ts` assert
-      only a non-zero exit and no answer text, which a CLI that failed to
-      start would also satisfy.
+    - Done: the older failure scenarios in
+      `provider-session-resilience-scenarios.ts` asserted only a non-zero exit,
+      no answer text and at least one request. They now go through
+      `assertFailedRun` with a row of `FAILURE_EXPECTATIONS` per route and
+      scenario: exit 1, one provider request, stderr equal to `error` plus the
+      persisted message, stdout empty or the partial text the stream
+      delivered, and a log whose turn ended `failed` with no response and no
+      assistant item. Three things the table leaves open, each marked where
+      it is left out:
+      - A connection dropped before any response is `network` and retryable,
+        with a `/retry turn` notice, on the OpenAI, Codex, OpenRouter and chat
+        routes, and `provider`, not retryable and without a notice on the
+        Anthropic and Google routes.
+      - A WebSocket closed before the terminal event is `network` and
+        retryable on the OpenAI lane and `provider` and not retryable on the
+        Codex lane. Neither offers `/retry turn`.
+      - The Google route shows only `Internal Server Error` for an HTTP 500
+        whose body names the failure. The fixture's body is not Google-shaped,
+        so this may be the fixture.
 11. **Done: the ledger is checked against the tests.**
     `reconcileExecutionsWithTests`, run by `provider-capability-matrix.test.ts`,
     compares the executed-scenario lists with the titles Vitest collects from

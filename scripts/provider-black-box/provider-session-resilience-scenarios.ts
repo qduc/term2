@@ -14,6 +14,7 @@ import {
   type IsolatedWorkspacePaths,
   type PtyChildDriver,
 } from './provider-test-harness.js';
+import { assertFailedRun, FAILURE_EXPECTATIONS } from './provider-session-resilience-failure-expectations.js';
 
 /**
  * Executed capabilities owned by this file. Gate C should combine this typed
@@ -1178,6 +1179,14 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
               0,
             );
             expect(server.responseFrames.length).toBe(server.requests.length);
+            // retryAttempts is 0: the failure is not retried, so exactly one request reached the server.
+            expect(server.requests, `${route.rowId}.${scenario}: provider requests`).toHaveLength(1);
+            await assertFailedRun(
+              `${route.rowId}.${scenario}`,
+              result,
+              FAILURE_EXPECTATIONS[route.rowId]![scenario]!,
+              PROMPT,
+            );
           });
         }
       }
@@ -1220,6 +1229,14 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
               0,
             );
             expect(server.responseFrames.length).toBe(server.requests.length);
+            // retryAttempts is 0: the failure is not retried, so exactly one request reached the server.
+            expect(server.requests, `${route.rowId}.${scenario}: provider requests`).toHaveLength(1);
+            await assertFailedRun(
+              `${route.rowId}.${scenario}`,
+              result,
+              FAILURE_EXPECTATIONS[route.rowId]![scenario]!,
+              PROMPT,
+            );
           });
         }
       }

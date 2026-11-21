@@ -187,6 +187,28 @@ describe.concurrent('API keys from the environment, through the built CLI', () =
       for (const request of requests)
         expect([undefined, 'Bearer placeholder']).toContain(request.headers.authorization);
     });
+
+    it(
+      'with no key and the default base URL fails before any request, and does not borrow another provider key',
+      { timeout: TIMEOUT },
+      async () => {
+        await withFake('responses', async (wire) => {
+          // No OPENAI_BASE_URL: the SDK would use https://api.openai.com, which the preload sends to the fixture
+          // server, so a request that left the process would be counted here.
+          const run = await runCli({
+            args: ['--provider', 'openai', '--model', 'fixture-model', 'Say hello'],
+            env: { OPENROUTER_API_KEY: 'env-openrouter-key', ANTHROPIC_API_KEY: 'env-anthropic-key' },
+            extraEnv: (root) => redirectHostsEnv(root, wire.baseUrl, ['api.openai.com']),
+          });
+          expect(run.status, describeRun(run)).toBe(1);
+          expect(run.stderr).toContain('OpenAI API key is not configured');
+          expect(run.stderr).toContain('OPENAI_API_KEY');
+          expect(modelRequests(wire), 'a model request was sent although no key is configured').toHaveLength(0);
+          // The catalogue lookup is the only traffic left; it never carried a credential.
+          for (const request of wire.requests) expect(header(request, 'authorization')).toBeUndefined();
+        });
+      },
+    );
   });
 
   describe('openrouter', () => {

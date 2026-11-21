@@ -126,7 +126,7 @@ set does not yet back.
 | Hard gates | `ApprovalHardGate` in `approval-route.ts` | Core | Only a person may grant them, in every mode. A break here is a safety failure. |
 | Shell sandbox, filesystem and network policy | `sandbox.*`, prompt `sandbox_network_access` | Core | |
 | Unsandboxed escape approval | `sandbox: "unsandboxed"` on `shell` | Core | |
-| Shell and generation limits | `shell.timeout`, `shell.backgroundTimeout`, `agent.maxStreamOutputChars` | Core | |
+| Shell and generation limits | `shell.timeout`, `shell.backgroundTimeout` (background jobs, TUI only), `agent.maxStreamOutputChars` (the model's streamed text per request, not tool output) | Core | |
 | Approval modes `auto`, `unattended`, `always` | `shell.autoApproveMode` | Supported | The modes are Supported; the hard gates they must respect are Core. |
 | Background shell jobs | `get_shell_job`, `cancel_shell_job`, `monitor_shell_job`, `cancel_shell_monitor`, `configure_task_check_in` | Supported | |
 | Code context | `read_code_outline`, `code_context_search` | Supported | |

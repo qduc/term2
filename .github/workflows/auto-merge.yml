@@ -1,0 +1,40 @@
+name: Auto-merge
+
+# Enable GitHub auto-merge on every same-repository PR into main once it is
+# ready for review. GitHub then squash-merges it after the `main` ruleset's
+# required status checks pass; this workflow does not merge anything itself.
+# Without required checks in that ruleset, auto-merge merges immediately.
+#
+# Mark a PR as draft (or disable auto-merge on it) to keep it open.
+#
+# A merge performed through auto-merge enabled by GITHUB_TOKEN does not start
+# push-triggered workflows on main (CI, docs deploy). Set the AUTO_MERGE_TOKEN
+# secret (a fine-grained PAT or GitHub App token with contents and pull-request
+# write access) so the merge is attributed to it and those workflows run.
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    # Fork PRs never auto-merge; drafts wait until marked ready.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --auto --squash

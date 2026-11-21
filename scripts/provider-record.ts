@@ -11,6 +11,11 @@ import { createFixtureRecorder, createRecordingMiddleware } from './provider-bla
 import type { FixtureTransport } from './provider-black-box/fixture-envelope.js';
 import type { FakeProviderScenario } from './provider-black-box/fake-provider-http-server.js';
 import { selectOpencodeModelTransport } from '../src/model/providers/opencode-routing.js';
+import {
+  KNOWN_CUSTOM_PROVIDER_TYPES,
+  SETTING_KEYS,
+  type KnownCustomProviderType,
+} from '../src/config/settings/settings-schema.js';
 
 const require = createRequire(import.meta.url);
 
@@ -28,6 +33,37 @@ const modelArg = get('--model');
 const probe = get('--probe');
 const outArg = get('--out');
 const fromFake = has('--from-fake');
+const typeArg = get('--type');
+const baseUrlArg = get('--base-url');
+const apiKeyEnvArg = get('--api-key-env');
+
+const usage = `Usage:
+  Live recording (spends credits; never part of PR tests):
+    pnpm provider:record --yes --provider <id> --model <model> --probe <scenario> [--out <absolute dir>]
+      <id> is one of openai, openrouter, anthropic, google|gemini, opencode; credentials come from that provider's
+      usual environment variables (OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, ...).
+      Base URL overrides: OPENROUTER_BASE_URL (openrouter), OPENAI_BASE_URL (openai), ANTHROPIC_BASE_URL (anthropic),
+      OPENCODE_BASE_URL (opencode).
+
+  Live recording of any custom provider type against a chosen base URL:
+    pnpm provider:record --yes --provider <new id> --type <type> --base-url <url> --api-key-env <ENV NAME>
+      --model <model> --probe <scenario> [--out <absolute dir>]
+      <type> is one of ${KNOWN_CUSTOM_PROVIDER_TYPES.join(', ')}. The id names a runtime provider registered with
+      that type and base URL, so the recording runs through the same registry path as a configured custom provider.
+      The key is read from the one named environment variable and from nowhere else. --type needs --base-url and
+      --api-key-env; --base-url and --api-key-env are only accepted with --type. The id must not be a built-in
+      provider (openai, openrouter, codex, grok).
+
+  Deterministic self-validation (no credentials):
+    pnpm provider:record --from-fake <protocol> <scenario> [--provider <id>] [--model <model>] [--out <absolute dir>]
+      protocols: chat-completions, responses, anthropic, google
+
+  Raw recordings are written outside the repository (default ~/.term2/provider-recordings, or $TERM2_RECORDING_DIR).
+  Run \`pnpm provider:fixture:prepare <file>\` before committing anything derived from one.`;
+if (has('--help') || has('-h')) {
+  console.log(usage);
+  process.exit(0);
+}
 
 const fakeProtocols = ['chat-completions', 'responses', 'anthropic', 'google'] as const;
 const fakeScenarios = [
@@ -46,10 +82,13 @@ if (!fromFake) {
   if (!has('--yes')) fail('Live recording is disabled by default. Re-run with --yes and an explicit probe.');
   if (!probe) fail('An explicit --probe scenario is required.');
   if (!providerArg || !modelArg) fail('Both --provider and --model are required.');
-  const credentialNames = credentialNamesFor(providerArg);
-  if (!credentialNames.some((name) => process.env[name]))
-    fail(`Missing credentials for ${providerArg} (${credentialNames.join(' or ')}).`);
-  await runLiveRecording(providerArg!, modelArg!, probe!, outArg);
+  const typed = typedRecordingFromArgs(providerArg!);
+  if (!typed) {
+    const credentialNames = credentialNamesFor(providerArg!);
+    if (!credentialNames.some((name) => process.env[name]))
+      fail(`Missing credentials for ${providerArg} (${credentialNames.join(' or ')}).`);
+  }
+  await runLiveRecording(providerArg!, modelArg!, probe!, outArg, typed);
   process.exit(0);
 }
 
@@ -57,6 +96,8 @@ if (!fromFake) {
 // for live tool-call probes; accepting it here would stamp a label on frames
 // that never came from the probe.
 if (probe) fail('--probe drives the live tool-call probe only; --from-fake records the deterministic fake scenario.');
+if (typeArg !== undefined || baseUrlArg !== undefined || apiKeyEnvArg !== undefined)
+  fail('--type, --base-url and --api-key-env apply to live recording only; --from-fake uses the fake provider.');
 const protocolArg = args[args.indexOf('--from-fake') + 1];
 const scenarioArg = args[args.indexOf('--from-fake') + 2] ?? 'success';
 if (!(fakeProtocols as readonly string[]).includes(protocolArg ?? ''))
@@ -99,11 +140,45 @@ function recordingPath(out: string | undefined, providerId: string, protocolId: 
 function safeName(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, '_');
 }
+type TypedRecording = { type: KnownCustomProviderType; baseUrl: string; apiKey: string };
+
+/**
+ * `--type` records a custom provider type against a caller-chosen base URL. The key comes from the one
+ * environment variable named by `--api-key-env`; nothing else in the environment is consulted.
+ * Returns undefined when none of the three flags is present (the original provider-id behaviour).
+ */
+function typedRecordingFromArgs(providerId: string): TypedRecording | undefined {
+  const flags = ['--type', '--base-url', '--api-key-env'].filter((name) => has(name));
+  if (!flags.length) return undefined;
+  for (const name of flags) {
+    const value = get(name);
+    if (!value || value.startsWith('--')) fail(`${name} needs a value.\n${usage}`);
+  }
+  if (!typeArg) fail(`${flags.join(' and ')} only apply together with --type.\n${usage}`);
+  if (!(KNOWN_CUSTOM_PROVIDER_TYPES as readonly string[]).includes(typeArg!))
+    fail(`--type must be one of ${KNOWN_CUSTOM_PROVIDER_TYPES.join(', ')} (got '${typeArg}').`);
+  if (!baseUrlArg || !apiKeyEnvArg)
+    fail(`--type requires both --base-url and --api-key-env; a typed recording never falls back to other credentials.`);
+  try {
+    const url = new URL(baseUrlArg!);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('not http(s)');
+  } catch {
+    fail(`--base-url must be an http(s) URL (got '${baseUrlArg}').`);
+  }
+  const apiKey = process.env[apiKeyEnvArg!];
+  if (!apiKey)
+    fail(
+      `Missing credentials for ${providerId}: environment variable ${apiKeyEnvArg} (from --api-key-env) is not set.`,
+    );
+  return { type: typeArg as KnownCustomProviderType, baseUrl: baseUrlArg!, apiKey: apiKey! };
+}
+
 async function runLiveRecording(
   providerId: string,
   modelId: string,
   probeId: string,
   out: string | undefined,
+  typed?: TypedRecording,
 ): Promise<void> {
   if (process.env.TERM2_RECORDING_TRANSPORT === 'websocket')
     fail('WebSocket live recording requires the ResponsesWS adapter; use HTTP recording for this pilot.');
@@ -114,11 +189,11 @@ async function runLiveRecording(
   const nativeFetch = globalThis.fetch;
   const recorder = createFixtureRecorder({
     provider: providerId,
-    wireFamily: wireFamilyFor(providerId, modelId),
+    wireFamily: wireFamilyFor(providerId, modelId, typed?.type),
     transport: 'http-sse',
     capture: {
-      sdkPackage: sdkPackageFor(providerId, modelId),
-      apiSdkVersion: installedVersion(sdkPackageFor(providerId, modelId)),
+      sdkPackage: sdkPackageFor(providerId, modelId, typed?.type),
+      apiSdkVersion: installedVersion(sdkPackageFor(providerId, modelId, typed?.type)),
       model: modelId,
       modelFamily: providerId,
       capturedAt: new Date().toISOString(),
@@ -130,17 +205,28 @@ async function runLiveRecording(
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
     captureFetch({ url: input, init }, (ctx) => nativeFetch(ctx.url, ctx.init))) as typeof fetch;
   try {
+    // Every key a provider's createStreamedModel path reads. Keep this in step with the providers: the
+    // stub throws on a key it does not list (see below), so a rename fails the recording instead of
+    // handing the provider `undefined`.
     const settingsValues: Record<string, unknown> = {
-      'agent.model': modelId,
-      'agent.retryAttempts': 0,
-      'agent.transport': 'http',
-      'agent.openai.apiKey': process.env.OPENAI_API_KEY,
-      'agent.anthropic.apiKey': anthropicApiKey(),
-      'agent.google.apiKey': googleApiKey(),
-      'agent.openrouter.apiKey': process.env.OPENROUTER_API_KEY,
-      'agent.opencode.apiKey': process.env.OPENCODE_API_KEY,
+      [SETTING_KEYS.AGENT_MODEL_SELECTION]: { provider: providerId, model: modelId },
+      [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 0,
+      [SETTING_KEYS.AGENT_TRANSPORT]: 'http',
+      // The built-in OpenAI and OpenRouter providers read their keys from settings (falling back to the
+      // environment themselves). A typed recording uses its own runtime provider and its one key, so
+      // no built-in credential is supplied to it.
+      [SETTING_KEYS.AGENT_OPENAI_API_KEY]: typed ? undefined : process.env.OPENAI_API_KEY,
+      [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: typed ? undefined : process.env.OPENROUTER_API_KEY,
+      [SETTING_KEYS.AGENT_OPENROUTER_BASE_URL]: typed ? undefined : process.env.OPENROUTER_BASE_URL,
     };
-    const runtimeConfig = runtimeProviderConfig(providerId);
+    // Read by the OpenRouter provider only to override its defaults; absent means "use the default".
+    const optionalSettingKeys = new Set<string>([
+      SETTING_KEYS.AGENT_OPENROUTER_REFERRER,
+      SETTING_KEYS.AGENT_OPENROUTER_TITLE,
+    ]);
+    const runtimeConfig = runtimeProviderConfig(providerId, typed);
+    if (typed && getProvider(providerId))
+      fail(`--provider '${providerId}' is already a registered provider; choose a new id for a --type recording.`);
     if (!getProvider(providerId) && runtimeConfig) {
       const { createOpenAICompatibleProviderDefinition } = await import(
         '../src/model/providers/openai-compatible.provider.js'
@@ -148,8 +234,19 @@ async function runLiveRecording(
       upsertProvider(createOpenAICompatibleProviderDefinition(runtimeConfig));
     }
     const settings = {
-      get: (key: string) => settingsValues[key],
-      getDynamic: (key: string) => (key === 'providers' && runtimeConfig ? [runtimeConfig] : undefined),
+      get: (key: string) => {
+        if (Object.hasOwn(settingsValues, key)) return settingsValues[key];
+        if (optionalSettingKeys.has(key)) return undefined;
+        throw new Error(
+          `provider:record settings stub has no value for '${key}'. Add it to settingsValues (or optionalSettingKeys) in scripts/provider-record.ts.`,
+        );
+      },
+      getDynamic: (key: string) => {
+        if (key === 'providers') return runtimeConfig ? [runtimeConfig] : undefined;
+        throw new Error(
+          `provider:record settings stub does not supply dynamic key '${key}'. Add it in scripts/provider-record.ts.`,
+        );
+      },
     } as any;
     const loggingService = {
       providerTraffic: undefined,
@@ -186,7 +283,9 @@ async function runLiveRecording(
           // AI SDK providers accept text/content parts for tool results, while
           // OpenAI Responses accepts the structured probe value directly.
           output:
-            providerId === 'openai' ? scenarioDefinition.toolResult : JSON.stringify(scenarioDefinition.toolResult),
+            providerId === 'openai' && !typed
+              ? scenarioDefinition.toolResult
+              : JSON.stringify(scenarioDefinition.toolResult),
         },
         { type: 'message', role: 'user', content: [{ type: 'text', text: scenarioDefinition.followUp }] },
       ],
@@ -204,13 +303,41 @@ async function runLiveRecording(
   }
 }
 
-function sdkPackageFor(id: string, modelId?: string): string {
-  return id === 'anthropic' ||
-    (id === 'opencode' && selectOpencodeModelTransport(modelId ?? '') === 'anthropic-messages')
-    ? '@ai-sdk/anthropic'
-    : id === 'google' || id === 'gemini'
-    ? '@ai-sdk/google'
-    : 'openai';
+/**
+ * The wire family a recording is classified under; `provider:fixture:prepare` files fixtures by it and
+ * the replay tests select on it. For a typed recording it follows the adapter the registry builds for
+ * the type, not the provider id: `openai` (a custom provider of that type) is served by the Chat
+ * Completions adapter, unlike the built-in `openai` provider, which speaks Responses.
+ */
+function wireFamilyFor(providerId: string, modelId: string, type?: KnownCustomProviderType): string {
+  if (type) {
+    if (type === 'anthropic') return 'anthropic';
+    if (type === 'google') return 'google';
+    if (type === 'opencode') return opencodeWireFamily(modelId);
+    return 'openai-chat';
+  }
+  if (providerId === 'openai') return 'openai-responses';
+  if (providerId === 'openrouter') return 'openai-chat';
+  if (providerId === 'anthropic') return 'anthropic';
+  if (providerId === 'google' || providerId === 'gemini') return 'google';
+  if (providerId === 'opencode') return opencodeWireFamily(modelId);
+  return providerId;
+}
+
+function sdkPackageFor(id: string, modelId?: string, type?: KnownCustomProviderType): string {
+  const family = wireFamilyFor(id, modelId ?? '', type);
+  if (family === 'anthropic') return '@ai-sdk/anthropic';
+  if (family === 'google') return '@ai-sdk/google';
+  return 'openai';
+}
+
+function opencodeWireFamily(modelId: string): string {
+  const transport = selectOpencodeModelTransport(modelId);
+  return transport === 'anthropic-messages'
+    ? 'anthropic'
+    : transport === 'openai-responses'
+    ? 'openai-responses'
+    : 'openai-chat';
 }
 function installedVersion(packageName: string): string {
   try {
@@ -229,15 +356,19 @@ function installedVersion(packageName: string): string {
     }
   }
 }
-function runtimeProviderConfig(id: string):
+function runtimeProviderConfig(
+  id: string,
+  typed?: TypedRecording,
+):
   | {
       name: string;
       label: string;
-      type: 'anthropic' | 'google' | 'opencode';
+      type: KnownCustomProviderType;
       baseUrl: string;
       apiKey: string | undefined;
     }
   | undefined {
+  if (typed) return { name: id, label: id, type: typed.type, baseUrl: typed.baseUrl, apiKey: typed.apiKey };
   if (id === 'anthropic') {
     const baseUrl = process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com/v1';
     return {
@@ -265,16 +396,6 @@ function runtimeProviderConfig(id: string):
       apiKey: googleApiKey(),
     };
   return undefined;
-}
-
-function wireFamilyFor(providerId: string, modelId: string): string {
-  if (providerId === 'openai') return 'openai-responses';
-  if (providerId === 'openrouter') return 'openai-chat';
-  if (providerId === 'anthropic') return 'anthropic';
-  if (providerId === 'google' || providerId === 'gemini') return 'google';
-  if (providerId === 'opencode')
-    return selectOpencodeModelTransport(modelId) === 'anthropic-messages' ? 'anthropic' : 'openai-chat';
-  return providerId;
 }
 
 function googleApiKey(): string | undefined {

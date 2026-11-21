@@ -172,6 +172,13 @@ placeholder collision rejection.
 
 New CLI: `pnpm provider:record --provider <id> --model <model> [--probe <scenario>] [--out <dir>]`.
 
+Live recording also accepts `--type <custom provider type> --base-url <url> --api-key-env <ENV NAME>`
+(`scripts/provider-record.ts`, `typedRecordingFromArgs`): `--provider` then names a runtime provider
+registered with that type and base URL through `createOpenAICompatibleProviderDefinition`, and the key is
+read from the one named variable. The built-in OpenRouter provider's base URL can be overridden with
+`OPENROUTER_BASE_URL`. `scripts/provider-black-box/provider-record-live.test.ts` runs the live path
+against the fake provider on loopback. `pnpm provider:record --help` lists the flags.
+
 - **Disabled by default.** Refuses to run without explicit `--yes` opt-in, without the
   provider's credentials env vars, and without an explicit probe scenario.
 - **Writes outside the repo permanently** to `~/.term2/provider-recordings/`

@@ -437,13 +437,14 @@ const AppSettingsSchema = z.object({
 
 const ToolsSettingsObjectSchema = z.object({
   logFileOperations: z.boolean().optional().default(true),
+  // At least 1,000 so a cut result can still carry its "Full output saved to" note and some content.
   maxOutputChars: z
     .number()
     .int()
-    .positive()
+    .min(1000)
     .default(20000)
     .describe(
-      'Maximum characters of one tool result that enters model context; larger results keep the start and end, and the full output is saved to a file',
+      'Maximum characters of one tool result that enters model context (at least 1000); larger results keep the start and end, and the full output is saved to a file',
     ),
   // Per-tool-group kill switches for the main agent. Each masks exactly one
   // capability group from the profile's tool capabilities (tool-toggles.ts),

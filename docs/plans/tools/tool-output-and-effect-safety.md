@@ -139,8 +139,22 @@ and 99.6% of `read_file` results are unaffected.
   a subagent's final text, memory results and session-browser results (the last
   two skip the generic trim). A per-call `max_output_length` or `maxChars` can
   only lower it.
-- Not covered: content-part arrays (images with text parts) are returned
-  unchanged, and results returned to a `run_code` script are not model-facing.
+- The setting's minimum is 1,000, so a cut result still has room for its note and
+  some content. `boundToolResultText` (`read_file`, `web_fetch`, `apply_patch`)
+  reserves its note's actual size; a result just over the cap would otherwise be
+  cut again at the boundary and spooled twice.
+- Not covered, each with its current bound:
+  - content-part arrays (images with text parts) are returned unchanged;
+  - results returned to a `run_code` script are not model-facing;
+  - the run-budget warning is appended after the bound, so a cut result can end a
+    few hundred characters over the limit;
+  - background shell completion notices (`session/notifications.ts`) enter context
+    as user messages with stdout and stderr each limited, so up to about twice the
+    limit in total;
+  - a background subagent's completion adds its diff stat and validation lines
+    after its bounded final text;
+  - JSON results are re-serialized compactly and their string fields trimmed one by
+    one before the whole-result check (unchanged from before).
 - A JSON result cut as a whole is no longer valid JSON, so an `error` field past
   the cut is not seen by `isSuccessOutput`. This needs a single JSON result
   over the limit after its strings were trimmed.

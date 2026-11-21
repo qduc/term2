@@ -225,8 +225,8 @@ export function projectResult(result: NestedRunResult, role: string, evidence?: 
   };
 }
 
-/** Legacy execution-runner's background result: diff stat and validation evidence, the 40k final-text
- * cap, and no final text on an error. */
+/** Legacy execution-runner's background result: diff stat and validation evidence, the final-text cap
+ * (tools.maxOutputChars), and no final text on an error. */
 async function projectBackgroundResult(
   result: NestedRunResult,
   role: string,

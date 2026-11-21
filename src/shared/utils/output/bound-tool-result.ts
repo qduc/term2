@@ -128,13 +128,13 @@ export async function boundToolResultText(params: BoundToolResultTextParams): Pr
     return { text: params.fullText, truncated: false, byteLength };
   }
 
-  // Reserve room for the note line so the combined result stays near the cap.
-  const noteReserve = 120;
-  const bodyBudget = Math.max(256, maxBytes - noteReserve);
-  const { text: truncatedBody } = truncateToUtf8Bytes(params.fullText, bodyBudget);
   const artifact = params.artifactContents ?? params.fullText;
   const artifactPath = await saveOutputArtifact(artifact);
   const note = formatFullOutputSavedNote(artifactPath, countFileLines(artifact));
+  // Reserve the note's actual size so the combined result stays within the cap; a result
+  // just over it would be cut again at the model boundary and spooled a second time.
+  const bodyBudget = Math.max(256, maxBytes - utf8ByteLength(note) - 1);
+  const { text: truncatedBody } = truncateToUtf8Bytes(params.fullText, bodyBudget);
   return {
     text: `${truncatedBody}\n${note}`,
     truncated: true,

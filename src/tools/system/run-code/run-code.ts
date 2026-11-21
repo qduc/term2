@@ -67,7 +67,7 @@ const RUN_CODE_DESCRIPTION =
   'use `Promise.allSettled` and map rejections to `{error: r.reason.message}` so successful siblings survive. When the call budget is exhausted, ' +
   'the error reports calls admitted and remaining: return the partial results and start another run_code call only ' +
   'for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you ' +
-  'need: model-visible output is limited to 30,000 characters, and larger host results can fail before rendering. ' +
+  'need: model-visible output is limited to the configured tool output limit (20,000 characters unless changed), and larger host results can fail before rendering. ' +
   "If the run's result says `Full output saved to`, read that exact path with `read_file` instead of repeating " +
   'completed calls; for any large artifact, take line ranges or only the fields you need instead of transferring ' +
   'the whole value. In the ' +

@@ -58,6 +58,8 @@ type RunOptions = {
   retryAttempts?: number;
   env?: Record<string, string | undefined>;
   baseUrlPath?: string;
+  /** Replaces the default `--json` chat run, for commands that are not a turn. */
+  args?: string[];
 };
 
 type RunResult = { run: BlackBoxRun; events: Array<Record<string, any>> };
@@ -86,7 +88,7 @@ async function runGrok(options: RunOptions): Promise<RunResult> {
   });
   const run = await lease.runCli({
     cwd: lease.root,
-    args: ['--lite', '--provider', 'grok', '--model', GROK_FIXTURE_MODEL, '--json', 'Say hello.'],
+    args: options.args ?? ['--lite', '--provider', 'grok', '--model', GROK_FIXTURE_MODEL, '--json', 'Say hello.'],
     env,
     cliPath: testCliPath(join(process.cwd(), 'dist/cli.js')),
   });
@@ -193,6 +195,23 @@ describe('Grok proxy contract', () => {
       outcome: 'failed',
       requests: { total: 1, completed: 0, failed: 1 },
     });
+  });
+
+  it('asks the model list from GROK_BASE_URL, including its path prefix', async () => {
+    const result = await runGrok({
+      cache: { version: '4.5.6', ageMs: 0 },
+      baseUrlPath: '/grok-proxy-prefix/v1',
+      args: ['--list-models', 'grok', '--refresh'],
+      reply: (_request, _number, response) => {
+        response.writeHead(200, { 'content-type': 'application/json', connection: 'close' });
+        response.end(JSON.stringify({ data: [{ id: 'grok-fixture-listed' }] }));
+      },
+    });
+    expect(
+      server!.requests.map((request) => request.url),
+      `request paths seen by the loopback server\n${describeRun(result)}\nstdout=${result.run.stdout}`,
+    ).toEqual(['/grok-proxy-prefix/v1/models']);
+    expect(result.run.stdout).toContain('grok-fixture-listed');
   });
 
   it('recovers from a transient 503 and sends the same Grok headers on the replayed request', async () => {

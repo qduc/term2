@@ -27,6 +27,11 @@ import type { StreamedModelTurn } from '../streamed-model-turn.js';
 const GROK_BASE_URL = 'https://cli-chat-proxy.grok.com/v1';
 const DEFAULT_GROK_MODEL = 'grok-4.6';
 
+/** `GROK_BASE_URL` redirects every Grok request: turns and the model list alike. */
+function grokBaseUrl(): string {
+  return process.env.GROK_BASE_URL || GROK_BASE_URL;
+}
+
 /**
  * The proxy hard-rejects requests whose client version it does not recognise
  * (HTTP 426, "Your Grok CLI version is outdated"), so the version header is
@@ -194,7 +199,7 @@ async function fetchGrokModels(
   const tokenManager = new GrokTokenManager({ fetchImpl, sessionAccountStore: deps.sessionAccountStore });
   const accessToken = await tokenManager.getOrRefreshAccessToken(deps.signal);
 
-  const response = await fetchImpl(`${GROK_BASE_URL}/models`, {
+  const response = await fetchImpl(`${grokBaseUrl().replace(/\/+$/, '')}/models`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'x-grok-client-version': await resolveGrokClientVersion(),
@@ -228,7 +233,7 @@ function createGrokStreamedModel(model: string, deps: ProviderDeps): StreamedMod
 
   const openAIClient = new OpenAI({
     apiKey: 'oauth',
-    baseURL: process.env.GROK_BASE_URL || GROK_BASE_URL,
+    baseURL: grokBaseUrl(),
     maxRetries: retryAttempts,
     fetch: buildGrokFetch(deps, new GrokTokenManager({ sessionAccountStore: deps.sessionAccountStore }), resolvedModel),
   });

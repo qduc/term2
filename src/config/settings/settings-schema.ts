@@ -320,7 +320,6 @@ const ShellSettingsSchema = z.object({
     .default(30 * 60 * 1000)
     .describe('Timeout for background shell jobs, in milliseconds. Capped: 0 or unbounded values are rejected.'),
   maxOutputLines: z.number().int().positive().default(1000),
-  maxOutputChars: z.number().int().positive().default(40000),
   autoApproveMode: z
     .enum(['off', 'advisory', 'auto', 'unattended', 'always'])
     .default('off')
@@ -436,8 +435,14 @@ const AppSettingsSchema = z.object({
     .default('auto'),
 });
 
+/** At least 1,000 so a cut result can still carry its "Full output saved to" note and some content. */
+export const ToolsMaxOutputCharsSchema = z.number().int().min(1000);
+
 const ToolsSettingsObjectSchema = z.object({
   logFileOperations: z.boolean().optional().default(true),
+  maxOutputChars: ToolsMaxOutputCharsSchema.default(20000).describe(
+    'Maximum characters of one tool result that enters model context (at least 1000); larger results keep the start and end, and the full output is saved to a file',
+  ),
   // Per-tool-group kill switches for the main agent. Each masks exactly one
   // capability group from the profile's tool capabilities (tool-toggles.ts),
   // removing that group's tools and capability-gated prompt fragments on the
@@ -812,7 +817,6 @@ export interface SettingsWithSources {
     timeout: SettingWithSource<number>;
     backgroundTimeout: SettingWithSource<number>;
     maxOutputLines: SettingWithSource<number>;
-    maxOutputChars: SettingWithSource<number>;
     autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto' | 'unattended' | 'always'>;
     unattendedEscapeReview: SettingWithSource<boolean>;
   };
@@ -857,6 +861,7 @@ export interface SettingsWithSources {
   };
   tools: {
     logFileOperations: SettingWithSource<boolean>;
+    maxOutputChars: SettingWithSource<number>;
     shell: { enabled: SettingWithSource<boolean> };
     web: { enabled: SettingWithSource<boolean> };
     fileRead: { enabled: SettingWithSource<boolean> };
@@ -973,7 +978,7 @@ export const SETTING_KEYS = {
   SHELL_TIMEOUT: 'shell.timeout',
   SHELL_BACKGROUND_TIMEOUT: 'shell.backgroundTimeout',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
-  SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
+  TOOLS_MAX_OUTPUT_CHARS: 'tools.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
   SHELL_UNATTENDED_ESCAPE_REVIEW: 'shell.unattendedEscapeReview',
   SANDBOX_ENABLED: 'sandbox.enabled',
@@ -1108,7 +1113,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SHELL_TIMEOUT,
   SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
   SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
-  SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
+  SETTING_KEYS.TOOLS_MAX_OUTPUT_CHARS,
   SETTING_KEYS.LOGGING_LOG_LEVEL,
   SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE,
   SETTING_KEYS.APP_ACTIVE_PROFILE_ID,
@@ -1254,7 +1259,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
     timeout: 120000,
     backgroundTimeout: 30 * 60 * 1000,
     maxOutputLines: 1000,
-    maxOutputChars: 40000,
     autoApproveMode: 'off',
     unattendedEscapeReview: false,
   },
@@ -1307,6 +1311,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   tools: {
     logFileOperations: true,
+    maxOutputChars: 20000,
     shell: { enabled: true },
     web: { enabled: true },
     fileRead: { enabled: true },

@@ -87,9 +87,9 @@ command and the interpreter's received bytes before changing model guidance.
 ### Source shell output preferences
 
 The source `createShellToolDefinition` and `executeFormattedShellCommand` pass the effective
-`shell.maxOutputLines` and `shell.maxOutputChars` settings to
-`formatShellExecutionOutput`. Limits apply independently to stdout and stderr,
-not to the total tool-result envelope. Lines are logical data lines: interior
+`shell.maxOutputLines` and `tools.maxOutputChars` settings to
+`formatShellExecutionOutput`. Limits apply independently to stdout and stderr;
+the total tool result is bounded afterwards at the model boundary (below). Lines are logical data lines: interior
 blank lines count, an empty stream has zero, and a final newline is a delimiter
 rather than an extra line. Above the line threshold the formatter retains head
 and tail data (at a limit of one, the first line), with an omitted-line marker;
@@ -103,7 +103,7 @@ and `Full output saved to` note. The settings do not enlarge the executor's
 capture buffer or change artifact lifetime. This contract covers the source
 formatter and its callers, not native background output storage or readback.
 
-Failure lesson: reading only `shell.maxOutputChars` at the shell callers left the
+Failure lesson: reading only the character setting (then `shell.maxOutputChars`) at the shell callers left the
 stored line preference inert; simply forwarding lines to the generic `trimOutput`
 was insufficient because its ten-line retention floor also defeats small limits.
 Keep small positive limits and delimiter/blank-line boundaries in real-executor
@@ -118,6 +118,52 @@ and a direct file read's full-output artifact: outer truncation alone can drop
 data without saving it. Keep the scripted-read 100 KB cap and `run_code`'s
 separate final-output cap intact, and check overlapping sessions with different
 limits rather than changing a process-global trim default.
+
+### Model-facing tool result limit
+
+`tools.maxOutputChars` (default 20,000 characters; formerly `shell.maxOutputChars`,
+default 40,000) bounds every tool result that enters model context, not only shell
+output. The 40,000 default let one dense result (a broad `rg` over CI logs full of
+terminal escape codes, about 2.2 characters per token) reach about 18.5k tokens and
+overflow a 32k-context local model; at 20,000 about 99% of recorded shell results
+and 99.6% of `read_file` results are unaffected.
+
+- Enforcement owner: `boundModelToolOutput` in `shared/utils/output/trim-tool-output.ts`,
+  called where root tools (`app/lib/agent-factory.ts`) and subagent tools
+  (`delegation/subagents/tool-policy.ts`) return results. It first applies the
+  per-string `trimToolOutput`, then, if the whole text is still over the limit,
+  cuts it by size (start and end kept), saves the untrimmed output and appends the
+  `Full output saved to` note. Cuts depend only on size, never on what the
+  text contains: no escape-code stripping, line shortening or line collapsing.
+- Self-bounded producers follow the same value: `run_code`'s final output,
+  a subagent's final text, memory results and session-browser results (the last
+  two skip the generic trim). A per-call `max_output_length` or `maxChars` can
+  only lower it.
+- The setting's minimum is 1,000, so a cut result still has room for its note and
+  some content. `boundToolResultText` (`read_file`, `web_fetch`, `apply_patch`)
+  reserves its note's actual size; a result just over the cap would otherwise be
+  cut again at the boundary and spooled twice.
+- Not covered, each with its current bound:
+  - content-part arrays (images with text parts) are returned unchanged;
+  - results returned to a `run_code` script are not model-facing;
+  - the run-budget warning is appended after the bound, so a cut result can end a
+    few hundred characters over the limit;
+  - background shell completion notices (`session/notifications.ts`) enter context
+    as user messages with stdout and stderr each limited, so up to about twice the
+    limit in total;
+  - a background subagent's completion adds its diff stat and validation lines
+    after its bounded final text;
+  - JSON results are re-serialized compactly and their string fields trimmed one by
+    one before the whole-result check (unchanged from before).
+- A JSON result cut as a whole is no longer valid JSON, so an `error` field past
+  the cut is not seen by `isSuccessOutput`. This needs a single JSON result
+  over the limit after its strings were trimmed.
+- Migration: settings files store every value, including defaults. A saved
+  `shell.maxOutputChars` moves to `tools.maxOutputChars` unless it is 40,000, the
+  old default, which would otherwise keep the old limit in force, or fails the new
+  field's schema (below 1,000, not an integer). An invalid carried value would fail
+  validation of the whole merged settings and silently reset every setting to its
+  default (`config/settings/ancillary-settings-migration.ts`).
 
 ## Milestone 1 — bounded tool results
 

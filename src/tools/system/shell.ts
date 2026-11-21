@@ -120,7 +120,7 @@ export const shellParametersSchema = z.object({
     .positive()
     .optional()
     .describe(
-      'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 40000 characters if not specified.',
+      'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to, and cannot exceed, the configured tool output limit (20000 characters unless changed).',
     ),
   sandbox: shellSandboxModeSchema.describe(
     'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
@@ -986,8 +986,8 @@ export function createShellToolDefinition(deps: {
           timeout_ms !== undefined ? 'invocation' : background ? 'background_setting' : 'foreground_setting';
         const executionMode = background || transferred ? 'background' : 'foreground';
         const maxOutputLines = settingsService.get('shell.maxOutputLines') ?? undefined;
-        const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
-        const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
+        const maxOutputLengthValue = max_output_length ?? settingsService.get('tools.maxOutputChars');
+        const configuredMaxOutputLength = settingsService.get('tools.maxOutputChars');
         // Clamp foreground requests to the configured maximum, mirroring the
         // background path below: a model-chosen budget is reduction-only.
         const foregroundMaxOutputLength =

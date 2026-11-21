@@ -47,7 +47,7 @@ import { createAskOrchestratorToolDefinition } from '../../tools/agent/ask-orche
 import { createRunExplorerToolDefinition, type ExplorerRunner } from '../../tools/agent/run-explorer.js';
 import type { SkillsService } from '../../tools/skills/skills-service.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
-import { trimToolOutput } from '../../shared/utils/output/trim-tool-output.js';
+import { boundModelToolOutput } from '../../shared/utils/output/trim-tool-output.js';
 import { injectRunBudgetWarning } from '../../session/inject-warning-into-tool-output.js';
 import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../tools/shell/command-safety/index.js';
@@ -1373,7 +1373,7 @@ export class SubagentToolFactory {
             context,
             details,
           );
-          const maxOutputLength = this.#settings.get('shell.maxOutputChars');
+          const maxOutputLength = this.#settings.get('tools.maxOutputChars');
           let result: unknown;
           try {
             result = await definition.execute(params, context, details);
@@ -1385,7 +1385,7 @@ export class SubagentToolFactory {
           if (definition.preserveSerializedOutput) {
             return String(result ?? '');
           }
-          const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
+          const trimmedResult = await boundModelToolOutput(result, maxOutputLength ?? undefined);
           // Structured content-part results (read_file images) carry no single
           // text slot for the run-budget advisory; deliver them unmodified so
           // the image reaches the provider converter.

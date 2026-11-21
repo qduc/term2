@@ -174,7 +174,8 @@ native background callbacks. Tool-facing result types remain in
 
 `buildDiffStat` preserves first-seen file order, deduplicates path strings, and
 looks up counts by the literal path before its resolved path; missing counts are
-zero. `truncateResultText` preserves text through 40,000 JavaScript string code
+zero. `truncateResultText` preserves text through `tools.maxOutputChars` (the
+output trim config's `maxCharacters`, 20,000 by default) JavaScript string code
 units. Longer text retains that prefix and a reference to the complete UTF-8
 artifact under `SANDBOX_TEMP_DIR/subagent-result`. Directory creation requests
 mode `0700` and is memoized, including a rejected creation promise.

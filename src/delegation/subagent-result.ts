@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { SANDBOX_TEMP_DIR } from '../shared/utils/shell/temp-dir.js';
+import { getTrimConfig } from '../shared/utils/output/output-trim.js';
 import type { DiffStatEntry, SubagentResult } from '../tools/subagents/types.js';
 
 export function buildDiffStat(
@@ -31,19 +32,19 @@ function resolveSafe(p: string): string {
   }
 }
 
-const MAX_FINAL_TEXT_CHARS = 40_000;
 const SUBAGENT_RESULT_DIR = path.join(SANDBOX_TEMP_DIR, 'subagent-result');
 let subagentResultTempDirPromise: Promise<string> | undefined;
 
 export async function truncateResultText(
   text: string,
 ): Promise<Pick<SubagentResult, 'finalText' | 'finalTextTruncated' | 'finalTextArtifactPath'>> {
-  if (text.length <= MAX_FINAL_TEXT_CHARS) return { finalText: text };
+  // A subagent's final text enters the parent's context as a tool result, so it shares tools.maxOutputChars.
+  const limit = getTrimConfig().maxCharacters;
+  if (text.length <= limit) return { finalText: text };
 
   const artifactPath = await saveSubagentResultArtifact(text);
   return {
-    finalText:
-      text.slice(0, MAX_FINAL_TEXT_CHARS) + `\n...(truncated)\nFull subagent result saved to \`${artifactPath}\``,
+    finalText: text.slice(0, limit) + `\n...(truncated)\nFull subagent result saved to \`${artifactPath}\``,
     finalTextTruncated: true,
     finalTextArtifactPath: artifactPath,
   };

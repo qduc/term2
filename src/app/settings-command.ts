@@ -299,9 +299,9 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.shell.maxOutputLines.source,
     },
     {
-      key: SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
-      value: settings.shell.maxOutputChars.value,
-      source: settings.shell.maxOutputChars.source,
+      key: SETTING_KEYS.TOOLS_MAX_OUTPUT_CHARS,
+      value: settings.tools.maxOutputChars.value,
+      source: settings.tools.maxOutputChars.source,
     },
     {
       key: SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,

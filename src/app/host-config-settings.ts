@@ -27,7 +27,7 @@ const SAFE_KEYS = [
   'logging.logLevel',
   'shell.timeout',
   'shell.maxOutputLines',
-  'shell.maxOutputChars',
+  'tools.maxOutputChars',
 ] as const;
 
 const PERSISTENT = new Set(['logging.logLevel']);

@@ -89,7 +89,6 @@ const SETTINGS_SOURCE_KEYS = {
     timeout: 'shell.timeout',
     backgroundTimeout: 'shell.backgroundTimeout',
     maxOutputLines: 'shell.maxOutputLines',
-    maxOutputChars: 'shell.maxOutputChars',
     autoApproveMode: 'shell.autoApproveMode',
     unattendedEscapeReview: 'shell.unattendedEscapeReview',
   },
@@ -134,6 +133,7 @@ const SETTINGS_SOURCE_KEYS = {
   },
   tools: {
     logFileOperations: 'tools.logFileOperations',
+    maxOutputChars: 'tools.maxOutputChars',
     shell: { enabled: 'tools.shell.enabled' },
     web: { enabled: 'tools.web.enabled' },
     fileRead: { enabled: 'tools.fileRead.enabled' },

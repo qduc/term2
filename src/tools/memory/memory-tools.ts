@@ -31,8 +31,8 @@ export type MemoryStores = Record<MemoryScope, MemoryStore>;
 
 const scope = z.enum(['global', 'project']).describe('Memory scope to write to.');
 const MIN_TOOL_OUTPUT_CHARS = 512;
-// Matches the default tool-result byte cap (output trim maxCharacters); a larger
-// budget would only produce a bounded-failure envelope for non-scripted calls.
+// Upper bound a caller may request; the effective budget is further clamped to
+// the tools.maxOutputChars tool-result cap (see output()).
 const MAX_TOOL_OUTPUT_CHARS = 40_000;
 const DEFAULT_INDEX_OUTPUT_CHARS = 12_000;
 const DEFAULT_DOCUMENT_OUTPUT_CHARS = 12_000;
@@ -63,7 +63,8 @@ function metadata(memory: MemoryMetadata): MemoryMetadata {
 }
 
 function output<T>(maxChars: number, build: (charsUsed: number) => T): T {
-  const fitted = fitSerializedEnvelope(build, { maxChars });
+  // Memory results skip the generic tool-result trim, so they must stay within its cap themselves.
+  const fitted = fitSerializedEnvelope(build, { maxChars: Math.min(maxChars, resolveToolResultMaxBytes()) });
   if (!fitted) throw new OutputBudgetExceededError();
   return fitted.value;
 }

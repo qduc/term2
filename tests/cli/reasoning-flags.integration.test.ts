@@ -39,7 +39,33 @@ async function run(args: string[], settings: Record<string, unknown> = {}) {
   }
 }
 
+/** A headless run that must fail before any model request; returns the status, stderr and request count. */
+async function runRejected(args: string[]) {
+  const world = createWorld('term2-reasoning');
+  const provider = await startLoopbackProvider({ turns: [TURN] });
+  try {
+    writeWorldSettings(world, provider.baseUrl, { sandbox: { enabled: false } });
+    const result = await runCli(world, integrationCliPath(), ['--profile', 'bare', ...args, 'Say something']);
+    return { ...result, requestCount: provider.requests().length };
+  } finally {
+    await provider.close();
+    removeWorld(world);
+  }
+}
+
 describe.concurrent('-r, --reasoning <effort>', () => {
+  it.each([['bogus'], ['HIGH'], ['hi gh']])(
+    '-r %s fails before any model request, naming the value and the valid efforts',
+    async (value) => {
+      const result = await runRejected(['-r', value]);
+      expect(result.status).toBe(1);
+      expect(result.requestCount).toBe(0);
+      expect(result.stderr).toContain(`Unknown reasoning effort "${value}"`);
+      expect(result.stderr).toContain('default, none, minimal, low, medium, high, xhigh');
+      expect(result.stdout).toBe('');
+    },
+  );
+
   it('sends no effort when neither the flag nor a setting names one', async () => {
     const { effort, stdout } = await run([]);
     expect(effort).toBeUndefined();

@@ -288,7 +288,7 @@ export const createGrepToolDefinition = (
       const maxCharacters = scripted ? resolveResultMaxBytesForCall(context) : undefined;
 
       if (useRg) {
-        const args = ['rg', '--line-number', '--no-heading', '--color=never'];
+        const args = ['rg', '--line-number', '--with-filename', '--no-heading', '--color=never'];
         if (ignore_case) args.push('--ignore-case');
         if (fixed_strings) args.push('--fixed-strings');
         if (!fixed_strings && patternMayMatchLineTerminator(pattern)) {
@@ -315,7 +315,7 @@ export const createGrepToolDefinition = (
         command = args.join(' ');
       } else {
         // Fallback to grep
-        const args = ['grep', '-r', '-n', '-I']; // -I to ignore binary
+        const args = ['grep', '-r', '-n', '-H', '-I']; // -H: name the file even for a single-file path; -I to ignore binary
         if (ignore_case) args.push('-i');
         if (fixed_strings) args.push('-F');
         if (include) {

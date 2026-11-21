@@ -208,7 +208,7 @@ export const createFindFilesToolDefinition = (
 
       // When the pattern itself is an absolute path (e.g. "/data/llamacpp/models/run_*.sh"),
       // extract the directory as the search root and use only the basename as the glob pattern.
-      const { pattern, targetPath } = resolveGlobSearchTarget(rawPattern, searchPath);
+      const { pattern, targetPath, directChildrenOnly } = resolveGlobSearchTarget(rawPattern, searchPath);
 
       // The workspace boundary is enforced by needsApproval in the default mode.
       const absolutePath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace: true });
@@ -234,6 +234,7 @@ export const createFindFilesToolDefinition = (
           args.push('--glob', escapedPattern);
         }
         if (no_ignore) args.push('--no-ignore', '--hidden');
+        if (directChildrenOnly) args.push('--max-depth', '1');
         args.push(escapedPath);
         command = args.join(' ');
       } else {
@@ -251,7 +252,15 @@ export const createFindFilesToolDefinition = (
         }
         const matchPattern = hasPathSegment ? path.join(absolutePath, normalizedPattern).replace(/\\/g, '/') : pattern;
         const escapedMatchPattern = `'${matchPattern.replace(/'/g, "'\\''")}'`;
-        command = ['find', escapedPath, '-type', 'f', matchArg, escapedMatchPattern].join(' ');
+        command = [
+          'find',
+          escapedPath,
+          ...(directChildrenOnly ? ['-maxdepth', '1'] : []),
+          '-type',
+          'f',
+          matchArg,
+          escapedMatchPattern,
+        ].join(' ');
       }
 
       const sshService = executionContext?.getSSHService();

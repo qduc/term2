@@ -22,8 +22,8 @@ export function buildEnvOverrides(): Partial<SettingsData> {
 
   const logging: DeepPartial<SettingsData['logging']> = {};
   if (env.LOG_LEVEL) logging.logLevel = env.LOG_LEVEL as SettingsData['logging']['logLevel'];
-  if (env.DISABLE_LOGGING !== undefined) logging.disableLogging = String(env.DISABLE_LOGGING) === 'true';
-  if (env.DEBUG_LOGGING !== undefined) logging.debugLogging = true;
+  if (env.DISABLE_LOGGING !== undefined) logging.disableLogging = booleanEnvOr(env.DISABLE_LOGGING, false);
+  if (env.DEBUG_LOGGING !== undefined) logging.debugLogging = booleanEnvOr(env.DEBUG_LOGGING, true);
 
   const environment: DeepPartial<SettingsData['environment']> = {
     nodeEnv: env.NODE_ENV,
@@ -34,7 +34,7 @@ export function buildEnvOverrides(): Partial<SettingsData> {
   };
 
   const tools: DeepPartial<SettingsData['tools']> = {};
-  if (env.LOG_FILE_OPERATIONS !== undefined) tools.logFileOperations = String(env.LOG_FILE_OPERATIONS) !== 'false';
+  if (env.LOG_FILE_OPERATIONS !== undefined) tools.logFileOperations = booleanEnvOr(env.LOG_FILE_OPERATIONS, true);
 
   // createRestartPlan emits these policy values as env overrides. Consume them
   // before settings layering so a restart cannot restore conflicting saved policy.
@@ -53,7 +53,7 @@ export function buildEnvOverrides(): Partial<SettingsData> {
     sandbox.enabled = parseStrictBooleanEnv('SANDBOX_ENABLED', env.SANDBOX_ENABLED);
 
   const debug: DeepPartial<SettingsData['debug']> = {};
-  if (env.DEBUG_BASH_TOOL !== undefined) debug.debugBashTool = true;
+  if (env.DEBUG_BASH_TOOL !== undefined) debug.debugBashTool = booleanEnvOr(env.DEBUG_BASH_TOOL, true);
 
   const webSearch: DeepPartial<SettingsData['webSearch']> = {};
   if (env.TAVILY_API_KEY) {
@@ -139,6 +139,16 @@ export const parseBooleanEnv = (value: unknown): boolean => {
   const normalized = value.trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes';
 };
+
+/**
+ * A lenient boolean env override: the true spellings of `parseBooleanEnv` are true, `0`/`false`/`no` are false, and
+ * any other value gives `unrecognised` (what each variable did before it shared this rule).
+ */
+function booleanEnvOr(value: unknown, unrecognised: boolean): boolean {
+  if (parseBooleanEnv(value)) return true;
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return ['0', 'false', 'no'].includes(normalized) ? false : unrecognised;
+}
 
 // Detect if running in test environment.
 //

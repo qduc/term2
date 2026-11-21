@@ -44,6 +44,56 @@ const READ_FILE_DESCRIPTION_ORCHESTRATOR =
   'Returns the file path, total line count, and the requested lines. ' +
   'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
 
+const SAVED_NOTE_MARKER = '\nFull output saved to';
+
+const readFileHeader = (filePath: string, totalLines: number, range: string): string =>
+  `File: ${filePath} (${totalLines} lines) [${range}]\n===\n`;
+
+/**
+ * What the model reads when `boundToolResultText` cut a read_file result. The cut text still opens with a header for
+ * the whole requested range, so this rebuilds the result from the numbered lines: as many whole lines as fit in
+ * `maxBytes`, a header and a `[truncated: ...]` marker (as run_code has) that name the lines present, and the
+ * saved-output note the cut text ends with. A file that is one long line keeps the start of that line.
+ */
+function markReadFileCut(params: {
+  cutText: string;
+  numberedLines: readonly string[];
+  header: { filePath: string; totalLines: number; fromLine: number; toLine: number };
+  maxBytes: number;
+}): string {
+  const { cutText, numberedLines, maxBytes } = params;
+  const { filePath, totalLines, fromLine, toLine } = params.header;
+  const noteStart = cutText.lastIndexOf(SAVED_NOTE_MARKER);
+  if (noteStart < 0) return cutText;
+  const note = cutText.slice(noteStart + 1);
+  const bytes = (text: string) => Buffer.byteLength(text, 'utf8');
+  const build = (body: string, shown: string): string =>
+    `${readFileHeader(filePath, totalLines, `${shown} of ${fromLine}-${toLine}, truncated`)}${body}\n` +
+    `[truncated: showing ${shown} of ${fromLine}-${toLine}; the rest was cut to fit the output limit.]\n${note}`;
+
+  const wholeLines = (count: number) => `lines ${fromLine}-${fromLine + count - 1}`;
+  // Sized with the widest range text, so the count found here still fits once its own range is written.
+  const budget = maxBytes - bytes(build('', wholeLines(numberedLines.length)));
+  let used = 0;
+  let count = 0;
+  for (const line of numberedLines) {
+    const cost = bytes(line) + (count > 0 ? 1 : 0);
+    if (used + cost > budget) break;
+    used += cost;
+    count += 1;
+  }
+  if (count > 0) return build(numberedLines.slice(0, count).join('\n'), wholeLines(count));
+
+  // Not even the first line fits: show its start and say so, rather than nothing.
+  const partial = `the start of line ${fromLine}`;
+  const room = maxBytes - bytes(build('', partial));
+  // Too small a limit for the marker itself: the cut text is within the limit, keep it.
+  if (room <= 0) return cutText;
+  let start = (numberedLines[0] ?? '').slice(0, room);
+  while (bytes(start) > room) start = start.slice(0, -1);
+  return build(start.replace(/[\uD800-\uDBFF]$/, ''), partial);
+}
+
 /** Detect image formats that the model adapters can send as image content. */
 function detectImageMediaType(buffer: Buffer, filePath: string): string | undefined {
   if (
@@ -272,7 +322,7 @@ export const createReadFileToolDefinition = (
         }
 
         // Create header with file path, line count, and line range
-        const header = `File: ${filePath} (${totalLines} lines) [lines ${fromLine}-${toLine}]\n${'='.repeat(3)}\n`;
+        const header = readFileHeader(filePath, totalLines, `lines ${fromLine}-${toLine}`);
 
         // Add line numbers to each line
         const numberedLines = filteredLines.map((line, idx) => {
@@ -396,7 +446,14 @@ export const createReadFileToolDefinition = (
             '',
           ].join('\n'),
         });
-        return bounded.text;
+        if (!bounded.truncated) return bounded.text;
+        // The cut text still opens with a header for the whole range: say which lines it actually holds.
+        return markReadFileCut({
+          cutText: bounded.text,
+          numberedLines,
+          header: { filePath, totalLines, fromLine, toLine },
+          maxBytes: resolveResultMaxBytesForCall(context, maxResultBytes),
+        });
       } catch (error: any) {
         if (isScriptedToolCall(context)) {
           if (error.code === 'ENOENT') {

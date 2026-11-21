@@ -412,18 +412,32 @@ section is a real recording behind every provider, replayed offline.
 - Skins: `tests/cli/cli.e2e.test.ts` now compares the idle screen with a
   layout record per skin (`LAYOUTS`). Tool and approval frames are not read.
 
-Found while writing them, and not changed:
+Found while writing them, and fixed, each with a test that failed first:
 
 - `-r` with a value outside `VALID_REASONING_EFFORTS` (`-r bogus`, `-r HIGH`)
-  is ignored without a word: exit 0 and no effort on the request.
-- `DISABLE_LOGGING=1` turns logging off (`parseBooleanEnv`) while the settings
-  override reads only `true`, so the setting shows `false` with source `env`.
-- `grep` on a single file returns `line:text` without the path its
-  description promises.
-- `read_file` cut by a small limit still heads the result with the full line
-  range; only the saved-output note says the rest is missing.
-- `glob` with `..` inside the pattern (`../*.txt`) searches the workspace and
-  returns its own files under the `find` backend. Nothing outside is returned.
+  was ignored without a word. `applyModelOverrides` in `src/app/cli.ts` now
+  rejects it the way an unknown `--provider` is rejected: exit 1, the valid
+  values on stderr, no model request.
+- `DISABLE_LOGGING=1` turned logging off (`parseBooleanEnv`) while the
+  settings override read only `true`, so the setting showed `false` with
+  source `env`. The boolean entries in `buildEnvOverrides` now share one
+  rule. This changes three spellings: `LOG_FILE_OPERATIONS=0` or `no` used to
+  mean on, and `DEBUG_LOGGING` or `DEBUG_BASH_TOOL` set to `0`, `false` or
+  `no` used to mean on. An unrecognised value keeps what each variable did
+  before.
+- `grep` on a single file returned `line:text` without the path its
+  description promises. Both backends now name the file.
+- `read_file` cut by a small limit still headed the result with the full line
+  range. A cut result now holds whole lines only, and its header and a
+  `[truncated: ...]` marker name the lines present; of a single line longer
+  than the limit it keeps the start (`markReadFileCut`).
+- `glob` with `..` in the pattern's directory part (`../*.txt`) searched the
+  workspace and returned its own files under the `find` backend.
+  `resolveGlobSearchTarget` now moves that directory part into the search
+  root, as it already did for an absolute pattern, so approval sees the
+  directory that is read: refused in a headless run, and with approval the
+  parent's own files. Not run with `fd`, which was not installed where this
+  was written; the split happens before the backend is chosen.
 
 ## Supported items with no check found
 

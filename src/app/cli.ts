@@ -206,10 +206,10 @@ async function applyModelOverrides(
 ): Promise<string | DirectCommandConfiguration> {
   let overrides: DirectCommandConfiguration = {};
   const reasoning = options.reasoning?.trim() || undefined;
-  const validReasoning =
-    reasoning !== undefined && (VALID_REASONING_EFFORTS as readonly string[]).includes(reasoning)
-      ? (reasoning as ModelSettingsReasoningEffort)
-      : undefined;
+  if (reasoning !== undefined && !(VALID_REASONING_EFFORTS as readonly string[]).includes(reasoning)) {
+    return `Error: Unknown reasoning effort "${reasoning}". Valid efforts: ${VALID_REASONING_EFFORTS.join(', ')}.`;
+  }
+  const validReasoning = reasoning as ModelSettingsReasoningEffort | undefined;
   if (validReasoning !== undefined) {
     settings.set('agent.reasoningEffort', validReasoning, { persist: false });
     overrides = { reasoning: validReasoning };

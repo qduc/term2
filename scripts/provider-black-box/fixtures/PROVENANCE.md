@@ -5,9 +5,10 @@ Replay fixtures validate captured provider behavior; they do not replace live ca
 for changes after capture.
 
 > **Status: OpenAI Responses HTTP, OpenRouter Chat Completions (built-in provider and two
-> custom provider types), OpenRouter Anthropic Messages (custom `anthropic` type), Google
-> GenerateContent, OpenCode Chat Completions, and OpenCode Go Anthropic pilots complete.** The reviewed real captures cover two-turn tool
-> continuations through registry paths.
+> custom provider types), OpenRouter Anthropic Messages (custom `anthropic` type), direct
+> Anthropic Messages (no thinking block), Google GenerateContent, OpenCode Chat
+> Completions, and OpenCode Go Anthropic pilots complete.** The reviewed real captures
+> cover two-turn tool continuations through registry paths.
 > The pre-capture `framesFor('responses')` helper was not wire-equivalent: it omitted
 > reasoning/item lifecycle, function-argument, and terminal event shapes beyond its
 > minimal synthetic success case. Synthetic frames remain for mutations and providers
@@ -19,11 +20,13 @@ for changes after capture.
 
 - **Generic Chat Completions fixture** — `chat-pilot.json` remains hand-authored; decide
   whether replacing it adds value now that the live OpenCode chat path is covered.
-- **Direct Anthropic API** — a capture against `api.anthropic.com` is still outstanding
-  (optional and credit-gated). Anthropic Messages wire coverage today is
+- **Direct Anthropic API** — `anthropic/tool-continuation-v2-anthropic.json` is a direct
+  `api.anthropic.com` capture, but the model produced no thinking block, so no fixture
+  yet shows Anthropic's own API accepting a tool continuation that follows a thinking
+  block. Recapture with a model and prompt that do think (or an explicit thinking
+  budget) to close that gap. Other Anthropic Messages coverage:
   `opencode/tool-continuation-v1-anthropic.json` (OpenCode Go) and
-  `anthropic-openrouter/tool-continuation-v2-anthropic.json` (OpenRouter's Messages
-  endpoint); neither is Anthropic's own server.
+  `anthropic-openrouter/tool-continuation-v2-anthropic.json` (OpenRouter).
 - **Responses WebSocket/Codex WebSocket** — replay server coverage is synthetic; a
   live bidirectional `ResponsesWS` capture adapter remains outstanding.
 - **OpenRouter maintenance** — the three Chat Completions fixtures are live captures of
@@ -116,6 +119,29 @@ for changes after capture.
   Messages-compatible service including thinking blocks, and weaker evidence about
   Anthropic's own server. Recapture when `@ai-sdk/anthropic` changes major/minor, the
   `anthropic` branch changes, or a direct `api.anthropic.com` capture becomes possible.
+
+- **anthropic/tool-continuation-v2-anthropic.json** — captured 2026-11-21T15:13:22.169Z
+  directly from Anthropic (`https://api.anthropic.com/v1/messages`), recorded by the
+  maintainer on their own machine with their own key (`pnpm provider:record --yes
+  --provider anthropic --model claude-haiku-5-5 --probe tool-continuation-v2`), through a
+  runtime provider of custom type `anthropic`, SDK package `@ai-sdk/anthropic`@3.0.76;
+  probe `tool-continuation-v2`; reviewer Claude Code, delegated by the maintainer. The
+  request carries the adaptive-thinking shape this model family gets
+  (`thinking: {type: "adaptive"}`, `output_config: {effort: "medium"}`, `max_tokens`
+  65536). Redacted: response headers `anthropic-organization-id`, `anthropic-workspace-id`,
+  `traceresponse`, `cf-ray` and every `anthropic-ratelimit-*` header (limits, remaining and
+  reset reveal the account's rate tier); `request-id` and `msg_…` ids became `req_<n>` and
+  `msg_<n>` placeholders; `x-api-key` redacted. The model-issued `toolu_…` tool-use id is
+  kept, as in the other fixtures. The recorded `content-encoding: gzip` head is kept; the
+  replay server omits `content-encoding` and `content-length` because the recorded frames
+  are decoded. **Limit:** the model did not think (`thinking_tokens` is 0 in both turns) and
+  there is no thinking content block, so this fixture does not exercise a continuation
+  that follows a thinking block. `anthropic-openrouter/…` has thinking blocks but was
+  served through OpenRouter, so whether Anthropic's own API accepts a continuation request
+  that omits a preceding thinking block is not covered by any fixture. Recapture when
+  `@ai-sdk/anthropic` changes major/minor, the adaptive-thinking request shape or the
+  `anthropic` branch of `createCustomProviderModelProvider` changes, or to obtain a
+  capture that includes a thinking block.
 
 - **google/tool-continuation-v1.json** — captured 2026-08-01T11:59:04.413Z; SDK @ai-sdk/google@3.0.72; model family google; probe `tool-continuation-v1`; reviewer fixture maintainer. Recapture when the wire family or transport-relevant SDK major/minor changes.
 

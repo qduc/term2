@@ -156,7 +156,14 @@ function replayTurn(
   if (!comparison.equal) failures.push(comparison.diff!);
   const head = turn.frames.find((frame) => frame.kind === 'http-response-head');
   const status = head?.kind === 'http-response-head' ? head.status : 200;
-  const headers = head?.kind === 'http-response-head' ? head.headers : { 'content-type': 'text/event-stream' };
+  // Recorded frames hold the decoded body, so a recorded `content-encoding` (a direct Anthropic capture
+  // says `gzip`) or `content-length` would make the client decode or frame bytes that are not encoded.
+  const headers =
+    head?.kind === 'http-response-head'
+      ? Object.fromEntries(
+          Object.entries(head.headers).filter(([name]) => !/^(?:content-encoding|content-length)$/i.test(name)),
+        )
+      : { 'content-type': 'text/event-stream' };
   res.writeHead(status, headers);
   const responseFrames = turn.frames.filter((frame) => frame.seq > expected.seq);
   let wrote = false;

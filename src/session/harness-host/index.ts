@@ -27,13 +27,16 @@ export function terminalNotice(result: {
   return result.kind === 'failed' && result.error ? describeRetriesExhausted(notice, result.error) : notice;
 }
 
+/** The failure kinds that can only come from a response: the provider was reached and refused or failed. */
+const ANSWERED_KINDS = new Set(['provider', 'rate_limit', 'authentication']);
+
 /**
  * The engine's `retriesExhausted` seam receives only the provider and the attempt count, so it must
- * assume the provider was unreachable. The failed turn's error says more: only a `network` failure means
- * no response arrived; any other kind is the provider answering with an error. Rewrites that lead.
+ * assume the provider was unreachable. The failed turn's error says more: for the kinds above a response
+ * did arrive, so the lead is rewritten. A `network` or unclassified failure keeps the engine's wording.
  */
 function describeRetriesExhausted(notice: string, error: { readonly kind: string }): string {
-  if (error.kind === 'network') return notice;
+  if (!ANSWERED_KINDS.has(error.kind)) return notice;
   const match = UNREACHED_LEAD.exec(notice);
   if (!match) return notice;
   const [lead, provider, attempts] = match as unknown as [string, string, string];

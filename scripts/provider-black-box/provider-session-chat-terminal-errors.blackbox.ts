@@ -35,7 +35,7 @@ const PROMPT = 'fixture terminal-error prompt';
 const NATIVE_ERROR_MESSAGE = 'Injected native provider failure';
 const PARTIAL = 'PARTIAL-TEXT-BEFORE-TRUNCATION';
 const ANSWER = 'fixture completed answer';
-const INCOMPLETE_STREAM_MESSAGE = 'OpenAI-compatible streamed response ended without a finish reason';
+const INCOMPLETE_STREAM_MESSAGE = 'Streamed response ended without a finish reason';
 
 type CapturedRequest = { method: string; url: string; body: Record<string, unknown> };
 type FixtureServer = { readonly baseUrl: string; readonly requests: CapturedRequest[]; close(): Promise<void> };

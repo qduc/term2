@@ -213,6 +213,32 @@ describe('fixture sanitizer', () => {
     expect(scanFixtureSecrets(result.envelope).safe).toBe(true);
   });
 
+  it('canonicalizes OpenRouter generation ids consistently and does not commit them as map keys', () => {
+    const live1 = 'gen-1795271668-8CNeAbX37UR7CAFpDfB2';
+    const live2 = 'gen-1795271669-GFIfML1zwc1u1DIZ0Ykb';
+    const result = sanitizeFixtureEnvelope({
+      ...envelope,
+      turns: [
+        {
+          frames: [
+            { seq: 0, kind: 'http-response-head', status: 200, headers: { 'x-generation-id': live1 } },
+            { seq: 1, kind: 'sse-event', data: JSON.stringify({ id: live1, choices: [] }) },
+            { seq: 2, kind: 'sse-event', data: JSON.stringify({ id: live2, choices: [] }) },
+          ],
+        },
+      ],
+    });
+    const [head, first, second] = result.envelope.turns[0]!.frames;
+    expect(head).toMatchObject({ headers: { 'x-generation-id': 'gen_<1>' } });
+    expect(first.kind === 'sse-event' && JSON.parse(first.data).id).toBe('gen_<1>');
+    expect(second.kind === 'sse-event' && JSON.parse(second.data).id).toBe('gen_<2>');
+    // The committed envelope carries no live id anywhere, including the placeholder map keys.
+    expect(JSON.stringify(result.envelope)).not.toMatch(/gen-\d+-/);
+    expect(result.envelope.placeholders).toEqual({ 'gen_<1>': 'gen_<1>', 'gen_<2>': 'gen_<2>' });
+    // The private review report still lets a reviewer see which live id became which placeholder.
+    expect(result.report.placeholders).toMatchObject({ [live1]: 'gen_<1>', [live2]: 'gen_<2>' });
+  });
+
   it('canonicalizes Responses reasoning and function item IDs and removes encrypted content', () => {
     const result = sanitizeFixtureEnvelope({
       ...envelope,

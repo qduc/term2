@@ -250,7 +250,8 @@ or missing message.
 ## Phase 4 — Connect to the suite (pilot-gated)
 
 - **Completed pilots:** OpenAI Responses HTTP (`o3-mini`), OpenRouter AI SDK
-  (`openai/gpt-oss-20b`), Google GenerateContent (`gemini-2.5-flash`), OpenCode Chat
+  (`openai/gpt-oss-20b`; its fixture was replaced on 2026-11-21 by a Chat Completions
+  capture of `mistralai/mistral-nemo`, see `fixtures/PROVENANCE.md`), Google GenerateContent (`gemini-2.5-flash`), OpenCode Chat
   Completions via OpenCode Go (`deepseek-v4-flash`), and OpenCode Go Anthropic Messages
   (`minimax-m3`) are accepted under `fixtures/openai/`, `fixtures/openrouter/`,
   `fixtures/google/`, and `fixtures/opencode/`. They replay two-turn tool

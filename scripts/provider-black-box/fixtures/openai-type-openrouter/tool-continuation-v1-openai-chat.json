@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "openai-type-openrouter",
+  "wireFamily": "openai-chat",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "openai",
+    "apiSdkVersion": "6.37.0",
+    "model": "mistralai/mistral-nemo",
+    "modelFamily": "openai-type-openrouter",
+    "capturedAt": "2026-11-21T14:34:36.850Z",
+    "recorderVersion": "1",
+    "probeScenario": "tool-continuation-v1"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "x64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "Linux",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.22.3"
+          },
+          "body": {
+            "model": "mistralai/mistral-nemo",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "reasoning_effort": "medium"
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-cache",
+            "cf-ray": "[REDACTED]",
+            "connection": "close, keep-alive",
+            "content-type": "text/event-stream",
+            "date": "Sat, 21 Nov 2026 14:34:37 GMT",
+            "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+            "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-generation-id": "gen_<1>",
+            "x-openrouter-release": "[REDACTED]"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271676,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"uiIC2QcJK\",\"type\":\"function\",\"function\":{\"name\":\"fixture\",\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271676,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"a\\\": 1\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271676,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271676,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\"}]}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795271676,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"service_tier\":null,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":76,\"completion_tokens\":20,\"total_tokens\":96,\"cost\":0.0000013087008,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":64,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00000132192,\"upstream_inference_prompt_cost\":8.8992e-7,\"upstream_inference_completions_cost\":4.32e-7},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "data": "[DONE]",
+          "seq": 7
+        }
+      ]
+    },
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "x64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "Linux",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.22.3"
+          },
+          "body": {
+            "model": "mistralai/mistral-nemo",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "id": "uiIC2QcJK",
+                    "type": "function",
+                    "function": {
+                      "name": "fixture",
+                      "arguments": "{\"a\":1}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "uiIC2QcJK",
+                "content": "{\"ok\":true,\"value\":1}"
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "The fixture tool returned its deterministic result. Give the final summary."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "reasoning_effort": "medium"
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-cache",
+            "cf-ray": "[REDACTED]",
+            "connection": "close, keep-alive",
+            "content-type": "text/event-stream",
+            "date": "Sat, 21 Nov 2026 14:34:39 GMT",
+            "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+            "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-generation-id": "gen_<2>",
+            "x-openrouter-release": "[REDACTED]"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" fixture tool was used with the input value\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" of 1. It returned a result\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" of 1, indicating that the tool\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" successfully processed the input and provided a deterministic\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" output.\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 7
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}]}",
+          "seq": 8
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795271677,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"service_tier\":null,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":150,\"completion_tokens\":36,\"total_tokens\":186,\"cost\":0.0000030465072,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":32,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00000307728,\"upstream_inference_prompt_cost\":0.00000229968,\"upstream_inference_completions_cost\":7.776e-7},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}",
+          "seq": 9
+        },
+        {
+          "kind": "sse-event",
+          "data": "[DONE]",
+          "seq": 10
+        }
+      ]
+    }
+  ],
+  "placeholders": {
+    "gen_<1>": "gen_<1>",
+    "gen_<2>": "gen_<2>"
+  }
+}

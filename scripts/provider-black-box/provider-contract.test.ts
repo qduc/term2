@@ -8,15 +8,17 @@ import {
 } from '../../src/model/providers/registry.js';
 import '../../src/model/providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../../src/model/providers/openai-compatible.provider.js';
+import { createOpenAICompatibleProviderDefinition as createLazyOpenAICompatibleProviderDefinition } from '../../src/model/providers/openai-compatible-lazy.js';
 import { RetryingModel } from '../../src/model/providers/retrying-model.js';
 import { isTransientRetryableError } from '../../src/model/failure/retry-error-classification.js';
 import type { ILoggingService, ISettingsService } from '../../src/shared/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import { readFixtureEnvelope } from './fixture-envelope.js';
 import { fixtureRequest, fixtureTool, multiTurnFixture } from './provider-wire-fixtures.js';
+import { getProbeScenario } from './probe-scenarios.js';
 
 type Protocol = 'chat-completions' | 'responses' | 'anthropic' | 'google';
-type RuntimeProviderType = 'openai-compatible' | 'anthropic' | 'google' | 'opencode' | 'llama.cpp';
+type RuntimeProviderType = 'openai-compatible' | 'openai' | 'anthropic' | 'google' | 'opencode' | 'llama.cpp';
 
 interface ProviderCase {
   name: string;
@@ -445,7 +447,7 @@ describe('provider boundary contracts through the registry', () => {
       new URL('./fixtures/openrouter/tool-continuation-v1.json', import.meta.url).pathname,
     );
     server = await startFakeProviderHttpServer({ fixture });
-    const providerCase = { ...providerCases[4]!, model: 'openai/gpt-oss-20b', providerOptions: {} };
+    const providerCase = { ...providerCases[4]!, model: fixture.capture.model, providerOptions: {} };
     const baseSettings = createSettings(providerCase);
     const settings = {
       ...baseSettings,
@@ -463,7 +465,6 @@ describe('provider boundary contracts through the registry', () => {
     });
     const initial = {
       ...fixtureRequest,
-      reasoning: { effort: 'default' },
       input: [
         {
           type: 'message',
@@ -567,6 +568,188 @@ describe('provider boundary contracts through the registry', () => {
     expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
     expect(fixture.turns.flatMap((turn) => turn.frames).some((frame) => frame.kind === 'sse-event')).toBe(true);
     server.assertReplayValid();
+  });
+
+  it.each([
+    {
+      type: 'openai-compatible',
+      fixturePath: './fixtures/openai-compatible-openrouter/tool-continuation-v1-openai-chat.json',
+      registryId: 'openai-compatible-openrouter',
+    },
+    {
+      type: 'openai',
+      fixturePath: './fixtures/openai-type-openrouter/tool-continuation-v1-openai-chat.json',
+      registryId: 'openai-type-openrouter',
+    },
+  ] as const)(
+    'real OpenRouter Chat Completions capture replays tool continuation through a custom $type provider',
+    async ({ type, fixturePath, registryId }) => {
+      const fixture = await readFixtureEnvelope(new URL(fixturePath, import.meta.url).pathname);
+      expect(fixture.provider).toBe(registryId);
+      server = await startFakeProviderHttpServer({ fixture });
+      // The recording's request path is `/api/v1/chat/completions`, so the runtime provider's base URL
+      // carries the same `/api/v1` prefix OpenRouter's does; the comparator checks the path as recorded.
+      const providerCase: ProviderCase = {
+        name: `OpenRouter via custom ${type}`,
+        registryId,
+        model: fixture.capture.model,
+        protocol: 'chat-completions',
+        expectedRoles: ['user', 'assistant', 'tool', 'user'],
+        runtimeType: type,
+        basePath: '/api/v1',
+        providerOptions: {},
+      };
+      const settings = createSettings(providerCase);
+      // The lazy definition is the one production registers for settings-defined providers.
+      upsertProvider(
+        createLazyOpenAICompatibleProviderDefinition({
+          name: providerCase.registryId,
+          label: providerCase.name,
+          type,
+          baseUrl: fixtureBaseUrl(providerCase),
+          apiKey: 'fixture-key',
+        }),
+      );
+      runtimeProviderIds.add(providerCase.registryId);
+      expect(settings.getDynamic('providers')).toEqual([expect.objectContaining({ id: registryId, type })]);
+      const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+        settingsService: settings,
+        loggingService: quietLogging,
+      });
+      const initial = {
+        ...fixtureRequest,
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'text', text: 'Use the fixture tool and then summarize its result.' }],
+          },
+        ],
+      } as any;
+      const firstEvents = await collect(model.stream(initial));
+      const call =
+        (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+        firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+      expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+
+      const continuation = {
+        ...initial,
+        input: [
+          ...initial.input,
+          { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+          { type: 'tool_result', id: call.id, output: JSON.stringify({ ok: true, value: 1 }) },
+          {
+            type: 'message',
+            role: 'user',
+            content: [
+              { type: 'text', text: 'The fixture tool returned its deterministic result. Give the final summary.' },
+            ],
+          },
+        ],
+      } as any;
+      const secondEvents = await collect(model.stream(continuation));
+      const allEvents = [...firstEvents, ...secondEvents];
+      const toolCalls = allEvents
+        .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+        .filter((event: any) => event.type === 'tool_call');
+      expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
+      expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+      expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+      expect(fixture.turns.flatMap((turn) => turn.frames).some((frame) => frame.kind === 'sse-event')).toBe(true);
+      server.assertReplayValid();
+
+      // Both custom types serialize this probe to the same Chat Completions request, so the wire cannot
+      // tell them apart; the continuation request must nonetheless carry the recorded tool exchange.
+      const continuationBody = server.requests[1]!.body as Record<string, any>;
+      expect(continuationBody.messages.map((message: any) => message.role)).toEqual(providerCase.expectedRoles);
+      expect(continuationBody.messages[2]).toMatchObject({ role: 'tool', tool_call_id: call.id });
+      // `createCustomProviderModelProvider` builds the two types in different branches. Only the
+      // `openai-compatible` branch attaches response normalization with a cost-trailer capture; the
+      // `openai` branch passes none. The model's own `costCapture` is the one observable that shows
+      // which branch this test actually ran (a private field, so a refactor of it should update this).
+      expect((model as any).costCapture !== undefined).toBe(type === 'openai-compatible');
+    },
+  );
+
+  it('real OpenRouter Messages capture replays tool continuation through a custom anthropic provider', async () => {
+    const fixture = await readFixtureEnvelope(
+      new URL('./fixtures/anthropic-openrouter/tool-continuation-v2-anthropic.json', import.meta.url).pathname,
+    );
+    expect(fixture.provider).toBe('anthropic-openrouter');
+    const probe = getProbeScenario(fixture.capture.probeScenario);
+    server = await startFakeProviderHttpServer({ fixture });
+    // The recorded path is `/api/v1/messages`, so the base URL carries OpenRouter's `/api/v1` prefix.
+    const providerCase: ProviderCase = {
+      ...providerCases[2]!,
+      name: 'OpenRouter Messages via custom anthropic',
+      registryId: 'anthropic-openrouter',
+      model: fixture.capture.model,
+      runtimeType: 'anthropic',
+      basePath: '/api/v1',
+      providerOptions: {},
+    };
+    const settings = createSettings(providerCase);
+    // The lazy definition is the one production registers for settings-defined providers.
+    upsertProvider(
+      createLazyOpenAICompatibleProviderDefinition({
+        name: providerCase.registryId,
+        label: providerCase.name,
+        type: 'anthropic',
+        baseUrl: fixtureBaseUrl(providerCase),
+        apiKey: 'fixture-key',
+      }),
+    );
+    runtimeProviderIds.add(providerCase.registryId);
+    expect(settings.getDynamic('providers')).toEqual([
+      expect.objectContaining({ id: providerCase.registryId, type: 'anthropic' }),
+    ]);
+    const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const initial = {
+      ...fixtureRequest,
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: probe.prompt }] }],
+    } as any;
+    const firstEvents = await collect(model.stream(initial));
+    const call =
+      (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
+      firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
+    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+
+    const continuation = {
+      ...initial,
+      input: [
+        ...initial.input,
+        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+        { type: 'tool_result', id: call.id, output: JSON.stringify(probe.toolResult) },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: probe.followUp }] },
+      ],
+    } as any;
+    const secondEvents = await collect(model.stream(continuation));
+    const allEvents = [...firstEvents, ...secondEvents];
+    const toolCalls = allEvents
+      .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+      .filter((event: any) => event.type === 'tool_call');
+    expect(new Set(toolCalls.map((event: any) => event.id))).toHaveLength(1);
+    expect(secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+    expect(secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    expect(
+      fixture.turns.flatMap((turn) =>
+        turn.frames.filter((frame) => frame.kind === 'sse-event').map((frame) => frame.data),
+      ),
+    ).toEqual(
+      expect.arrayContaining([expect.stringContaining('thinking_delta'), expect.stringContaining('message_stop')]),
+    );
+    server.assertReplayValid();
+
+    // This type's own wire behaviour: the key travels in `x-api-key`, never as a bearer token.
+    expect(server.requests).toHaveLength(2);
+    for (const request of server.requests) {
+      expect(request.url).toBe('/api/v1/messages');
+      expect(request.headers['x-api-key']).toBe('fixture-key');
+      expect(request.headers.authorization).toBeUndefined();
+    }
   });
 
   it('real OpenCode Anthropic capture replays tool continuation through the registry', async () => {

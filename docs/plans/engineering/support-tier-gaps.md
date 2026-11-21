@@ -175,8 +175,13 @@ section is a real recording behind every provider, replayed offline.
    probe the two chat types send identical requests, so the pair does not yet
    exercise anything that differs between them. Still checked against
    hand-written servers only: Codex and OpenAI over WebSocket, which wait on the
-   WebSocket capture adapter `PROVENANCE.md` lists as outstanding; Grok; and
-   `llama.cpp` with the local presets. A direct `api.anthropic.com` capture now
+   WebSocket capture adapter `PROVENANCE.md` lists as outstanding; and Grok.
+   Decided against: a recording for `llama.cpp` and the local presets. The
+   maintainer's judgement is that they have nothing of their own on the wire:
+   they speak Chat Completions, which the `openai-compatible` captures cover,
+   and their type-specific request shape is asserted against the loopback
+   server in `provider-session-chat-terminal-errors.blackbox.ts` and the
+   stateless lifecycle file. A local server's own quirks are found by using it. A direct `api.anthropic.com` capture now
    exists (`fixtures/anthropic/`), but the model produced no thinking block in
    it, and the capture that does contain thinking blocks came through
    OpenRouter. No fixture therefore shows whether Anthropic's own API accepts a
@@ -185,16 +190,16 @@ section is a real recording behind every provider, replayed offline.
    think before it calls the tool. OpenCode's
    Responses protocol is also unrecorded; `opencode` is Supported and the
    maintainer has no account, so it stays so.
-8. **Re-prepare the older fixtures.** `openrouter/tool-continuation-v1.json` was
-   replaced by a live capture of both sides, which closes the gap this item
-   used to describe. What remains: `sanitizeFixtureEnvelope` used to write each
-   live provider id as a key of the committed `placeholders` table. That is
-   fixed for new fixtures, but the fixtures under `fixtures/openai/`,
-   `fixtures/google/` and `fixtures/opencode/` were prepared before the fix and
-   still carry live request and response ids there. They are identifiers, not
-   credentials. Fixtures are never edited by hand, so removing them means
-   running `pnpm provider:fixture:prepare --accept` again on the raw recordings,
-   which are kept outside the repository.
+8. **Done: the older fixtures no longer carry live ids.**
+   `sanitizeFixtureEnvelope` used to write each live provider id as a key of
+   the committed `placeholders` table, and six fixtures prepared before that
+   was fixed still did. The raw recordings no longer exist, so they were not
+   recaptured. Instead `pnpm provider:fixture:prepare --accept` was run on a
+   copy of each committed fixture: the frames already held placeholders, so
+   the sanitizer left every turn unchanged and rewrote only the table, which
+   is now keyed by the placeholder. `fixture-security.test.ts` fails if a
+   table is keyed by anything else. The ids remain in the repository's
+   history; they are identifiers, not credentials.
 9. **Login flows now have tests; what they leave out.**
    `tests/cli/oauth-login.integration.test.ts` runs the built CLI with
    `--codex-login` and `--grok-login`, and `tests/cli/oauth-login-paste.e2e.test.ts`

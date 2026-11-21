@@ -169,6 +169,16 @@ for changes after capture.
   delegated by the maintainer. Replayed by `pnpm release:smoke --tgz <tarball>` beside the Google
   capture. Recapture when OpenRouter's wire output or the CLI's chat transport changes.
 
+- **Placeholder tables re-keyed, 2026-11-21.** `openai/tool-continuation-v1.json`,
+  `google/cli-release-turn-v1-google.json`, both `opencode/` fixtures and the two under `fixture/`
+  were prepared when the sanitizer wrote each live provider id as a key of the `placeholders`
+  table. The raw recordings no longer exist. `pnpm provider:fixture:prepare --accept` was run on a
+  copy of each committed fixture; every turn came out identical and only the table changed, now
+  keyed by the placeholder. Nothing was recaptured, so the capture dates above stand. The prepared
+  `chat-pilot` fixture was put back at `fixture/chat-pilot.json`, because the script files by the
+  envelope's provider name, which differs from that directory. Reviewer: Claude Code, delegated by
+  the maintainer.
+
 ## Recapture
 
 Run `pnpm provider:record --from-fake chat-completions success --provider fixture --model chat-fixture --out /absolute/private/path`, then `pnpm provider:fixture:prepare <recording>` and review the generated artifact. `--accept` places the reviewed envelope at `scripts/provider-black-box/fixtures/fixture/fake_chat-completions_success.json`, replacing the committed fixture. Live recording additionally requires `--yes`, credentials, an explicit `--probe`, and a real wire capture; it is never part of PR tests. To record a custom provider type against another base URL (for example OpenRouter's Messages or Chat Completions endpoint), add `--type <type> --base-url <url> --api-key-env <ENV NAME>`; see `pnpm provider:record --help`.

@@ -345,8 +345,17 @@ async function runCommand(
     session.write('\x1b');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
     // The heading can render with only the pinned current model while catalogs
-    // load. Wait for this opening's second row before testing navigation to it.
+    // load. Wait for this opening's second row and settled catalog warning
+    // before testing navigation to it.
+    const beforeReopen = session.getVisibleOutput().length;
     await step('/model ', 'mock-beta');
+    await expect
+      .poll(() => session!.getVisibleOutput().slice(beforeReopen), {
+        timeout: 30_000,
+        interval: 25,
+        message: 'No new terminal output containing Some providers failed: brokenprov',
+      })
+      .toContain('Some providers failed: brokenprov');
     await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 60_000 });
     await step('\x1b[B', '❯   mock-beta');
     await step('\x06', '❯ ★ mock-beta');

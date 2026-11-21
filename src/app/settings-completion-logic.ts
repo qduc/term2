@@ -2,6 +2,7 @@ import { SENSITIVE_SETTINGS } from '../config/settings/settings-schema.js';
 import { getSettingLabel } from '../config/settings/settings-ui-metadata.js';
 import { scoreSubsequence } from '../shared/utils/subsequence-filter.js';
 import {
+  ADVANCED_SETTINGS_CATEGORY,
   CATEGORY_KEYS,
   HIDDEN_SETTINGS,
   SETTINGS_CATEGORIES,
@@ -18,9 +19,9 @@ SETTINGS_CATEGORIES.forEach((category, categoryIndex) => {
   });
 });
 
-/** The browse tab a setting lives in; `undefined` for advanced settings. */
-export function getSettingCategory(key: string): SettingsCategory | undefined {
-  return CATEGORY_POSITION.get(key)?.category;
+/** The browse tab for a visible setting. */
+export function getSettingCategory(key: string): SettingsCategory {
+  return CATEGORY_POSITION.get(key)?.category ?? ADVANCED_SETTINGS_CATEGORY;
 }
 
 function isAdvancedSetting(key: string): boolean {
@@ -130,7 +131,7 @@ export function filterSettingsByQuery(
 }
 
 export function filterSettingsByCategory<T extends { key: string }>(settings: T[], categoryId: string): T[] {
-  return settings.filter((item) => getSettingCategory(item.key)?.id === categoryId);
+  return settings.filter((item) => getSettingCategory(item.key).id === categoryId);
 }
 
 export function clampIndex(currentIndex: number, arrayLength: number): number {

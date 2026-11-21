@@ -259,10 +259,11 @@ it('retry redraw restores older static history while the new response streams', 
   await waitForHarnessComposerValue(idlePath, 'question to retry', { timeoutMs: 60_000 });
   session!.write('\r');
   await session!.waitForOutput('retryable failure', 60_000);
+  await session!.waitForOutput('Use /retry turn to try again.', 30_000);
   await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
   const before = session!.getOutput().length;
-  session!.write('/retry-turn');
-  await waitForHarnessComposerValue(idlePath, '/retry-turn', { timeoutMs: 30_000 });
+  session!.write('/retry turn');
+  await waitForHarnessComposerValue(idlePath, '/retry turn', { timeoutMs: 30_000 });
   session!.write('\r');
   await session!.waitForOutput('RETRY-STREAMING', 60_000);
   const retryOutput = session!.getVisibleOutput();
@@ -354,8 +355,13 @@ it(
   },
 );
 
-it('admits a steer at the request boundary after a tool call', { timeout: TIMEOUT_MS }, async () => {
-  const { idlePath } = await start([{ text: 'TOOL-STREAM', hang: true, tool: true }, { text: 'AFTER-TOOL' }]);
+it('admits a steer at a tool boundary and can retry from the retained result', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([
+    { text: 'TOOL-STREAM', hang: true, tool: true },
+    { text: 'AFTER-TOOL' },
+    { text: 'RETRY-FROM-TOOL' },
+  ]);
+  const idle = readHarnessIdleGeneration(idlePath);
   session!.write('first question');
   await waitForHarnessComposerValue(idlePath, 'first question', { timeoutMs: 60_000 });
   session!.write('\r');
@@ -372,6 +378,22 @@ it('admits a steer at the request boundary after a tool call', { timeout: TIMEOU
   expect(received[1]).toContain('tool boundary steer');
   expect(received[1]).toContain('tool completed');
   expect(session!.getVisibleOutput()).not.toContain('Stopped');
+
+  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  session!.write('/retry tool');
+  await waitForHarnessComposerValue(idlePath, '/retry tool', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('RETRY-FROM-TOOL', 30_000);
+  expect(received).toHaveLength(3);
+  const { messages } = JSON.parse(received[2]!);
+  expect(messages).toContainEqual(expect.objectContaining({ role: 'tool', tool_call_id: 'call_1' }));
+  const logDir = path.join(root, 'conversations');
+  const log = fs
+    .readdirSync(logDir)
+    .filter((name) => name.endsWith('.jsonl'))
+    .map((name) => fs.readFileSync(path.join(logDir, name), 'utf8'))
+    .join('\n');
+  expect(log.match(/"type":"tool_started"/g)).toHaveLength(1);
 });
 
 it('a second message sent while the first is still being sent is kept, not lost', { timeout: TIMEOUT_MS }, async () => {

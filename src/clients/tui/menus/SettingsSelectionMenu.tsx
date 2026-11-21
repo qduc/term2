@@ -4,6 +4,7 @@ import { getSettingCategory, type SettingCompletionItem, type SettingsCategory }
 import { MenuContainer, MenuFooter, SelectionMarker, type MenuHint } from './MenuContainer.js';
 import { ScrollableTabBar } from './ScrollableTabBar.js';
 import { useTheme } from '../presentation/components/theme.js';
+import { useTerminalSize } from '../terminal.js';
 import {
   cleanSettingDescription,
   formatSettingDisplayValue,
@@ -17,6 +18,7 @@ type Props = {
   selectedIndex: number;
   scrollOffset?: number;
   query: string;
+  operation: 'set' | 'reset';
   isSearchingAll?: boolean;
   activeCategoryId: string;
   categories: SettingsCategory[];
@@ -25,9 +27,9 @@ type Props = {
   getDefaultValue?: (key: string) => unknown;
 };
 
-/** Marker, label/value gap, changed dot, restart glyph, scrollbar, and border. */
-const ROW_CHROME = 12;
-const TAG_WIDTH = 10;
+/** Side margins, frame, scrollbar, selection marker, label gap, and changed dot. */
+const ROW_CHROME = 15;
+const TAG_WIDTH = 12;
 
 /**
  * Secondary detail for the selected setting. The common case (default value,
@@ -62,6 +64,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   selectedIndex,
   scrollOffset = 0,
   query,
+  operation,
   isSearchingAll = false,
   activeCategoryId,
   categories,
@@ -69,26 +72,32 @@ const SettingsSelectionMenu: FC<Props> = ({
   getDefaultValue,
 }) => {
   const theme = useTheme();
-  const columns = process.stdout.columns ?? 80;
+  const { columns } = useTerminalSize();
   const longestLabel = items.reduce((max, item) => Math.max(max, item.label.length), 0);
   const labelColWidth = Math.max(12, Math.min(30, longestLabel, Math.floor(columns * 0.4)));
-  const tagWidth = isSearchingAll ? TAG_WIDTH : 0;
-  const valueColWidth = Math.max(8, columns - labelColWidth - tagWidth - ROW_CHROME);
+  const tagWidth = isSearchingAll && columns >= 56 ? TAG_WIDTH : 0;
+  const valueColWidth = Math.max(2, columns - labelColWidth - tagWidth - ROW_CHROME);
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
   const selectedItem = items[selectedIndex];
   const stateDescription = selectedItem ? describeSettingState(selectedItem, getDefaultValue) : undefined;
   const description = selectedItem?.description ? cleanSettingDescription(selectedItem.description) : '';
   // Two lines of description at most, so the list never gets pushed off screen.
   const descriptionText = truncateText(description, Math.max(20, (columns - 6) * 2));
-  const isToggle = typeof selectedItem?.currentValue === 'boolean';
+  const acceptAction =
+    operation === 'reset'
+      ? query.trim() === selectedItem?.key
+        ? 'reset'
+        : 'choose'
+      : typeof selectedItem?.currentValue === 'boolean'
+      ? 'toggle'
+      : 'edit';
 
   // One line at 80 columns: the ↻ glyph is explained in the detail line of
   // whichever setting carries it.
   const hints: MenuHint[] = [
-    ['type', 'search'],
     ['↑↓', 'move'],
     ...(isSearchingAll ? [] : [['Tab', 'section'] as MenuHint]),
-    ['⏎', isToggle ? 'toggle' : 'edit'],
+    ...(selectedItem ? [['⏎', acceptAction] as MenuHint] : []),
     ['Esc', 'close'],
     ['●', 'changed', 'warning'],
   ];
@@ -96,7 +105,9 @@ const SettingsSelectionMenu: FC<Props> = ({
   return (
     <Box flexDirection="column">
       {isSearchingAll ? (
-        <Text color={theme.textSubtle}>Searching all settings, including advanced ones</Text>
+        <Text color={theme.textSubtle}>
+          Searching all settings · {items.length} {items.length === 1 ? 'match' : 'matches'}
+        </Text>
       ) : (
         <ScrollableTabBar
           items={categories}
@@ -115,15 +126,9 @@ const SettingsSelectionMenu: FC<Props> = ({
         selectedIndex={selectedIndex}
         scrollOffset={scrollOffset}
         maxHeight={visibleCount}
-        borderColor={theme.accent}
+        title={operation === 'reset' ? 'Reset settings' : undefined}
         fallbackText={
-          <Box flexDirection="column">
-            <Text color={theme.textSubtle}>No settings found</Text>
-            <Text color={theme.textSubtle}>
-              No settings match "{query}"{' '}
-              {isSearchingAll ? 'in any section' : `in ${activeCategory?.label ?? 'this section'}`}
-            </Text>
-          </Box>
+          isSearchingAll ? `No settings match “${query}”` : `No settings in ${activeCategory?.label ?? 'this section'}`
         }
         footer={
           <Box flexDirection="column">
@@ -136,48 +141,44 @@ const SettingsSelectionMenu: FC<Props> = ({
               </Text>
             )}
             {descriptionText && (
-              <Box marginTop={1}>
-                <Text color={theme.accent} italic>
-                  {descriptionText}
-                </Text>
-              </Box>
+              <Text color={theme.accent} italic>
+                {descriptionText}
+              </Text>
             )}
             {stateDescription && <Text color={theme.textSubtle}>{stateDescription}</Text>}
-            <Box marginTop={1}>
-              <MenuFooter hints={hints} />
-            </Box>
+            <MenuFooter hints={hints} />
           </Box>
         }
         footerOutsideBorder={false}
         renderItem={(item, _actualIndex, isSelected) => {
           const valueObj = formatSettingDisplayValue(item.key, item.currentValue);
           const paddedLabel = truncateText(item.label, labelColWidth).padEnd(labelColWidth, ' ') + '  ';
+          const restart = item.requiresRestart ? ' ↻' : '';
+          const valueWidth = Math.max(1, valueColWidth - restart.length);
           // Paths are most meaningful at their end; everything else at its start.
           const valueText = valueObj.text.startsWith('/')
-            ? truncateStart(valueObj.text, valueColWidth)
-            : truncateText(valueObj.text, valueColWidth);
-          const tag = isSearchingAll ? getSettingCategory(item.key)?.label ?? 'advanced' : '';
+            ? truncateStart(valueObj.text, valueWidth)
+            : truncateText(valueObj.text, valueWidth);
+          const tag = tagWidth > 0 ? getSettingCategory(item.key).label : '';
 
           return (
             <Box key={item.key} width="100%">
               <SelectionMarker selected={isSelected} />
-              <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
-                {paddedLabel}
-              </Text>
-              <Text color={theme.warning}>{item.isModified ? '● ' : '  '}</Text>
-              <Box flexGrow={1}>
-                <Text color={theme[valueObj.tone ?? 'textSubtle']} bold={isSelected} wrap="truncate-end">
-                  {valueText}
-                  {item.requiresRestart && <Text color={theme.textSubtle}> ↻</Text>}
+              <Box flexGrow={1} flexShrink={1} flexBasis={0}>
+                <Text wrap="truncate-end">
+                  <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
+                    {paddedLabel}
+                  </Text>
+                  <Text color={theme.warning}>{item.isModified ? '● ' : '  '}</Text>
+                  <Text color={theme[valueObj.tone ?? 'textSubtle']} bold={isSelected}>
+                    {tag ? valueText.padEnd(valueWidth, ' ') : valueText}
+                  </Text>
+                  <Text color={theme.textSubtle}>
+                    {restart}
+                    {tag.padStart(tagWidth, ' ')}
+                  </Text>
                 </Text>
               </Box>
-              {tag && (
-                <Box width={tagWidth} justifyContent="flex-end">
-                  <Text color={theme.textSubtle} wrap="truncate-end">
-                    {tag}
-                  </Text>
-                </Box>
-              )}
             </Box>
           );
         }}

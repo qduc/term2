@@ -54,6 +54,8 @@ This README tracks `main`; npm releases may lag behind it. Check `term2 --versio
 
 ## Useful commands
 
+Type `/` to browse commands by section, or type a command name to narrow the list. In `/settings`, use Tab or the left and right arrows to browse sections, or type to search across all settings.
+
 | To…                         | Use…                                                          |
 | --------------------------- | ------------------------------------------------------------- |
 | Switch models               | `/model` or `Ctrl+O`                                          |

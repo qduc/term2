@@ -41,8 +41,12 @@ The experiment README contains the testing policy and decision criteria; histori
 references point to tag `unit-suite-baseline`.
 
 **GitHub-first workflow:** Work in isolated branches/worktrees and deliver changes
-through PRs. Do not merge locally into `main`, push directly to it, or merge a PR
-unless explicitly asked. Commit completed work without waiting for the user to ask.
+through PRs. Do not merge locally into `main` or push directly to it. Non-draft
+PRs from this repository get GitHub auto-merge (`.github/workflows/auto-merge.yml`)
+and squash-merge once required checks pass, so open a PR only when it is ready
+to land; open it as a draft, or disable auto-merge on it, to hold it for review.
+Do not merge a PR by hand or bypass checks unless explicitly asked. Commit
+completed work without waiting for the user to ask.
 Preserve the shared checkout and other agents’ work.
 
 ## Parallel work isolation

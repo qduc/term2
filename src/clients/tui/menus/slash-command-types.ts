@@ -9,6 +9,8 @@ export type SlashCommandCompletion =
 export interface SlashCommand {
   name: string;
   description: string;
+  section: string;
+  alias?: boolean;
   action: (args?: string) => boolean | void;
   expectsArgs?: boolean;
   completion?: SlashCommandCompletion;

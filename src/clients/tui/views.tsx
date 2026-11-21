@@ -369,7 +369,7 @@ export function Activity({
           )
             ? 'Connection to the model dropped. /retry to try again.'
             : // Legacy conversation-orchestrator appendBotError.
-              `Error: ${state.lastError}\n\nUse /retry-turn to try again.`}
+              `Error: ${state.lastError}\n\nUse /retry turn to try again.`}
         </Text>
       ) : null}
     </Box>

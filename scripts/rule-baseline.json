@@ -872,11 +872,6 @@
       "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
     },
     {
-      "file": "tests/cli/help-reachability.e2e.test.ts",
-      "count": 2,
-      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
-    },
-    {
       "file": "tests/cli/model-id.e2e.test.ts",
       "count": 1,
       "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."

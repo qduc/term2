@@ -262,7 +262,7 @@ it('keeps paged help available during a still-streaming response', { timeout: TI
   for (let i = 0; i < 400 && !session!.getVisibleOutput().slice(before).includes('Lines 1'); i++)
     await new Promise((resolve) => setTimeout(resolve, 25));
   // Legacy's help text: the commands first, the keyboard shortcuts last.
-  expect(session!.getVisibleOutput().slice(before)).toContain('/model — Choose or set the AI model');
+  expect(session!.getVisibleOutput().slice(before)).toContain('/model — Choose a model');
   expect(session!.getVisibleOutput().slice(before)).toMatch(/Lines 1[–-]\d+ of \d+/);
   for (let i = 0; i < 12; i++) {
     session!.write('\x1b[6~');

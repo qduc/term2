@@ -808,7 +808,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
         }
         if (normalized) yield normalized;
       }
-      if (!terminal) throw new Error('OpenAI streamed response ended without a completion.');
+      if (!terminal) throw new Error('Streamed response ended without a completion.');
     } catch (error) {
       markContextCompactionFailure(
         error,

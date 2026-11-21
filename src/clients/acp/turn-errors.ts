@@ -54,7 +54,7 @@ function turnError(error?: WireError): NonNullable<PromptOutcome['error']> {
   } else if (error && Object.hasOwn(kindMessages, error.kind)) {
     kind = error.kind;
     message = kindMessages[error.kind as keyof typeof kindMessages];
-  } else if (error?.message === 'OpenAI-compatible streamed response ended without a finish reason') {
+  } else if (error?.message === 'Streamed response ended without a finish reason') {
     kind = 'incomplete_response';
     message = 'The model provider ended the response before it was complete.';
   }

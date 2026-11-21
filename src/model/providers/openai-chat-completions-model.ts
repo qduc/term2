@@ -265,7 +265,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         errorFinishPayload = (chunk as any).error ?? choice?.error;
       }
     }
-    if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
+    if (!sawFinishReason) throw new Error('Streamed response ended without a finish reason');
     if (sawErrorFinish) {
       pendingTrivialWhitespace = '';
       throw normalizeChatCompletionError(errorFinishPayload);

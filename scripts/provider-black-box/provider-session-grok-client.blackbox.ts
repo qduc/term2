@@ -5,6 +5,7 @@ import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import {
   GROK_CONSTANT_CLIENT_VERSION,
   GROK_FIXTURE_MODEL,
+  createdFrame,
   grokConfigDir,
   grokEnvironment,
   grokSettings,
@@ -195,6 +196,17 @@ describe('Grok proxy contract', () => {
       outcome: 'failed',
       requests: { total: 1, completed: 0, failed: 1 },
     });
+  });
+
+  it('names no other provider when a Grok Responses stream ends without a completion', async () => {
+    const result = await runGrok({
+      cache: { version: '4.5.6', ageMs: 0 },
+      reply: (_request, _number, response) =>
+        sendSse(response, [createdFrame('resp-grok-cut'), { type: 'response.output_text.delta', delta: 'PARTIAL' }]),
+    });
+    const message = String(result.events.find((event) => event.type === 'error')?.message);
+    expect(message, describeRun(result)).toContain('ended without a completion');
+    expect(message).not.toContain('OpenAI');
   });
 
   it('asks the model list from GROK_BASE_URL, including its path prefix', async () => {

@@ -25,30 +25,57 @@ Ordered by what a miss costs, then by how likely the miss is.
 
 ### 1. Safety checks that do not run
 
-1. **Strengthen and extend the real-sandbox checks.** One check does run the
-   real sandbox: the case "bare retains the outside-workspace edit approval
-   boundary without asking headlessly" in `tests/cli/cli.integration.scenarios.ts`
-   writes outside the workspace through the built CLI with default settings and
-   asserts the file is absent. `cli-headless.integration.test.ts` runs it in the
-   `test` lane, which installs bubblewrap, and `publish.yml` runs it again. An
-   earlier version of this plan said no such test existed; that was wrong. What
-   is still missing:
-   - Its other assertion is `toMatch(/exit [1-9]/)`, which a failure unrelated
-     to the sandbox would also satisfy. It should assert the denial itself.
-   - No test shows the real sandbox refusing a read of a credential path. The
-     denied-read tests in `tests/tools/system/run-code/shell.integration.test.ts`
-     use a stub `ShellSandboxRunner` that prints "Permission denied".
-   - The network policy is unchecked. `tests/cli/sandbox-network.e2e.test.ts`
-     runs only when `RUN_SHELL_SANDBOX_INTEGRATION=1`, which nothing sets, and
-     setting it is not enough: the file belongs to the `e2e` lane, which runs on
-     `ubuntu-latest` without bubblewrap or socat, and a comment in `publish.yml`
-     records that Ubuntu 24.04 runners reject bubblewrap's loopback setup. The
-     test has to move to a lane on `ubuntu-22.04` with the binaries installed.
-   - The ACP shell cases in `tests/clients/acp/v1.integration.test.ts` and
-     `tests/clients/acp-v2/serve.integration.test.ts` accept either a sandboxed
-     result or a refusal, so they pass whether or not the sandbox ran.
-     `TERM2_ACP_REQUIRE_SHELL_SUCCESS=1` makes success mandatory and nothing
-     sets it.
+1. **The real sandbox is now checked for writes, credential reads and the
+   network.** These tests run the built CLI with the sandbox on and are not
+   skipped where the tools are missing: the shell then asks for approval
+   instead of running, and the assertions fail. The two new files are Linux
+   only; Seatbelt has not been run with them.
+   - Writes: the case "bare retains the outside-workspace edit approval
+     boundary without asking headlessly" in
+     `tests/cli/cli.integration.scenarios.ts` used to assert
+     `toMatch(/exit [1-9]/)`, which a write to a missing directory also
+     satisfied. On Linux it now asserts the target path and
+     `Read-only file system`, the error of the sandbox's read-only mount, and
+     a sibling case shows the same write inside the workspace succeeding.
+   - Credential reads: `tests/cli/sandbox-credential-read.integration.test.ts`
+     plants sentinels in `~/.ssh`, `~/.aws` and `~/.netrc` of a throwaway
+     home, readable by Unix permissions, and a secret in the environment. The
+     model's `cat` of each is denied, the variable is empty inside the
+     command, an ordinary home file and a workspace file read normally, and
+     no sentinel reaches the provider, stdout or stderr.
+   - Network: `tests/cli/sandbox-network.integration.test.ts` counts what
+     reaches a loopback HTTP server. A direct connection has no route; the
+     proxy answers 403 until `term2 sandbox-network allow`; after it the
+     request arrives; `sandbox.allowNetworking: false` and a revoke close it
+     again.
+   - ACP: the `integration` job sets `TERM2_ACP_REQUIRE_SHELL_SUCCESS=1`, so
+     the shell cases in `tests/clients/acp/v1.integration.test.ts` and
+     `tests/clients/acp-v2/serve.integration.test.ts` no longer pass on a
+     refusal.
+
+   Found, and open:
+   - **A sandboxed command can read Term2's own credentials.** `denyRead`
+     (`credentialFiles` in `src/tools/shell/sandbox/sandbox-policy.ts`) lists
+     `~/.ssh`, `~/.aws`, `~/.netrc` and the like, and not Term2's settings
+     directory. With default settings and no approval, `head` on
+     `codex-auth.json`, `grok-auth.json` and `settings.json` there returned
+     their contents to the model. A decision: which of those files the
+     sandbox hides, given that a `term2` started inside the sandbox would
+     then not find them.
+   - The sandbox's proxy bridge is `socat TCP-LISTEN:3128`, which opens an
+     IPv6 socket. On a kernel without IPv6 the bridge never starts and every
+     proxied command fails with "Failed to connect to localhost port 3128"
+     and no explanation. The network test names this cause when it sees it.
+   - `tests/cli/sandbox-network.e2e.test.ts` still runs only with
+     `RUN_SHELL_SANDBOX_INTEGRATION=1`, which nothing sets, in a lane without
+     the tools. It is the only check of the approval prompt and of reuse
+     across linked worktrees. It passes where bubblewrap, socat and IPv6 are
+     present. Running it in CI needs `owner()` in `scripts/run-ci-lane.mjs`
+     to place it in the `test` lane and that job to set the variable.
+   - Two cases in `tests/session/logging/logging-failures.integration.test.ts`
+     failed in a container running as root and pass in CI. They make a
+     directory unwritable with `chmod`, which root ignores; that is the
+     likely cause and was not confirmed.
 2. **Answered: the `e2e` and `provider-black-box` lanes need no real sandbox.**
    Those jobs install no sandbox binaries, and none of their tests depends on
    one. `tests/cli/approval-mode.e2e.test.ts` and the provider scenarios call

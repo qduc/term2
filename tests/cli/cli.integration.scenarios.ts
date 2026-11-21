@@ -2581,15 +2581,20 @@ fs.createWriteStream = (filename, options) => {
       },
     );
 
-    it.each<[string, boolean]>([
-      ['bare retains the outside-workspace edit approval boundary without asking headlessly', false],
-      ['bare permits explicit sandbox scratch writes without approval', true],
-    ])('%s', async (_title, scratch) => {
+    // These run the real sandbox (bubblewrap on Linux, Seatbelt on macOS) with default settings. They are
+    // not skipped when it is missing: the shell then asks for approval instead of running, which fails
+    // the exit and denial assertions below, so a lane without the sandbox tools fails loudly.
+    it.each<[string, 'outside' | 'scratch' | 'workspace']>([
+      ['bare retains the outside-workspace edit approval boundary without asking headlessly', 'outside'],
+      ['bare permits explicit sandbox scratch writes without approval', 'scratch'],
+      ['bare permits workspace writes under the sandbox without approval', 'workspace'],
+    ])('%s', async (_title, where) => {
       const workspace = path.join(testDir, 'workspace');
       fs.mkdirSync(workspace);
-      const target = path.join(scratch ? cliTempDir : testDir, 'outside.txt');
+      const succeeds = where !== 'outside';
+      const target = path.join({ outside: testDir, scratch: cliTempDir, workspace }[where], 'outside.txt');
       const content = 'fixture edit';
-      const reply = scratch ? 'Scratch edit completed.' : 'Outside edit denied; kept existing permissions.';
+      const reply = succeeds ? 'Allowed edit completed.' : 'Outside edit denied; kept existing permissions.';
       const mock = await startModelMock(['mock-alpha'], (n) =>
         n === 1
           ? [
@@ -2634,18 +2639,28 @@ fs.createWriteStream = (filename, options) => {
           workspace,
         );
         expect(result.status, result.stderr).toBe(0);
-        expect(fs.existsSync(target), JSON.stringify(lastWireToolExchange(mock.capturedRequests()))).toBe(scratch);
+        expect(fs.existsSync(target), JSON.stringify(lastWireToolExchange(mock.capturedRequests()))).toBe(succeeds);
         expect(result.stdout).toContain(reply);
         const toolExchange = lastWireToolExchange(mock.capturedRequests());
         expect(toolExchange.results).toHaveLength(1);
         // Bare edits through the shell, so the sandbox is the write boundary.
-        if (scratch) {
+        if (succeeds) {
           expect(fs.readFileSync(target, 'utf8')).toBe(`${content}\n`);
           expect(toolExchange.results[0]?.content).toContain('exit 0');
           expect(result.stderr).not.toContain('[approval required]');
         } else {
-          // The sandbox's denial text is platform-specific; the failed exit is not.
-          expect(toolExchange.results[0]?.content).toMatch(/exit [1-9]/);
+          // The denial comes from the sandbox's read-only mount of everything it was not told to make writable,
+          // so the shell reports EROFS ("Read-only file system") for a user-owned directory, as root or not
+          // (a permission error would not name the mount). Naming the target shows the write itself failed.
+          // A run without the sandbox would instead say the call "was not approved".
+          const denial = toolExchange.results[0]?.content ?? '';
+          expect(denial).toMatch(/exit [1-9]/);
+          expect(denial).not.toContain('not approved');
+          // Seatbelt words its denial differently and has not been run with these two; the exit is asserted there.
+          if (process.platform === 'linux') {
+            expect(denial).toContain(target);
+            expect(denial).toContain('Read-only file system');
+          }
         }
       } finally {
         await mock.close();

@@ -135,6 +135,22 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     auditScenarios: ['codex-websocket.two-user-turn: prompt_cache_key/include projection'],
   },
   {
+    id: 'grok-http',
+    label: 'Built-in Grok, HTTP',
+    registryRoute: { kind: 'built-in', providerId: 'grok' },
+    wireFamily: 'openai-responses',
+    transport: 'http-sse',
+    // The CLI chat proxy is a Zero Data Retention org and refuses previous_response_id.
+    chainingMode: 'stateless',
+    toolSupport: { supportsTools: true, supportsApproval: true },
+    reasoningSupport: 'native',
+    nativeContinuationField: null,
+    requiredScenarios: requiredScenarios('grok-http', 'http-sse'),
+    auditScenarios: [
+      'grok-http: x-grok-client-version lookup chain, outdated-client 426, GROK_BASE_URL (provider-session-grok-client.blackbox.ts)',
+    ],
+  },
+  {
     id: 'openrouter-http',
     label: 'Built-in OpenRouter',
     registryRoute: { kind: 'built-in', providerId: 'openrouter' },

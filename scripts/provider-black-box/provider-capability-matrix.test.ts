@@ -9,8 +9,8 @@ import { ALL_PROVIDER_SESSION_CAPABILITY_EXECUTIONS } from './provider-session-c
 
 describe('provider capability matrix', () => {
   it('declares every target route with transport, lifecycle, and required scenarios', () => {
-    expect(PROVIDER_CAPABILITY_MATRIX).toHaveLength(12);
-    expect(new Set(PROVIDER_CAPABILITY_MATRIX.map((row) => row.id)).size).toBe(12);
+    expect(PROVIDER_CAPABILITY_MATRIX).toHaveLength(13);
+    expect(new Set(PROVIDER_CAPABILITY_MATRIX.map((row) => row.id)).size).toBe(13);
     for (const row of PROVIDER_CAPABILITY_MATRIX) {
       expect(row.registryRoute.providerId, row.id).toBeTruthy();
       expect(row.wireFamily, row.id).toBeTruthy();

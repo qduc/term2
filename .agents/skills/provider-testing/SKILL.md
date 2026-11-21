@@ -92,6 +92,13 @@ scenario is the one whose CLI never reached the state it waits for.
   The continuity entry retains the aggregate Responses ledger declaration.
 - `scripts/provider-black-box/provider-session-stateless.blackbox.ts` owns the
   stateless lifecycle scenarios and its exported ledger declaration.
+- `provider-session-grok.blackbox.ts` runs the `grok-http` lifecycle row (stateless
+  Responses over HTTP) through the built CLI; `provider-session-grok-client.blackbox.ts`
+  holds what is Grok-specific: the `x-grok-client-version` lookup chain, the 426
+  outdated-client rejection, the `GROK_BASE_URL` override and the `TERM2_GROK_API=chat`
+  lane. `grok-fixture.ts` writes the credential and version-cache fixtures and refuses
+  the version endpoints through a loopback proxy, so no scenario leaves the machine; the
+  live x.ai version fetch is deliberately untested.
 - `provider-session-resilience.blackbox.ts` and
   `provider-session-resilience-continuity.blackbox.ts` register transport and
   continuity groups from `provider-session-resilience-scenarios.ts`. They retain

@@ -165,7 +165,7 @@ export interface TuiSettingsLibrary {
   ): SettingCompletionItem[];
   filterSettingsByQuery(settings: SettingCompletionItem[], query: string, maxResults?: number): SettingCompletionItem[];
   filterSettingsByCategory<T extends { key: string }>(settings: T[], categoryId: string): T[];
-  getSettingCategory(key: string): SettingsCategory | undefined;
+  getSettingCategory(key: string): SettingsCategory;
   getSettingMetadata(key: string): { readonly type?: string } | undefined;
   getSettingLabel(key: string): string;
   isSecretSetting(key: string): boolean;

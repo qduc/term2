@@ -16,10 +16,7 @@ Type `/` at the start of a prompt to open the command menu.
 | **`/sandbox`** | — | Toggle shell sandbox isolation on or off. |
 | **`/compact`** | — | Compact older conversation turns into a local summary. |
 | **`/rewind`** | `[last\|<turn>] [edit\|resend]` | Choose a turn and review what will be discarded before rewinding. |
-| **`/undo`** | — | Alias for `/rewind edit` (places target turn back in composer for revision). |
-| **`/retry`** | — | Alias for `/rewind resend` (immediately resends the last user turn). |
-| **`/retry-turn`** | — | Regenerate the latest user turn from its original prompt. |
-| **`/retry-tool`** | — | Retry the last tool call by rewinding to it. |
+| **`/retry`** | `[turn\|tool]` | Resend the latest prompt, regenerate from the original prompt, or continue from the last tool result. |
 | **`/copy`** | `[N]` | Copy the latest assistant response (or $N$-th prior response) to clipboard. |
 | **`/usage`** | — | Show token usage and model cost metrics for the current session. Subscription reference cost, when available, is a catalog comparison, not a billed charge. |
 | **`/resume`** | `[conversation-id\|ls]` | Resume a saved conversation or browse conversations. |
@@ -55,13 +52,13 @@ Type `/` at the start of a prompt to open the command menu.
 - **Usage**: `/rewind`, `/rewind 3 edit`, `/rewind last resend`
 - Opens the rewind menu to select a turn to rewind. Discards subsequent transcript turns and either loads the user prompt into the composer (`edit`) or resubmits it immediately (`resend`).
 
-### `/retry-turn`
-- **Usage**: `/retry-turn`
-- Regenerates the entire latest user turn from its original prompt, replacing the old turn in the transcript.
+### `/retry [turn|tool]`
 
-### `/retry-tool`
-- **Usage**: `/retry-tool`
-- Retries the last tool call by rewinding the transcript to it. Verify any effects that may already have occurred before retrying.
+- `/retry` immediately resends the latest prompt. Use `/rewind` to choose an earlier turn.
+- `/retry turn` regenerates the latest response from its original prompt.
+- `/retry tool` resumes model generation with the last retained tool result.
+
+The earlier spellings `/retry-turn` and `/retry-tool` still work. `/undo` remains an alias for `/rewind edit`.
 
 ### `/copy [N]`
 - **Usage**: `/copy`, `/copy 2`

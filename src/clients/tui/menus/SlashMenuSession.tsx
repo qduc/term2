@@ -75,8 +75,9 @@ export function SlashMenuSession({ frame, active, controller, interactions, serv
     <SlashCommandMenu
       commands={slash.filteredCommands}
       selectedIndex={slash.selectedIndex}
-      filter={frame.binding.query}
+      browsing={slash.filter.length === 0}
       scrollOffset={slash.scrollOffset}
+      visibleCount={slash.visibleCount}
     />
   );
 }

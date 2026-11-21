@@ -105,7 +105,7 @@ async function screen(action: () => void, pattern: RegExp): Promise<void> {
   throw new Error(`Screen never matched ${pattern}: ${session!.getVisibleOutput().slice(-1800)}`);
 }
 
-it('bare /settings opens the legacy settings menu and Escape clears it', { timeout: TIMEOUT_MS }, async () => {
+it('browses settings by section and searches across sections', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start();
   session!.write('/settings');
   await waitForHarnessComposerValue(idlePath, '/settings', { timeoutMs: 60_000 });
@@ -113,7 +113,20 @@ it('bare /settings opens the legacy settings menu and Escape clears it', { timeo
   // Legacy's action puts the trigger in the composer, which opens the menu.
   await waitForHarnessComposerValue(idlePath, '/settings ', { timeoutMs: 60_000 });
   await session!.waitForOutput('Tab section', 60_000);
-  expect(session!.getVisibleOutput()).toContain('Providers');
+  expect(session!.getVisibleOutput()).toContain('Models');
+  for (const key of [
+    'ui.theme',
+    'shell.autoApproveMode',
+    'tools.shell.enabled',
+    'agent.contextCompaction.enabled',
+    'agent.runBudget.maxUsdMicros',
+    'hooks.user.enabled',
+  ]) {
+    await fresh(() => session!.write('\t'), key);
+  }
+  await fresh(() => session!.write('\t'), 'Advanced');
+  await fresh(() => session!.write('logging.logLevel'), 'logging.logLevel');
+  await waitForHarnessComposerValue(idlePath, '/settings logging.logLevel', { timeoutMs: 60_000 });
   session!.write('\x1b');
   await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
 });

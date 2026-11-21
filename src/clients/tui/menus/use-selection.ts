@@ -8,9 +8,13 @@ export function clampIndex(currentIndex: number, arrayLength: number): number {
   return Math.max(0, Math.min(currentIndex, arrayLength - 1));
 }
 
-export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) => boolean; initialIndex?: number }) {
+export function useSelection<T>(
+  items: T[],
+  options?: { isInactive?: (item: T) => boolean; initialIndex?: number; pageSize?: number },
+) {
   const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
   const selectedIndexRef = useRef(options?.initialIndex ?? 0);
+  const pageSize = options?.pageSize ?? 10;
 
   const isInactive = useCallback(
     (item: T): boolean => {
@@ -122,7 +126,7 @@ export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) =
     let current = selectedIndexRef.current;
     let count = 0;
     let lastActive = current;
-    while (current > 0 && count < 10) {
+    while (current > 0 && count < pageSize) {
       current--;
       if (!isInactive(items[current])) {
         count++;
@@ -133,14 +137,14 @@ export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) =
       selectedIndexRef.current = lastActive;
       forceUpdate();
     }
-  }, [items, isInactive]);
+  }, [items, isInactive, pageSize]);
 
   const pageDown = useCallback(() => {
     if (items.length === 0) return;
     let current = selectedIndexRef.current;
     let count = 0;
     let lastActive = current;
-    while (current < items.length - 1 && count < 10) {
+    while (current < items.length - 1 && count < pageSize) {
       current++;
       if (!isInactive(items[current])) {
         count++;
@@ -151,7 +155,7 @@ export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) =
       selectedIndexRef.current = lastActive;
       forceUpdate();
     }
-  }, [items, isInactive]);
+  }, [items, isInactive, pageSize]);
 
   const getSelectedItem = useCallback((): T | undefined => {
     if (items.length === 0) return undefined;

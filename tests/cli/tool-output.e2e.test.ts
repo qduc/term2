@@ -484,7 +484,7 @@ it.each([undefined, 'concise', 'standard'] as const)(
     // Use the actual settings menu: select the key, enter its value, then dismiss the list.
     session.write('/settings ');
     await waitForHarnessComposerValue(idlePath, '/settings ', { timeoutMs: 30_000 });
-    await session.waitForOutput('type search', 30_000);
+    await session.waitForOutput('Search settings:', 30_000);
     session.write('ui.displayMode');
     await waitForHarnessComposerValue(idlePath, '/settings ui.displayMode', { timeoutMs: 30_000 });
     session.write('\r');

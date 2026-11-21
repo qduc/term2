@@ -13,7 +13,7 @@ type BareTarget = 'picker' | 'last';
 const COMMANDS: Record<string, { defaultDisposition: RewindDisposition; bareTarget: BareTarget; aliasOf?: string }> = {
   rewind: { defaultDisposition: 'edit', bareTarget: 'picker' },
   undo: { defaultDisposition: 'edit', bareTarget: 'picker', aliasOf: 'rewind' },
-  retry: { defaultDisposition: 'resend', bareTarget: 'last', aliasOf: 'rewind' },
+  retry: { defaultDisposition: 'resend', bareTarget: 'last' },
 };
 
 export const REWIND_COMMAND = /^\/(rewind|undo|retry)(?:\s+([\s\S]*))?$/;

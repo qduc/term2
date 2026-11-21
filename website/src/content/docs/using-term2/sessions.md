@@ -50,18 +50,17 @@ term2 --resume --fork
 ## Choose what to do next
 
 - **Revisit an earlier point:** Use `/rewind` to inspect earlier turns and affected files before confirming. See the command details below before discarding anything.
-- **Retry a response or tool call:** Use `/retry-turn` or `/retry-tool`; check for effects that may already have happened before retrying a tool.
+- **Retry a response:** Use `/retry` to resend the latest prompt, or `/retry tool` to continue from the last tool result.
 - **Reload the installed CLI:** Use `/restart` to resume the same conversation in a new process. Save or submit drafts first, and see the restrictions below.
 - **Keep a longer outcome in view:** Use `/goal set <outcome>` and `/goal` to inspect it later.
 - **Continue from a script:** Add a prompt after `term2 --resume <conversation-id>`; examples appear below.
 
-## Time-Travel Rewind (`/rewind`, `/undo`, `/retry`)
+## Rewind or retry
 
-- **Interactive Rewind Picker (`/rewind`)**: Opens a menu detailing previous turns and modified files so you can inspect discards before confirming.
-- **Undo (`/undo`)**: An alias for `/rewind edit`. Discards subsequent turns and places the selected user prompt back into the input composer for editing.
-- **Retry Turn (`/retry`)**: An alias for `/rewind resend`. Discards subsequent turns and immediately re-submits the last prompt to the model.
-- **Regenerate Turn (`/retry-turn`)**: Regenerates the entire latest user turn from its original prompt, replacing the old turn in the transcript.
-- **Retry Tool (`/retry-tool`)**: Retries the last tool call by rewinding conversation history to that call. Check for effects that already occurred before retrying.
+- `/rewind` lets you pick an earlier turn and see what will be discarded. Choose whether to restore its prompt for editing or resend it immediately.
+- `/retry` resends the latest prompt immediately.
+- `/retry turn` regenerates the latest response from its original prompt.
+- `/retry tool` resumes model generation using the last retained tool result.
 
 ## Restart the Built CLI
 

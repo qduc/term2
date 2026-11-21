@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MenuSettingsService as SettingsService } from '../integration.js';
 import { useInputContext } from './input-context.js';
 import { clampIndex, useSelection } from './use-selection.js';
+import { useTerminalSize } from '../terminal.js';
 import {
   SETTING_KEYS,
   SETTING_ENV_VARIABLES,
@@ -19,8 +20,8 @@ import {
  * Rows the settings list may use: the terminal height minus the chrome around
  * the list (prompt, tab bar, detail block, hints, status line).
  */
-function getSettingsVisibleCount(rows: number = process.stdout.rows ?? 24): number {
-  return Math.max(5, Math.min(20, rows - 14));
+function getSettingsVisibleCount(rows: number): number {
+  return Math.max(3, Math.min(20, rows - 14));
 }
 
 function sameValue(a: unknown, b: unknown): boolean {
@@ -95,7 +96,8 @@ export {
 export const useSettingsCompletion = (settingsService: SettingsService) => {
   const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
 
-  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const { stack } = controller.getSnapshot();
+  const controllerFrame = stack.find((frame) => frame.kind === 'settings');
   const isControllerOpen = controllerFrame?.kind === 'settings';
   const isOpen = isControllerOpen || mode === 'settings_completion';
 
@@ -142,11 +144,11 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
   }, [settingsService, settingsVersion]);
 
   const categories = useMemo(() => {
-    const presentCategoryIds = new Set(allSettings.map((item) => getSettingCategory(item.key)?.id));
+    const presentCategoryIds = new Set(allSettings.map((item) => getSettingCategory(item.key).id));
     return SETTINGS_CATEGORIES.filter((category) => presentCategoryIds.has(category.id));
   }, [allSettings]);
 
-  const [activeCategoryId, setActiveCategoryId] = useState(() => SETTINGS_CATEGORIES[0]?.id ?? 'model');
+  const [activeCategoryId, setActiveCategoryId] = useState(() => SETTINGS_CATEGORIES[0]?.id ?? 'models');
 
   const resolvedActiveCategoryId = useMemo(() => {
     if (categories.some((category) => category.id === activeCategoryId)) {
@@ -164,8 +166,10 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     return filterSettingsByQuery(candidateSettings, query, candidateSettings.length);
   }, [allSettings, isSearchingAll, query, resolvedActiveCategoryId]);
 
+  const { rows } = useTerminalSize();
+  const visibleCount = getSettingsVisibleCount(rows);
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
-    useSelection(filteredEntries);
+    useSelection(filteredEntries, { pageSize: visibleCount });
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const [targetKey, setTargetKey] = useState<string | null>(null);
@@ -195,7 +199,6 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     [categories, resolvedActiveCategoryId, setSelectedIndex],
   );
 
-  const visibleCount = getSettingsVisibleCount();
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
       setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
@@ -222,8 +225,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       const editor = controller.getSnapshot().editor;
       controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
       if (initialSelectionKey) {
-        const category = getSettingCategory(initialSelectionKey);
-        if (category) setActiveCategoryId(category.id);
+        setActiveCategoryId(getSettingCategory(initialSelectionKey).id);
         setTargetKey(initialSelectionKey);
       } else {
         setSelectedIndex(0);
@@ -248,7 +250,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     allSettings,
     filteredEntries,
     selectedIndex,
-    scrollOffset,
+    scrollOffset: Math.min(scrollOffset, Math.max(0, filteredEntries.length - visibleCount)),
     isSearchingAll,
     categories,
     activeCategoryId: resolvedActiveCategoryId,

@@ -173,15 +173,40 @@ section is a real recording behind every provider, replayed offline.
 
 ### 3. Saved data across upgrades
 
-14. **Keep fixtures written by past releases.** No test loads a conversation
-    log, settings file, credential file or memory store produced by an older
-    release; every "old" input is constructed inside its test, as in
-    `tests/session/conversation/migration-source.integration.test.ts`. Commit one
-    of each from the current release and assert that later releases load them.
-15. **Test the version rejection.** The reader throws on a `v` other than
-    `LOG_FORMAT_VERSION`; no test references that path.
+14. **Snapshots of released data exist for the Core formats; extend them.**
+    `tests/fixtures/release-data/1.4.0/` holds a conversation log, `settings.json`,
+    `codex-auth.json` and `grok-auth.json` written by the 1.4.0 code itself
+    (`pnpm capture:release-data`), with synthetic content, and
+    `tests/cli/release-data.integration.test.ts` loads every snapshot directory
+    through the built CLI: it resumes the conversation and checks the earlier
+    turns and tool result reach the provider, checks the saved settings take
+    effect and survive, and checks each credential file is read. A committed
+    snapshot is never edited; `tests/fixtures/release-data/README.md` gives the
+    rule and the capture command. Still missing: a snapshot of the memory store,
+    and a conversation containing a compaction or rollover fact, which could not
+    be produced from a headless run. A snapshot has to be added at each release
+    that changes a persisted format, and nothing enforces that yet.
+15. **The version rejection is tested on the headless paths; one of them
+    misleads.** A log whose lines carry an unknown `v` is refused by
+    `--resume <id>` with "unsupported log version", exit 1, no provider request
+    and the file unchanged, and the test asserts that. `--resume ls` and
+    `--resume last` go through `withNativeCatalogue`, which skips the
+    conversation with a warning on stderr while stdout says "No saved
+    conversations found." So after an incompatible upgrade a user's
+    conversations would appear to have vanished. Nothing is lost, but the
+    message should say that conversations exist which this build cannot read.
+    The test asserts the stderr diagnostic and the unchanged bytes, and
+    deliberately not the stdout wording. Not covered: the TUI resume picker,
+    and a log in which only later lines carry an unknown version.
 16. **Decide whether `settings.json` gets a version field.** It has none, so an
-    incompatible change cannot be detected on load.
+    incompatible change cannot be detected on load; the snapshot test protects
+    only the values it asserts on. Two related behaviours seen while capturing
+    the snapshot: the file is written as a full dump of defaults, and that dump
+    includes `memory.directory` as an absolute path computed on the machine
+    that wrote it, so a copied settings file points memory at the old machine's
+    path. Separately, a conversation log records its workspace as an absolute
+    path and resume is refused from any other directory, so a moved or renamed
+    project cannot resume its conversations.
 17. **Test the automatic triggers.** The compaction tests use `/compact` with
     automatic compaction disabled, and no test sets `agent.sessionRollover.*`.
     Both features are Core because they run unprompted, and the unprompted path

@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "activeAccountId": "snapshot-codex-account",
+  "accounts": [
+    {
+      "id": "snapshot-codex-account",
+      "label": "snapshot-codex-account",
+      "tokens": {
+        "access_token": "codex-snapshot-fake-access-token",
+        "refresh_token": "codex-snapshot-fake-refresh-token",
+        "account_id": "snapshot-codex-account"
+      },
+      "addedAt": "2026-11-21T15:56:00.939Z"
+    }
+  ]
+}

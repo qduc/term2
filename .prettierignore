@@ -16,3 +16,6 @@ website/**
 web-client/**
 # Written by parity scripts; their own formatting is canonical.
 parity/goldens/
+
+# Snapshots of what a release wrote: product-written bytes, never reformatted (see its README).
+tests/fixtures/release-data/

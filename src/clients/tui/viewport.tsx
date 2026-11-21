@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, renderToString, useBoxMetrics, useStdout, Text, type DOMElement, type Key } from 'ink';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Box, measureElement, renderToString, useStdout, Text, type DOMElement, type Key } from 'ink';
 import { ThemeProvider, useTheme } from './presentation/components/theme.js';
 import { SkinProvider, useSkin } from './presentation/skins/SkinContext.js';
 import type { TuiState } from './state.js';
@@ -40,6 +40,37 @@ function useLegacyWindow(state: TuiState, epoch: number): TuiState {
   return useMemo(() => (windowed ? { ...state, ...windowed } : state), [state, windowed]);
 }
 
+/**
+ * Measure only the controls box height after React commits (never inside Ink's
+ * synchronous `emitLayoutListeners` / `resetAfterCommit`, which can trigger
+ * React nested-update #185 loops when layout shifts during commit).
+ */
+function useControlsHeight(
+  ref: React.RefObject<DOMElement | null>,
+  stdout: NodeJS.WriteStream,
+): { readonly hasMeasured: boolean; readonly height: number } {
+  const [measured, setMeasured] = useState<{ readonly hasMeasured: boolean; readonly height: number }>({
+    hasMeasured: false,
+    height: 0,
+  });
+  const measure = useCallback(() => {
+    const node = ref.current;
+    const next = node ? { hasMeasured: true, height: measureElement(node).height } : { hasMeasured: false, height: 0 };
+    setMeasured((current) =>
+      current.hasMeasured === next.hasMeasured && current.height === next.height ? current : next,
+    );
+  }, [ref]);
+
+  useEffect(measure);
+  useEffect(() => {
+    stdout.on('resize', measure);
+    return () => {
+      stdout.off('resize', measure);
+    };
+  }, [stdout, measure]);
+  return measured;
+}
+
 /** Render the skin and markdown at the terminal width, then scroll by visible rows. */
 export function useTranscriptViewport(
   history: TuiState,
@@ -53,7 +84,7 @@ export function useTranscriptViewport(
   const { stdout } = useStdout();
   // Ink accepts an unattached ref, though the metrics hook's type omits null.
   const controlsRef = useRef<DOMElement>(null!);
-  const controls = useBoxMetrics(controlsRef);
+  const controls = useControlsHeight(controlsRef, stdout);
   // Stay below Ink's fullscreen threshold and leave a margin above the controls.
   const maxHeight = Math.max(1, rows - 1);
   const spaceAboveControls = controls.hasMeasured ? Math.max(0, maxHeight - controls.height) : 0;

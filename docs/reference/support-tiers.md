@@ -69,7 +69,7 @@ items are stable and depended on by old conversation logs; they are not unfinish
 | Restart | `/restart [stop]` | Supported | |
 | Task manager and budget panel | Ctrl+G, Ctrl+B | Supported | |
 | Picker keys | Tab, arrows, Ctrl+F, Ctrl+N, Ctrl+R, Ctrl+D | Supported | |
-| Themes | `ui.theme` | Core (`auto`, `dark`, `light`), Supported (`high-contrast`, `mono`) | An unreadable default is a broken TUI. |
+| Themes | `ui.theme` | Supported | Maintainer decision: not important enough to block a release. |
 | Skins | `ui.skin` | Core (`classic`), Supported (`rail`, `cards`, `ledger`, `zen`) | `classic` is the default. |
 | Desktop notifications | `app.notifications*` | Supported | Depends on terminal support. |
 | First-run setup, home-directory guard | automatic | Supported | |

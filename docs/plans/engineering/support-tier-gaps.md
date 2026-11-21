@@ -128,9 +128,6 @@ model request.
 
 ### 5. Small Core items without a check
 
-- Themes `auto`, `dark` and `light`: no test changes or renders a theme. Either
-  add a check or move them to Supported; a colour assertion is weak evidence, so
-  moving them is the cheaper honest answer.
 - `/settings reset`, the `-r` short flag and `--show-reasoning`: not run by a test.
 - `grep` and `glob`: only their error paths are asserted.
 - Environment overrides: three of the entries in `SETTING_ENV_VARIABLES` are

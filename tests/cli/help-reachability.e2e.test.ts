@@ -61,12 +61,11 @@ for (const [cols, rows] of [
       await waitForHarnessComposerValue(idle, '/', { timeoutMs: 60_000 });
       await terminal.waitForOutput('Commands', 30_000);
       // The title can arrive in a frame before the box's bottom border; slice only the finished box.
-      const boxDeadline = Date.now() + 30_000;
       const finishedBox = () => {
         const fresh = terminal.getVisibleOutput().slice(menuOffset);
         return fresh.lastIndexOf('╰') > fresh.lastIndexOf('╭');
       };
-      while (!finishedBox() && Date.now() < boxDeadline) await new Promise((resolve) => setTimeout(resolve, 50));
+      await expect.poll(finishedBox, { timeout: 30_000 }).toBe(true);
       const menu = terminal.getVisibleOutput().slice(menuOffset);
       expect(menu).toContain('╭');
       expect(menu).toContain('Commands');
@@ -87,16 +86,23 @@ for (const [cols, rows] of [
         'copy',
         'usage',
         'compact',
+        'handoff',
         'rewind',
         'retry',
-        'retry-turn',
-        'retry-tool',
       ]) {
         terminal.write('\x1b[B');
         await terminal.waitForOutput(`❯ /${name}`, 30_000);
       }
       await terminal.waitForOutput('Rewind & Retry', 30_000);
-      terminal.write('help');
+      const retryOffset = terminal.getVisibleOutput().length;
+      terminal.write('retry');
+      await waitForHarnessComposerValue(idle, '/retry', { timeoutMs: 60_000 });
+      const retryMenu = () => terminal.getVisibleOutput().slice(retryOffset);
+      await expect.poll(retryMenu, { timeout: 30_000 }).toMatch(/Command: \/retry[\s\S]*❯ \/retry +Resend[\s\S]*╰/);
+      expect(retryMenu()).not.toMatch(/\/retry-(?:tool|turn)/);
+      terminal.write('\x1b');
+      await waitForHarnessComposerValue(idle, '', { timeoutMs: 60_000 });
+      terminal.write('/help');
       await waitForHarnessComposerValue(idle, '/help', { timeoutMs: 60_000 });
       terminal.write('\r');
       // Help must be emitted in full without keyboard paging, even on a short terminal.
@@ -104,6 +110,7 @@ for (const [cols, rows] of [
       const helpOutput = terminal.getVisibleOutput();
       expect(helpOutput).not.toMatch(/Profile:|\bBARE\b/);
       expect(helpOutput).toMatch(/Application\r?\n +\/help —/);
+      expect(helpOutput).toContain('/retry tool continues from the last tool result');
       expect(helpOutput).toContain('/settings reset <key>');
       expect(helpOutput.lastIndexOf('Keyboard shortcuts')).toBeGreaterThan(helpOutput.lastIndexOf('/help —'));
       // Every browsable command should appear in help.
@@ -113,7 +120,10 @@ for (const [cols, rows] of [
       );
       const commands = [...table.matchAll(/name: '([^']+)'/g)].map((match) => match[1]!);
       expect(commands.length).toBeGreaterThan(20);
-      for (const command of commands.filter((name) => name !== 'undo')) expect(helpOutput).toContain(`/${command} —`);
+      for (const command of commands.filter((name) => !['undo', 'retry-turn', 'retry-tool'].includes(name))) {
+        expect(helpOutput).toContain(`/${command} —`);
+      }
+      expect(helpOutput).not.toMatch(/\/(?:undo|retry-tool|retry-turn) —/);
       // Dropped by owner scope, or never in legacy.
       for (const command of [
         '/profile',
@@ -135,6 +145,20 @@ for (const [cols, rows] of [
         expect(helpOutput).not.toContain(`${command} —`);
       }
       expect(terminal.getVisibleOutput()).not.toMatch(/Lines 1[–-]\d+ of \d+/);
+      if (cols === 60) {
+        for (const [command, notice] of [
+          ['/ReTrY  TOOL', 'No tool call to retry.'],
+          ['/retry-tool', 'No tool call to retry.'],
+          ['/retry tool extra', 'Unrecognised argument "tool"'],
+          ['/retr last', 'Ambiguous command /retr'],
+        ] as const) {
+          const offset = terminal.getVisibleOutput().length;
+          terminal.write(command);
+          await waitForHarnessComposerValue(idle, command, { timeoutMs: 60_000 });
+          terminal.write('\r');
+          await expect.poll(() => terminal.getVisibleOutput().slice(offset), { timeout: 30_000 }).toContain(notice);
+        }
+      }
     } finally {
       terminal.dispose();
       fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

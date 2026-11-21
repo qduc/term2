@@ -52,6 +52,9 @@ export function resolveTypedCommand(input: string): TypedCommand {
   const candidates = exact ? [exact] : LEGACY_COMMANDS.filter((command) => command.name.startsWith(lower));
   if (candidates.length === 1) {
     const entry = candidates[0]!;
+    // Normalize just the named retry modes before the session's rewind parser sees /retry.
+    const retryTarget = entry.name === 'retry' ? /^\s+(turn|tool)\s*$/i.exec(rest)?.[1] : undefined;
+    if (retryTarget) return { kind: 'command', input: `/retry-${retryTarget.toLowerCase()}` };
     return { kind: 'command', input: `/${entry.name}${rest}` };
   }
   if (OTHER_COMMANDS.has(lower)) return { kind: 'command', input: `/${lower}${rest}` };

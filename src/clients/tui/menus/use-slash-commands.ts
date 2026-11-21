@@ -26,31 +26,24 @@ function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[
     return commands.filter(({ alias }) => !alias);
   }
 
-  return commands
-    .filter((cmd) => {
-      const lowerName = cmd.name.toLowerCase();
+  const matches = commands.filter((cmd) => {
+    const lowerName = cmd.name.toLowerCase();
+    return lowerFilter.includes(' ') ? lowerFilter.startsWith(lowerName + ' ') : lowerName.includes(lowerFilter);
+  });
+  const primaryMatches = matches.filter(({ alias }) => !alias);
+  return (primaryMatches.length ? primaryMatches : matches).sort((a, b) => {
+    const aLower = a.name.toLowerCase();
+    const bLower = b.name.toLowerCase();
 
-      // Case 1: Typing the command (e.g. "mod" matches "model")
-      if (!lowerFilter.includes(' ')) {
-        return lowerName.includes(lowerFilter);
-      }
+    const aStartsWith = aLower.startsWith(lowerFilter);
+    const bStartsWith = bLower.startsWith(lowerFilter);
 
-      // Case 2: Command with arguments (e.g. "model gpt-4" matches "model")
-      return lowerFilter.startsWith(lowerName + ' ');
-    })
-    .sort((a, b) => {
-      const aLower = a.name.toLowerCase();
-      const bLower = b.name.toLowerCase();
+    if (aStartsWith && !bStartsWith) return -1;
+    if (!aStartsWith && bStartsWith) return 1;
 
-      const aStartsWith = aLower.startsWith(lowerFilter);
-      const bStartsWith = bLower.startsWith(lowerFilter);
-
-      if (aStartsWith && !bStartsWith) return -1;
-      if (!aStartsWith && bStartsWith) return 1;
-
-      // Maintain alphabetical order for items within the same priority
-      return aLower.localeCompare(bLower);
-    });
+    // Maintain alphabetical order for items within the same priority
+    return aLower.localeCompare(bLower);
+  });
 }
 
 function shouldAutocomplete(command: SlashCommand, filter: string): boolean {

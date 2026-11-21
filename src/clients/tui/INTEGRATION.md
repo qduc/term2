@@ -137,9 +137,11 @@ Pasted images arrive from ink-prompt as editor-only private-use markers plus ima
 
 `/settings` opens the settings picker. Tab and the left and right arrows cycle through Models, Appearance, Permissions, Tools, Context, Limits, Hooks, and Advanced. Typing searches all visible settings with their section shown when space allows. Enter toggles a boolean or opens the value editor. Escape returns from an editor to the settings list or closes the list. Editable credentials are masked in both the list and the value editor. Changes go through the session settings command, which reports the result even if the picker closes while the change is pending. Use `/settings reset <key>` to restore a default.
 
-The slash menu groups commands under Setup, Conversation, Rewind & Retry, and Application. Typing narrows the list by command name and includes aliases such as `/undo`. Tab inserts the selected command in the composer. Enter selects it. The visible item window adapts to terminal height and shows up to ten commands. `/help` uses the same browse groups.
+The slash menu groups commands under Setup, Conversation, Rewind & Retry, and Application. Typing narrows the list by command name and shows aliases when no primary command matches. Tab inserts the selected command in the composer. Enter selects it. The visible item window adapts to terminal height and shows up to ten commands. `/help` uses the same browse groups.
 
 `/undo` is an alias of `/rewind`: the bare command opens the same target/action picker, while explicit targets use the same receipt-backed edit/resend path. The default action restores the selected prompt into the composer without submitting it.
+
+`/retry` resends the latest prompt through the rewind path and accepts explicit rewind targets. `/retry turn` regenerates from the latest original prompt through the native retry path. `/retry tool` resumes generation with the last retained tool result. The earlier `/retry-turn` and `/retry-tool` spellings still work.
 
 On attachment, the TUI shows the continuation hint for a recovered interrupted turn or a last cancelled turn. The notice is initialized from the snapshot, not emitted on live cancellation, and clears on the next submitted input. Completed and failed turns do not acquire this hint.
 

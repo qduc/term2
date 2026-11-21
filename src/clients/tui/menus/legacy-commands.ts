@@ -60,6 +60,7 @@ export const COMMAND_SECTIONS: readonly (readonly [string, readonly Entry[]])[] 
       { name: 'copy', description: 'Copy the latest response (use /copy N for an earlier one)' },
       { name: 'usage', description: 'Show token usage for this session' },
       { name: 'compact', description: 'Summarize older conversation turns' },
+      { name: 'handoff', description: 'Send the last response to another model for review' },
     ],
   ],
   [
@@ -67,10 +68,9 @@ export const COMMAND_SECTIONS: readonly (readonly [string, readonly Entry[]])[] 
     [
       { name: 'rewind', description: 'Rewind to a user turn and restore its prompt', expectsArgs: true },
       { name: 'undo', description: 'Alias for /rewind', expectsArgs: true, alias: true },
-      { name: 'retry', description: 'Resend the last user turn or choose one', expectsArgs: true },
-      { name: 'retry-turn', description: 'Regenerate the latest turn from its original prompt' },
-      { name: 'retry-tool', description: 'Retry the last tool call' },
-      { name: 'handoff', description: 'Send the last response to another model for review' },
+      { name: 'retry', description: 'Resend the last prompt · /retry tool', expectsArgs: true },
+      { name: 'retry-turn', description: 'Alias for /retry turn', alias: true },
+      { name: 'retry-tool', description: 'Alias for /retry tool', alias: true },
     ],
   ],
   [
@@ -79,7 +79,7 @@ export const COMMAND_SECTIONS: readonly (readonly [string, readonly Entry[]])[] 
       { name: 'help', description: 'Show commands and keyboard shortcuts' },
       { name: 'bridge', description: 'Connect or disconnect this session from the Discord bridge' },
       { name: 'restart', description: 'Reload Term2 (use /restart stop to stop background work)' },
-      { name: 'quit', description: 'Exit Term2' },
+      { name: 'quit', description: 'Exit the application' },
     ],
   ],
 ];

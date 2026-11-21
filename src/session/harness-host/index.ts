@@ -15,7 +15,7 @@ const term2TurnText: TurnText = {
   notice: (text) => `${MODE_NOTICE_PREFIX}${text}`,
   retriesExhausted: (provider, attempts) =>
     `Could not reach ${provider} after ${attempts} attempts. No model response was received.` +
-    '\n\nType /retry-turn to try again, or send a new message to move on.',
+    '\n\nType /retry turn to try again, or send a new message to move on.',
   compactionHardFit: (reason) =>
     `${
       reason === 'single_turn_too_large'

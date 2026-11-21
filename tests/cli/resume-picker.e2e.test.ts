@@ -472,7 +472,7 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   session.write('\r');
   await session.waitForOutput("Missing parent or Profile 'user:missing'", 30_000);
   await send('/help');
-  await session.waitForOutput('/retry-tool — Retry the last tool call', 30_000);
+  await session.waitForOutput('/retry tool continues from the last tool result', 30_000);
 });
 
 it(

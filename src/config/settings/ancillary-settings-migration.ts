@@ -1,13 +1,15 @@
-import { type SettingsData } from './settings-schema.js';
+import { type SettingsData, ToolsMaxOutputCharsSchema } from './settings-schema.js';
 
 type Migration = {
   target: string;
   legacy: string[];
   /**
-   * Legacy values that only record an old default. Settings files store every value, defaults included,
-   * so carrying one of these over would keep the old default in force instead of the target's new one.
+   * Which legacy values to carry over; others are dropped. Needed when the target is stricter than the
+   * legacy key (an invalid carried value fails validation of the whole merged settings, resetting every
+   * setting to its default), or when a legacy value only records an old default: settings files store
+   * every value, so carrying it would keep the old default in force instead of the target's new one.
    */
-  ignoredLegacyValues?: unknown[];
+  accepts?: (value: unknown) => boolean;
 };
 
 const MIGRATIONS: Migration[] = [
@@ -19,7 +21,11 @@ const MIGRATIONS: Migration[] = [
   },
   { target: 'agent.decisionModel', legacy: ['agent.decisionShadowModel', 'agent.autoApproveDecisionShadowModel'] },
   // The limit now bounds every tool result, not only shell output, and its default fell from 40,000 to 20,000.
-  { target: 'tools.maxOutputChars', legacy: ['shell.maxOutputChars'], ignoredLegacyValues: [40000] },
+  {
+    target: 'tools.maxOutputChars',
+    legacy: ['shell.maxOutputChars'],
+    accepts: (value) => value !== 40000 && ToolsMaxOutputCharsSchema.safeParse(value).success,
+  },
 ];
 
 function getOwnValue(object: unknown, path: string): { found: boolean; value?: unknown } {
@@ -63,7 +69,7 @@ export function migrateLegacyAncillarySettings(
           candidate.found &&
           candidate.value !== undefined &&
           candidate.value !== null &&
-          !migration.ignoredLegacyValues?.includes(candidate.value),
+          (migration.accepts?.(candidate.value) ?? true),
       );
     if (!legacyValue) continue;
 

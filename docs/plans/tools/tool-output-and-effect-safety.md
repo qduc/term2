@@ -160,8 +160,10 @@ and 99.6% of `read_file` results are unaffected.
   over the limit after its strings were trimmed.
 - Migration: settings files store every value, including defaults. A saved
   `shell.maxOutputChars` moves to `tools.maxOutputChars` unless it is 40,000, the
-  old default, which would otherwise keep the old limit in force
-  (`config/settings/ancillary-settings-migration.ts`).
+  old default, which would otherwise keep the old limit in force, or fails the new
+  field's schema (below 1,000, not an integer). An invalid carried value would fail
+  validation of the whole merged settings and silently reset every setting to its
+  default (`config/settings/ancillary-settings-migration.ts`).
 
 ## Milestone 1 — bounded tool results
 

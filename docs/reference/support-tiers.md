@@ -152,7 +152,7 @@ set does not yet back.
 | --- | --- | --- | --- |
 | Conversation log | automatic | Core | Every other conversation feature is replayed from it. |
 | Context compaction | `agent.contextCompaction.*`, automatic | Core | Runs without being asked in any long session. |
-| Session rollover | `agent.sessionRollover.*`, automatic | Core | Same reason. |
+| Session rollover | `agent.sessionRollover.*`: an automatic reminder at each milestone (`ContextMilestoneReminder`); the session rotates only when the model then calls `session_rollover` | Core | The reminder is sent without being asked in any long session. |
 | Settings load, save and environment overrides | `settings.json`, `SETTING_ENV_VARIABLES` | Core | |
 | AGENTS.md instructions | `~/.agents/AGENTS.md`, `<cwd>/AGENTS.md` | Core | |
 | Local workspace admission | launch directory | Core | Decides what may be written. |

@@ -37,7 +37,7 @@ const PROMPTS = { alpha: 'alpha question', bravo: 'bravo question', charlie: 'ch
 const SUMMARY_REQUEST = '[Host context-compaction request]';
 
 type Wire = { role: string; content?: unknown; tool_calls?: { id: string }[]; tool_call_id?: string };
-type Request = { messages: Wire[] };
+type Request = { messages: Wire[]; tools?: { function?: { name?: string } }[] };
 type Fact = Record<string, any>;
 
 const text = (message: Wire): string =>
@@ -406,6 +406,30 @@ describe('automatic context compaction', () => {
     async () => {
       const under = await converse({ usage: 59_000, env: { TERM2_SUPERVISED: '1' }, settings: conflictingSettings });
       expectUncompacted(under);
+    },
+  );
+
+  // The milestone reminder tells the model to call `session_rollover`, a tool only the interactive TUI offers.
+  // A headless run must not be told to call a tool its request does not carry.
+  it(
+    'sends no rollover reminder in a headless run, whose requests carry no session_rollover tool',
+    { timeout: 60_000 },
+    async () => {
+      const run = await converse({
+        usage: 60_000,
+        settings: {
+          agent: {
+            sessionRollover: { enabled: true, milestones: [1000], autoBrief: true },
+            contextCompaction: { enabled: false },
+          },
+        },
+      });
+      expect(run.bravoRequests.map((r) => r.kind)).toEqual(['main', 'main', 'main']);
+      const wire = JSON.stringify(run.bravoRequests.map((r) => r.body.messages));
+      expect(wire, 'the model was told to call session_rollover').not.toContain('crossed rollover milestone');
+      const tools = run.all.flatMap((r) => r.body.tools?.map((tool) => tool.function?.name) ?? []);
+      expect(tools, 'the fixture saw no tool list').toContain('read_file');
+      expect(tools).not.toContain('session_rollover');
     },
   );
 });

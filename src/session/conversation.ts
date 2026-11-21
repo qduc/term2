@@ -322,7 +322,8 @@ function conversation(
             return capabilities!.prepareRequest(request, input);
           },
           normalStop: capabilities!.normalStop,
-          ...(generation.supplied?.contextMilestones
+          // The reminder tells the model to call session_rollover, so only where that tool is offered.
+          ...(generation.supplied?.contextMilestones && generation.supplied.modelRollover !== false
             ? { contextMilestones: generation.supplied.contextMilestones }
             : {}),
           compactionHold,

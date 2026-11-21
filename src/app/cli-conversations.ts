@@ -6,6 +6,7 @@ import { readDirectListDetails } from '../session/list-preview.js';
 import { withNativeCatalogue, type NativeCatalogueEntry } from './native-catalogue.js';
 import { resolveDirectRemoteConnection } from './remote-config.js';
 import type { SessionOptions } from './cli-args.js';
+import { formatResumeList } from '../session/conversation/resume-list.js';
 import { displaySessionId, storedSessionId } from '../protocol/session-id.js';
 
 const NATIVE_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -33,13 +34,37 @@ function belongsTo({ metadata }: ReturnType<typeof readDirectSessionStart>, sele
   return normalize(metadata.workspace) === normalize(selected.root);
 }
 
-function recent(directory: string, selected: Selection): readonly NativeCatalogueEntry[] {
-  return withNativeCatalogue(directory, (catalogue) =>
-    catalogue.list({
+type Unreadable = readonly { readonly logical: string; readonly reason: string }[];
+
+function recentWithUnreadable(
+  directory: string,
+  selected: Selection,
+): { entries: readonly NativeCatalogueEntry[]; unreadable: Unreadable } {
+  return withNativeCatalogue(directory, (catalogue) => ({
+    entries: catalogue.list({
       ...selected,
       ...(selected.target === 'local' ? {} : { binding: { client: 'ssh', id: selected.target } }),
     }),
-  );
+    unreadable: catalogue.unreadable,
+  }));
+}
+
+/**
+ * Says that conversations exist which this build cannot open, and why, so a missing list is not read as lost
+ * history (for example after a downgrade). The reason is the reader's own message, which names the file.
+ */
+function describeUnreadable(unreadable: Unreadable): string {
+  if (unreadable.length === 0) return '';
+  const count = `${unreadable.length} saved conversation${unreadable.length === 1 ? '' : 's'}`;
+  const newer = unreadable.some((row) => row.reason.includes('unsupported log version'));
+  return [
+    `${count} cannot be read by this version of Term2${
+      newer ? ' (written in a log format it does not know; a newer Term2 probably wrote it)' : ''
+    }. ${unreadable.length === 1 ? 'It was' : 'They were'} left unchanged.`,
+    ...unreadable.slice(0, 5).map((row) => `  ${row.reason}`),
+    ...(unreadable.length > 5 ? [`  and ${unreadable.length - 5} more`] : []),
+    ...(newer ? ['Open them with the Term2 version that wrote them, or update Term2.'] : []),
+  ].join('\n');
 }
 
 /** A resume refusal the CLI prints as is, without its `error ` prefix, as legacy cli.tsx does. */
@@ -63,8 +88,13 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
   const selected = await selection(options);
   let lineage: ReturnType<typeof readDirectSessionStart>;
   if (reference === 'last') {
-    const latest = recent(directory, selected)[0];
-    if (!latest) throw notFound(reference);
+    const { entries, unreadable } = recentWithUnreadable(directory, selected);
+    const latest = entries[0];
+    if (!latest) {
+      const missing = notFound(reference);
+      if (unreadable.length === 0) throw missing;
+      throw new ResumeRefusal(`${describeUnreadable(unreadable)}\n${missing.message}`);
+    }
     return { ...options, resumeId: latest.id };
   } else {
     if (!NATIVE_ID.test(reference) || !existsSync(path.join(directory, `${reference}.jsonl`))) {
@@ -94,12 +124,13 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
 
 /** Rows for legacy's `--resume ls` listing (src/shared/utils/resume-list.ts formats them), from the native catalogue. */
 export async function listNativeConversations(directory: string, options: SessionOptions) {
-  const conversations = recent(directory, await selection(options)).slice(0, 10);
+  const found = recentWithUnreadable(directory, await selection(options));
+  const conversations = found.entries.slice(0, 10);
   const details = readDirectListDetails(
     directory,
     conversations.map((lineage) => lineage.id),
   );
-  return conversations.map((lineage) => ({
+  const rows = conversations.map((lineage) => ({
     id: displaySessionId(lineage.id),
     updatedAt: lineage.updated,
     ...details.get(lineage.id),
@@ -108,4 +139,13 @@ export async function listNativeConversations(directory: string, options: Sessio
     model: lineage.model,
     messageCount: lineage.displayed ?? lineage.messages,
   }));
+  // The rows are what the listing shows; `unreadable` rides along for the text around them.
+  return Object.assign(rows, { unreadable: found.unreadable });
+}
+
+/** The text of `--resume ls`: the list, or "No saved conversations found.", and a note on any unreadable logs. */
+export function listingText(rows: Awaited<ReturnType<typeof listNativeConversations>>): string {
+  // A directory that is really empty says so; one holding only unreadable logs must not read as empty.
+  const list = rows.length === 0 && rows.unreadable.length > 0 ? '' : formatResumeList(rows);
+  return [list, describeUnreadable(rows.unreadable)].filter(Boolean).join('\n\n');
 }

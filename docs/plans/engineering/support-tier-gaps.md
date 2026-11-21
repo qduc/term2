@@ -135,18 +135,35 @@ section is a real recording behind every provider, replayed offline.
    history replay. Not covered: the live fetch of the current client version
    and its cache write-back, token refresh through the provider, and credential
    import from `GROK_HOME`. Grok still has no recorded traffic (item 7).
-   Writing the tests surfaced product behaviour worth a decision:
-   - A 426 reaches the user as the SDK's text, "426 Your Grok CLI version is
-     outdated", with nothing saying what to do about it. Term2 is the client
-     here, so the remedy is a Term2 or version-cache update, not a Grok CLI one.
-   - On the same failure a `--json` run emits a `final` event with empty
-     `finalText` before the `error` event.
-   - An incomplete Grok stream is reported as "OpenAI streamed response ended
-     without a completion."
-   - `GROK_BASE_URL` redirects model requests but not `fetchGrokModels`.
-   - A lead, not yet confirmed: when the 426 was temporarily made retryable
-     with `agent.retryAttempts` at 2, the server saw six requests, which
-     suggests two retry layers multiplying.
+   Writing the tests surfaced these:
+   - Fixed: a 426 reached the user as the proxy's text, "Your Grok CLI version
+     is outdated", with nothing saying what to do. `explainOutdatedClient` in
+     `grok.provider.ts` now adds the version Term2 sent and what refreshes it:
+     the version is looked up from x.ai and cached for six hours, so the
+     remedies are deleting the cache file and updating Term2.
+   - Fixed: a stream that ended early was reported as "OpenAI streamed
+     response ended without a completion." for every provider that shares
+     `openai-responses-model.ts`, and as "OpenAI-compatible …" for those that
+     share `openai-chat-completions-model.ts`. Both messages no longer name a
+     provider.
+   - Fixed: `GROK_BASE_URL` redirected model requests but not
+     `fetchGrokModels`. Both now use `grokBaseUrl`.
+   - Open, a decision: a failed `--json` run emits a `final` event before the
+     `error` event, with empty `finalText` on a 426 and with the partial text
+     when a stream is cut short. `OutputState.endTurn` in
+     `src/clients/headless/output.ts` emits `final` for every ended turn, and
+     two tests read usage and the terminal cause from it on runs that did not
+     complete, so removing it is a contract change. The narrowest change
+     would leave `final` in place and omit the partial text when the outcome
+     is `failed`.
+   - Confirmed, and not specific to Grok: with `agent.retryAttempts` at n, a
+     provider that keeps answering 503 receives 2 × (n + 1) requests for n of
+     1 or 2, and one request for n of 0. The same counts were seen for
+     `openai`, `grok`, `codex` and both chat custom types. `physicalModelStream`
+     in `src/model/retry.ts` makes n + 1 attempts, and the engine in
+     `@qduc/agent-core` then retries the turn, which runs them again. The
+     final error reports the engine's count, three, for six requests. A fix
+     belongs in `@qduc/agent-core` and needs a decision on what n counts.
 7. **Record what has only been faked.** Recorded fixtures exist for OpenAI over
    HTTP, Google, OpenCode's Chat and Anthropic protocols, and, recorded through
    OpenRouter, the `openai-compatible`, custom `openai` and `anthropic` custom
@@ -208,9 +225,15 @@ section is a real recording behind every provider, replayed offline.
     their exclusion, and its reason now says the type is Supported. The three
     chat types behaved identically. Findings:
     - A stream that ends after partial text makes a `--json` run emit a
-      `final` event carrying the partial text, and then the `error` event.
-    - A provider that answered HTTP 500 is recorded as "Could not reach
-      <provider> after 1 attempts. No model response was received."
+      `final` event carrying the partial text, and then the `error` event
+      (open; see item 6).
+    - Fixed: a provider that answered HTTP 500 was recorded as "Could not
+      reach <provider> after 1 attempts. No model response was received."
+      `terminalNotice` in `src/session/harness-host/index.ts` now says the
+      provider answered with an error when the failure kind is `provider`,
+      `rate_limit` or `authentication`, and keeps the engine's wording for a
+      `network` or unclassified failure.
+      `provider-retries-exhausted-notice.blackbox.ts` covers both.
     - The older scenarios in `provider-session-resilience-scenarios.ts` assert
       only a non-zero exit and no answer text, which a CLI that failed to
       start would also satisfy.
@@ -265,18 +288,19 @@ section is a real recording behind every provider, replayed offline.
     and a conversation containing a compaction or rollover fact, which could not
     be produced from a headless run. A snapshot has to be added at each release
     that changes a persisted format, and nothing enforces that yet.
-15. **The version rejection is tested on the headless paths; one of them
-    misleads.** A log whose lines carry an unknown `v` is refused by
-    `--resume <id>` with "unsupported log version", exit 1, no provider request
-    and the file unchanged, and the test asserts that. `--resume ls` and
-    `--resume last` go through `withNativeCatalogue`, which skips the
-    conversation with a warning on stderr while stdout says "No saved
-    conversations found." So after an incompatible upgrade a user's
-    conversations would appear to have vanished. Nothing is lost, but the
-    message should say that conversations exist which this build cannot read.
-    The test asserts the stderr diagnostic and the unchanged bytes, and
-    deliberately not the stdout wording. Not covered: the TUI resume picker,
-    and a log in which only later lines carry an unknown version.
+15. **The version rejection is tested on the headless paths.** A log whose
+    lines carry an unknown `v` is refused by `--resume <id>` with "unsupported
+    log version", exit 1, no provider request and the file unchanged.
+    `--resume ls` and `--resume last` go through `withNativeCatalogue`, which
+    skips such a conversation. Fixed: stdout used to say "No saved
+    conversations found." with the reason only on stderr, so after a downgrade
+    a user's conversations appeared to have vanished. `listingText` in
+    `src/app/cli-conversations.ts` now says how many saved conversations this
+    version cannot read and why, and `--resume last` says the same when
+    nothing readable is left. An empty directory still says none were found.
+    `tests/cli/release-data.integration.test.ts` asserts the wording. Not
+    covered: the TUI resume picker, and a log in which only later lines carry
+    an unknown version.
 16. **Decide whether `settings.json` gets a version field.** It has none, so an
     incompatible change cannot be detected on load; the snapshot test protects
     only the values it asserts on. Two related behaviours seen while capturing

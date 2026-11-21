@@ -9,13 +9,47 @@ import { term2CompactionPrompts } from './compaction-prompts.js';
 import { term2ContextEstimator } from './context-estimate.js';
 
 const MODE_NOTICE_PREFIX = '[Mode Notice] ';
+const RETRY_HINT = '\n\nType /retry turn to try again, or send a new message to move on.';
+
+function attemptCount(attempts: number): string {
+  return `${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}`;
+}
+
+const UNREACHED_LEAD = /^Could not reach (.+) after (\d+) attempts?\. No model response was received\./;
+
+/** The notice stored with a turn's terminal fact: the engine's own, with a retries-exhausted lead made precise. */
+export function terminalNotice(result: {
+  readonly notice?: string;
+  readonly kind: string;
+  readonly error?: { readonly kind: string };
+}): string {
+  const notice = result.notice ?? '';
+  return result.kind === 'failed' && result.error ? describeRetriesExhausted(notice, result.error) : notice;
+}
+
+/** The failure kinds that can only come from a response: the provider was reached and refused or failed. */
+const ANSWERED_KINDS = new Set(['provider', 'rate_limit', 'authentication']);
+
+/**
+ * The engine's `retriesExhausted` seam receives only the provider and the attempt count, so it must
+ * assume the provider was unreachable. The failed turn's error says more: for the kinds above a response
+ * did arrive, so the lead is rewritten. A `network` or unclassified failure keeps the engine's wording.
+ */
+function describeRetriesExhausted(notice: string, error: { readonly kind: string }): string {
+  if (!ANSWERED_KINDS.has(error.kind)) return notice;
+  const match = UNREACHED_LEAD.exec(notice);
+  if (!match) return notice;
+  const [lead, provider, attempts] = match as unknown as [string, string, string];
+  return `${provider} answered with an error after ${attemptCount(
+    Number(attempts),
+  )}, so no model response was produced.${notice.slice(lead.length)}`;
+}
 
 const term2TurnText: TurnText = {
   // Every harness notice is admitted as a user message with this prefix.
   notice: (text) => `${MODE_NOTICE_PREFIX}${text}`,
   retriesExhausted: (provider, attempts) =>
-    `Could not reach ${provider} after ${attempts} attempts. No model response was received.` +
-    '\n\nType /retry turn to try again, or send a new message to move on.',
+    `Could not reach ${provider} after ${attemptCount(attempts)}. No model response was received.${RETRY_HINT}`,
   compactionHardFit: (reason) =>
     `${
       reason === 'single_turn_too_large'

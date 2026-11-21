@@ -5,6 +5,7 @@ import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import {
   GROK_CONSTANT_CLIENT_VERSION,
   GROK_FIXTURE_MODEL,
+  createdFrame,
   grokConfigDir,
   grokEnvironment,
   grokSettings,
@@ -58,6 +59,8 @@ type RunOptions = {
   retryAttempts?: number;
   env?: Record<string, string | undefined>;
   baseUrlPath?: string;
+  /** Replaces the default `--json` chat run, for commands that are not a turn. */
+  args?: string[];
 };
 
 type RunResult = { run: BlackBoxRun; events: Array<Record<string, any>> };
@@ -86,7 +89,7 @@ async function runGrok(options: RunOptions): Promise<RunResult> {
   });
   const run = await lease.runCli({
     cwd: lease.root,
-    args: ['--lite', '--provider', 'grok', '--model', GROK_FIXTURE_MODEL, '--json', 'Say hello.'],
+    args: options.args ?? ['--lite', '--provider', 'grok', '--model', GROK_FIXTURE_MODEL, '--json', 'Say hello.'],
     env,
     cliPath: testCliPath(join(process.cwd(), 'dist/cli.js')),
   });
@@ -183,9 +186,9 @@ describe('Grok proxy contract', () => {
     ).toBe(1);
     expect(clientVersions(), 'x-grok-client-version header per request').toEqual(['4.5.6']);
     expect(result.run.exitCode, describeRun(result)).toBe(1);
-    // The product passes the proxy's status and message through; it adds no remediation text of its own.
+    // The proxy's status and message stay visible; the remedy is asserted in the case below.
     expect(result.events.find((event) => event.type === 'error')).toMatchObject({
-      message: '426 Your Grok CLI version is outdated',
+      message: expect.stringContaining('426 Your Grok CLI version is outdated'),
       code: 'provider',
     });
     expect(result.events.find((event) => event.type === 'final')?.finalText).toBe('');
@@ -193,6 +196,46 @@ describe('Grok proxy contract', () => {
       outcome: 'failed',
       requests: { total: 1, completed: 0, failed: 1 },
     });
+  });
+
+  it('tells the user what a 426 means in Term2 terms and what to do, keeping the original status text', async () => {
+    const result = await runGrok({
+      cache: { version: '4.5.6', ageMs: 0 },
+      reply: (_request, _number, response) => sendJsonError(response, 426, 'Your Grok CLI version is outdated'),
+    });
+    const message = String(result.events.find((event) => event.type === 'error')?.message);
+    expect(message, describeRun(result)).toContain('426 Your Grok CLI version is outdated');
+    expect(message).toContain('Term2 sent 4.5.6');
+    expect(message).toContain(join(lease!.paths.cacheDir, 'grok-client-version.json'));
+    expect(message).toContain('update Term2');
+  });
+
+  it('names no other provider when a Grok Responses stream ends without a completion', async () => {
+    const result = await runGrok({
+      cache: { version: '4.5.6', ageMs: 0 },
+      reply: (_request, _number, response) =>
+        sendSse(response, [createdFrame('resp-grok-cut'), { type: 'response.output_text.delta', delta: 'PARTIAL' }]),
+    });
+    const message = String(result.events.find((event) => event.type === 'error')?.message);
+    expect(message, describeRun(result)).toContain('ended without a completion');
+    expect(message).not.toContain('OpenAI');
+  });
+
+  it('asks the model list from GROK_BASE_URL, including its path prefix', async () => {
+    const result = await runGrok({
+      cache: { version: '4.5.6', ageMs: 0 },
+      baseUrlPath: '/grok-proxy-prefix/v1',
+      args: ['--list-models', 'grok', '--refresh'],
+      reply: (_request, _number, response) => {
+        response.writeHead(200, { 'content-type': 'application/json', connection: 'close' });
+        response.end(JSON.stringify({ data: [{ id: 'grok-fixture-listed' }] }));
+      },
+    });
+    expect(
+      server!.requests.map((request) => request.url),
+      `request paths seen by the loopback server\n${describeRun(result)}\nstdout=${result.run.stdout}`,
+    ).toEqual(['/grok-proxy-prefix/v1/models']);
+    expect(result.run.stdout).toContain('grok-fixture-listed');
   });
 
   it('recovers from a transient 503 and sends the same Grok headers on the replayed request', async () => {

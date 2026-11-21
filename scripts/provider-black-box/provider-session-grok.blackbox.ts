@@ -128,8 +128,8 @@ describe('Grok lifecycle through the shipped CLI (Responses over HTTP, stateless
   it('grok-http.incomplete-stream rejects a stream that ends without a terminal event', async () => {
     await start('incomplete');
     await submitPrompt('exercise the truncated case');
-    // The product's wording: it names OpenAI because the Responses adapter is shared with the OpenAI provider.
-    await child!.waitForVisibleOutput('OpenAI streamed response ended without a completion.', 20_000);
+    // The shared Responses adapter's wording names no provider.
+    await child!.waitForVisibleOutput('Streamed response ended without a completion.', 20_000);
     const visible = child!.getVisibleOutput();
     // The partial text was not promoted to an answer.
     expect(visible).not.toContain('PARTIAL');

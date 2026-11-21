@@ -370,12 +370,23 @@ describe('committed release snapshots', () => {
         expect(resumed.stderr, 'a message, not a stack trace').not.toMatch(/\n\s+at /);
         expect(sha256(logFile), 'resume rewrote the log').toBe(before);
 
-        // The listing says why it has nothing to show. (What it prints on stdout in that case is
-        // not asserted: see the report that accompanies this test.)
+        // The listing does not read as an empty directory: stdout says how many conversations exist
+        // that this version cannot read, and why, and the reader's own message stays on stderr.
         const listing = await runCli(sandbox, ['--resume', 'ls']);
+        expect(listing.stdout, describeRun(listing)).toContain('1 saved conversation cannot be read by this version');
+        expect(listing.stdout).toContain(`${logName}:1: unsupported log version ${UNKNOWN}`);
+        expect(listing.stdout).toContain('newer Term2');
+        expect(listing.stdout).not.toContain('No saved conversations found.');
         expect(listing.stderr).toContain(`unsupported log version ${UNKNOWN}`);
         expect(listing.stderr, 'a message, not a stack trace').not.toMatch(/\n\s+at /);
         expect(sha256(logFile), 'the listing rewrote the log').toBe(before);
+
+        // `--resume last` names the same cause instead of only saying nothing was found.
+        const last = await runCli(sandbox, ['--resume', 'last', RESUME_PROMPT]);
+        expect(last.status, describeRun(last)).toBe(1);
+        expect(last.stderr).toContain('1 saved conversation cannot be read by this version');
+        expect(last.stderr).toContain(`unsupported log version ${UNKNOWN}`);
+        expect(sha256(logFile), '--resume last rewrote the log').toBe(before);
         expect(responsesRequests(provider), 'the provider was called for a log that could not be read').toHaveLength(0);
       },
       TIMEOUT,

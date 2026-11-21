@@ -117,7 +117,9 @@ function sanitizeFrame(
     const headers = sanitizeHeaders(frame.headers) ?? {};
     const sanitizedHeaders = Object.fromEntries(
       Object.entries(headers).map(([key, value]) => {
-        if (/organization|project|account|cf-ray/i.test(key)) {
+        // `x-openrouter-release` is OpenRouter's build identifier: no replay value, and long enough
+        // that the secret scan reads it as a token.
+        if (/organization|project|account|cf-ray|^x-openrouter-release$/i.test(key)) {
           report.redactions.push({ path: `${path}.headers.${key}`, reason: 'provider identifier redacted' });
           return [key, '[REDACTED]'];
         }

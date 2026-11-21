@@ -354,10 +354,18 @@ section is a real recording behind every provider, replayed offline.
 
 ### 4. Release
 
-18. **Gate the publish on the packed artifact.** `publish.yml` builds, runs the
-    guards and the integration tier, and publishes. `scripts/release-smoke.ts`,
-    which installs the tarball outside the repository and replays a recorded
-    turn, is run by hand and has one fixture, for Google.
+18. **Done: the publish is gated on the packed artifact.** `publish.yml` now
+    packs the build and runs `scripts/release-smoke.ts` on the tarball before
+    it publishes: the tarball is installed outside the repository and a
+    recorded provider turn with a tool call is replayed against it. CI's `e2e`
+    job runs the same two commands on every pull request, so the step is
+    exercised before a release depends on it. Two captures are replayed: the
+    Google one, and `openai-compatible/cli-release-turn-v1-openai-chat.json`,
+    recorded through OpenRouter. Limits: the publish step packs a second time
+    when it publishes, so the tarball that was smoke-tested and the one that
+    is published are built from the same `dist/` but are not the same file;
+    and no capture exercises the Responses or Anthropic wire formats from the
+    installed artifact.
 
 ### 5. Small Core items without a check
 

@@ -69,6 +69,15 @@ jobs:
       - name: Run integration tests
         run: pnpm test:integration
 
+      # The last check before the registry write is on the artifact itself: pack the build,
+      # install the tarball outside the repository and replay a recorded provider turn against
+      # it (scripts/release-smoke.ts, loopback only, no credentials). CI's e2e job runs the same
+      # two commands on every pull request, so a failure here is about this build, not the check.
+      - name: Smoke-test the packed tarball
+        run: |
+          pnpm pack --pack-destination "$RUNNER_TEMP/term2-pack"
+          pnpm release:smoke --tgz "$RUNNER_TEMP"/term2-pack/*.tgz
+
       - name: Publish package
         # Tag checkouts are detached; pnpm's git checks would reject them.
         # prepublishOnly checks the built identity before any registry write,

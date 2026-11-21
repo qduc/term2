@@ -157,6 +157,18 @@ for changes after capture.
   request bodies are not compared. Recapture when Google's wire output or the CLI's provider
   transport changes.
 
+- **openai-compatible/cli-release-turn-v1-openai-chat.json** — captured 2026-11-21T17:25:23.178Z
+  from the packed term2 1.4.0 CLI via `pnpm release:smoke --record`, with a custom
+  `openai-compatible` provider aimed at OpenRouter's Chat Completions endpoint; model
+  `mistralai/mistral-nemo`; probe `cli-release-turn-v1`. Two exchanges: the model read `smoke.txt`
+  and answered with its contents. It shows the shipped artifact handling a real Chat Completions
+  stream; it is OpenRouter's server, not any other vendor's. `Authorization`, `set-cookie`,
+  `cf-ray` and `x-openrouter-release` are redacted and the two generation ids canonicalized; the
+  secret scan passed, and the request bodies were checked for account names, the host name and
+  personal paths (the only paths are the smoke run's own temp directory). Reviewer: Claude Code,
+  delegated by the maintainer. Replayed by `pnpm release:smoke --tgz <tarball>` beside the Google
+  capture. Recapture when OpenRouter's wire output or the CLI's chat transport changes.
+
 ## Recapture
 
 Run `pnpm provider:record --from-fake chat-completions success --provider fixture --model chat-fixture --out /absolute/private/path`, then `pnpm provider:fixture:prepare <recording>` and review the generated artifact. `--accept` places the reviewed envelope at `scripts/provider-black-box/fixtures/fixture/fake_chat-completions_success.json`, replacing the committed fixture. Live recording additionally requires `--yes`, credentials, an explicit `--probe`, and a real wire capture; it is never part of PR tests. To record a custom provider type against another base URL (for example OpenRouter's Messages or Chat Completions endpoint), add `--type <type> --base-url <url> --api-key-env <ENV NAME>`; see `pnpm provider:record --help`.

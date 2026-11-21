@@ -25,12 +25,17 @@ import {
   type GrokFixtureServer,
   type RefusingProxy,
 } from '../../scripts/provider-black-box/grok-fixture.js';
+import { startLoopbackProvider, type LoopbackProvider } from '../helpers/loopback-chat-world.js';
 
 const SNAPSHOTS = fileURLToPath(new URL('../fixtures/release-data', import.meta.url));
 /** What the capture script writes in place of the capturing machine's temporary directory. */
 const ROOT_PLACEHOLDER = '/term2-release-data';
 const RESUME_PROMPT = 'Third prompt, sent after the upgrade.';
 const FRESH_PROMPT = 'A fresh prompt after the upgrade.';
+const COMPACTED_RESUME_PROMPT = 'Fourth prompt, sent after the upgrade to a compacted log.';
+const COMPACTED_ANSWER = 'Answer to the compacted log from the loopback provider.';
+/** Snapshots from a release that could compact keep that conversation here, apart from the plain one. */
+const COMPACTED_DIR = 'conversations-compacted';
 const TIMEOUT = 60_000;
 
 const versions = fs
@@ -45,6 +50,7 @@ type Run = { status: number | null; stdout: string; stderr: string };
 
 let root = '';
 let servers: GrokFixtureServer[] = [];
+let chatProviders: LoopbackProvider[] = [];
 /**
  * Every child routes HTTPS here and is refused. A run reaches for hosts the fixtures do not
  * stand in for (the npm update check, the Codex and Grok catalogues), and a fake credential must
@@ -59,6 +65,8 @@ beforeEach(async () => {
 afterEach(async () => {
   await Promise.all([...servers, refusingProxy].map((s) => s.close().catch(() => undefined)));
   servers = [];
+  await Promise.all(chatProviders.map((p) => p.close().catch(() => undefined)));
+  chatProviders = [];
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -86,7 +94,7 @@ type Sandbox = {
 };
 
 /** Copy one snapshot into this test's own directories; the committed files stay untouched. */
-function install(version: string, extraEnv: NodeJS.ProcessEnv = {}): Sandbox {
+function install(version: string, extraEnv: NodeJS.ProcessEnv = {}, logsFolder = 'conversations'): Sandbox {
   const snapshot = path.join(SNAPSHOTS, version);
   const dirs = {
     workspace: path.join(root, 'workspace'),
@@ -99,12 +107,12 @@ function install(version: string, extraEnv: NodeJS.ProcessEnv = {}): Sandbox {
   };
   for (const dir of Object.values(dirs)) fs.mkdirSync(dir, { recursive: true });
 
-  const logs = fs.readdirSync(path.join(snapshot, 'conversations')).filter((name) => name.endsWith('.jsonl'));
+  const logs = fs.readdirSync(path.join(snapshot, logsFolder)).filter((name) => name.endsWith('.jsonl'));
   for (const name of logs) {
     // A log names its workspace in its first fact and a conversation resumes only from that
     // directory. Point the recorded root at this test's directory (the workspace is `<root>/workspace`
     // in both); every other byte is kept.
-    const text = fs.readFileSync(path.join(snapshot, 'conversations', name), 'utf8');
+    const text = fs.readFileSync(path.join(snapshot, logsFolder, name), 'utf8');
     const newline = text.indexOf('\n');
     const head = text.slice(0, newline).split(ROOT_PLACEHOLDER).join(root);
     fs.writeFileSync(path.join(dirs.conversationsDir, name), head + text.slice(newline));
@@ -272,6 +280,126 @@ describe('committed release snapshots', () => {
           readFacts(path.join(sandbox.conversationsDir, logName!)).filter((fact) => fact.type === 'turn_started'),
         ).toHaveLength(userTexts.length + 1);
         expectNothingLost(settingsBefore, readJson(sandbox.settingsFile));
+      },
+      TIMEOUT,
+    );
+
+    it.skipIf(!fs.existsSync(path.join(SNAPSHOTS, version, COMPACTED_DIR)))(
+      'resumes a log that holds a completed compaction: the summary replaces the older span in the request',
+      async () => {
+        const provider = await startLoopbackProvider({ turns: [{ text: COMPACTED_ANSWER }] });
+        chatProviders.push(provider);
+        const sandbox = install(version, {}, COMPACTED_DIR);
+        // The log records the model and provider it ran on, not a way to reach them; the loopback
+        // chat provider stands in for that provider name.
+        const settings = readJson(sandbox.settingsFile);
+        settings.agent = {
+          ...settings.agent,
+          retryAttempts: 0,
+          modelSelection: { provider: 'mockprov', model: 'mock-alpha' },
+        };
+        settings.providers = [
+          { name: 'mockprov', type: 'openai-compatible', baseUrl: provider.baseUrl, apiKey: 'loopback-key' },
+        ];
+        fs.writeFileSync(sandbox.settingsFile, JSON.stringify(settings));
+
+        expect(sandbox.logs, 'one compacted log in the snapshot').toHaveLength(1);
+        const [logName] = sandbox.logs;
+        const logFile = path.join(sandbox.conversationsDir, logName!);
+        const before = fs.readFileSync(logFile, 'utf8');
+        const facts = readFacts(logFile);
+        const id = String(facts[0]!.id).replace(/^conv_/, '');
+
+        // What the snapshot's own log says was compacted, kept, and summarised.
+        const replacedAt = facts.findIndex((fact) => fact.type === 'history_replaced' && fact.reason === 'compaction');
+        expect(replacedAt, `the ${version} compacted log has no compaction history_replaced fact`).toBeGreaterThan(-1);
+        expect(
+          facts.some((fact) => fact.type === 'compaction_completed'),
+          'no compaction_completed fact',
+        ).toBe(true);
+        const replaced = facts[replacedAt]!;
+        const replacedIds = new Set<string>(replaced.history[0].replaces as string[]);
+        const summaryText = String(replaced.history[0].text);
+        const summary = /<summary>\n([\s\S]*?)\n<\/summary>/.exec(summaryText)?.[1];
+        expect(summary, 'summary text between <summary> tags').toBeTruthy();
+        const textOf = (item: Json): string[] =>
+          item.type === 'assistant_message'
+            ? (item.content as Json[]).map((part) => part.text as string)
+            : item.type === 'tool_result'
+            ? [String(item.output)]
+            : [];
+        const logItems = facts
+          .map((fact, index) => ({ index, item: fact.item as Json | undefined }))
+          .filter((e) => e.item);
+        // Output replaced by the summary: the assistant text and tool results the compaction named.
+        const gone = logItems
+          .filter(
+            ({ index, item }) =>
+              index < replacedAt && (replacedIds.has(String(item!.id)) || replacedIds.has(String(item!.callId))),
+          )
+          .flatMap(({ item }) => textOf(item!));
+        // Output the compaction kept, and output written after it.
+        const kept = logItems.filter(({ index }) => index > replacedAt).flatMap(({ item }) => textOf(item!));
+        const keptInHistory = (replaced.history as Json[])
+          .filter((entry) => entry.type === 'tool_result')
+          .flatMap((entry) => textOf(entry));
+        expect(gone.length, 'snapshot has output the compaction replaced').toBeGreaterThanOrEqual(2);
+        expect(kept.length + keptInHistory.length, 'snapshot has output after the compaction').toBeGreaterThanOrEqual(
+          2,
+        );
+
+        const resumed = await runCli(sandbox, ['--resume', id, COMPACTED_RESUME_PROMPT]);
+        expect(resumed.status, `resuming the compacted ${version} log failed\n${describeRun(resumed)}`).toBe(0);
+        expect(resumed.stdout).toContain(COMPACTED_ANSWER);
+        const requests = provider.requests();
+        expect(requests, 'one model request for the resumed turn').toHaveLength(1);
+        // The wire is searched as JSON, so a multi-line text must be searched in its escaped form.
+        const wire = JSON.stringify(requests[0]!.messages);
+        const onWire = (text: string) => JSON.stringify(text).slice(1, -1);
+
+        // The compaction is honoured: the summary stands where the replaced span was.
+        expect(wire, `request lacks the summary the ${version} compaction recorded`).toContain(onWire(summary!));
+        for (const text of gone) {
+          expect(
+            wire,
+            `request still carries output the ${version} compaction replaced: ${text.slice(0, 60)}`,
+          ).not.toContain(onWire(text));
+        }
+        for (const text of [...keptInHistory, ...kept]) {
+          expect(wire, `request lost post-compaction output from the ${version} log: ${text.slice(0, 60)}`).toContain(
+            onWire(text),
+          );
+        }
+        const userTurns = requests[0]!.messages
+          .filter((message) => message.role === 'user')
+          .map((message) => JSON.stringify(message.content));
+        expect(userTurns.at(-1), 'the new prompt comes last').toContain(COMPACTED_RESUME_PROMPT);
+        const loggedPrompts = facts
+          .filter((fact) => fact.type === 'turn_started')
+          .flatMap((fact) =>
+            (fact.input as Json[]).flatMap((item) => (item.content as Json[]).map((part) => part.text as string)),
+          );
+        for (const prompt of loggedPrompts) expect(wire, `user turn missing: ${prompt}`).toContain(prompt);
+
+        // The run appended to the same log; every line the release wrote is unchanged.
+        expect(fs.readdirSync(sandbox.conversationsDir).filter((name) => name.endsWith('.jsonl'))).toEqual(
+          sandbox.logs,
+        );
+        const after = fs.readFileSync(logFile, 'utf8');
+        expect(after.startsWith(before), 'earlier lines of the log changed').toBe(true);
+        const afterFacts = readFacts(logFile);
+        expect(afterFacts.length).toBeGreaterThan(facts.length);
+        expect(afterFacts.filter((fact) => fact.type === 'turn_started')).toHaveLength(loggedPrompts.length + 1);
+        expect(
+          afterFacts.filter((fact) => fact.type === 'history_replaced'),
+          'resume compacted again',
+        ).toHaveLength(facts.filter((fact) => fact.type === 'history_replaced').length);
+        expect(
+          afterFacts
+            .slice(facts.length)
+            .some((fact) => fact.type === 'item' && JSON.stringify(fact.item).includes(COMPACTED_ANSWER)),
+          'the new answer was not appended',
+        ).toBe(true);
       },
       TIMEOUT,
     );

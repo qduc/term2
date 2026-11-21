@@ -1,6 +1,12 @@
 # Generated edge-case verification pilot
 
-This opt-in method searches bounded input spaces using fast-check, not an LLM.
+This method searches bounded input spaces using fast-check, not an LLM. It is
+opt-in for exploring a change, and since 2026-11-21 the `quality` job in
+`.github/workflows/ci.yml` also runs it on every pull request with the fixed seed
+`424242`, by the maintainer's decision. The fixed seed means CI detects a change
+that breaks a property on that sample; it does not search new inputs on each run.
+The earlier instruction in [PLAN.md](PLAN.md) not to enable CI is superseded by
+that decision.
 The user explicitly authorized persistent generated checks as an exception to the
 traditional permanent-unit-test ban. This is not a restored example-based suite.
 
@@ -136,6 +142,6 @@ are tracked in [PLAN.md](PLAN.md).
 
 The ledger rollout evidence and limits are in [LEDGER-PLAN.md](LEDGER-PLAN.md).
 The remaining hotspot rollout is tracked in [HOTSPOTS-PLAN.md](HOTSPOTS-PLAN.md).
-The default now samples sixteen properties (16,000 cases total); `--target history`
-samples the three history properties. A recorded replay can report fewer cases
+The default samples the ten properties `run.mjs` registers (10,000 cases total);
+`--target history` samples `history.pair-projection`. A recorded replay can report fewer cases
 because it continues from a shrunk path, not a fresh full seed run.

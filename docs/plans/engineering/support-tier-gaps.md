@@ -58,23 +58,23 @@ Ordered by what a miss costs, then by how likely the miss is.
    availability reports true. The remaining e2e files disable the sandbox. So
    these lanes test approval routing around the sandbox setting, and the
    sandbox itself is exercised only by the checks in item 1.
-3. **Decide whether the generated properties run in CI.** `pnpm verify:generated`
-   runs ten properties from `scripts/generated-verification/run.mjs`, six of
-   them about approvals, and no workflow calls it. The pilot's own `PLAN.md`
-   says not to enable CI for it without the maintainer's authority, so this is
-   a decision, not an oversight. For that decision: a full run with a fixed
+3. **Decided: the generated properties run in CI.** The `quality` job runs
+   `pnpm verify:generated --seed 424242`: ten properties from
+   `scripts/generated-verification/run.mjs`, six of them about approvals. The
+   maintainer authorized it on 2026-11-21, which the pilot's `PLAN.md` required
+   before any CI use. Before it was added, a seeded change that stopped
+   `docker-host` from routing as a hard gate failed `approval.decision-table`
+   on its sixth case. A full run with a fixed
    seed took about 17 seconds in a cloud container with no build, passed at
    `49edfe662`, and two runs with the same seed produced the same report apart
-   from timings. The `quality` job already has what it needs. Two limits on
-   what it would add. `approval.decision-table` does not assert a route per
+   from timings. Two limits on what it adds. `approval.decision-table` does not assert a route per
    gate: it generates request shapes at random and asserts on whether any hard
    gate applies, so each pairing of an `ApprovalHardGate` with an approval mode
    is covered only as often as 1,000 random cases happen to produce it. And
    behavioural tests still cover four of the sixteen pairs: `question` and
    `denied-read` in `off`, `docker-host` in `unattended`, and `docker-host` in
    `off` behind `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS. The pilot's
-   `README.md` says the default samples sixteen properties; the runner
-   registers ten.
+   `README.md` now gives the registered count.
 4. **Check the workspace write boundary.** The home-directory warning is tested
    in `tests/cli/cli.integration.scenarios.ts`; nothing asserts that a write
    outside the launch directory is refused or asked about.

@@ -115,6 +115,8 @@ export function withNativeCatalogue<T>(
   indexer: NativeIndexer,
   operation: (catalogue: {
     list(scope: NativeCatalogueScope, options?: { readonly includeBound?: boolean }): readonly NativeCatalogueEntry[];
+    /** Lineages this build could not read during this call (a newer log format, damage), each with the reason. */
+    readonly unreadable: readonly { readonly logical: string; readonly reason: string }[];
   }) => T,
   options?: { readonly skip?: readonly string[] },
 ): T {
@@ -122,6 +124,7 @@ export function withNativeCatalogue<T>(
   directory = path.resolve(directory);
   // Namespace validation must not be hidden by cache recovery or per-lineage isolation.
   const names = directLogNames(directory);
+  const unreadable: { logical: string; reason: string }[] = [];
   const db = openCache(nativeCataloguePath(directory));
   try {
     db.transaction(() => {
@@ -182,6 +185,7 @@ export function withNativeCatalogue<T>(
         } catch (error) {
           dropLogical(db, logical);
           failed.add(logical);
+          unreadable.push({ logical, reason: error instanceof Error ? error.message : String(error) });
           console.warn(`Native catalogue unavailable for ${logical}: ${String(error)}`);
         }
       }
@@ -193,7 +197,7 @@ export function withNativeCatalogue<T>(
       (db.prepare('SELECT * FROM catalogue ORDER BY updated DESC, id').all() as NativeCatalogueEntry[]).filter(
         (entry) => allowed(entry, scope, listOptions?.includeBound === true),
       );
-    return operation({ list });
+    return operation({ list, unreadable });
   } finally {
     db.close();
   }

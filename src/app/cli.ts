@@ -28,12 +28,11 @@ import type { InteractivePickerRequest } from '../model/models/model-resolution.
 import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
 import { exitAfterDrain, settledExitCode } from '../shared/lib/exit-after-drain.js';
 import { exitCodeForSignal, onStdioClosed } from '../shared/lib/exit-on-closed-pipe.js';
-import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService, type AppSettingsOptions } from './settings.js';
 import { runSandboxNetworkCommand } from './lib/cli-sandbox-network.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
-import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './cli-conversations.js';
+import { listingText, listNativeConversations, resolveNativeResume, ResumeRefusal } from './cli-conversations.js';
 import {
   launchDirect,
   INTERACTIVE_TERMINAL_REQUIRED,
@@ -443,7 +442,7 @@ async function main(argv: readonly string[]): Promise<number> {
     case 'list-models':
       return runListModelsCommand(command.search, command.refresh);
     case 'list-conversations':
-      stdout.write(`${formatResumeList(await listNativeConversations(conversationsDirectory(), command.options))}\n`);
+      stdout.write(`${listingText(await listNativeConversations(conversationsDirectory(), command.options))}\n`);
       return 0;
     case 'interactive': {
       if (command.refused) throw refused(command.refused);

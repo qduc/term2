@@ -14,6 +14,118 @@ const STARTUP_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 45_000;
 const TEST_TIMEOUT_MS = 180_000;
 
+/**
+ * What each skin's own files say sets it apart (src/clients/tui/presentation/skins/<name>/index.ts), read from the
+ * idle screen: how the banner, the composer, the hints and the status line are drawn. Classic is the base look and
+ * the others override slots of it. A layout record is small on purpose: each skin must differ from every other in
+ * at least two fields, so swapping two skins, or losing a skin's frame, changes a record.
+ *
+ *   classic  banner behind a `▌` bar; one hairline above the composer; hints separated by `│`
+ *   rail     "the prompt sits between two hairlines, the status is one line": banner on one line, hairlines above
+ *            and below the composer, the status right under the hints
+ *   cards    "the banner ... the input ... are rounded boxes"
+ *   ledger   "a header bar ... a footer bar of chips": banner on one line, chips instead of `│` or `·` separators
+ *   zen      "a borderless prompt, a status line you only notice when it has something to say": `›` prompt, no
+ *            hairlines, status flush right
+ */
+type Layout = {
+  glyph: string;
+  banner: 'bar' | 'box' | 'one-line' | 'two-line';
+  ruleAbove: boolean;
+  ruleBelow: boolean;
+  boxedComposer: boolean;
+  hintSeparator: '│' | '·' | 'space';
+  blankBeforeStatus: boolean;
+  statusAlign: 'left' | 'right';
+};
+
+const LAYOUTS: Record<string, Layout> = {
+  classic: {
+    glyph: '❯',
+    banner: 'bar',
+    ruleAbove: true,
+    ruleBelow: false,
+    boxedComposer: false,
+    hintSeparator: '│',
+    blankBeforeStatus: true,
+    statusAlign: 'left',
+  },
+  rail: {
+    glyph: '❯',
+    banner: 'one-line',
+    ruleAbove: true,
+    ruleBelow: true,
+    boxedComposer: false,
+    hintSeparator: '·',
+    blankBeforeStatus: false,
+    statusAlign: 'left',
+  },
+  cards: {
+    glyph: '❯',
+    banner: 'box',
+    ruleAbove: false,
+    ruleBelow: false,
+    boxedComposer: true,
+    hintSeparator: '·',
+    blankBeforeStatus: true,
+    statusAlign: 'left',
+  },
+  ledger: {
+    glyph: '❯',
+    banner: 'one-line',
+    ruleAbove: true,
+    ruleBelow: false,
+    boxedComposer: false,
+    hintSeparator: 'space',
+    blankBeforeStatus: true,
+    statusAlign: 'left',
+  },
+  zen: {
+    glyph: '›',
+    banner: 'two-line',
+    ruleAbove: false,
+    ruleBelow: false,
+    boxedComposer: false,
+    hintSeparator: '·',
+    blankBeforeStatus: true,
+    statusAlign: 'right',
+  },
+};
+
+/** Reads the idle screen's layout from the visible output; undefined while the last frame is incomplete. */
+function layoutOf(visibleOutput: string): Layout | undefined {
+  const lines = visibleOutput.split(/\r?\n/).map((line) => line.trimEnd());
+  const isRule = (line: string | undefined) => /^\s*─{20,}$/.test(line ?? '');
+  const lastIndexWhere = (matches: (line: string) => boolean) => {
+    for (let index = lines.length - 1; index >= 0; index -= 1) if (matches(lines[index]!)) return index;
+    return -1;
+  };
+  const composer = lastIndexWhere((line) => /^\s*(│\s*)?[❯›](\s|$)/.test(line));
+  const banner = lines.find((line) => line.trim() !== '' && /term²|[▌╭]/.test(line));
+  const hints = lines.findIndex((line, index) => index > composer && composer >= 0 && line.includes('/ commands'));
+  const status = lastIndexWhere((line) => line.includes('mockprov/mock-alpha'));
+  if (composer < 0 || banner === undefined || hints < 0 || status <= hints) return undefined;
+  const first = banner.trimStart();
+  const bannerKind: Layout['banner'] = first.startsWith('▌')
+    ? 'bar'
+    : first.startsWith('╭')
+    ? 'box'
+    : first.includes('mock-alpha')
+    ? 'one-line'
+    : 'two-line';
+  const hintLine = lines[hints]!;
+  return {
+    glyph: lines[composer]!.includes('›') ? '›' : '❯',
+    banner: bannerKind,
+    ruleAbove: isRule(lines[composer - 1]),
+    ruleBelow: isRule(lines[composer + 1]),
+    boxedComposer: /^\s*│ .*│$/.test(lines[composer]!),
+    hintSeparator: hintLine.includes('│') ? '│' : hintLine.includes('·') ? '·' : 'space',
+    blankBeforeStatus: status - hints > 1,
+    statusAlign: lines[status]!.length - lines[status]!.trimStart().length >= 30 ? 'right' : 'left',
+  };
+}
+
 let session: TerminalSession | null = null;
 let tempHome = '';
 let tempConversationsDir = '';
@@ -72,6 +184,10 @@ it.sequential.each([
     await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
     expect(session.getVisibleOutput()).not.toMatch(/Profile:|\bBARE\b|\bBare\b/);
     expect(session.getVisibleOutput()).toContain('mock-alpha');
+    // The idle screen is laid out as the skin lays it out: the facts only this skin has (see LAYOUTS).
+    await expect
+      .poll(() => layoutOf(session!.getVisibleOutput()), { timeout: 10_000, interval: 50 })
+      .toEqual(LAYOUTS[skin]);
 
     {
       const headers = fs

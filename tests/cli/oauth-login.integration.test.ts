@@ -154,9 +154,9 @@ describe.skipIf(process.platform === 'win32')('browser login through the built C
       }
 
       // What the user was told, and what the system was asked to open.
-      const printed = login.output().stdout;
-      expect(printed).toContain(`Opening your browser to log in to ${spec.label}.`);
-      expect(printed).toContain('paste it here');
+      // The URL is one write and the paste hint the next, so the hint can still be on its way.
+      await expect.poll(() => login.output().stdout, { timeout: 5_000 }).toContain('paste it here');
+      expect(login.output().stdout).toContain(`Opening your browser to log in to ${spec.label}.`);
       await expect.poll(() => sandbox.openedUrls(), { timeout: 5_000 }).toEqual([authorize.url.toString()]);
 
       // A stray request to the listener is refused and does not end the login.

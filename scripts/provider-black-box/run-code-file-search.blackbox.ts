@@ -48,19 +48,11 @@ it('grep returns path:line:text for each match, and a search option narrows exac
       { code: grep({ pattern: 'hello', path: '.', exclude: '*.{md,ts,log}' }) },
       { code: grep({ pattern: 'hello', path: 'sub' }) },
       { code: grep({ pattern: 'zzz-appears-nowhere', path: '.' }) },
+      { code: grep({ pattern: 'hello', path: 'sub/b.txt' }) },
     ],
   });
-  const [plain, ignoreCase, regex, fixed, includeMd, includeBraces, exclude, subdirectory, none] = results as [
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-  ];
+  const [plain, ignoreCase, regex, fixed, includeMd, includeBraces, exclude, subdirectory, none, singleFile] =
+    results as [string, string, string, string, string, string, string, string, string, string];
 
   // Case-sensitive by default: `Hello World` and `HELLO LOUD` do not match `hello`.
   expect(matchLines(plain)).toEqual([
@@ -91,6 +83,8 @@ it('grep returns path:line:text for each match, and a search option narrows exac
   expect(matchLines(subdirectory)).toEqual(['sub/b.txt:1:hello from b', 'sub/c.md:1:hello from c']);
   // No match is a sentence, not an empty string and not an error.
   expect(returned(none)).toBe('No matches found.');
+  // A single file path gives the same `path:line:text` shape as a directory, not a bare `line:text`.
+  expect(matchLines(singleFile)).toEqual(['sub/b.txt:1:hello from b']);
 });
 
 it('glob returns { paths, total, truncated } relative to the search root', async () => {
@@ -166,9 +160,6 @@ it('grep and glob stay inside the workspace: outside paths are refused and never
   expect(inside).not.toContain('outside.txt');
   expect(returned(notFromInside)).toBe('No matches found.');
   expect(globResult(globInside).paths).toEqual(['a.txt', 'regex.txt', 'sub/b.txt']);
-  // A `..` inside a pattern does not move the search root out of the workspace.
-  expect(JSON.stringify(globResult(globDotDot).paths)).not.toContain('outside.txt');
-  expect(globResult(globDotDot).paths.every((path) => !path.startsWith('..') && !path.startsWith('/'))).toBe(true);
 
   // A path that resolves outside the workspace needs approval, and a headless run cannot give it:
   // the call fails, says so, and nothing outside is read.
@@ -178,6 +169,8 @@ it('grep and glob stay inside the workspace: outside paths are refused and never
     [grepAbsolute, 'grep'],
     [globParent, 'glob'],
     [globAbsolute, 'glob'],
+    // A `..` in the leading directory part of a pattern moves the search root out of the workspace like `path` does.
+    [globDotDot, 'glob'],
   ] as const) {
     expect(result).toContain('Tool execution was not approved');
     expect(result).toContain(refusal(tool));
@@ -186,4 +179,27 @@ it('grep and glob stay inside the workspace: outside paths are refused and never
     expect(result).not.toMatch(/\n\d+:|\.txt:\d+:/);
     expect(result).not.toContain('outside.txt');
   }
+});
+
+it('glob with a pattern that leaves the workspace searches where the pattern points once approved', async () => {
+  const results = await runScriptedRunCode({
+    files: FILES,
+    scripts: [
+      { code: "return await tools.glob({ pattern: '../*.txt' });" },
+      { code: "return await tools.glob({ pattern: '../outside.*' });" },
+      { code: "return await tools.glob({ pattern: 'sub/../*.txt' });" },
+    ],
+  });
+  const [parent, named, roundTrip] = results.map(globResult) as [
+    ReturnType<typeof globResult>,
+    ReturnType<typeof globResult>,
+    ReturnType<typeof globResult>,
+  ];
+
+  // The files the pattern names, in the folder beside the workspace; paths are relative to that search root.
+  expect(parent).toEqual({ paths: ['outside.txt'], total: 1, truncated: false });
+  expect(named).toEqual({ paths: ['outside.txt'], total: 1, truncated: false });
+  // A `..` that returns to the workspace is still the workspace (no approval, no file from beside it), and a directory
+  // part makes the pattern name that directory's own files, not those of every depth below it.
+  expect(roundTrip.paths).toEqual(['a.txt', 'regex.txt']);
 });

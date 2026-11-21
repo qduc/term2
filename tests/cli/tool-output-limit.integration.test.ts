@@ -17,10 +17,11 @@ import {
 //   shell      keeps the start and the end, drops the middle behind `... [N characters trimmed] ...` (or
 //              `... [N lines trimmed] ...` for output with many short lines)
 //   run_code   keeps the start and drops the end, saying so: `[truncated: output was N characters, ...]`
-//   read_file  keeps the start; the saved-output note is its only sign that the rest exists
+//   read_file  keeps whole lines from the start and says which: `[truncated: showing lines A-B of A-N; ...]`;
+//              of a single line longer than the limit it keeps the start
 // and, for each, a `Full output saved to `<file>` (N lines)` note naming a file with the whole output.
 // The result, note included, stays within the limit. A result within the limit is passed as it is, and a
-// different value moves the line: the same five calls are made under three limits.
+// different value moves the line: the same six calls are made under three limits.
 //
 // The shell commands only print; the sandbox is off (no bubblewrap in some environments) and approvals are
 // bypassed with shell.autoApproveMode=always so the calls run headlessly.
@@ -64,6 +65,11 @@ const CALLS: Array<{ id: string; turn: ScriptedTurn; size: number }> = [
     id: 'read_file',
     turn: { call: { tool: 'read_file', args: { path: 'file.txt' } } },
     size: FILE_TEXT.length,
+  },
+  {
+    id: 'read_file long line',
+    turn: { call: { tool: 'read_file', args: { path: 'long-line.txt' } } },
+    size: LONG_LINE.length,
   },
 ];
 
@@ -133,7 +139,7 @@ describe.concurrent('tools.maxOutputChars', () => {
 
   it('cuts run_code output at the end, and read_file output at the end', { timeout: 30_000 }, async () => {
     const limit = 1000;
-    const { run_code: script, read_file: file } = await runCalls(limit);
+    const { run_code: script, read_file: file, 'read_file long line': oneLine } = await runCalls(limit);
 
     expect(script!.text.length).toBeLessThanOrEqual(limit);
     expect(script!.text).toContain(`${HEAD}-`);
@@ -149,10 +155,27 @@ describe.concurrent('tools.maxOutputChars', () => {
     expect(file!.text).toContain('line 1 ');
     expect(file!.text).not.toContain('line 300 ');
     expect(file!.saved?.contents).toContain('line 300 ');
+
+    // The result says by itself that it is cut and which lines it has: the last numbered line present is the one
+    // the marker names, and the header no longer claims the whole range as present.
+    const numbered = [...file!.text.matchAll(/^(\d+): line \d+ z+$/gm)].map((match) => Number(match[1]));
+    const shown = numbered[numbered.length - 1]!;
+    expect(shown).toBeGreaterThan(1);
+    expect(shown).toBeLessThan(300);
+    expect(numbered).toEqual(Array.from({ length: shown }, (_, index) => index + 1));
+    expect(file!.text).toContain(`[truncated: showing lines 1-${shown} of 1-300`);
+    expect(file!.text.split('\n')[0]).not.toContain('[lines 1-300]');
+
+    // A file that is one line longer than the limit: the model gets the start of that line, not nothing.
+    expect(oneLine!.text.length).toBeLessThanOrEqual(limit);
+    expect(oneLine!.text).toContain(`1: ${HEAD}-xxxx`);
+    expect(oneLine!.text).not.toContain(`-${TAIL}`);
+    expect(oneLine!.text).toContain('[truncated: showing the start of line 1 of 1-1;');
+    expect(oneLine!.saved?.contents).toContain(LONG_LINE);
   });
 
   it.each([
-    { limit: 1000, cut: ['long line', 'many lines', 'run_code', 'read_file'] },
+    { limit: 1000, cut: ['long line', 'many lines', 'run_code', 'read_file', 'read_file long line'] },
     { limit: 5000, cut: ['read_file'] },
     { limit: undefined, cut: [] as string[] },
   ])(

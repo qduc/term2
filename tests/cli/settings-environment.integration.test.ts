@@ -224,6 +224,10 @@ const ROWS: readonly Row[] = [
       [undefined, 'true', false],
       [false, 'true', false],
       [true, 'false', true],
+      [false, '1', false],
+      [true, '0', true],
+      [true, 'no', true],
+      [false, 'yes', false],
     ],
   },
   {
@@ -246,6 +250,10 @@ const ROWS: readonly Row[] = [
       [undefined, 'false', false],
       [true, 'false', false],
       [false, 'true', true],
+      [false, '1', true],
+      [true, '0', false],
+      [true, 'no', false],
+      [false, 'yes', true],
     ],
   },
 ];

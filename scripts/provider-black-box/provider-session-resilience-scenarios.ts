@@ -1150,12 +1150,20 @@ async function waitForCapturedCount(
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+/**
+ * The ledger spells the truncated-stream scenario `incomplete-stream`; the fixture servers' scenario
+ * name stays `incomplete`. Titles carry the ledger spelling (see provider-capability-matrix.test.ts).
+ */
+function ledgerSuffix(scenario: string): string {
+  return scenario === 'incomplete' ? 'incomplete-stream' : scenario;
+}
+
 export function registerResilienceScenarios(group: 'transport' | 'continuity'): void {
   if (group === 'transport') {
     describe('application-owned provider HTTP resilience', () => {
       for (const { family, route } of HTTP_ROUTES) {
         for (const scenario of ['native-error', 'early-close', 'incomplete'] as const) {
-          it(`${route.rowId}.${scenario} does not become empty success`, async () => {
+          it(`${route.rowId}.${ledgerSuffix(scenario)} does not become empty success`, async () => {
             const server = await startResilienceHttpServer({ family, scenario });
             activeHttpServers.push(server);
             const result = await runOneShot(route, server, scenario);
@@ -1200,7 +1208,7 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
     describe('application-owned provider WebSocket resilience', () => {
       for (const { family, route } of WS_ROUTES) {
         for (const scenario of ['native-error', 'incomplete', 'abnormal-close'] as const) {
-          it(`${route.rowId}.${scenario} fails without fabricated completion`, async () => {
+          it(`${route.rowId}.${ledgerSuffix(scenario)} fails without fabricated completion`, async () => {
             const server = await startResilienceWebSocketServer({ family, scenario });
             activeWsServers.push(server);
             const result = await runOneShot(route, server, scenario);

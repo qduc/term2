@@ -137,9 +137,10 @@ afterEach(async () => {
 });
 
 describe('assembled stateless provider lifecycle black-box', () => {
-  it.each(STATELESS_PROVIDER_ROWS)(
-    '$label executes two user turns and approval continuations through its registry route',
-    async (row) => {
+  // One CLI session executes all three lifecycle scenarios of its row, so the title names all three ids
+  // (provider-capability-matrix.test.ts matches the ledger against titles; `it.each` `$id` would quote them).
+  for (const row of STATELESS_PROVIDER_ROWS) {
+    it(`${row.id}.two-user-turn, ${row.id}.approval-approve and ${row.id}.approval-reject through the registry route (${row.label})`, async () => {
       activeServer = await startStatelessLifecycleServer(row);
       activeWorkspace = await createIsolatedWorkspaceLease({
         prefix: `term2-${row.id}-`,
@@ -163,8 +164,8 @@ describe('assembled stateless provider lifecycle black-box', () => {
       expect(activeServer.requests, `${row.id} captured requests`).toHaveLength(6);
       assertProviderRoute(row, activeServer.requests);
       assertHistoryAndNativeShape(row, activeServer.requests);
-    },
-  );
+    });
+  }
 });
 
 async function sendUserTurn(child: PtyChildDriver, prompt: string, response: string): Promise<void> {

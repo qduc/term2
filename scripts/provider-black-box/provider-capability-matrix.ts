@@ -66,13 +66,14 @@ function requiredScenarios(rowId: string, transport: CapabilityTransport): reado
   );
 }
 
+/** Exclusion for Supported (not Core) types only; see the reason it records. */
 function sharedTerminalExclusion(
   rowId: string,
   representativeRowId: string,
   protocolLabel: string,
 ): CapabilityExclusion {
   return {
-    reason: `The ${protocolLabel} native-error and incomplete-stream lifecycle is covered by the representative ${representativeRowId} route; ${rowId} routing and two-turn/tool lifecycle remain distinct.`,
+    reason: `The custom type behind ${rowId} ('opencode') is Supported, not Core (docs/reference/support-tiers.md), so it has no check of its own for the ${protocolLabel} native-error and incomplete-stream lifecycle; the representative ${representativeRowId} route covers that protocol, and ${rowId} routing and two-turn/tool lifecycle remain distinct. Only a Supported type may be excluded here; a Core type needs its own scenarios.`,
     evidence: `provider-session-resilience.blackbox.ts executes ${representativeRowId}.native-error and ${representativeRowId}.incomplete-stream; provider-session-stateless.blackbox.ts executes ${rowId}.two-user-turn, ${rowId}.approval-approve, and ${rowId}.approval-reject.`,
     scenarioIds: [`${rowId}.native-error`, `${rowId}.incomplete-stream`],
   };
@@ -173,11 +174,6 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     reasoningSupport: 'provider-dependent',
     nativeContinuationField: null,
     requiredScenarios: requiredScenarios('runtime-openai-chat', 'http-sse'),
-    exclusion: sharedTerminalExclusion(
-      'runtime-openai-chat',
-      'runtime-openai-compatible-chat',
-      'Chat Completions HTTP/SSE',
-    ),
   },
   {
     id: 'runtime-openai-compatible-chat',
@@ -202,11 +198,6 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     reasoningSupport: 'provider-dependent',
     nativeContinuationField: null,
     requiredScenarios: requiredScenarios('runtime-llama-cpp-chat', 'http-sse'),
-    exclusion: sharedTerminalExclusion(
-      'runtime-llama-cpp-chat',
-      'runtime-openai-compatible-chat',
-      'Chat Completions HTTP/SSE',
-    ),
   },
   {
     id: 'runtime-anthropic-messages',
@@ -342,4 +333,48 @@ export function assertProviderCapabilityAccounting(
       : []),
   ];
   if (failures.length) throw new Error(failures.join('\n'));
+}
+
+/**
+ * Scenario ids are matched in collected test titles: `<rowId>.<scenario>`, not preceded by an id character
+ * and not followed by `-` or a word character (so `x.incomplete` is not `x.incomplete-stream`).
+ */
+function titleNames(scenarioId: string, title: string): boolean {
+  const escaped = scenarioId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w.-])${escaped}(?![\\w-])`).test(title);
+}
+
+/**
+ * Check the hand-listed executed-scenario ledger against the test titles Vitest collected from the
+ * lifecycle files, in both directions: a ledger entry that no test title names (the test was deleted or
+ * renamed), and a required scenario that a test names but the ledger does not list (including one the row
+ * still excludes). Returns one message per discrepancy, each naming the row and the scenario.
+ */
+export function reconcileExecutionsWithTests(
+  matrix: readonly ProviderCapability[],
+  executions: readonly CapabilityExecution[],
+  collectedTitles: readonly string[],
+): string[] {
+  const failures: string[] = [];
+  const seen = new Set<string>();
+  for (const { rowId, scenarioId } of executions) {
+    if (seen.has(scenarioId)) continue;
+    seen.add(scenarioId);
+    if (!collectedTitles.some((title) => titleNames(scenarioId, title)))
+      failures.push(
+        `row '${rowId}', scenario '${scenarioId}': the manifest lists it as executed, but no collected test title names it`,
+      );
+  }
+  for (const row of matrix) {
+    for (const scenarioId of row.requiredScenarios) {
+      if (seen.has(scenarioId)) continue;
+      if (collectedTitles.some((title) => titleNames(scenarioId, title)))
+        failures.push(
+          `row '${row.id}', scenario '${scenarioId}': a test title names it, but the manifest does not list it${
+            row.exclusion ? ' (the row still carries an exclusion)' : ''
+          }`,
+        );
+    }
+  }
+  return failures;
 }

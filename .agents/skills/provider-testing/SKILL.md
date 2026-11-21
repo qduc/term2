@@ -82,7 +82,22 @@ scenario is the one whose CLI never reached the state it waits for.
   prompt's handler is in place, like the approval prompt's `.approval` channel.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
-  typed lifecycle ledgers, and aggregate accounting.
+  typed lifecycle ledgers, and aggregate accounting. The ledgers are hand-listed, so
+  `provider-capability-matrix.test.ts` checks them against what Vitest collects from
+  the `provider-session-*` files (`reconcileExecutionsWithTests`, using
+  `vitest list --json`): a ledger entry that no test title names fails, and so does a
+  required scenario whose test exists but is not listed. The link is the title. A test
+  that executes a ledger scenario must contain the literal id `<rowId>.<scenario>`
+  (`runtime-openai-chat.native-error`); register parameterised cases with a loop and a
+  template literal, because `it.each`'s `$prop` quotes strings and reads `$id.suffix`
+  as a property path. Add a new lifecycle file to a ledger export in the manifest,
+  name it `provider-session-*`, and remove the row's exclusion when you add its tests.
+- An exclusion in the matrix is for a Supported (not Core) type only
+  (`docs/reference/support-tiers.md`): the two OpenCode rows. Core types, including
+  `runtime-openai-chat` and `runtime-llama-cpp-chat`, own their `native-error` and
+  `incomplete-stream` scenarios in `provider-session-chat-terminal-errors.blackbox.ts`
+  (one-shot runs of the built CLI, asserting exit status, error text, `--json` events and
+  the persisted failed turn).
 - `scripts/provider-black-box/provider-session-responses.blackbox.ts`,
   `provider-session-responses-tools.blackbox.ts`, and
   `provider-session-responses-failures.blackbox.ts` register the Responses

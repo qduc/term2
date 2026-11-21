@@ -26,6 +26,9 @@ function getPath(obj: any, keyPath: string): any {
 
 // Known environment variable mappings from settings-env.ts and provider-credentials.ts
 const ENV_VAR_MAP: Record<string, string> = {
+  'shell.showReview': 'TERM2_SHOW_REVIEW',
+  'shell.autoApproveMode': 'SHELL_AUTO_APPROVE_MODE',
+  'sandbox.enabled': 'SANDBOX_ENABLED',
   'agent.openai.apiKey': 'OPENAI_API_KEY',
   'agent.openrouter.apiKey': 'OPENROUTER_API_KEY',
   'agent.openrouter.baseUrl': 'OPENROUTER_BASE_URL',

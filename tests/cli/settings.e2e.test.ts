@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -42,7 +42,7 @@ async function startProvider(): Promise<string> {
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-async function start(cols = 80, rows = 24): Promise<{ idlePath: string }> {
+async function start(cols = 80, rows = 24, persist = false): Promise<{ idlePath: string; settingsFile: string }> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
@@ -64,6 +64,7 @@ async function start(cols = 80, rows = 24): Promise<{ idlePath: string }> {
     [HARNESS_IDLE_ENV]: idlePath,
     // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
     CI: 'false',
+    ...(persist ? { NODE_ENV: 'production' } : {}),
   };
   const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
   fs.mkdirSync(settingsDir, { recursive: true });
@@ -80,7 +81,7 @@ async function start(cols = 80, rows = 24): Promise<{ idlePath: string }> {
 
   session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols, rows });
   await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-  return { idlePath };
+  return { idlePath, settingsFile: path.join(settingsDir, 'settings.json') };
 }
 
 /** Write keys and wait for new output containing `needle`, so an earlier frame cannot satisfy the wait. */
@@ -191,4 +192,26 @@ it('does not expose profile controls in settings search', { timeout: TIMEOUT_MS 
   expect(output).not.toContain('app.activeProfileId');
   expect(output).not.toContain('app.liteMode');
   expect(output).not.toContain('app.planMode');
+});
+
+it('keeps approval mode, review display and sandbox preferences independent', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath, settingsFile } = await start(80, 24, true);
+  const saved = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  const command = async (text: string, output?: string) => {
+    if (output) session!.write(text);
+    else await fresh(() => session!.write(text), 'Approval mode');
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    if (output) await fresh(() => session!.write('\r'), output);
+    else session!.write('\r');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+  };
+  await command('/auto-approve off --show-review', 'Approval review display enabled.');
+  expect(saved().shell, session!.getVisibleOutput()).toMatchObject({ autoApproveMode: 'off', showReview: true });
+  for (const mode of ['auto', 'unattended', 'always', 'off']) {
+    await command(`/auto-approve ${mode}`);
+    await vi.waitFor(() =>
+      expect(saved().shell, session!.getVisibleOutput()).toMatchObject({ autoApproveMode: mode, showReview: true }),
+    );
+    expect(saved().sandbox.enabled).toBe(false);
+  }
 });

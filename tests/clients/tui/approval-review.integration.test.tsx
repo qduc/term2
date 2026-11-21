@@ -50,7 +50,9 @@ it('shows a session review without options, ignores focus events, and takes it o
     <ApprovalHost {...props(connection, inputHandler)} request={undefined} reviewing={reviewing} />,
   );
   try {
-    await vi.waitFor(() => expect(screen.lastFrame()).toContain('Reviewing shell for automatic approval'));
+    await vi.waitFor(() =>
+      expect(screen.lastFrame()).toContain('Reviewing shell… (Esc to review manually, n to deny)'),
+    );
     expect(screen.lastFrame()).not.toContain('Allow this action?');
     await vi.waitFor(() => expect(inputHandler.current).not.toBeNull());
     inputHandler.current?.('[O', {} as Key);

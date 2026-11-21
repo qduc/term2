@@ -469,7 +469,8 @@ it('gives approval advisory requests their own explicit affinity without an ambi
   const settings = createMockSettingsService({
     'agent.modelSelection': { provider: id, model: 'gpt-test' },
     'agent.retryAttempts': 0,
-    'shell.autoApproveMode': 'advisory',
+    'shell.autoApproveMode': 'off',
+    'shell.showReview': true,
     'agent.decisionModel': undefined,
   });
   const surface = createToolSurface(

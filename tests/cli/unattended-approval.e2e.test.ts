@@ -217,6 +217,30 @@ function loggedFacts(dir: string): Record<string, unknown>[] {
   );
 }
 
+it.each([false, true])(
+  'keeps off-mode advisory assessment separate from headless execution authorization (autoApprove=%s)',
+  { timeout: TIMEOUT_MS },
+  async (autoApprove) => {
+    const { baseUrl, seen } = await startProvider([{ call: { id: 'advisory-call', command: 'node -v' } }], ['pass']);
+    const { status, output, conversations } = await runHeadless(baseUrl, [
+      '--approval-mode',
+      'off',
+      '--show-review',
+      ...(autoApprove ? ['--auto-approve'] : []),
+    ]);
+    expect(status, output).toBe(0);
+    expect(seen.reviews).toHaveLength(1);
+    expect(seen.main[1].includes(process.version)).toBe(autoApprove);
+    const facts = loggedFacts(conversations);
+    expect(facts.find((fact) => fact['type'] === 'interaction_opened')).toMatchObject({
+      review: { kind: 'reviewed', approved: false, advisoryOnly: true, showReview: true },
+    });
+    const closed = facts.find((fact) => fact['type'] === 'interaction_closed');
+    expect(closed).toMatchObject({ resolution: { kind: autoApprove ? 'allow' : 'deny' } });
+    expect(closed).not.toHaveProperty('automaticApproval');
+  },
+);
+
 it('runs a command the reviewer approves, as auto does', { timeout: TIMEOUT_MS }, async () => {
   const { baseUrl, seen } = await startProvider([{ call: { id: 'c1', command: 'node -v' } }], ['pass']);
   const { status, output, conversations } = await runHeadless(baseUrl);

@@ -13,7 +13,7 @@ it('executes shell-quoted manual recovery with exactly the current resume/settin
     const entry = join(root, 'dist/cli.js');
     await writeFile(
       entry,
-      `console.log(JSON.stringify({argv:process.argv.slice(2),approval:process.env.SHELL_AUTO_APPROVE_MODE,sandbox:process.env.SANDBOX_ENABLED,herdr:process.env.HERDR_PANE_ID}));`,
+      `console.log(JSON.stringify({argv:process.argv.slice(2),approval:process.env.SHELL_AUTO_APPROVE_MODE,sandbox:process.env.SANDBOX_ENABLED,showReview:process.env.TERM2_SHOW_REVIEW,herdr:process.env.HERDR_PANE_ID}));`,
     );
     const plan = createRestartPlan({
       entry,
@@ -21,8 +21,9 @@ it('executes shell-quoted manual recovery with exactly the current resume/settin
       model: { model: "fixture's model", provider: 'fixture-provider' },
       reasoning: 'high',
       profile: 'builtin:bare',
-      approval: 'advisory',
+      approval: 'off',
       sandbox: false,
+      showReview: true,
       ssh: { target: 'user@host', directory: "/remote/it's here", port: 2222 },
       control: { name: 'connected-now', discordInput: false },
     });
@@ -37,8 +38,9 @@ it('executes shell-quoted manual recovery with exactly the current resume/settin
     const captured = JSON.parse(stdout);
     expect(captured).toEqual({
       argv: plan.args.slice(1),
-      approval: 'advisory',
+      approval: 'off',
       sandbox: 'false',
+      showReview: 'true',
       herdr: 'fixture-pane',
     });
     expect(captured.argv).toEqual([
@@ -60,8 +62,9 @@ it('executes shell-quoted manual recovery with exactly the current resume/settin
       "/remote/it's here",
       '--control-socket=connected-now',
     ]);
-    expect(plan.env.SHELL_AUTO_APPROVE_MODE).toBe('advisory');
+    expect(plan.env.SHELL_AUTO_APPROVE_MODE).toBe('off');
     expect(plan.env.SANDBOX_ENABLED).toBe('false');
+    expect(plan.env.TERM2_SHOW_REVIEW).toBe('true');
     expect(
       createRestartPlan({
         entry,

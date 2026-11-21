@@ -40,6 +40,7 @@ it('routes workspace and local-owner configuration operations through their auth
       safety: {
         sandbox: 'enabled',
         approval: 'off',
+        showReview: false,
         backgroundShell: 'disabled-by-gateway',
         workspaceAccess: 'read_write',
         network: 'denied',

@@ -132,8 +132,8 @@ export const approvalProperties = [
         inputEscape: fc.boolean(),
         grants: fc.subarray(['unsandboxed-once', 'network-allow-once', 'allow-project', 'allow-folder-session']),
       }),
-      fc.constantFrom('off', 'advisory', 'auto', 'unattended', 'always', undefined),
-      fc.constantFrom('off', 'advisory', 'auto', 'unattended', 'always', undefined),
+      fc.constantFrom('off', 'auto', 'unattended', 'always', undefined),
+      fc.constantFrom('off', 'auto', 'unattended', 'always', undefined),
       fc.oneof(
         fc.constant('throws'),
         fc.constant('none'),
@@ -150,7 +150,8 @@ export const approvalProperties = [
       ),
       fc.boolean(),
       fc.boolean(),
-      async (shape, mode, modeAfter, verdict, abort, reviewEscapes) => {
+      fc.boolean(),
+      async (shape, mode, modeAfter, verdict, abort, reviewEscapes, showReview) => {
         const request = {
           kind: shape.kind,
           toolName: shape.toolName,
@@ -165,7 +166,7 @@ export const approvalProperties = [
           isDockerHostControl: () => shape.docker,
           isSandboxEscape: () => shape.inputEscape,
         });
-        const surfaceRoute = approvalRouteFor(mode, profile, { reviewEscapes });
+        const surfaceRoute = approvalRouteFor(mode, profile, { reviewEscapes, showReview });
         const route = ['decide', 'advise', 'judge'].includes(surfaceRoute.kind) ? 'review' : surfaceRoute.kind;
         const escape = shape.kind !== 'question' && (shape.grants.includes('unsandboxed-once') || shape.inputEscape);
         if (mode === 'unattended') {
@@ -181,7 +182,11 @@ export const approvalProperties = [
         } else {
           assert.notEqual(route, 'refuse', 'a mode other than unattended refused');
           if (profile.hardGate) assert.equal(route, 'ask_user', 'a hard gate was routed to review');
-          if (mode !== 'auto' && mode !== 'advisory') assert.equal(route, 'ask_user', 'reviewed outside auto/advisory');
+          if (mode === 'always' && !profile.hardGate) assert.equal(route, 'bypass');
+          if ((mode === 'off' || mode === undefined) && !showReview)
+            assert.equal(route, 'ask_user', 'off reviewed without showReview');
+          if ((mode === 'off' || mode === undefined) && showReview && !profile.hardGate && profile.reviewable)
+            assert.equal(route, 'review', 'off+showReview lost its advisory assessment');
         }
         if (route === 'review')
           assert.equal(
@@ -197,7 +202,7 @@ export const approvalProperties = [
           profile,
           signal: controller.signal,
           currentMode: () => (calls === 0 ? mode : modeAfter),
-          routeOptions: () => ({ reviewEscapes }),
+          routeOptions: () => ({ reviewEscapes, showReview }),
           review: async () => {
             calls += 1;
             if (abort) controller.abort();
@@ -206,6 +211,14 @@ export const approvalProperties = [
           },
         });
         if (route !== 'review') assert.equal(calls, 0, 'reviewed a request routed to a person');
+        if (route === 'bypass') {
+          assert.equal(result.kind, 'bypassed');
+          assert.equal(result.approved, true);
+          const oneTime = ['unsandboxed-once', 'network-allow-once'].find((g) => shape.grants.includes(g));
+          assert.equal(result.grant, oneTime, 'bypass lost its scoped grant');
+          return;
+        }
+        if (result.kind === 'reviewed') assert.equal(result.showReview, showReview);
         if (!result.approved) return;
         assert.equal(route, 'review');
         assert.ok(mode === 'auto' || mode === 'unattended', 'approved outside auto or unattended mode');
@@ -235,14 +248,26 @@ export const approvalProperties = [
         routedAtOpen: fc.boolean(),
         routedAtSettle: fc.boolean(),
         decidesAtSettle: fc.boolean(),
+        bypassAtOpen: fc.boolean(),
+        bypassAtSettle: fc.boolean(),
         outcome: fc.constantFrom('approved', 'rejected', 'throws'),
         stopBeforeResult: fc.boolean(),
         unattendedAtSettle: fc.boolean(),
       }),
-      async ({ routedAtOpen, routedAtSettle, decidesAtSettle, outcome, stopBeforeResult, unattendedAtSettle }) => {
+      async ({
+        routedAtOpen,
+        routedAtSettle,
+        decidesAtSettle,
+        bypassAtOpen,
+        bypassAtSettle,
+        outcome,
+        stopBeforeResult,
+        unattendedAtSettle,
+      }) => {
         let unattended = false;
         let routed = routedAtOpen;
         let decides = true;
+        let bypass = bypassAtOpen;
         let release;
         const gate = new Promise((resolve) => (release = resolve));
         const settles = [];
@@ -250,14 +275,16 @@ export const approvalProperties = [
         const reviews = new ApprovalReviews(
           {
             willReview: () => routed,
-            // `advisory` still reviews but may not answer; only `auto` decides.
+            // Advisory assessments cannot answer; reviewed approvals and bypasses are distinct authority.
             mayApprove: () => routed && decides,
-            route: () => ({ kind: routed ? (decides ? 'decide' : 'advise') : 'ask_user' }),
+            route: () => ({ kind: routed ? (decides ? (bypass ? 'bypass' : 'decide') : 'advise') : 'ask_user' }),
             unattended: () => unattended,
             review: async () => {
               await gate;
               if (outcome === 'throws') throw new Error('model down');
-              return outcome === 'approved'
+              return outcome === 'approved' && bypassAtOpen
+                ? { kind: 'bypassed', approved: true, grant: 'unsandboxed-once' }
+                : outcome === 'approved'
                 ? { kind: 'reviewed', approved: true, advisory: { approved: true, reasoning: '', model: 'm' } }
                 : { kind: 'reviewed', approved: false, advisory: { approved: false, reasoning: '', model: 'm' } };
             },
@@ -277,6 +304,7 @@ export const approvalProperties = [
         if (stopBeforeResult) assert.ok(reviews.stop('r'), 'stop did not return the held request');
         routed = routedAtSettle;
         decides = decidesAtSettle;
+        bypass = bypassAtSettle;
         unattended = unattendedAtSettle;
         release();
         for (let i = 0; i < 5; i += 1) await Promise.resolve();
@@ -286,7 +314,7 @@ export const approvalProperties = [
         if (stopBeforeResult)
           return assert.equal(settles.length + refusals.length, 0, 'settled after a person stopped the review');
         assert.equal(settles.length + refusals.length, 1, 'settled other than exactly once');
-        const approves = outcome === 'approved' && routedAtSettle && decidesAtSettle;
+        const approves = outcome === 'approved' && routedAtSettle && decidesAtSettle && bypassAtOpen === bypassAtSettle;
         // A non-approval follows the mode current at settle: refused in unattended, opened otherwise.
         assert.equal(
           refusals.length,

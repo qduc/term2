@@ -1,18 +1,23 @@
 # Unattended approval: build brief
 
-**Status:** built (2026-11-20). Part A is `src/session/approval/approval-route.ts`, `approval-arbiter.ts` and `unattended-refusals.ts`; part B is `src/tools/workspace/workspace-snapshot.ts` (a shadow repository, decision 7) and `src/session/approval/unattended-snapshot.ts`. Evidence: `tests/cli/unattended-approval.e2e.test.ts` and the `approvals` target of `pnpm verify:generated`. The decisions below are the ones built.
+The implementation is in `src/session/approval/approval-route.ts`,
+`approval-arbiter.ts` and `unattended-refusals.ts`; snapshot ownership is in
+`src/tools/workspace/workspace-snapshot.ts` and
+`src/session/approval/unattended-snapshot.ts`. This brief retains the original
+snapshot and refusal decisions. The current four-mode policy is described in
+[approval-arbiter.md](approval-arbiter.md).
 
-Rationale, evidence and the deferred designs are in [`docs/research/unattended-approval.md`](../../research/unattended-approval.md). This brief states what to build and how to tell it is done. It does not prescribe a design.
+Rationale, evidence and the deferred designs are in [`docs/research/unattended-approval.md`](../../research/unattended-approval.md). This brief retains the build criteria and their rationale.
 
 ## Goal
 
-A fifth `shell.autoApproveMode` value, `unattended`, in which no approval request waits for a person. A request the reviewer approves runs as it does in `auto`. Every other request is refused to the model with a reason, and the model continues. Repeated refusals end the turn. Each unattended turn starts with a workspace snapshot, so a mistake inside the sandbox can be undone.
+The `shell.autoApproveMode` value `unattended`, in which no approval request waits for a person. A request the reviewer approves runs as it does in `auto`. Every other request is refused to the model with a reason, and the model continues. Repeated refusals end the turn. Each unattended turn starts with a workspace snapshot, so a mistake inside the sandbox can be undone.
 
 The security target is the one in the research document: prevent accidents, bound injection damage with the sandbox, do not attempt to resist an agent working against its monitor.
 
 ## Decisions
 
-Proposed as defaults on 2026-11-20. The owner changes them here before building; the builder does not reopen them.
+The owner selected these decisions on 2026-11-20.
 
 1. The mode is a new setting value, not `auto` with no person attached.
 2. `ask_user` still asks in an interactive client. Headless keeps its stop marker.
@@ -25,7 +30,7 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 ## Constraints
 
 - **The threshold does not move.** `acceptVerdict`, `SHELL_AUTO_APPROVAL_INSTRUCTIONS` and its prompt version stay as they are. Unattended changes where a non-approval goes, with decision 4 as the only stricter rule.
-- **The other four modes do not change.** Nor do headless without `unattended`, or the worker policy in `SubagentToolPolicy`.
+- **The other modes retain their refusal and snapshot behavior.** Nor do headless without `unattended`, or the worker policy in `SubagentToolPolicy`.
 - **One owner.** The route, the refusal and the limit are decided in `src/session/approval/`. Clients render a state; none decides. No new branch on a tool name outside `describeApproval`. The import rules and gates in `docs/architecture/layers.md` hold.
 - **Fail closed.** In `unattended`, an error, timeout, abort or ambiguous state refuses. It never allows and never waits.
 - **Prompts stay fixed.** The main prompt and tool descriptions are not edited; the refusal result carries the guidance. Decision D5 in `llm-auto-approve-unsandboxed.md` is the precedent.
@@ -40,7 +45,7 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 
 ### A. The mode
 
-1. `unattended` is selectable wherever the other four values are. The default stays `off`.
+1. `unattended` is selectable wherever the other three values are. The default stays `off`.
 2. In `unattended`, no approval prompt reaches any client for a turn-owned, task-owned or nested `run_code` request. `ask_user` follows decision 2.
 3. A request whose review passes `acceptVerdict` runs with the same grant and the same durable record as in `auto`.
 4. A request whose review does not pass, or is unavailable, returns a refusal as the call's result. The refusal names what was refused, gives the reason (the reviewer's reasoning, or that the review was unavailable) and tells the model to take a different approach. The turn continues.
@@ -50,7 +55,7 @@ Proposed as defaults on 2026-11-20. The owner changes them here before building;
 8. Each refusal is a durable fact with policy provenance and the review attached. A reopened session shows it as refused, never as pending. A client cannot record a refusal or an approval as automatic.
 9. A mode change while a review runs never yields an answer under the old mode; the request follows the current mode. A request already open for a person when the mode becomes `unattended` stays open.
 10. Headless without `--auto-approve` is unchanged. With `--auto-approve` and `unattended`, criteria 3 to 7 apply before the `NonInteractiveApprovalPolicy` fallback.
-11. A behaviour matrix (surface × mode × tool × gate → outcome), captured before the change for `off`, `advisory`, `auto` and `always`, is identical after it.
+11. The original unattended change preserved the captured behavior matrix for `off`, `advisory`, `auto` and `always`. The later four-mode policy replaces `advisory` with `off` plus `shell.showReview`; see the approval-arbiter reference.
 12. With the sandbox disabled or unavailable, or over SSH, a shell request in `unattended` is routed to the reviewer as in `auto`, and criteria 3, 4 and 7 apply to it.
 
 ### B. The snapshot

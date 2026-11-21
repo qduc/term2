@@ -303,11 +303,21 @@ it('routes approval keys while a slash menu is suspended', { timeout: TIMEOUT_MS
 it.each([
   { risk: 'low', automatic: true, delayedDenial: false, mode: 'auto', sandbox: true },
   { risk: 'high', automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'high', automatic: false, delayedDenial: false, mode: 'auto', showReview: false, sandbox: true },
   { risk: 'low', confidence: 'low', automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
   { risk: 'low', reviewFails: true, automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: true, mode: 'auto', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'off', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'advisory', sandbox: true },
+  {
+    risk: 'low',
+    automatic: false,
+    delayedDenial: false,
+    mode: 'off',
+    showReview: true,
+    cliPolicy: true,
+    sandbox: true,
+  },
   { risk: 'low', automatic: true, delayedDenial: false, mode: 'auto', sandbox: false },
   { risk: 'high', regular: true, automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
   { risk: 'low', regular: true, automatic: true, delayedDenial: false, mode: 'auto', sandbox: false },
@@ -323,6 +333,8 @@ it.each([
     confidence = 'high',
     reviewFails = false,
     regular = false,
+    showReview = mode !== 'off',
+    cliPolicy = false,
   }) => {
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unsandboxed-review-')));
     const home = path.join(root, 'home');
@@ -335,7 +347,7 @@ it.each([
     const reviewGate = new Promise<void>((resolve) => {
       releaseReview = resolve;
     });
-    const reviewExpected = mode === 'auto' || mode === 'advisory';
+    const reviewExpected = mode === 'auto' || mode === 'advisory' || (mode === 'off' && showReview);
     const baseUrl = await startProvider(
       [
         { call: { id: 'unsandboxed-call', args: regular ? { command } : { command, sandbox: 'unsandboxed' } } },
@@ -382,10 +394,15 @@ it.each([
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
         providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
         sandbox: { enabled: sandbox },
-        shell: { autoApproveMode: mode },
+        shell: { autoApproveMode: cliPolicy ? 'auto' : mode, showReview: cliPolicy ? false : showReview },
       }),
     );
-    session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+    session = spawnTerminal('node', [builtCli, ...(cliPolicy ? ['--approval-mode', mode, '--show-review'] : [])], {
+      cwd: workspace,
+      env,
+      cols: 100,
+      rows: 30,
+    });
     await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     session.write('Write the approved marker outside the sandbox');
     await waitForHarnessComposerValue(idlePath, 'Write the approved marker outside the sandbox', { timeoutMs: 60_000 });
@@ -410,11 +427,16 @@ it.each([
         if (reviewExpected)
           await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
         expect(fs.existsSync(marker)).toBe(false);
-        if (reviewExpected && !reviewFails) {
+        if (reviewExpected && !showReview) {
+          await session.waitForOutput('Manual approval required.', 30_000);
+          expect(session.getVisibleOutput()).not.toContain('fixture review');
+          expect(session.getVisibleOutput()).not.toContain('Confidence:');
+        } else if (reviewExpected && !reviewFails) {
           await session.waitForOutput('fixture review', 30_000);
           expect(session.getVisibleOutput()).toContain(`Confidence: ${confidence}`);
           // Advisory mode never answers a request, so its prompt does not say approval was "not granted".
-          if (mode === 'advisory') expect(session.getVisibleOutput()).toContain('AI review is advisory');
+          if (mode === 'advisory' || (mode === 'off' && showReview))
+            expect(session.getVisibleOutput()).toContain('AI review is advisory');
         } else {
           await session.waitForOutput(
             reviewFails ? 'Approval review unavailable' : 'Not reviewed automatically',
@@ -980,7 +1002,7 @@ async function runCommand(
 
 // Legacy's bare /auto-approve puts its trigger in the composer, which opens the menu.
 it('/auto-approve without an argument opens the legacy auto-approval menu', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/auto-approve', 'Shell auto-approval', undefined, false, false, '/auto-approve '),
+  runCommand('/auto-approve', 'Approval mode', undefined, false, false, '/auto-approve '),
 );
 
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {

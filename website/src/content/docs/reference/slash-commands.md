@@ -12,7 +12,7 @@ Type `/` at the start of a prompt to open the command menu.
 | **`/bridge`** | `[status\|connect [name]\|disconnect]` | Inspect or change local Discord session attachment. Connectivity to Discord is not verified by attachment status. |
 | **`/model`** | `[model-name]` | Change the active model (shortcut: `Ctrl+O`). |
 | **`/effort`** | `[level]` | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`) (shortcut: `Ctrl+T`). |
-| **`/auto-approve`** | `[off\|advisory\|auto\|always]` | Set shell and tool auto-approval policy. `always` disables `sandbox.enabled`. |
+| **`/auto-approve`** | `[off\|auto\|unattended\|always]` | Set shell and tool approval policy; preserves `sandbox.enabled`. |
 | **`/sandbox`** | — | Toggle shell sandbox isolation on or off. |
 | **`/compact`** | — | Compact older conversation turns into a local summary. |
 | **`/rewind`** | `[last\|<turn>] [edit\|resend]` | Choose a turn and review what will be discarded before rewinding. |
@@ -45,8 +45,8 @@ Type `/` at the start of a prompt to open the command menu.
 - Sets the reasoning effort level passed to models supporting variable reasoning tokens.
 
 ### `/auto-approve [mode]`
-- **Usage**: `/auto-approve off`, `/auto-approve advisory`, `/auto-approve auto`, `/auto-approve always`
-- Sets the tool execution approval mode. Mode `always` sets `sandbox.enabled = false`.
+- **Usage**: `/auto-approve off`, `/auto-approve auto`, `/auto-approve unattended`, `/auto-approve always`
+- Sets the tool execution approval mode without changing `sandbox.enabled`. `shell.showReview` separately controls reviewer assessment display; with `off`, it requests advice that cannot approve. Saved `advisory` settings migrate to `off` with review display enabled.
 
 ### `/rewind [last|<turn>] [edit|resend]`
 - **Usage**: `/rewind`, `/rewind 3 edit`, `/rewind last resend`

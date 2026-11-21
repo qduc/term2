@@ -71,24 +71,42 @@ for (const [cols, rows] of [
       expect(menu).toContain('╭');
       expect(menu).toContain('Commands');
       expect(menu).toContain('╰');
-      // Legacy's slash menu (ported): first entry selected, a fixed ten-row window.
+      expect(menu).toContain('Setup');
+      expect(menu).toContain('Conversation');
       expect(menu).toContain('❯ /model');
       // Navigate past the first window; the selected command must remain visible.
-      for (let i = 0; i < 10; i++) {
+      for (const name of [
+        'effort',
+        'providers',
+        'settings',
+        'auto-approve',
+        'skills',
+        'clear',
+        'resume',
+        'goal',
+        'copy',
+        'usage',
+        'compact',
+        'rewind',
+        'retry',
+        'retry-turn',
+        'retry-tool',
+      ]) {
         terminal.write('\x1b[B');
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await terminal.waitForOutput(`❯ /${name}`, 30_000);
       }
-      await terminal.waitForOutput('❯ /retry-tool', 30_000);
+      await terminal.waitForOutput('Rewind & Retry', 30_000);
       terminal.write('help');
       await waitForHarnessComposerValue(idle, '/help', { timeoutMs: 60_000 });
       terminal.write('\r');
       // Help must be emitted in full without keyboard paging, even on a short terminal.
-      // The last help line (legacy's begins `Shift+Tab: switch Standard/Plan · `, dropped with Plan: #149).
       await terminal.waitForOutput('@: complete paths · !: shell', 30_000);
-      const helpOutput = terminal.getOutput();
+      const helpOutput = terminal.getVisibleOutput();
       expect(helpOutput).not.toMatch(/Profile:|\bBARE\b/);
+      expect(helpOutput).toMatch(/Application\r?\n +\/help —/);
+      expect(helpOutput).toContain('/settings reset <key>');
       expect(helpOutput.lastIndexOf('Keyboard shortcuts')).toBeGreaterThan(helpOutput.lastIndexOf('/help —'));
-      // Legacy's command table, except /undo, as the slash menu lists it.
+      // Every browsable command should appear in help.
       const table = fs.readFileSync(
         fileURLToPath(new URL('../../src/clients/tui/menus/legacy-commands.ts', import.meta.url)),
         'utf8',

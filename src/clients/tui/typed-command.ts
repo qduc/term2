@@ -52,7 +52,7 @@ export function resolveTypedCommand(input: string): TypedCommand {
   const candidates = exact ? [exact] : LEGACY_COMMANDS.filter((command) => command.name.startsWith(lower));
   if (candidates.length === 1) {
     const entry = candidates[0]!;
-    return { kind: 'command', input: `/${entry.runs ?? entry.name}${rest}` };
+    return { kind: 'command', input: `/${entry.name}${rest}` };
   }
   if (OTHER_COMMANDS.has(lower)) return { kind: 'command', input: `/${lower}${rest}` };
   if (candidates.length > 1)

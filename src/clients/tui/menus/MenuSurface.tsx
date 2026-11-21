@@ -49,6 +49,10 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
   // A credential being typed is masked, so it never shows on screen.
   const promptLabel = valueFrame
     ? `${getSettingLabel(valueFrame.settingKey)} = `
+    : activeFrame?.kind === 'settings'
+    ? 'Search settings: '
+    : activeFrame?.kind === 'slash'
+    ? 'Command: /'
     : filterFrame
     ? 'Filter: '
     : menuPromptLabel;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SlashCommand } from './slash-command-types.js';
 import { useInputContext } from './input-context.js';
 import { useSelection } from './use-selection.js';
+import { useTerminalSize } from '../terminal.js';
 
 interface UseSlashCommandsOptions {
   commands: SlashCommand[];
@@ -22,7 +23,7 @@ function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[
   const lowerFilter = filter.toLowerCase();
 
   if (!lowerFilter) {
-    return commands;
+    return commands.filter(({ alias }) => !alias);
   }
 
   return commands
@@ -117,25 +118,27 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
 
   const filteredCommands = useMemo(() => filterCommands(commands, filter), [commands, filter]);
 
-  const MAX_VISIBLE_ITEMS = 10;
+  const { rows } = useTerminalSize();
+  const visibleCount = Math.max(3, Math.min(10, rows - 11));
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
-    useSelection(filteredCommands);
+    useSelection(filteredCommands, { pageSize: visibleCount });
 
-  // Sync scrollOffset with selectedIndex
+  // Keep the selected command in view when moving or resizing the terminal.
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
       setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
-    } else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
-      setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
+    } else if (selectedIndex >= scrollOffset + visibleCount) {
+      setScrollOffset(selectedIndex - visibleCount + 1);
     }
-  }, [selectedIndex, scrollOffset]);
+  }, [selectedIndex, scrollOffset, visibleCount]);
 
-  // Reset scroll when menu opens or closes
+  // Start at the top whenever the search changes.
   useEffect(() => {
     setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [isOpen]);
+    setSelectedIndex(0);
+  }, [filter, isOpen, setSelectedIndex]);
 
   const open = useCallback(() => {
     // Avoid resetting selection when already open to preserve
@@ -168,7 +171,8 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     isOpen,
     filter,
     selectedIndex,
-    scrollOffset,
+    scrollOffset: Math.min(scrollOffset, Math.max(0, filteredCommands.length - visibleCount)),
+    visibleCount,
     filteredCommands,
     open,
     close,

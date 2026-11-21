@@ -252,6 +252,7 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
         selectedIndex={settings.selectedIndex}
         scrollOffset={settings.scrollOffset}
         query={frame.binding.query}
+        operation={frame.operation}
         isSearchingAll={settings.isSearchingAll}
         activeCategoryId={settings.activeCategoryId}
         categories={settings.categories}

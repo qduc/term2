@@ -15,7 +15,7 @@ export type SettingCompletionItem = {
   startupOverride?: { source: 'env' | 'cli'; name?: string };
   /** True when a change only takes effect after restarting term2. */
   requiresRestart?: boolean;
-  /** Tuning knob kept out of the browse tabs; reachable through search. */
+  /** Tuning knob in the Advanced tab; lower priority in global search. */
   isAdvanced?: boolean;
 };
 
@@ -24,14 +24,17 @@ export type SettingsCategory = {
   label: string;
 };
 
+export const ADVANCED_SETTINGS_CATEGORY: SettingsCategory = { id: 'advanced', label: 'Advanced' };
+
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   { id: 'models', label: 'Models' },
-  { id: 'providers', label: 'Providers' },
-  { id: 'context', label: 'Context' },
-  { id: 'safety', label: 'Safety' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'permissions', label: 'Permissions' },
   { id: 'tools', label: 'Tools' },
-  { id: 'ui', label: 'UI' },
+  { id: 'context', label: 'Context' },
+  { id: 'limits', label: 'Limits' },
   { id: 'hooks', label: 'Hooks' },
+  ADVANCED_SETTINGS_CATEGORY,
 ];
 
 export const SETTING_DESCRIPTIONS: Record<string, string> = getAllSettingDescriptions();
@@ -68,18 +71,15 @@ export const HIDDEN_SETTINGS = new Set<string>([
  * The browse tabs: each lists the settings a user changes on purpose, in the
  * order they should read (most used first, related settings adjacent).
  *
- * Any visible setting not listed here is *advanced*: it stays out of the tabs
- * but is still found by search. That is the default for a new setting, so a
- * tuning knob never lands in a tab by accident.
+ * Remaining visible settings land in Advanced, in label order.
  */
 export const CATEGORY_KEYS: Record<string, readonly string[]> = {
   models: [
     SETTING_KEYS.AGENT_MODEL_SELECTION,
-    SETTING_KEYS.VERIFIER_MODEL,
     SETTING_KEYS.AGENT_REASONING_EFFORT,
-    SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_FAVORITE_MODELS,
     SETTING_KEYS.AGENT_MODEL_NICKNAMES,
+    SETTING_KEYS.VERIFIER_MODEL,
     SETTING_KEYS.AGENT_SMART_MODEL,
     SETTING_KEYS.AGENT_SMART_REASONING_EFFORT,
     SETTING_KEYS.AGENT_BALANCED_MODEL,
@@ -88,15 +88,17 @@ export const CATEGORY_KEYS: Record<string, readonly string[]> = {
     SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT,
     SETTING_KEYS.AGENT_CHORE_MODEL,
     SETTING_KEYS.AGENT_MENTOR_POOL,
+    SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_DISABLED_PROVIDERS,
     SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
   ],
-  providers: [
-    SETTING_KEYS.WEB_SEARCH_PROVIDER,
-    SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
-    SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
-    SETTING_KEYS.WEB_SEARCH_FIRECRAWL_API_KEY,
-    SETTING_KEYS.WEB_SEARCH_SEARXNG_BASE_URL,
+  appearance: [
+    SETTING_KEYS.UI_THEME,
+    SETTING_KEYS.UI_SKIN,
+    SETTING_KEYS.UI_DISPLAY_MODE,
+    SETTING_KEYS.APP_NOTIFICATIONS,
+    SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL,
+    SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
   ],
   context: [
     SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED,
@@ -107,24 +109,34 @@ export const CATEGORY_KEYS: Record<string, readonly string[]> = {
     SETTING_KEYS.MEMORY_ENABLED,
     SETTING_KEYS.MEMORY_DIRECTORY,
   ],
-  safety: [
+  permissions: [
     SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+    SETTING_KEYS.SHELL_UNATTENDED_ESCAPE_REVIEW,
     SETTING_KEYS.SANDBOX_ENABLED,
     SETTING_KEYS.SANDBOX_READ_POLICY,
     SETTING_KEYS.SANDBOX_ALLOW_NETWORKING,
     SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS,
-    SETTING_KEYS.AGENT_COMPLETION_VERIFICATION,
+  ],
+  limits: [
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
     SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
     SETTING_KEYS.AGENT_MAX_TURNS,
+    SETTING_KEYS.SHELL_TIMEOUT,
+    SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
   ],
   tools: [
     SETTING_KEYS.TOOLS_SHELL_ENABLED,
     SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
     SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
     SETTING_KEYS.TOOLS_WEB_ENABLED,
+    SETTING_KEYS.WEB_SEARCH_PROVIDER,
+    SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
+    SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
+    SETTING_KEYS.WEB_SEARCH_FIRECRAWL_API_KEY,
+    SETTING_KEYS.WEB_SEARCH_FIRECRAWL_BASE_URL,
+    SETTING_KEYS.WEB_SEARCH_SEARXNG_BASE_URL,
     SETTING_KEYS.TOOLS_MEMORY_ENABLED,
     SETTING_KEYS.TOOLS_SESSIONS_ENABLED,
     SETTING_KEYS.TOOLS_SKILLS_ENABLED,
@@ -134,17 +146,9 @@ export const CATEGORY_KEYS: Record<string, readonly string[]> = {
     SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED,
     SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED,
     SETTING_KEYS.ENABLE_AGENT_WORKFLOW,
-    SETTING_KEYS.SHELL_TIMEOUT,
+    SETTING_KEYS.AGENT_COMPLETION_VERIFICATION,
     SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED,
     SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS,
-  ],
-  ui: [
-    SETTING_KEYS.UI_THEME,
-    SETTING_KEYS.UI_SKIN,
-    SETTING_KEYS.UI_DISPLAY_MODE,
-    SETTING_KEYS.APP_NOTIFICATIONS,
-    SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL,
-    SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
   ],
   hooks: [
     SETTING_KEYS.HOOKS_USER_ENABLED,
@@ -153,6 +157,7 @@ export const CATEGORY_KEYS: Record<string, readonly string[]> = {
     SETTING_KEYS.HOOKS_INCLUDE_USER_TEXT,
     SETTING_KEYS.HOOKS_INCLUDE_TOOL_ARGUMENTS,
     SETTING_KEYS.HOOKS_INCLUDE_TOOL_RESULTS,
+    SETTING_KEYS.HOOKS_TIMEOUT_MS,
   ],
 };
 

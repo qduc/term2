@@ -56,8 +56,8 @@ export const bindingHints = (bindings: MenuBindingTable): [string, string][] =>
 
 /** Slash-command picker. Owned by createSlashMenuInteraction (SlashMenuSession). */
 export const SLASH_MENU_BINDINGS: MenuBindingTable = [
-  { key: '↑↓', action: 'navigate', commands: ['move'] },
-  { key: '⏎', action: 'run', commands: ['accept'] },
+  { key: '↑↓', action: 'move', commands: ['move'] },
+  { key: '⏎', action: 'select', commands: ['accept'] },
   {
     key: 'Tab',
     action: 'complete',
@@ -65,7 +65,7 @@ export const SLASH_MENU_BINDINGS: MenuBindingTable = [
     rationale:
       'The slash frame has no tab/section dimension, so under the conditional Tab rule Tab inserts the highlighted command into the composer ("complete") without executing it.',
   },
-  { key: 'esc', action: 'cancel', commands: ['escape'] },
+  { key: 'esc', action: 'close', commands: ['escape'] },
 ];
 
 /**

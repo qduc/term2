@@ -246,6 +246,14 @@ jobs:
       - name: Check golden parity
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node parity/run.mjs check --cli dist/cli.js
+      # What users install is the tarball, not the checkout: pack the build this job just tested,
+      # install it outside the repository and replay a recorded provider turn against it.
+      # publish.yml runs the same two commands before it publishes.
+      - name: Smoke-test the packed tarball
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: |
+          pnpm pack --pack-destination "$RUNNER_TEMP/term2-pack"
+          pnpm release:smoke --tgz "$RUNNER_TEMP"/term2-pack/*.tgz
 
   provider-black-box:
     needs: changes

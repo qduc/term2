@@ -1,0 +1,1033 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "openai-compatible",
+  "wireFamily": "openai-chat",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "term2-cli",
+    "apiSdkVersion": "1.4.0",
+    "model": "mistralai/mistral-nemo",
+    "modelFamily": "openai-compatible",
+    "capturedAt": "2026-11-21T17:25:23.178Z",
+    "recorderVersion": "release-smoke-1",
+    "probeScenario": "cli-release-turn-v1"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "accept-encoding": "identity",
+            "accept-language": "*",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "sec-fetch-mode": "cors",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "x64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "Linux",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.22.3"
+          },
+          "body": {
+            "model": "mistralai/mistral-nemo",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: Linux 6.18.44-fc-v726 (linux); shell: unknown; cwd (you're already here, don't `cd` to it): /tmp/term2-release-smoke-pXO6tA/work; home (`~`): /tmp/term2-release-smoke-pXO6tA/home; date: 2026-11-21\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the read_file tool to read smoke.txt in the current directory, then reply with only its exact contents."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "shell",
+                  "description": "Run shell commands for reads, searches and local checks. Combine known dependent steps in one command; batch independent reads and return only relevant evidence. Make file edits with the shell too. Foreground execution only. Respect approvals; unsandboxed execution requires approval.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "command": {
+                        "description": "Shell command. Batch related reads and filter output locally.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": {
+                        "description": "Short user-visible description.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "timeout_ms": {
+                        "description": "Finite deadline in milliseconds; size explicitly for long work. A timeout is not permission to repeat effects.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "max_output_length": {
+                        "description": "Output character limit. Overflow is saved to a file; inspect relevant ranges instead of rerunning.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "sandbox": {
+                        "description": "Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.",
+                        "default": "default",
+                        "type": "string",
+                        "enum": ["default", "unsandboxed"]
+                      }
+                    },
+                    "required": ["command", "sandbox"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "read_file",
+                  "description": "Read file content from the workspace (like cat command). Supports reading specific line ranges. Image files are returned as image content for visual models. Use this to inspect a known file or verify a specific claim about a location. Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. Do NOT use this to search for text across files (inside run_code, use tools.grep(...) instead). Returns the file path, total line count, and the requested lines. Large results are truncated and the full payload is saved to a file; look for \"Full output saved to\" and read that path when you need more.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "description": "File path relative to workspace root",
+                        "type": "string"
+                      },
+                      "start_line": {
+                        "description": "Starting line number (1-indexed). Optional; give a line range when you know the exact range to read.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "end_line": {
+                        "description": "Ending line number (1-indexed, inclusive).",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "create_file",
+                  "description": "Create a new file with the specified content. Replace existing files requires setting overwrite=true. Do NOT use this to edit existing files; inside run_code, use tools.search_replace(...) instead. Returns Created <path>, Overwrote <path>, or Error: <reason>.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "description": "The absolute or relative path to the new file.",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "The initial content for the new file.",
+                        "type": "string"
+                      },
+                      "overwrite": {
+                        "description": "Whether to overwrite an existing file.",
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "confirmOverwriteCode": {
+                        "description": "Confirmation code from a previous failed attempt.",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["path", "content", "overwrite"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "search_replace",
+                  "description": "Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\nGap matching: When rewriting large chunks of text, put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span—both anchors and everything between them—is replaced, so a misplaced anchor silently deletes a large region. Choose distinctive, unambiguous anchors: prefer a few lines of real, unique code. Never anchor on a single generic line like }, return, or a blank line. Use this to edit or delete a large block without reproducing it: Delete the block including anchors: omit them from replace_content. Delete only the middle: repeat the anchors in replace_content.\nDo NOT use this to create files from scratch; inside run_code, use tools.create_file(...). Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "description": "The absolute or relative path to the file",
+                        "type": "string"
+                      },
+                      "replacements": {
+                        "description": "The list of replacements to apply to the file",
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "search_content": {
+                              "description": "The exact content to search for. <...> on its own line acts as a gap anchor.",
+                              "type": "string"
+                            },
+                            "replace_content": {
+                              "description": "The content to replace the matched search_content with.",
+                              "type": "string"
+                            },
+                            "match_all": {
+                              "description": "Replace every non-overlapping match. Defaults to false, which requires exactly one match.",
+                              "default": false,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["search_content", "replace_content", "match_all"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["path", "replacements"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "run_subagent",
+                  "description": "Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. execution \"foreground\" (explorer and librarian only) waits for the child and returns its result in this call: use it when you need the result before your next step. \"background\" returns a running handle immediately and a later completion notification: use it for long or parallel independent work. The subagent runs in its own context and returns only a summary, preserving your context.\n\n## When to delegate\nDo the work yourself by default. Investigating, implementing, testing and adjusting form one loop: a test result can change the diagnosis, so keep that loop in one agent instead of splitting it across roles. Delegate a unit only when it separates cleanly: it can start without another unit's result, it returns something useful on its own, and you can judge it against the same criteria as any sibling run. Give parallel runs one shared starting point, the same requirements and assumptions, or their reports cannot be compared. Use a fresh reviewer when an independent judgment is worth the extra run.\n\nYou keep ownership of the outcome. A subagent's report is a claim, not a result: check its important claims against the evidence, resolve disagreements between runs yourself, and finish the work. A reviewer's approval is a separate check, not a guarantee.\n\nBackground launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n## Task Requirements\nGive the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. The subagent does not see your conversation or reasoning. For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. For reviewer, describe the artifact to review (diff range, files, plan), give the original requirement as the review criteria, and name concrete scenarios to check. Do not present your own reasoning about the change as the requirement; if the reviewer needs it, label it separately. It gathers evidence only through explorers. For librarian, assign one history question to answer from memory and prior sessions, or one memory-maintenance topic boundary.\n\nFor isolated worker edits, create a git worktree under the workspace root first (`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. `worktree` pins the child into that existing tree without re-rooting this session; generic writable agents may use it too.\n\nA background status of \"running\" means launch succeeded: end the turn and wait for the completion notification.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "execution": {
+                        "description": "\"foreground\" (explorer or librarian only) returns the result in this call; \"background\" returns a running handle immediately.",
+                        "type": "string",
+                        "enum": ["foreground", "background"]
+                      },
+                      "role": {
+                        "description": "Optional legacy role preset.",
+                        "type": "string",
+                        "enum": ["explorer", "worker", "mentor", "reviewer", "librarian"]
+                      },
+                      "task": {
+                        "description": "Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.",
+                        "type": "string"
+                      },
+                      "agent_spec": {
+                        "description": "Dynamic goal/context/tools/constraints/model/budget; no named role required.",
+                        "type": "object",
+                        "properties": {
+                          "goal": {
+                            "description": "The goal for this general-purpose agent invocation.",
+                            "type": "string"
+                          },
+                          "context": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "tools": {
+                            "description": "Optional allowlist of child-buildable tools; omitted defaults to read-only workspace tools.",
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "read_file",
+                                "grep",
+                                "glob",
+                                "read_code_outline",
+                                "code_context_search",
+                                "web_search",
+                                "web_fetch",
+                                "shell",
+                                "apply_patch",
+                                "search_replace",
+                                "create_file"
+                              ]
+                            }
+                          },
+                          "permissions": {
+                            "type": "object",
+                            "properties": {
+                              "tools": {
+                                "readOnly": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "read_file",
+                                    "grep",
+                                    "glob",
+                                    "read_code_outline",
+                                    "code_context_search",
+                                    "web_search",
+                                    "web_fetch",
+                                    "shell",
+                                    "apply_patch",
+                                    "search_replace",
+                                    "create_file"
+                                  ]
+                                }
+                              },
+                              "filesystem": {
+                                "type": "object",
+                                "properties": {
+                                  "read": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "write": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "network": {
+                                "type": "object",
+                                "properties": {
+                                  "hosts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "agents": {
+                                "type": "object",
+                                "properties": {
+                                  "create": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
+                                    "type": "number"
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "constraints": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "doneWhen": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["efficient", "balanced", "capable"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["provider", "model"],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "budget": {
+                            "description": "Only enforced per-invocation budgets are accepted.",
+                            "type": "object",
+                            "properties": {
+                              "maxTurns": {
+                                "description": "Maximum model turns; defaults to 200.",
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              },
+                              "maxTokens": {
+                                "description": "Provider output-token cap per model response, not an aggregate run token budget.",
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["goal"],
+                        "additionalProperties": false
+                      },
+                      "worktree": {
+                        "description": "For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into.",
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens. Background only.",
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                      },
+                      "continue_run_id": {
+                        "description": "Continue a completed background run using its runId. Background only; writable generic runs and workers cannot continue.",
+                        "type": "string"
+                      },
+                      "check_in": {
+                        "description": "Optional check-in configuration for this background subagent. Background only.",
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "description": "Enable or disable proactive check-ins for this background subagent. Defaults to true.",
+                            "type": "boolean"
+                          },
+                          "interval_seconds": {
+                            "description": "Custom interval in seconds between proactive check-ins.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["execution"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "run_code",
+                  "description": "Run a JavaScript program. Return the value you want the model to receive. Most of your tools are callable in the script as `tools.<tool_name>(params)` with exactly their documented parameters, validated against the real schema before the tool runs. Each call returns a promise of the tool's normal result; a failed call, including an approval denial, rejects and can be caught. The catalogue below is complete: a name absent from it is not available in the script, even if you can call that tool directly. Prefer one script over many tool calls for a loop, a fan-out over many files, or multi-step work whose intermediate values you do not need to see. The script is isolated, with no filesystem, network, timers, require, or eval; `tools.*` is the only way out. Auto-approved tools run immediately; tools that need approval show the usual approval prompt and the script resumes after the decision. `console.log` is a debugging trace, shown only when the script fails or times out, or with `include_console: true`.\n\nEach script may make at most 200 tools.* calls; split large work into chunks and track progress. Catch individual failures or use `Promise.allSettled` to keep partial results; for independent reads, use `Promise.allSettled` and map rejections to `{error: r.reason.message}` so successful siblings survive. When the call budget is exhausted, the error reports calls admitted and remaining: return the partial results and start another run_code call only for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you need: model-visible output is limited to the configured tool output limit (20,000 characters unless changed), and larger host results can fail before rendering. If the run's result says `Full output saved to`, read that exact path with `read_file` instead of repeating completed calls; for any large artifact, take line ranges or only the fields you need instead of transferring the whole value. In the script, a `read_file` result may have `truncated: true` and a `fullOutputPath`: follow that path or narrow the projection before returning it. Use `tools.describe(name)` for the full schema and description of a tool rather than guessing parameters or returned fields. Pass patch or file text that contains JavaScript syntax such as backticks or `${...}` through the `inputs` parameter and read it from the global `inputs` object; do not embed it in code. Code and serialized inputs share the 65,536-byte admission limit. Example: `const r = await Promise.allSettled([tools.read_file({path:\"a.ts\"}), tools.read_file({path:\"b.ts\"})]); return r.map(x => x.status === \"fulfilled\" ? {content:(typeof x.value === \"string\" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`\n\nAvailable inside the script (parameter shapes are approximate; tools you can also call directly are described in their own definitions):\nEssential tools:\n- tools.read_file({ path: string, start_line?: number, end_line?: number })\n    returns { path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string }|({ type: \"text\", text: string }|{ __term2_run_code_media_reference__: string }|string)[]|string (guidance: the { path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } object for a text file; content parts [{ type: \"text\" | \"image\", ... }] for an image file)\n- tools.grep({ pattern: string, path: string, fixed_strings?: boolean, ignore_case?: boolean, include?: string, exclude?: string, no_ignore?: boolean }) — Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. Use…\n    returns string (guidance: string: newline-delimited \"path:line: text\" match lines; \"No matches found.\" when none; a trailing \"Note:\" line when the result was capped)\n- tools.glob({ pattern: string, path?: string, max_results?: number, no_ignore?: boolean }) — Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files. Use…\n    returns { paths: string[], total: number, truncated: boolean }|string (guidance: { paths: string[], total: number, truncated: boolean })\n- tools.create_file({ path: string, content: string, overwrite?: boolean, confirmOverwriteCode?: string })\n    returns string (guidance: string status: \"Created <path>\" | \"Overwrote <path>\" on success; \"Error: …\" on failure (approval denials reject instead))\n- tools.search_replace({ path: string, replacements: { search_content: string, replace_content: string, match_all?: boolean }[] })\n    returns string (guidance: string: one status line per operation, newline-joined — \"Updated <path> (N match)\" | \"Created <path> (new file)\" | \"Error: …\")\n\nOther tools (call tools.describe(name) before use): shell, web_fetch, configure_task_check_in, memory_list, memory_get, memory_search, memory_retrieve, memory_create, memory_update, memory_delete, list_models, get_subagent_result, get_subagent_status, send_message, cancel_run\n\n## Agent capability\n\nWhen present, a flat `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:\n- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result (status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` only for independent runs given the same requirements, and catch per-call rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. When a session approval owner is bound, child tool approval pauses surface to the user and resume the exact child execution; the work clock pauses only while all calls await approval. Without that owner, or for non-tool interruptions, the child rejects rather than reporting completion.\n- `agent.start({ spec, name? })` starts a conversation-scoped background run and resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout. `continue_run_id` is rejected by this script capability until stored-run authority can be verified.\n- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session notification lane even after this script returns.\n- `spec` is a plain AgentSpec (`{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`). The host attenuates it against this session's authority before launch: requests beyond parent tools, scopes, or the worktree scope reject per call as `Agent specification rejected: ...`; the raw spec is never forwarded to any launch path.\n- Per-script limits, separate from the tools.* budget: at most 16 agent launches, 4 parallel foreground runs, and 200 agent.* calls.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "description": "JavaScript (not TypeScript) run as the body of an async function, so top-level await works. Return the value you want the model to receive.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "inputs": {
+                        "description": "JSON data exposed to the script as the global `inputs`. Use this for patch or file text.",
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      "include_console": {
+                        "description": "Also include the console.log trace in a successful result. Defaults to false.",
+                        "type": "boolean"
+                      },
+                      "timeout_ms": {
+                        "description": "Wall-clock limit for the script. Defaults to 120000.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "description": {
+                        "description": "One short line describing what the script does, shown to the user.",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["code", "description"],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "max_tokens": 16384
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-cache",
+            "cf-ray": "[REDACTED]",
+            "connection": "close, keep-alive",
+            "content-type": "text/event-stream",
+            "date": "Sat, 21 Nov 2026 17:25:25 GMT",
+            "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+            "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-generation-id": "gen_<1>",
+            "x-openrouter-release": "[REDACTED]"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795281924,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"cGngx3n5W\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795281924,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"path\\\": \\\"sm\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795281924,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"oke.txt\\\"}\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795281924,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\"}]}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<1>\",\"object\":\"chat.completion.chunk\",\"created\":1795281924,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"service_tier\":null,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":5193,\"completion_tokens\":22,\"total_tokens\":5215,\"cost\":0.0000855153288,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":16,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00008637912,\"upstream_inference_prompt_cost\":0.00008590392,\"upstream_inference_completions_cost\":4.752e-7},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}",
+          "seq": 6
+        },
+        {
+          "kind": "sse-event",
+          "data": "[DONE]",
+          "seq": 7
+        }
+      ]
+    },
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/api/v1/chat/completions",
+          "headers": {
+            "accept": "application/json",
+            "accept-encoding": "identity",
+            "accept-language": "*",
+            "authorization": "[REDACTED]",
+            "content-type": "application/json",
+            "sec-fetch-mode": "cors",
+            "user-agent": "OpenAI/JS 6.37.0",
+            "x-stainless-arch": "x64",
+            "x-stainless-lang": "js",
+            "x-stainless-os": "Linux",
+            "x-stainless-package-version": "6.37.0",
+            "x-stainless-retry-count": "0",
+            "x-stainless-runtime": "node",
+            "x-stainless-runtime-version": "v24.22.3"
+          },
+          "body": {
+            "model": "mistralai/mistral-nemo",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: Linux 6.18.44-fc-v726 (linux); shell: unknown; cwd (you're already here, don't `cd` to it): /tmp/term2-release-smoke-pXO6tA/work; home (`~`): /tmp/term2-release-smoke-pXO6tA/home; date: 2026-11-21\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
+              },
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the read_file tool to read smoke.txt in the current directory, then reply with only its exact contents."
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "id": "cGngx3n5W",
+                    "type": "function",
+                    "function": {
+                      "name": "read_file",
+                      "arguments": "{\"path\":\"smoke.txt\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "cGngx3n5W",
+                "content": "File: smoke.txt (2 lines) [lines 1-2]\n===\n1: kestrel-41-orbit\n2: "
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "shell",
+                  "description": "Run shell commands for reads, searches and local checks. Combine known dependent steps in one command; batch independent reads and return only relevant evidence. Make file edits with the shell too. Foreground execution only. Respect approvals; unsandboxed execution requires approval.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "command": {
+                        "description": "Shell command. Batch related reads and filter output locally.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "description": {
+                        "description": "Short user-visible description.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "timeout_ms": {
+                        "description": "Finite deadline in milliseconds; size explicitly for long work. A timeout is not permission to repeat effects.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "max_output_length": {
+                        "description": "Output character limit. Overflow is saved to a file; inspect relevant ranges instead of rerunning.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "sandbox": {
+                        "description": "Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.",
+                        "default": "default",
+                        "type": "string",
+                        "enum": ["default", "unsandboxed"]
+                      }
+                    },
+                    "required": ["command", "sandbox"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "read_file",
+                  "description": "Read file content from the workspace (like cat command). Supports reading specific line ranges. Image files are returned as image content for visual models. Use this to inspect a known file or verify a specific claim about a location. Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. Do NOT use this to search for text across files (inside run_code, use tools.grep(...) instead). Returns the file path, total line count, and the requested lines. Large results are truncated and the full payload is saved to a file; look for \"Full output saved to\" and read that path when you need more.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "description": "File path relative to workspace root",
+                        "type": "string"
+                      },
+                      "start_line": {
+                        "description": "Starting line number (1-indexed). Optional; give a line range when you know the exact range to read.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "end_line": {
+                        "description": "Ending line number (1-indexed, inclusive).",
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "create_file",
+                  "description": "Create a new file with the specified content. Replace existing files requires setting overwrite=true. Do NOT use this to edit existing files; inside run_code, use tools.search_replace(...) instead. Returns Created <path>, Overwrote <path>, or Error: <reason>.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "description": "The absolute or relative path to the new file.",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "The initial content for the new file.",
+                        "type": "string"
+                      },
+                      "overwrite": {
+                        "description": "Whether to overwrite an existing file.",
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "confirmOverwriteCode": {
+                        "description": "Confirmation code from a previous failed attempt.",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["path", "content", "overwrite"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "search_replace",
+                  "description": "Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\nGap matching: When rewriting large chunks of text, put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span—both anchors and everything between them—is replaced, so a misplaced anchor silently deletes a large region. Choose distinctive, unambiguous anchors: prefer a few lines of real, unique code. Never anchor on a single generic line like }, return, or a blank line. Use this to edit or delete a large block without reproducing it: Delete the block including anchors: omit them from replace_content. Delete only the middle: repeat the anchors in replace_content.\nDo NOT use this to create files from scratch; inside run_code, use tools.create_file(...). Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "description": "The absolute or relative path to the file",
+                        "type": "string"
+                      },
+                      "replacements": {
+                        "description": "The list of replacements to apply to the file",
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "search_content": {
+                              "description": "The exact content to search for. <...> on its own line acts as a gap anchor.",
+                              "type": "string"
+                            },
+                            "replace_content": {
+                              "description": "The content to replace the matched search_content with.",
+                              "type": "string"
+                            },
+                            "match_all": {
+                              "description": "Replace every non-overlapping match. Defaults to false, which requires exactly one match.",
+                              "default": false,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["search_content", "replace_content", "match_all"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["path", "replacements"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "run_subagent",
+                  "description": "Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. execution \"foreground\" (explorer and librarian only) waits for the child and returns its result in this call: use it when you need the result before your next step. \"background\" returns a running handle immediately and a later completion notification: use it for long or parallel independent work. The subagent runs in its own context and returns only a summary, preserving your context.\n\n## When to delegate\nDo the work yourself by default. Investigating, implementing, testing and adjusting form one loop: a test result can change the diagnosis, so keep that loop in one agent instead of splitting it across roles. Delegate a unit only when it separates cleanly: it can start without another unit's result, it returns something useful on its own, and you can judge it against the same criteria as any sibling run. Give parallel runs one shared starting point, the same requirements and assumptions, or their reports cannot be compared. Use a fresh reviewer when an independent judgment is worth the extra run.\n\nYou keep ownership of the outcome. A subagent's report is a claim, not a result: check its important claims against the evidence, resolve disagreements between runs yourself, and finish the work. A reviewer's approval is a separate check, not a guarantee.\n\nBackground launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n## Task Requirements\nGive the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. The subagent does not see your conversation or reasoning. For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. For reviewer, describe the artifact to review (diff range, files, plan), give the original requirement as the review criteria, and name concrete scenarios to check. Do not present your own reasoning about the change as the requirement; if the reviewer needs it, label it separately. It gathers evidence only through explorers. For librarian, assign one history question to answer from memory and prior sessions, or one memory-maintenance topic boundary.\n\nFor isolated worker edits, create a git worktree under the workspace root first (`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. `worktree` pins the child into that existing tree without re-rooting this session; generic writable agents may use it too.\n\nA background status of \"running\" means launch succeeded: end the turn and wait for the completion notification.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "execution": {
+                        "description": "\"foreground\" (explorer or librarian only) returns the result in this call; \"background\" returns a running handle immediately.",
+                        "type": "string",
+                        "enum": ["foreground", "background"]
+                      },
+                      "role": {
+                        "description": "Optional legacy role preset.",
+                        "type": "string",
+                        "enum": ["explorer", "worker", "mentor", "reviewer", "librarian"]
+                      },
+                      "task": {
+                        "description": "Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.",
+                        "type": "string"
+                      },
+                      "agent_spec": {
+                        "description": "Dynamic goal/context/tools/constraints/model/budget; no named role required.",
+                        "type": "object",
+                        "properties": {
+                          "goal": {
+                            "description": "The goal for this general-purpose agent invocation.",
+                            "type": "string"
+                          },
+                          "context": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "tools": {
+                            "description": "Optional allowlist of child-buildable tools; omitted defaults to read-only workspace tools.",
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "read_file",
+                                "grep",
+                                "glob",
+                                "read_code_outline",
+                                "code_context_search",
+                                "web_search",
+                                "web_fetch",
+                                "shell",
+                                "apply_patch",
+                                "search_replace",
+                                "create_file"
+                              ]
+                            }
+                          },
+                          "permissions": {
+                            "type": "object",
+                            "properties": {
+                              "tools": {
+                                "readOnly": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "read_file",
+                                    "grep",
+                                    "glob",
+                                    "read_code_outline",
+                                    "code_context_search",
+                                    "web_search",
+                                    "web_fetch",
+                                    "shell",
+                                    "apply_patch",
+                                    "search_replace",
+                                    "create_file"
+                                  ]
+                                }
+                              },
+                              "filesystem": {
+                                "type": "object",
+                                "properties": {
+                                  "read": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "write": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "network": {
+                                "type": "object",
+                                "properties": {
+                                  "hosts": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "agents": {
+                                "type": "object",
+                                "properties": {
+                                  "create": {
+                                    "type": "boolean"
+                                  },
+                                  "maxDepth": {
+                                    "type": "number"
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "constraints": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "doneWhen": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["efficient", "balanced", "capable"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string"
+                                  },
+                                  "model": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["provider", "model"],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "budget": {
+                            "description": "Only enforced per-invocation budgets are accepted.",
+                            "type": "object",
+                            "properties": {
+                              "maxTurns": {
+                                "description": "Maximum model turns; defaults to 200.",
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              },
+                              "maxTokens": {
+                                "description": "Provider output-token cap per model response, not an aggregate run token budget.",
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["goal"],
+                        "additionalProperties": false
+                      },
+                      "worktree": {
+                        "description": "For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into.",
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens. Background only.",
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+                      },
+                      "continue_run_id": {
+                        "description": "Continue a completed background run using its runId. Background only; writable generic runs and workers cannot continue.",
+                        "type": "string"
+                      },
+                      "check_in": {
+                        "description": "Optional check-in configuration for this background subagent. Background only.",
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "description": "Enable or disable proactive check-ins for this background subagent. Defaults to true.",
+                            "type": "boolean"
+                          },
+                          "interval_seconds": {
+                            "description": "Custom interval in seconds between proactive check-ins.",
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["execution"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              {
+                "type": "function",
+                "function": {
+                  "type": "function",
+                  "name": "run_code",
+                  "description": "Run a JavaScript program. Return the value you want the model to receive. Most of your tools are callable in the script as `tools.<tool_name>(params)` with exactly their documented parameters, validated against the real schema before the tool runs. Each call returns a promise of the tool's normal result; a failed call, including an approval denial, rejects and can be caught. The catalogue below is complete: a name absent from it is not available in the script, even if you can call that tool directly. Prefer one script over many tool calls for a loop, a fan-out over many files, or multi-step work whose intermediate values you do not need to see. The script is isolated, with no filesystem, network, timers, require, or eval; `tools.*` is the only way out. Auto-approved tools run immediately; tools that need approval show the usual approval prompt and the script resumes after the decision. `console.log` is a debugging trace, shown only when the script fails or times out, or with `include_console: true`.\n\nEach script may make at most 200 tools.* calls; split large work into chunks and track progress. Catch individual failures or use `Promise.allSettled` to keep partial results; for independent reads, use `Promise.allSettled` and map rejections to `{error: r.reason.message}` so successful siblings survive. When the call budget is exhausted, the error reports calls admitted and remaining: return the partial results and start another run_code call only for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you need: model-visible output is limited to the configured tool output limit (20,000 characters unless changed), and larger host results can fail before rendering. If the run's result says `Full output saved to`, read that exact path with `read_file` instead of repeating completed calls; for any large artifact, take line ranges or only the fields you need instead of transferring the whole value. In the script, a `read_file` result may have `truncated: true` and a `fullOutputPath`: follow that path or narrow the projection before returning it. Use `tools.describe(name)` for the full schema and description of a tool rather than guessing parameters or returned fields. Pass patch or file text that contains JavaScript syntax such as backticks or `${...}` through the `inputs` parameter and read it from the global `inputs` object; do not embed it in code. Code and serialized inputs share the 65,536-byte admission limit. Example: `const r = await Promise.allSettled([tools.read_file({path:\"a.ts\"}), tools.read_file({path:\"b.ts\"})]); return r.map(x => x.status === \"fulfilled\" ? {content:(typeof x.value === \"string\" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`\n\nAvailable inside the script (parameter shapes are approximate; tools you can also call directly are described in their own definitions):\nEssential tools:\n- tools.read_file({ path: string, start_line?: number, end_line?: number })\n    returns { path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string }|({ type: \"text\", text: string }|{ __term2_run_code_media_reference__: string }|string)[]|string (guidance: the { path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } object for a text file; content parts [{ type: \"text\" | \"image\", ... }] for an image file)\n- tools.grep({ pattern: string, path: string, fixed_strings?: boolean, ignore_case?: boolean, include?: string, exclude?: string, no_ignore?: boolean }) — Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. Use…\n    returns string (guidance: string: newline-delimited \"path:line: text\" match lines; \"No matches found.\" when none; a trailing \"Note:\" line when the result was capped)\n- tools.glob({ pattern: string, path?: string, max_results?: number, no_ignore?: boolean }) — Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files. Use…\n    returns { paths: string[], total: number, truncated: boolean }|string (guidance: { paths: string[], total: number, truncated: boolean })\n- tools.create_file({ path: string, content: string, overwrite?: boolean, confirmOverwriteCode?: string })\n    returns string (guidance: string status: \"Created <path>\" | \"Overwrote <path>\" on success; \"Error: …\" on failure (approval denials reject instead))\n- tools.search_replace({ path: string, replacements: { search_content: string, replace_content: string, match_all?: boolean }[] })\n    returns string (guidance: string: one status line per operation, newline-joined — \"Updated <path> (N match)\" | \"Created <path> (new file)\" | \"Error: …\")\n\nOther tools (call tools.describe(name) before use): shell, web_fetch, configure_task_check_in, memory_list, memory_get, memory_search, memory_retrieve, memory_create, memory_update, memory_delete, list_models, get_subagent_result, get_subagent_status, send_message, cancel_run\n\n## Agent capability\n\nWhen present, a flat `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:\n- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result (status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` only for independent runs given the same requirements, and catch per-call rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. When a session approval owner is bound, child tool approval pauses surface to the user and resume the exact child execution; the work clock pauses only while all calls await approval. Without that owner, or for non-tool interruptions, the child rejects rather than reporting completion.\n- `agent.start({ spec, name? })` starts a conversation-scoped background run and resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout. `continue_run_id` is rejected by this script capability until stored-run authority can be verified.\n- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session notification lane even after this script returns.\n- `spec` is a plain AgentSpec (`{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`). The host attenuates it against this session's authority before launch: requests beyond parent tools, scopes, or the worktree scope reject per call as `Agent specification rejected: ...`; the raw spec is never forwarded to any launch path.\n- Per-script limits, separate from the tools.* budget: at most 16 agent launches, 4 parallel foreground runs, and 200 agent.* calls.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "description": "JavaScript (not TypeScript) run as the body of an async function, so top-level await works. Return the value you want the model to receive.",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "inputs": {
+                        "description": "JSON data exposed to the script as the global `inputs`. Use this for patch or file text.",
+                        "type": "object",
+                        "additionalProperties": {}
+                      },
+                      "include_console": {
+                        "description": "Also include the console.log trace in a successful result. Defaults to false.",
+                        "type": "boolean"
+                      },
+                      "timeout_ms": {
+                        "description": "Wall-clock limit for the script. Defaults to 120000.",
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "description": {
+                        "description": "One short line describing what the script does, shown to the user.",
+                        "type": "string"
+                      }
+                    },
+                    "required": ["code", "description"],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "max_tokens": 16384
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-cache",
+            "cf-ray": "[REDACTED]",
+            "connection": "close, keep-alive",
+            "content-type": "text/event-stream",
+            "date": "Sat, 21 Nov 2026 17:25:26 GMT",
+            "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+            "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+            "server": "cloudflare",
+            "set-cookie": "[REDACTED]",
+            "transfer-encoding": "chunked",
+            "x-content-type-options": "nosniff",
+            "x-generation-id": "gen_<2>",
+            "x-openrouter-release": "[REDACTED]"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795281925,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"k\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795281925,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"estrel-41-orbit\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}",
+          "seq": 3
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795281925,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}]}",
+          "seq": 4
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"id\":\"gen_<2>\",\"object\":\"chat.completion.chunk\",\"created\":1795281925,\"model\":\"mistralai/mistral-nemo\",\"provider\":\"Io Net\",\"system_fingerprint\":\"[REDACTED]\",\"service_tier\":null,\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5281,\"completion_tokens\":9,\"total_tokens\":5290,\"cost\":0.0000571188024,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":5200,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00005769576,\"upstream_inference_prompt_cost\":0.00005750136,\"upstream_inference_completions_cost\":1.944e-7},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}",
+          "seq": 5
+        },
+        {
+          "kind": "sse-event",
+          "data": "[DONE]",
+          "seq": 6
+        }
+      ]
+    }
+  ],
+  "placeholders": {
+    "gen_<1>": "gen_<1>",
+    "gen_<2>": "gen_<2>"
+  }
+}

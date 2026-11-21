@@ -50,6 +50,10 @@ scenario is the one whose CLI never reached the state it waits for.
   deadlines, and cleanup.
 - `scripts/provider-black-box/fake-provider-http-server.ts` and
   `provider-wire-fixtures.ts` contain deterministic loopback HTTP/SSE fixtures.
+- `scripts/provider-black-box/provider-record-live.test.ts` runs the recorder's live
+  path (`scripts/provider-record.ts --yes --probe`) as an asynchronous child process
+  against the fake server, so a settings or provider change that breaks recording fails
+  here rather than at the next paid recording.
 - `scripts/provider-black-box/fake-provider-websocket-server.ts` owns the
   deterministic WebSocket replay fixture and its terminal/error assertions.
 - `scripts/provider-black-box/provider-test-harness.ts` owns child-process,

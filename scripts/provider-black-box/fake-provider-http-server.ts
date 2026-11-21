@@ -179,6 +179,31 @@ export function framesFor(
   scenario: FakeProviderScenario,
   requestNumber = 1,
 ): Record<string, unknown>[] {
+  // Messages API tool call: a `tool_use` block whose input arrives as JSON fragments.
+  if (protocol === 'anthropic' && scenario === 'tool-fragments')
+    return [
+      {
+        type: 'message_start',
+        message: {
+          id: 'msg_fake',
+          type: 'message',
+          role: 'assistant',
+          content: [],
+          model: 'fake',
+          usage: { input_tokens: 1, output_tokens: 0 },
+        },
+      },
+      {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu_fake', name: 'fixture', input: {} },
+      },
+      { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"a"' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: ':1}' } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 1 } },
+      { type: 'message_stop' },
+    ];
   if (protocol === 'anthropic')
     return [
       {

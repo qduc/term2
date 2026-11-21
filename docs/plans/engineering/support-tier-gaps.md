@@ -75,11 +75,43 @@ Ordered by what a miss costs, then by how likely the miss is.
    `denied-read` in `off`, `docker-host` in `unattended`, and `docker-host` in
    `off` behind `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS. The pilot's
    `README.md` now gives the registered count.
-4. **Check the workspace write boundary.** The home-directory warning is tested
-   in `tests/cli/cli.integration.scenarios.ts`; nothing asserts that a write
-   outside the launch directory is refused or asked about.
-5. **Check the shell and output limits.** No test sets or asserts
-   `shell.timeout`, `shell.backgroundTimeout` or `agent.maxStreamOutputChars`.
+4. **The workspace write boundary is now checked for the file tools.**
+   `tests/cli/workspace-write-boundary.integration.test.ts` (headless) and
+   `tests/cli/workspace-write-boundary.e2e.test.ts` (a person answering the
+   prompt) run the built CLI with the sandbox off. `create_file` and
+   `search_replace` are tried by absolute path, by `..`, through a symlinked
+   directory and a symlinked file, into a sibling directory whose name starts
+   with the workspace's, into `~`, and into `.term2/hooks`; each is held for
+   approval, the refusal names the approval policy as the reason, and nothing
+   outside changes. The cases cover each of `APPROVAL_POLICIES`. Not covered:
+   the sandbox as the boundary for shell writes (item 1), `apply_patch`, and
+   writes made from inside `run_code`. Findings:
+   - Headless `--auto-approve` allows any `create_file` or `search_replace`
+     outside the workspace, in every approval mode, including after the
+     reviewer model has rejected it (`decideHeadlessApproval` allows every
+     tool that is not the shell). A rejected shell command stays rejected.
+     The flag's help says it skips confirmation, so this may be intended; it
+     is not asserted either way.
+   - With the sandbox off, a shell redirect to an absolute path under `/tmp`
+     runs without approval in mode `off`, wherever the workspace is, because
+     the path classifier treats `/tmp` as safe. Redirects through `..` or `~`
+     are held. The tests assert only the held cases.
+   - The comment on the existing real-sandbox case says the bare profile
+     edits through the shell. Bare also has `create_file` and
+     `search_replace`, which approval admits, not the sandbox.
+5. **The shell and output limits are now checked.**
+   `tests/cli/shell-limits.integration.test.ts` covers `shell.timeout`: a
+   command past it is stopped, its whole process tree is gone before the model
+   sees the result, a command that ignores the first signal is still killed,
+   and an explicit `timeout_ms` on the call wins.
+   `tests/cli/shell-background-timeout.e2e.test.ts` covers
+   `shell.backgroundTimeout`, which applies only to background jobs, and those
+   exist only in the TUI. `agent.maxStreamOutputChars` turned out to limit the
+   model's streamed text per request, not tool output: text past it fails the
+   turn, the limit is inclusive, and reasoning past it is cut without failing.
+   Tool output is cut by `tools.maxOutputChars`, which has no test. Not
+   covered: Windows, and a foreground command moved to the background in the
+   TUI.
 
 ### 2. Providers
 

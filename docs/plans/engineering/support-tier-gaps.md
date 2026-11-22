@@ -191,26 +191,31 @@ section is a real recording behind every provider, replayed offline.
      still arrives as `text_delta` events.
      `provider-session-chat-terminal-errors.blackbox.ts` asserts it on both
      chat rows.
-   - Decided 2026-11-22 and fixed in `@qduc/agent-core` 0.3.0-alpha.1
-     (qduc/agent-runtime#17): `agent.retryAttempts` = n sends n + 1 requests
-     to a provider that keeps failing before any output, every retry announced
-     as k/n and the stored notice counting the requests sent. Before, n of 1 or
-     2 sent 2 × (n + 1) requests, on `openai`, `grok`, `codex` and both chat
-     custom types, and for a connection dropped before any response. An
-     earlier diagnosis here, that `physicalModelStream` in `src/model/retry.ts`
+   - Decided 2026-11-22 and fixed in `@qduc/agent-core` 0.3.0-alpha.2
+     (qduc/agent-runtime#17 and #18): `agent.retryAttempts` = n sends n + 1
+     requests to a provider that keeps failing before any output, every retry
+     announced as k/n and the stored notice counting the requests sent. Before,
+     n of 1 or 2 sent 2 × (n + 1) requests, on `openai`, `grok`, `codex` and
+     both chat custom types, for a connection dropped before any response, and
+     for a stream that opened and ended before any output. An earlier
+     diagnosis here, that `physicalModelStream` in `src/model/retry.ts`
      retries under the engine, was wrong: with the engine's `request.recovery`
      it makes one attempt, and the provider factories get `retryAttempts: 0`
      (`lazyModel` in `src/model/provider.ts`), so the SDK and `RetryingModel`
      add none (`tests/model/custom-provider-retries.integration.test.ts`). The
-     doubling was `DirectRecovery#transient` in 0.3.0-alpha.0: up to n silent
-     retries, then one "retrying k/n" turn-level retry that restarted them.
-     It now has one counter, and each retry spends a physical attempt but not
-     the automatic replay. `provider-retries-exhausted-notice.blackbox.ts`
-     counts 1, 2 and 3 requests for n of 0, 1 and 2 on custom chat, OpenAI
-     Responses and Codex, and `provider-session-grok-client.blackbox.ts` 2 for
-     Grok at n = 1. The recovery budget's three physical attempts still cap n
-     above 3 at four requests, and the `connection_interrupted` path (a stream
-     cut after it started) has a similar shape and was not changed.
+     doubling was in the engine's `DirectRecovery`: up to n silent retries,
+     then one turn-level or chain retry that restarted them. alpha.1 gave a
+     failed request one counter; alpha.2 does the same for a stream cut before
+     any output (`connection_interrupted`), which now ends with the exhausted
+     notice, and raises the default recovery budget's physical-attempt cap
+     from 3 to n when n is larger, so n of 4 sends 5 requests; the 90 s
+     recovery clock still bounds the episode. A stream cut after output was
+     already n + 1 (its partial text withdrawn and retried silently) and is
+     unchanged. `provider-retries-exhausted-notice.blackbox.ts` counts 1, 2
+     and 3 requests for n of 0, 1 and 2 on custom chat, OpenAI Responses and
+     Codex, 2 and 3 for a stream ended before output on chat and Responses,
+     and 5 for n of 4; `provider-session-grok-client.blackbox.ts` counts 2
+     for Grok at n = 1.
 7. **Record what has only been faked.** Recorded fixtures exist for OpenAI over
    HTTP, Google, OpenCode's Chat and Anthropic protocols, and, recorded through
    OpenRouter, the `openai-compatible`, custom `openai` and `anthropic` custom

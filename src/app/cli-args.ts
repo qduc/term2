@@ -5,6 +5,7 @@
  */
 import { join } from 'node:path';
 import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
 import { parseServeArgs, type ServeArgs } from '../host/gateway/serve-args.js';
 import { parseAcpArgs, type AcpArgs } from './serve-args.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
@@ -463,4 +464,17 @@ export function cliSettingsOverrides(options: SessionOptions): {
       ...(options.showReview === undefined ? {} : { showReview: options.showReview }),
     },
   };
+}
+
+/**
+ * `--auto-approve` selects `auto` for a headless run: the approval reviewer decides what `off` would have
+ * asked about, and anything still left is refused. An explicit --approval-mode wins; a saved `unattended`
+ * or `always` is kept (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 2).
+ */
+export function raiseOffForAutoApprove(
+  options: Pick<SessionOptions, 'autoApprove' | 'approvalMode'>,
+  settings: Pick<ISettingsService, 'get' | 'set'>,
+): void {
+  if (options.autoApprove && options.approvalMode === undefined && settings.get('shell.autoApproveMode') === 'off')
+    settings.set('shell.autoApproveMode', 'auto', { persist: false });
 }

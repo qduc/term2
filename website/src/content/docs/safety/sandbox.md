@@ -24,6 +24,10 @@ You can toggle the sandbox at any time with `/sandbox`, or configure policies vi
   - `~/.docker`
   - `~/.netrc`
   - Shell history files.
+  - Term2's own settings and config directories, which hold your API keys (`settings.json`) and sign-in tokens. A `term2` started inside the sandbox therefore finds no keys; give it its own with `TERM2_CONFIG_DIR` and, on Linux, `XDG_STATE_HOME`.
+  - Other coding agents' token files, such as `~/.codex/auth.json`, `~/.grok/auth.json` and `~/.claude/.credentials.json`.
+
+These protections need the sandbox. With it off, a shell command is checked only by a path heuristic, which a determined command can get around.
 
 ### `strict` Policy
 - **Filesystem reads**: In addition to write restrictions, restricts read access exclusively to the active workspace directory and standard toolchain binaries.

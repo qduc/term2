@@ -5,7 +5,10 @@ checkout, use a temporary directory, and reuse a project dependency cache.
 Term2 supplies XDG cache paths and cache locations for tools such as npm and
 pip that use different defaults. Other tools can point their caches at
 `$XDG_CACHE_HOME` or a directory in the checkout. Credentials inherited from the host process
-are filtered and common credential files remain protected.
+are filtered and common credential files remain protected, including Term2's own settings and
+config directories and other agents' token files (`agentCredentialPaths` in
+`src/tools/shell/sandbox/agent-credential-paths.ts`). A `term2` started inside the sandbox
+therefore finds no API keys; point it at its own config with `TERM2_CONFIG_DIR`.
 
 ## Network approval
 

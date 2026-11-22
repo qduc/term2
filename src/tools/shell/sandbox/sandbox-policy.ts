@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
+import { agentCredentialPaths } from './agent-credential-paths.js';
 import { resolveGitWorktreeWritePaths } from './git-worktree-write-paths.js';
 import { isSecretKey, SANDBOX_SYSTEM_CA_BUNDLE } from './sandbox-env.js';
 import { resolveProjectNetworkStateDirectory } from './sandbox-network-store.js';
@@ -203,6 +204,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     path.join(home, '.gemrc'),
     path.join(home, '.config', 'hub'),
     path.join(home, '.docker', 'config.json'),
+    ...agentCredentialPaths(home, options.env ?? process.env),
   ];
   const defaultCredentialEnvVars = [
     'AWS_ACCESS_KEY_ID',
@@ -230,7 +232,11 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     Boolean(socketPath),
   );
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
-  const denyRead = readPolicy === 'strict' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;
+  // Strict denies all of home; Term2's directories can sit outside it (TERM2_CONFIG_DIR, XDG overrides).
+  const denyRead =
+    readPolicy === 'strict'
+      ? [home, '/etc', '/var', '/root', '/private/var', ...agentCredentialPaths(home, options.env ?? process.env)]
+      : credentialFiles;
   // Docker Desktop's socket is nested under the credential-denied ~/.docker
   // tree. The sandbox runtime gives allowRead precedence over denyRead, so this
   // exact-path exception permits connecting only to the user-approved daemon

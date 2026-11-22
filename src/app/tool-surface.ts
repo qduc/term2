@@ -20,7 +20,8 @@ import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { formatApprovalReview } from '../shared/contracts/approval-review.js';
-import { approvalRouteFor, describeApproval } from '../session/approval/approval-route.js';
+import { approvalRouteFor, describeApproval, unreviewedRefusalReason } from '../session/approval/approval-route.js';
+import { protectedWriteForFileTool } from '../tools/protected-write-paths.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';
@@ -263,9 +264,13 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     refreshSandbox();
     return sandboxAvailable !== false;
   };
+  // A local file-tool write on the approval floor (headless-approval-redesign.md, decision 3).
+  const isProtectedWrite = (toolName: string, input: unknown): boolean =>
+    !remote && protectedWriteForFileTool(toolName, input, executionContext.getCwd()) !== undefined;
   // The one review path every surface uses (src/session/approval/approval-route.ts).
   const reviewApproval = createAssistedApprovalReview({
     isSandboxEscape,
+    isProtectedWrite,
     agentClient,
     settings,
     logger,
@@ -345,6 +350,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       const profile = describeApproval(request, {
         isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
         isSandboxEscape,
+        isProtectedWrite,
       });
       return approvalRouteFor(settings.get('shell.autoApproveMode'), profile, {
         showReview: settings.get('shell.showReview') === true,
@@ -361,6 +367,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         // Session commits before resolution; the engine records the unanswered
         // result and stops continuation, rather than cancelling that settlement.
         return { kind: 'answer', answer: '', stopAfterApprovalResolution: true };
+      }
+      // The approval floor: headless auto-approval never writes hooks, Term2's settings or git's hooks/config.
+      if (isProtectedWrite(request.toolName, request.input)) {
+        return { kind: 'deny', reason: unreviewedRefusalReason({ hardGate: 'protected-write', reviewable: false }) };
       }
       // Headless auto-approval never silently grants Docker host control.
       if (isDockerRequest(request.toolName, request.input, sessionAccess)) {

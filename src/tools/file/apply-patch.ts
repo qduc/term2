@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../../shared/utils/apply-diff.js';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { protectedWriteForFileTool } from '../protected-write-paths.js';
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
@@ -243,6 +244,9 @@ export function createApplyPatchToolDefinition(deps: {
     strictParameters: applyPatchStrictParametersSchema,
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;
+      // The approval floor holds in every mode, `always` included, and no session edit grant covers it.
+      if (protectedWriteForFileTool(TOOL_NAME_APPLY_PATCH, params, executionContext?.getCwd() || process.cwd()))
+        return true;
       if (settingsService.get('shell.autoApproveMode') === 'always') {
         let operationCount: number | undefined;
         try {

@@ -98,9 +98,11 @@ Ordered by what a miss costs, then by how likely the miss is.
    gate: it generates request shapes at random and asserts on whether any hard
    gate applies, so each pairing of an `ApprovalHardGate` with an approval mode
    is covered only as often as 1,000 random cases happen to produce it. And
-   behavioural tests still cover four of the sixteen pairs: `question` and
-   `denied-read` in `off`, `docker-host` in `unattended`, and `docker-host` in
-   `off` behind `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS. The pilot's
+   behavioural tests cover eight of the twenty pairs: `question` and
+   `denied-read` in `off`, `docker-host` in `unattended`, `docker-host` in
+   `off` behind `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS, and
+   `protected-write` in all four modes (headless, with `--auto-approve`, in
+   `workspace-write-boundary.integration.test.ts`). The pilot's
    `README.md` now gives the registered count.
 4. **The workspace write boundary is now checked for the file tools.**
    `tests/cli/workspace-write-boundary.integration.test.ts` (headless) and

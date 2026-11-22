@@ -286,6 +286,14 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     }
   }
 
+  // The approval floor (headless-approval-redesign.md, decision 3): project hooks and remembered read grants
+  // sit inside the writable workspace. Git hooks need nothing here: the runtime denies `.git/hooks` where
+  // `.git` is a directory, and a linked worktree's shared git directory is writable only for its objects,
+  // refs and logs (`resolveGitWorktreeWritePaths`).
+  const floorWritePaths =
+    options.allowWrite === false
+      ? []
+      : [path.join(workspaceRoot, '.term2', 'hooks'), path.join(workspaceRoot, '.term2', 'sandbox-allow-paths.json')];
   const allowNetworking = options.allowNetworking ?? false;
   return {
     network: {
@@ -299,7 +307,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       denyRead,
       ...(allowRead ? { allowRead } : {}),
       allowWrite,
-      denyWrite: [protectedApprovalDirectory, ...gitWritePaths.deny],
+      denyWrite: [protectedApprovalDirectory, ...gitWritePaths.deny, ...floorWritePaths],
       allowGitConfig: true,
     },
     credentials: {

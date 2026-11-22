@@ -12,9 +12,7 @@ import {
   profileIdFromLegacyModeSetting,
 } from '../config/profiles/legacy-adapter.js';
 import {
-  COMPUTED_PATH_DEFAULT_KEYS,
   DEFAULT_SETTINGS,
-  OPTIONAL_DEFAULT_KEYS,
   RUNTIME_MODIFIABLE_SETTINGS,
   SENSITIVE_SETTING_KEYS,
   SettingsSchema,
@@ -31,13 +29,15 @@ import { migrateLegacyAncillarySettings } from '../config/settings/ancillary-set
 import {
   hasMissingKeys,
   loadSettingsFromFile,
+  OPTIONAL_DEFAULT_KEYS,
+  omitComputedPathDefaults,
   quarantineCorruptSettingsFile,
   saveSettingsToFile,
+  SETTINGS_FILE_VERSION,
   stripSensitiveSettings,
-  type SettingsFileRecovery,
-} from '../config/settings/settings-persistence.js';
+  type ComputedDefaultIntent,
+} from '../config/settings/file/index.js';
 import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
-import { SETTINGS_FILE_VERSION } from '../config/settings/settings-file-version.js';
 
 /**
  * Result of a public settings mutation at the SettingsService owner boundary.
@@ -98,50 +98,6 @@ function setSettingValue(target: Record<string, any>, key: string, value: unknow
     current = current[part];
   }
   current[parts[parts.length - 1]] = cloneSettingValue(value);
-}
-
-/** Which keys a write names: an explicit set always writes a computed path default; a reset forgets it. */
-type ComputedDefaultIntent = { set?: readonly string[]; reset?: readonly string[] | 'all' };
-
-function hasSettingPath(target: unknown, key: string): boolean {
-  let current: unknown = target;
-  for (const part of key.split('.')) {
-    if (!current || typeof current !== 'object' || !Object.hasOwn(current, part)) return false;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return true;
-}
-
-function readSettingPath(target: unknown, key: string): unknown {
-  let current: unknown = target;
-  for (const part of key.split('.')) {
-    if (!current || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-}
-
-/**
- * Leave a computed path default (COMPUTED_PATH_DEFAULT_KEYS) out of the bytes written. It is
- * written when this write sets it explicitly, when its value differs from this machine's
- * default, or when the file on disk already holds it and this write is not a reset of it.
- * An existing value equal to the default is kept: it cannot be told apart from a value the
- * user chose, and dropping it would move memory if XDG_DATA_HOME later changed.
- */
-function omitComputedPathDefaults(cleaned: Partial<SettingsData>, raw: unknown, intent: ComputedDefaultIntent): void {
-  for (const key of COMPUTED_PATH_DEFAULT_KEYS) {
-    if (intent.set?.includes(key)) continue;
-    if (!hasSettingPath(cleaned, key)) continue;
-    if (JSON.stringify(readSettingPath(cleaned, key)) !== JSON.stringify(readSettingPath(DEFAULT_SETTINGS, key))) {
-      continue;
-    }
-    const resetHere =
-      intent.reset === 'all' || (intent.reset ?? []).some((reset) => reset === key || key.startsWith(`${reset}.`));
-    if (!resetHere && hasSettingPath(raw, key)) continue;
-    const parts = key.split('.');
-    const parent = readSettingPath(cleaned, parts.slice(0, -1).join('.')) as Record<string, unknown>;
-    delete parent[parts[parts.length - 1]!];
-  }
 }
 
 function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Array<[string, unknown]> {
@@ -1067,17 +1023,7 @@ export class SettingsService {
    * Load settings from file
    * Returns both raw (pre-Zod) and validated data
    */
-  private loadFromFile(): {
-    validated: Partial<SettingsData>;
-    raw: any;
-    hadErrors: boolean;
-    errorDetails?: string[];
-    recovery?: SettingsFileRecovery;
-    migratedSelections?: boolean;
-    migratedApprovalPolicy?: boolean;
-    fileVersion?: number;
-    versionRefusal?: string;
-  } {
+  private loadFromFile(): ReturnType<typeof loadSettingsFromFile> {
     return loadSettingsFromFile({
       settingsDir: this.settingsDir,
       schema: SettingsSchema,

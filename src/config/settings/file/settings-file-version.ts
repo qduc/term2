@@ -38,7 +38,7 @@ type SettingsFileMigration = {
 };
 
 /** Ordered by `from`; each entry moves exactly one version, and the last ends at {@link SETTINGS_FILE_VERSION}. */
-export const SETTINGS_FILE_MIGRATIONS: readonly SettingsFileMigration[] = [
+const SETTINGS_FILE_MIGRATIONS: readonly SettingsFileMigration[] = [
   // 0 -> 1: the version field was introduced. The content format did not change.
   { from: 0, to: 1, migrate: (raw) => raw },
 ];

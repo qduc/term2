@@ -1,5 +1,5 @@
 // The settings.json `version` field and what a startup writes, through the built CLI and a real
-// settings directory (src/config/settings/settings-file-version.ts; Contract 10).
+// settings directory (src/config/settings/file/settings-file-version.ts; Contract 10).
 //
 // `--list-models` is the launch here because it loads settings with file persistence on and needs
 // no terminal: a headless prompt never writes settings.json, so it cannot show a startup migration.

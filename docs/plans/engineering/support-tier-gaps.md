@@ -387,7 +387,7 @@ section is a real recording behind every provider, replayed offline.
     2026-11-22: a top-level `version` with loader-owned migrations keyed by it;
     machine-specific defaults are no longer written; conversations remain bound
     to the folder they were started in. `SETTINGS_FILE_VERSION` and the ordered
-    `SETTINGS_FILE_MIGRATIONS` are in `src/config/settings/settings-file-version.ts`.
+    `SETTINGS_FILE_MIGRATIONS` are in `src/config/settings/file/settings-file-version.ts`.
     A file without `version` is version 0 and is migrated and rewritten at the
     current version; a newer or non-numeric version is refused at startup with a
     message naming it, and the file is left unchanged, as an unknown log `v` is.

@@ -128,6 +128,8 @@ export const approvalProperties = [
         explicitUser: fc.boolean(),
         deniedRead: fc.boolean(),
         docker: fc.boolean(),
+        // The app reports a file-tool write on the approval floor (hooks, Term2 settings, git hooks/config).
+        protectedWrite: fc.boolean(),
         // The app reports a shell call asking to leave an enabled sandbox (TUI/headless offer no grant for it).
         inputEscape: fc.boolean(),
         grants: fc.subarray(['unsandboxed-once', 'network-allow-once', 'allow-project', 'allow-folder-session']),
@@ -165,6 +167,7 @@ export const approvalProperties = [
         const profile = describeApproval(request, {
           isDockerHostControl: () => shape.docker,
           isSandboxEscape: () => shape.inputEscape,
+          isProtectedWrite: () => shape.protectedWrite,
         });
         const surfaceRoute = approvalRouteFor(mode, profile, { reviewEscapes, showReview });
         const route = ['decide', 'advise', 'judge'].includes(surfaceRoute.kind) ? 'review' : surfaceRoute.kind;

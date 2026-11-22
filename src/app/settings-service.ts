@@ -23,7 +23,7 @@ import {
   type SettingsData,
   type SettingsWithSources,
 } from '../config/settings/settings-schema.js';
-import { isTestEnvironment, parseBooleanEnv, withoutSavedCredentials } from '../config/settings/settings-env.js';
+import { isTestEnvironment, parseBooleanEnv } from '../config/settings/settings-env.js';
 import { flattenSettings, mergeSettings, trackSettingSources } from '../config/settings/settings-merger.js';
 import { buildSettingsWithSources } from '../config/settings/settings-sources.js';
 import { migrateLegacyAncillarySettings } from '../config/settings/ancillary-settings-migration.js';
@@ -247,8 +247,7 @@ export class SettingsService {
         this.startupMigrations.push([`agent.${key}`, pool]);
       }
     }
-    const fileEnv = withoutSavedCredentials(env, fileConfig);
-    this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, fileEnv, cli, {
+    this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
     });
@@ -266,7 +265,7 @@ export class SettingsService {
         recoveredSectionKeys: this.recoveryResult.recoveredSectionKeys,
       });
     }
-    this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, fileEnv, cli);
+    this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
     if (!Object.hasOwn((rawFileConfig as any)?.agent ?? {}, 'maxOutputTokens')) {
       this.sources.set(
         'agent.maxOutputTokens',
@@ -1104,8 +1103,7 @@ export class SettingsService {
       return;
     }
 
-    const committedEnv = withoutSavedCredentials(this.startupEnv, committed);
-    let next = mergeSettings(DEFAULT_SETTINGS, committed, committedEnv, this.startupCli, {
+    let next = mergeSettings(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
     });
@@ -1115,7 +1113,7 @@ export class SettingsService {
     // env/cli may still name a retired Profile id; keep memory canonical.
     if (next.app) next.app = { ...next.app, activeProfileId: canonicalProfileId(String(next.app.activeProfileId)) };
     this.settings = next;
-    this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, committedEnv, this.startupCli);
+    this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
     if (implicitOutputDefault)
       this.sources.set(
         'agent.maxOutputTokens',

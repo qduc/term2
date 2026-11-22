@@ -66,8 +66,9 @@ changes, `/settings` command for user entry).
   `NODE_ENV`, `SHELL/COMSPEC`, file-operation diagnostics, and Tavily, Exa,
   Firecrawl, SearXNG, and web-search provider selection. The API keys among
   them (`ENV_FALLBACK_CREDENTIAL_KEYS`: OpenAI, OpenRouter, Tavily, Exa,
-  Firecrawl) are fallbacks, not overrides: `withoutSavedCredentials` drops each
-  from the env layer when `settings.json` holds a non-empty value, so a saved
+  Firecrawl) are fallbacks, not overrides: `mergeSettings` and
+  `trackSettingSources` drop each from the env layer (`withoutSavedCredentials`)
+  when `settings.json` holds a non-empty value, so a saved
   key wins, matching custom providers' stored key over their type-level
   variable (owner decision 2026-11-22).
   `TERM2_SUPERVISED=1` sets an 80,000-token request input ceiling, an 8,192-token

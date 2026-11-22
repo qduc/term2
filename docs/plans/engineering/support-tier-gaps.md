@@ -221,8 +221,13 @@ section is a real recording behind every provider, replayed offline.
    of any other vendor's server, and `PROVENANCE.md` says so per fixture. For this
    probe the two chat types send identical requests, so the pair does not yet
    exercise anything that differs between them. Still checked against
-   hand-written servers only: Codex and OpenAI over WebSocket, which wait on the
-   WebSocket capture adapter `PROVENANCE.md` lists as outstanding; and Grok.
+   hand-written servers only: Codex and OpenAI over WebSocket, and Grok. For
+   Codex and OpenAI over WebSocket the tooling is done and the recording is
+   pending: `pnpm provider:record --provider codex` records with the
+   maintainer's ChatGPT login (scrubbed at capture, secret-scanned after
+   writing), and a committed capture is replayed by `provider-contract.test.ts`
+   without new test code. It needs the maintainer to run the command in
+   `fixtures/PROVENANCE.md` ("Recording Codex") and send the folder back.
    Decided against: a recording for `llama.cpp` and the local presets. The
    maintainer's judgement is that they have nothing of their own on the wire:
    they speak Chat Completions, which the `openai-compatible` captures cover,

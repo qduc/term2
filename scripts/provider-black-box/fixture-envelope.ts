@@ -20,7 +20,29 @@ export type HttpResponseHeadFrame = {
 export type SseEventFrame = { seq: number; kind: 'sse-event'; event?: string; data: string };
 export type JsonBodyFrame = { seq: number; kind: 'json-body'; body: unknown };
 export type WsMessageFrame = { seq: number; kind: 'ws-message'; direction: 'send' | 'receive'; data: unknown };
-export type FixtureFrame = HttpRequestFrame | HttpResponseHeadFrame | SseEventFrame | JsonBodyFrame | WsMessageFrame;
+/**
+ * The opening handshake of one WebSocket session: the client's upgrade request (path and query only, never
+ * the host) with headers already scrubbed, and the server's handshake status (101 when it upgraded). The
+ * handshake response's headers are deliberately not kept; they carry request, trace and account ids and
+ * nothing replay needs.
+ */
+export type WsOpenFrame = {
+  seq: number;
+  kind: 'ws-open';
+  urlPath: string;
+  headers: Record<string, string>;
+  status?: number;
+};
+/** How the session ended: the close code and reason the client observed (1005/1006 when there was none). */
+export type WsCloseFrame = { seq: number; kind: 'ws-close'; code: number; reason: string };
+export type FixtureFrame =
+  | HttpRequestFrame
+  | HttpResponseHeadFrame
+  | SseEventFrame
+  | JsonBodyFrame
+  | WsMessageFrame
+  | WsOpenFrame
+  | WsCloseFrame;
 
 export type FixtureEnvelopeV1 = {
   schemaVersion: 1;
@@ -47,6 +69,8 @@ const frameKinds = new Set<FixtureFrame['kind']>([
   'sse-event',
   'json-body',
   'ws-message',
+  'ws-open',
+  'ws-close',
 ]);
 const transports = new Set<FixtureTransport>(['http-sse', 'http-json', 'websocket']);
 
@@ -129,6 +153,14 @@ function validateFrame(value: unknown): asserts value is FixtureFrame {
     if (value.event !== undefined) requireString(value.event, 'sse-event.event');
   } else if (value.kind === 'ws-message') {
     if (value.direction !== 'send' && value.direction !== 'receive') throw new Error('Invalid websocket direction');
+  } else if (value.kind === 'ws-open') {
+    requireString(value.urlPath, 'ws-open.urlPath');
+    requireRecordOfStrings(value.headers, 'ws-open.headers');
+    if (value.status !== undefined && (typeof value.status !== 'number' || !Number.isInteger(value.status)))
+      throw new Error('Invalid ws-open status');
+  } else if (value.kind === 'ws-close') {
+    if (typeof value.code !== 'number' || !Number.isInteger(value.code)) throw new Error('Invalid ws-close code');
+    if (typeof value.reason !== 'string') throw new Error('Invalid ws-close reason');
   }
 }
 

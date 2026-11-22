@@ -54,6 +54,13 @@ scenario is the one whose CLI never reached the state it waits for.
   path (`scripts/provider-record.ts --yes --probe`) as an asynchronous child process
   against the fake server, so a settings or provider change that breaks recording fails
   here rather than at the next paid recording.
+- `scripts/provider-black-box/websocket-recorder.test.ts` covers the WebSocket capture
+  adapter (`websocket-capture.ts`) and the credentialed recording path: the
+  `--from-fake websocket` self-validation, `--provider codex` with a fake login against
+  `probe-websocket-responder.ts` (both transports), OpenAI over WebSocket, the no-login
+  error, and the secret scan deleting a recording that leaks. It also replays a fresh
+  recording through `replayWebSocketProbeRecording`, the helper
+  `provider-contract.test.ts` uses for committed WebSocket captures.
 - `scripts/provider-black-box/fake-provider-websocket-server.ts` owns the
   deterministic WebSocket replay fixture and its terminal/error assertions.
 - `scripts/provider-black-box/provider-test-harness.ts` owns child-process,

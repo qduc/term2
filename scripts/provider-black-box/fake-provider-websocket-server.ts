@@ -1,10 +1,12 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { FixtureEnvelopeV1, WsMessageFrame } from './fixture-envelope.js';
+import type { FixtureEnvelopeV1, WsMessageFrame, WsOpenFrame } from './fixture-envelope.js';
 import { canonicalizeFixtureValue } from './fixture-comparator.js';
 
 export type FakeProviderWebSocketScenario = 'success' | 'native-error' | 'incomplete' | 'abnormal-close';
 
 export type WebSocketReplaySession = {
+  /** The upgrade request the client made: path and query, and its headers as the server saw them. */
+  handshake: { urlPath: string; headers: Record<string, string> };
   sent: unknown[];
   received: unknown[];
   failures: string[];
@@ -37,6 +39,8 @@ export interface FakeProviderWebSocketServerOptions {
 
 type ReplayTurn = {
   frames: WsMessageFrame[];
+  /** The recorded handshake, when the recording has one (live captures do; synthetic fixtures do not). */
+  handshake?: WsOpenFrame;
   intentionalClose: boolean;
   abnormalClose: boolean;
 };
@@ -58,14 +62,18 @@ export async function startFakeProviderWebSocketServer(
   const fixture = options.fixture ?? generated!.fixture;
   if (fixture.transport !== 'websocket')
     throw new Error(`Fake WebSocket server requires fixture transport 'websocket', got '${fixture.transport}'.`);
-  const turns = fixture.turns.map((turn, index) => {
-    if (turn.frames.some((frame) => frame.kind !== 'ws-message'))
+  const turns: ReplayTurn[] = fixture.turns.map((turn, index) => {
+    if (turn.frames.some((frame) => !['ws-message', 'ws-open', 'ws-close'].includes(frame.kind)))
       throw new Error(`WebSocket replay turn ${index} contains non-WebSocket frames.`);
     const frames = turn.frames.filter((frame): frame is WsMessageFrame => frame.kind === 'ws-message');
+    // The recorded close is evidence of how the live session ended; replay always ends a completed session
+    // with its own 1000 close (below), as it does for synthetic fixtures.
+    const handshake = turn.frames.find((frame): frame is WsOpenFrame => frame.kind === 'ws-open');
     if (!frames.some((frame) => frame.direction === 'send') || !frames.some((frame) => frame.direction === 'receive'))
       throw new Error(`WebSocket replay turn ${index} must contain a meaningful websocket exchange.`);
     return {
       frames,
+      ...(handshake ? { handshake } : {}),
       intentionalClose: Boolean(generated?.intentionalClose) || Boolean(options.fixture),
       abnormalClose: Boolean(generated?.abnormalClose),
     };
@@ -86,9 +94,18 @@ export async function startFakeProviderWebSocketServer(
     throw error;
   }
 
-  wsServer.on('connection', (socket) => {
+  wsServer.on('connection', (socket, request) => {
     clients.add(socket);
     const session: WebSocketReplaySession = {
+      handshake: {
+        urlPath: request.url ?? '/',
+        headers: Object.fromEntries(
+          Object.entries(request.headers).map(([key, value]) => [
+            key,
+            Array.isArray(value) ? value.join(', ') : value ?? '',
+          ]),
+        ),
+      },
       sent: [],
       received: [],
       failures: [],
@@ -156,7 +173,7 @@ export async function startFakeProviderWebSocketServer(
         return;
       }
       const expectedValue = canonicalizeFixtureValue(expected.data, fixture.placeholders);
-      const actualValue = canonicalizeFixtureValue(actual, fixture.placeholders);
+      const actualValue = canonicalizeFixtureValue(adoptRedactions(expected.data, actual), fixture.placeholders);
       if (JSON.stringify(expectedValue) !== JSON.stringify(actualValue)) {
         session.failures.push(
           `Websocket message ${cursor} differs\nexpected: ${JSON.stringify(expectedValue)}\nactual: ${JSON.stringify(
@@ -209,7 +226,7 @@ export async function startFakeProviderWebSocketServer(
         const turn = turns[index];
         const expectedSends = turn?.frames.filter((frame) => frame.direction === 'send').length ?? 0;
         const expectedReceives = turn?.frames.filter((frame) => frame.direction === 'receive').length ?? 0;
-        const sessionFailures = [...session.failures];
+        const sessionFailures = [...session.failures, ...handshakeFailures(turn?.handshake, session.handshake)];
         if (session.sent.length !== expectedSends) {
           sessionFailures.push(
             `Websocket session #${index + 1} expected ${expectedSends} outbound message(s), got ${session.sent.length}`,
@@ -234,6 +251,46 @@ export async function startFakeProviderWebSocketServer(
       if (failures.length) throw new Error(failures.join('\n'));
     },
   };
+}
+
+/**
+ * A value the recorder scrubbed (`[REDACTED]`, see wire-identity-scrubber.ts) matches whatever the client
+ * sends in its place: the recorded value was deliberately destroyed, and a live run sends fresh session,
+ * turn and installation ids each time. The key must still be there; a missing field still fails, as the
+ * HTTP comparator does for redacted headers.
+ */
+export function adoptRedactions(expected: unknown, actual: unknown): unknown {
+  if (expected === '[REDACTED]') return actual === undefined ? actual : '[REDACTED]';
+  if (Array.isArray(expected) && Array.isArray(actual))
+    return actual.map((item, index) => adoptRedactions(expected[index], item));
+  if (isPlainObject(expected) && isPlainObject(actual))
+    return Object.fromEntries(
+      Object.entries(actual).map(([key, value]) => [key, adoptRedactions(expected[key], value)]),
+    );
+  return actual;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * A recorded handshake must replay: same path and query, and every recorded header present. A recorded
+ * value that was kept (protocol headers such as `openai-beta`, `originator`) must match; a scrubbed one
+ * matches any value.
+ */
+function handshakeFailures(recorded: WsOpenFrame | undefined, actual: WebSocketReplaySession['handshake']): string[] {
+  if (!recorded) return [];
+  const failures: string[] = [];
+  if (recorded.urlPath !== actual.urlPath)
+    failures.push(`handshake path differs: expected ${recorded.urlPath}, got ${actual.urlPath}`);
+  for (const [name, value] of Object.entries(recorded.headers)) {
+    const sent = actual.headers[name.toLowerCase()];
+    if (sent === undefined) failures.push(`handshake header '${name}' missing`);
+    else if (value !== '[REDACTED]' && sent !== value)
+      failures.push(`handshake header '${name}' differs: expected ${value}, got ${sent}`);
+  }
+  return failures;
 }
 
 function sendWebSocketFrame(socket: WebSocket, data: unknown): Promise<void> {

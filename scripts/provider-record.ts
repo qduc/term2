@@ -5,9 +5,16 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { recordAndSelfValidate } from './provider-black-box/fixture-self-validation.js';
-import { fixtureRequest } from './provider-black-box/provider-wire-fixtures.js';
+import {
+  recordAndSelfValidate,
+  recordAndSelfValidateWebSocket,
+  webSocketSelfValidationScenarios,
+  type WebSocketSelfValidationScenario,
+} from './provider-black-box/fixture-self-validation.js';
 import { createFixtureRecorder, createRecordingMiddleware } from './provider-black-box/fixture-recorder.js';
+import { probeRunOptionsFor, runToolContinuationProbe } from './provider-black-box/probe-runner.js';
+import { RecordingLeakError, addLiteral, redactLiterals } from './provider-black-box/recording-secret-scan.js';
+import type { ScrubReport } from './provider-black-box/wire-identity-scrubber.js';
 import type { FixtureTransport } from './provider-black-box/fixture-envelope.js';
 import type { FakeProviderScenario } from './provider-black-box/fake-provider-http-server.js';
 import { selectOpencodeModelTransport } from '../src/model/providers/opencode-routing.js';
@@ -36,14 +43,26 @@ const fromFake = has('--from-fake');
 const typeArg = get('--type');
 const baseUrlArg = get('--base-url');
 const apiKeyEnvArg = get('--api-key-env');
+const transportArg = get('--transport');
 
 const usage = `Usage:
   Live recording (spends credits; never part of PR tests):
-    pnpm provider:record --yes --provider <id> --model <model> --probe <scenario> [--out <absolute dir>]
-      <id> is one of openai, openrouter, anthropic, google|gemini, opencode; credentials come from that provider's
-      usual environment variables (OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, ...).
-      Base URL overrides: OPENROUTER_BASE_URL (openrouter), OPENAI_BASE_URL (openai), ANTHROPIC_BASE_URL (anthropic),
-      OPENCODE_BASE_URL (opencode).
+    pnpm provider:record --yes --provider <id> --model <model> --probe <scenario> [--transport http|websocket]
+      [--out <absolute dir>]
+      <id> is one of openai, openrouter, anthropic, google|gemini, opencode, codex; credentials come from that
+      provider's usual environment variables (OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY,
+      GEMINI_API_KEY, ...). Base URL overrides: OPENROUTER_BASE_URL (openrouter), OPENAI_BASE_URL (openai),
+      ANTHROPIC_BASE_URL (anthropic), OPENCODE_BASE_URL (opencode), CODEX_BASE_URL (codex).
+      --transport defaults to websocket for codex and http otherwise; websocket is accepted for codex and openai.
+
+  Live recording of Codex with your ChatGPT login (two model requests on one WebSocket):
+    pnpm provider:record --yes --provider codex --model <model> --probe tool-continuation-v2 --out <absolute dir>
+      The login is read the way term2 reads it: term2's codex-auth.json (\`term2 --codex-login\`), else the Codex
+      CLI's ~/.codex/auth.json. Tokens are never printed. Codex and OpenAI-over-WebSocket recordings are
+      scrubbed as they are captured (account, session, installation and turn ids, headers outside an
+      allow-list, rate-limit and plan details), sanitized, and secret-scanned after writing; on a match the
+      files are deleted and the command exits 3. Writes <provider>-<transport>-<probe>.json and a
+      .redactions.json beside it.
 
   Live recording of any custom provider type against a chosen base URL:
     pnpm provider:record --yes --provider <new id> --type <type> --base-url <url> --api-key-env <ENV NAME>
@@ -56,7 +75,9 @@ const usage = `Usage:
 
   Deterministic self-validation (no credentials):
     pnpm provider:record --from-fake <protocol> <scenario> [--provider <id>] [--model <model>] [--out <absolute dir>]
-      protocols: chat-completions, responses, anthropic, google
+      protocols: chat-completions, responses, anthropic, google, websocket
+      websocket scenarios: ${webSocketSelfValidationScenarios.join(', ')} (records the WebSocket capture
+      adapter from the fake WebSocket server, scans for planted secrets, and replays it)
 
   Raw recordings are written outside the repository (default ~/.term2/provider-recordings, or $TERM2_RECORDING_DIR).
   Run \`pnpm provider:fixture:prepare <file>\` before committing anything derived from one.`;
@@ -83,12 +104,13 @@ if (!fromFake) {
   if (!probe) fail('An explicit --probe scenario is required.');
   if (!providerArg || !modelArg) fail('Both --provider and --model are required.');
   const typed = typedRecordingFromArgs(providerArg!);
-  if (!typed) {
+  const transport = liveTransport(providerArg!, typed);
+  if (!typed && providerArg !== 'codex') {
     const credentialNames = credentialNamesFor(providerArg!);
     if (!credentialNames.some((name) => process.env[name]))
       fail(`Missing credentials for ${providerArg} (${credentialNames.join(' or ')}).`);
   }
-  await runLiveRecording(providerArg!, modelArg!, probe!, outArg, typed);
+  await runLiveRecording(providerArg!, modelArg!, probe!, outArg, transport, typed);
   process.exit(0);
 }
 
@@ -98,10 +120,32 @@ if (!fromFake) {
 if (probe) fail('--probe drives the live tool-call probe only; --from-fake records the deterministic fake scenario.');
 if (typeArg !== undefined || baseUrlArg !== undefined || apiKeyEnvArg !== undefined)
   fail('--type, --base-url and --api-key-env apply to live recording only; --from-fake uses the fake provider.');
+if (transportArg !== undefined) fail('--transport applies to live recording only; use --from-fake websocket.');
 const protocolArg = args[args.indexOf('--from-fake') + 1];
 const scenarioArg = args[args.indexOf('--from-fake') + 2] ?? 'success';
+if (protocolArg === 'websocket') {
+  if (!(webSocketSelfValidationScenarios as readonly string[]).includes(scenarioArg))
+    fail(`Unknown websocket scenario '${scenarioArg}'. Available: ${webSocketSelfValidationScenarios.join(', ')}`);
+  const provider = providerArg ?? 'fixture';
+  try {
+    const file = await recordAndSelfValidateWebSocket({
+      provider,
+      model: modelArg ?? 'fixture-model',
+      scenario: scenarioArg as WebSocketSelfValidationScenario,
+      file: recordingPath(outArg, provider, 'websocket', scenarioArg).file,
+    });
+    console.log(file);
+  } catch (error) {
+    if (error instanceof RecordingLeakError) {
+      console.error(`provider:record: ${error.message}`);
+      process.exit(3);
+    }
+    fail(error instanceof Error ? error.message : String(error));
+  }
+  process.exit(0);
+}
 if (!(fakeProtocols as readonly string[]).includes(protocolArg ?? ''))
-  fail(`Usage: --from-fake <protocol> <scenario>; protocols: ${fakeProtocols.join(', ')}`);
+  fail(`Usage: --from-fake <protocol> <scenario>; protocols: ${[...fakeProtocols, 'websocket'].join(', ')}`);
 if (!(fakeScenarios as readonly string[]).includes(scenarioArg))
   fail(`Unknown scenario '${scenarioArg}'. Available: ${fakeScenarios.join(', ')}`);
 const provider = providerArg ?? 'fixture';
@@ -173,37 +217,81 @@ function typedRecordingFromArgs(providerId: string): TypedRecording | undefined 
   return { type: typeArg as KnownCustomProviderType, baseUrl: baseUrlArg!, apiKey: apiKey! };
 }
 
+type LiveTransport = 'http' | 'websocket';
+
+function liveTransport(providerId: string, typed?: TypedRecording): LiveTransport {
+  const value = transportArg ?? (providerId === 'codex' ? 'websocket' : 'http');
+  if (value !== 'http' && value !== 'websocket') fail(`--transport must be http or websocket (got '${value}').`);
+  if (value === 'websocket' && (typed || (providerId !== 'codex' && providerId !== 'openai')))
+    fail('--transport websocket records the built-in codex and openai providers only.');
+  return value as LiveTransport;
+}
+
+/**
+ * Codex (either transport) and OpenAI over WebSocket are recorded with an account's own credentials and
+ * through the identity scrubber; their output is sanitized and secret-scanned before it is kept. The other
+ * HTTP recordings keep their original behaviour: a raw recording that `provider:fixture:prepare` sanitizes.
+ */
+function isCredentialedRecording(providerId: string, transport: LiveTransport): boolean {
+  return providerId === 'codex' || transport === 'websocket';
+}
+
 async function runLiveRecording(
   providerId: string,
   modelId: string,
   probeId: string,
   out: string | undefined,
+  transport: LiveTransport,
   typed?: TypedRecording,
 ): Promise<void> {
-  if (process.env.TERM2_RECORDING_TRANSPORT === 'websocket')
-    fail('WebSocket live recording requires the ResponsesWS adapter; use HTTP recording for this pilot.');
   const { getProbeScenario } = await import('./provider-black-box/probe-scenarios.js');
   const { getProvider, upsertProvider } = await import('../src/model/providers/registry.js');
+  const credentialed = await import('./provider-black-box/credentialed-recording.js');
   await import('../src/model/providers/index.js');
   const scenarioDefinition = getProbeScenario(probeId);
-  const nativeFetch = globalThis.fetch;
+  const scrubbed = isCredentialedRecording(providerId, transport);
+  const literals = providerId === 'codex' ? codexLoginLiterals(credentialed) : [];
+  if (scrubbed) {
+    addLiteral(literals, 'OPENAI_API_KEY', providerId === 'openai' ? process.env.OPENAI_API_KEY : undefined);
+    for (const literal of credentialed.codexSecretLiterals()) addLiteral(literals, literal.label, literal.value);
+  }
+  const capturedAt = new Date().toISOString();
+  const sdkPackage = sdkPackageFor(providerId, modelId, typed?.type);
   const recorder = createFixtureRecorder({
     provider: providerId,
-    wireFamily: wireFamilyFor(providerId, modelId, typed?.type),
-    transport: 'http-sse',
+    wireFamily: providerId === 'codex' ? 'codex-responses' : wireFamilyFor(providerId, modelId, typed?.type),
+    transport: transport === 'websocket' ? 'websocket' : 'http-sse',
     capture: {
-      sdkPackage: sdkPackageFor(providerId, modelId, typed?.type),
-      apiSdkVersion: installedVersion(sdkPackageFor(providerId, modelId, typed?.type)),
+      sdkPackage,
+      apiSdkVersion: installedVersion(sdkPackage),
       model: modelId,
       modelFamily: providerId,
-      capturedAt: new Date().toISOString(),
-      recorderVersion: '1',
+      capturedAt,
+      recorderVersion: scrubbed ? '2' : '1',
       probeScenario: probeId,
     },
   });
-  const captureFetch = createRecordingMiddleware({ recorder });
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-    captureFetch({ url: input, init }, (ctx) => nativeFetch(ctx.url, ctx.init))) as typeof fetch;
+  const captureReport: ScrubReport = [];
+  const nativeFetch = globalThis.fetch;
+  let webSocketCapture: import('./provider-black-box/websocket-capture.js').WebSocketCapture | undefined;
+  let fallback: ReturnType<typeof credentialed.observeResponsesHttpFallback> | undefined;
+  if (transport === 'websocket') {
+    const { ResponsesWS } = await import('openai/resources/responses/ws');
+    const { installResponsesWebSocketCapture } = await import('./provider-black-box/websocket-capture.js');
+    webSocketCapture = installResponsesWebSocketCapture(ResponsesWS);
+    fallback = credentialed.observeResponsesHttpFallback();
+  } else {
+    const codexBase = providerId === 'codex' ? codexBaseUrl() : undefined;
+    const captureFetch = createRecordingMiddleware({
+      recorder,
+      ...(scrubbed ? { identityScrub: captureReport } : {}),
+      // Codex's token refresh goes through the same global fetch; only the Responses traffic is recorded.
+      ...(codexBase ? { shouldRecord: (url: URL) => url.href.startsWith(codexBase) } : {}),
+    });
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+      captureFetch({ url: input, init }, (ctx) => nativeFetch(ctx.url, ctx.init))) as typeof fetch;
+  }
+  let model: any;
   try {
     // Every key a provider's createStreamedModel path reads. Keep this in step with the providers: the
     // stub throws on a key it does not list (see below), so a rename fails the recording instead of
@@ -211,7 +299,7 @@ async function runLiveRecording(
     const settingsValues: Record<string, unknown> = {
       [SETTING_KEYS.AGENT_MODEL_SELECTION]: { provider: providerId, model: modelId },
       [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 0,
-      [SETTING_KEYS.AGENT_TRANSPORT]: 'http',
+      [SETTING_KEYS.AGENT_TRANSPORT]: transport,
       // The built-in OpenAI and OpenRouter providers read their keys from settings (falling back to the
       // environment themselves). A typed recording uses its own runtime provider and its one key, so
       // no built-in credential is supplied to it.
@@ -219,10 +307,13 @@ async function runLiveRecording(
       [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: typed ? undefined : process.env.OPENROUTER_API_KEY,
       [SETTING_KEYS.AGENT_OPENROUTER_BASE_URL]: typed ? undefined : process.env.OPENROUTER_BASE_URL,
     };
-    // Read by the OpenRouter provider only to override its defaults; absent means "use the default".
+    // Read only to override a provider default; absent means "use the default" (OpenRouter's referrer and
+    // title, Codex's WebSocket receive timeouts).
     const optionalSettingKeys = new Set<string>([
       SETTING_KEYS.AGENT_OPENROUTER_REFERRER,
       SETTING_KEYS.AGENT_OPENROUTER_TITLE,
+      'agent.codex.websocketFirstFrameTimeoutMs',
+      'agent.codex.websocketInterFrameTimeoutMs',
     ]);
     const runtimeConfig = runtimeProviderConfig(providerId, typed);
     if (typed && getProvider(providerId))
@@ -258,49 +349,72 @@ async function runLiveRecording(
     } as any;
     const provider = getProvider(providerId);
     if (!provider?.createStreamedModel) fail(`Provider '${providerId}' is not registered`);
-    const model = await provider.createStreamedModel(modelId, { settingsService: settings, loggingService });
-    const initial = {
-      ...fixtureRequest,
-      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: scenarioDefinition.prompt }] }],
-    } as any;
-    const firstEvents: any[] = [];
-    for await (const event of model.stream(initial)) firstEvents.push(event);
-    const call =
-      firstEvents.find((event) => event.type === 'tool_call') ??
-      firstEvents
-        .flatMap((event) => event.output ?? [])
-        .find((item: any) => item.type === 'tool_call' || item.type === 'function_call');
-    if (!call) fail('Probe model did not produce the required fixture tool call');
-    const callId = call.id ?? call.callId;
-    const continuation = {
-      ...initial,
-      input: [
-        ...initial.input,
-        { type: 'tool_call', id: callId, name: call.name, arguments: call.arguments },
-        {
-          type: 'tool_result',
-          id: callId,
-          // AI SDK providers accept text/content parts for tool results, while
-          // OpenAI Responses accepts the structured probe value directly.
-          output:
-            providerId === 'openai' && !typed
-              ? scenarioDefinition.toolResult
-              : JSON.stringify(scenarioDefinition.toolResult),
-        },
-        { type: 'message', role: 'user', content: [{ type: 'text', text: scenarioDefinition.followUp }] },
-      ],
-    };
-    for await (const _event of model.stream(continuation)) {
-      /* recorder owns wire frames */
+    model = await provider.createStreamedModel(modelId, {
+      settingsService: settings,
+      loggingService,
+      // The CLI runs every turn inside a session; Codex keys its response chaining (previous_response_id on
+      // the retained socket) and its session headers to it. HTTP recordings of other providers keep none.
+      ...(scrubbed ? { sessionContextService: credentialed.recordingSessionContext(capturedAt) as any } : {}),
+    });
+    await runToolContinuationProbe(
+      model,
+      scenarioDefinition,
+      probeRunOptionsFor(providerId, provider.defaultModelSettings?.().include as string[] | undefined, !!typed),
+    );
+    if (webSocketCapture) {
+      await model.close?.();
+      await webSocketCapture.settle();
+      webSocketCapture.assertCaptured();
+      if (fallback!.count() > 0)
+        throw new Error(
+          `The model fell back from WebSocket to HTTP (${fallback!.count()} HTTP Responses request(s)); this is not a WebSocket recording. Nothing was written.`,
+        );
+      webSocketCapture.recordInto(recorder);
+      captureReport.push(...webSocketCapture.report);
     }
     const envelope = await recorder.flush();
-    const destination = recordingPath(out, providerId, providerId, probeId);
+    const destination = recordingPath(out, providerId, scrubbed ? transport : providerId, probeId);
     await mkdir(destination.dir, { recursive: true });
-    await writeFile(destination.file, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
-    console.log(destination.file);
+    if (!scrubbed) {
+      await writeFile(destination.file, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
+      console.log(destination.file);
+      return;
+    }
+    // Tokens may have been refreshed during the run; scan for the new ones too.
+    if (providerId === 'codex')
+      for (const literal of credentialed.codexSecretLiterals()) addLiteral(literals, literal.label, literal.value);
+    const written = await credentialed.writeCredentialedRecording({
+      envelope,
+      file: destination.file,
+      captureReport,
+      literals,
+    });
+    console.log(written.file);
+    console.log(written.reportFile);
+  } catch (error) {
+    if (error instanceof RecordingLeakError) {
+      console.error(`provider:record: ${error.message}`);
+      process.exit(3);
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    fail(scrubbed ? redactLiterals(message, literals) : message);
   } finally {
     globalThis.fetch = nativeFetch;
+    fallback?.restore();
+    webSocketCapture?.uninstall();
   }
+}
+
+function codexBaseUrl(): string {
+  return (process.env.CODEX_BASE_URL || 'https://chatgpt.com/backend-api/codex').replace(/\/+$/, '');
+}
+
+function codexLoginLiterals(credentialed: typeof import('./provider-black-box/credentialed-recording.js')) {
+  const login = credentialed.findCodexLogin();
+  if (!login)
+    fail(`No Codex login found. Looked for ${credentialed.codexLoginLocations()}. Run \`term2 --codex-login\` first.`);
+  console.error(`provider:record: using the Codex login from ${login!.sources[0]}`);
+  return [...login!.literals];
 }
 
 /**

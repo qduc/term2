@@ -144,6 +144,16 @@ function sanitizeFrame(
   }
   if (frame.kind === 'json-body') return { ...frame, body: sanitize(frame.body, `${path}.body`) };
   if (frame.kind === 'sse-event') return { ...frame, data: String(sanitize(frame.data, `${path}.data`)) };
+  if (frame.kind === 'ws-open') {
+    // The handshake headers of a live WebSocket recording are already scrubbed by an allow-list at capture
+    // time (wire-identity-scrubber.ts); this is the same request-header pass the HTTP frames get.
+    const headers = sanitizeHeaders(frame.headers) ?? {};
+    for (const key of Object.keys(frame.headers))
+      if (secretHeader.test(key))
+        report.redactions.push({ path: `${path}.headers.${key}`, reason: 'secret header redacted' });
+    return { ...frame, urlPath: sanitizeUrlPath(frame.urlPath, `${path}.urlPath`, report), headers };
+  }
+  if (frame.kind === 'ws-close') return { ...frame, reason: mapDynamic(frame.reason, `${path}.reason`) };
   return { ...frame, data: sanitize(frame.data, `${path}.data`) };
 }
 

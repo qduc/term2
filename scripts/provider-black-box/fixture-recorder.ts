@@ -1,5 +1,6 @@
 import type { FetchMiddleware } from '../../src/model/providers/fetch/compose.js';
 import { sanitizeHeaders } from '../../src/shared/utils/header-sanitizer.js';
+import { scrubBody, scrubHeaders, scrubUrlPath, type ScrubReport } from './wire-identity-scrubber.js';
 import {
   validateFixtureEnvelope,
   type FixtureEnvelopeV1,
@@ -9,6 +10,8 @@ import {
   type SseEventFrame,
   type JsonBodyFrame,
   type WsMessageFrame,
+  type WsOpenFrame,
+  type WsCloseFrame,
 } from './fixture-envelope.js';
 
 export type FixtureRecorderOptions = Pick<FixtureEnvelopeV1, 'provider' | 'wireFamily' | 'transport' | 'capture'> & {
@@ -22,6 +25,9 @@ export type FixtureRecorder = {
   recordSseEvent(frame: Omit<SseEventFrame, 'seq'>): void;
   recordJsonBody(frame: Omit<JsonBodyFrame, 'seq'>): void;
   recordWsMessage(frame: Omit<WsMessageFrame, 'seq'>): void;
+  /** The handshake of a WebSocket session; call `startTurn()` first so the session gets its own turn. */
+  recordWsOpen(frame: Omit<WsOpenFrame, 'seq'>): void;
+  recordWsClose(frame: Omit<WsCloseFrame, 'seq'>): void;
   /** Starts a new HTTP turn or WebSocket session in the same recording. */
   startTurn(): void;
   flush(): Promise<FixtureEnvelopeV1>;
@@ -44,6 +50,8 @@ export function createFixtureRecorder(options: FixtureRecorderOptions): FixtureR
     recordSseEvent: add,
     recordJsonBody: add,
     recordWsMessage: add,
+    recordWsOpen: add,
+    recordWsClose: add,
     startTurn: () => {
       current = { frames: [] };
       turns.push(current);
@@ -65,8 +73,22 @@ export function createFixtureRecorder(options: FixtureRecorderOptions): FixtureR
 export function createRecordingMiddleware(options: {
   recorder: FixtureRecorder;
   onError?: (error: unknown) => void;
+  /**
+   * Applies the capture-time identity scrubber (wire-identity-scrubber.ts) to every request and response
+   * head, body and SSE event before it is recorded, and records it into this report. Used for recordings
+   * made with an account's own credentials (Codex over HTTP); without it, only `sanitizeHeaders` runs.
+   */
+  identityScrub?: ScrubReport;
+  /** Records only requests this accepts; others pass through unrecorded (e.g. a token refresh). */
+  shouldRecord?: (url: URL) => boolean;
 }): FetchMiddleware {
+  let exchange = 0;
   return async (ctx, next) => {
+    const url = ctx.url instanceof URL ? ctx.url : new URL(ctx.url instanceof Request ? ctx.url.url : String(ctx.url));
+    if (options.shouldRecord && !options.shouldRecord(url)) return next(ctx);
+    const scrub = options.identityScrub;
+    const path = `exchanges[${exchange++}]`;
+    const scrubbed = <T>(value: T, at: string): T => (scrub ? (scrubBody(value, `${path}.${at}`, scrub) as T) : value);
     const bodyText = await requestBody(ctx.url, ctx.init);
     let body: unknown = bodyText || undefined;
     if (bodyText) {
@@ -76,13 +98,14 @@ export function createRecordingMiddleware(options: {
         /* retain text */
       }
     }
-    const url = ctx.url instanceof URL ? ctx.url : new URL(ctx.url instanceof Request ? ctx.url.url : String(ctx.url));
+    const requestHeaders =
+      sanitizeHeaders(ctx.init?.headers ?? (ctx.url instanceof Request ? ctx.url.headers : undefined)) ?? {};
     options.recorder.recordRequest({
       kind: 'http-request',
       method: ctx.init?.method ?? (ctx.url instanceof Request ? ctx.url.method : 'GET'),
-      urlPath: `${url.pathname}${url.search}`,
-      headers: sanitizeHeaders(ctx.init?.headers ?? (ctx.url instanceof Request ? ctx.url.headers : undefined)) ?? {},
-      body,
+      urlPath: scrub ? scrubUrlPath(url, `${path}.urlPath`, scrub) : `${url.pathname}${url.search}`,
+      headers: scrub ? scrubHeaders(requestHeaders, `${path}.request.headers`, scrub) : requestHeaders,
+      body: scrubbed(body, 'request.body'),
     });
     let response: Response;
     try {
@@ -94,12 +117,15 @@ export function createRecordingMiddleware(options: {
     options.recorder.recordResponseHead({
       kind: 'http-response-head',
       status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
+      headers: scrub
+        ? scrubHeaders(Object.fromEntries(response.headers.entries()), `${path}.response.headers`, scrub)
+        : Object.fromEntries(response.headers.entries()),
     });
     try {
       const text = await response.clone().text();
       if ((response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream')) {
-        for (const event of parseSseEvents(text)) options.recorder.recordSseEvent({ kind: 'sse-event', ...event });
+        for (const event of parseSseEvents(text))
+          options.recorder.recordSseEvent({ kind: 'sse-event', ...event, data: scrubbed(event.data, 'response.sse') });
       } else if (text) {
         let bodyValue: unknown = text;
         try {
@@ -107,7 +133,7 @@ export function createRecordingMiddleware(options: {
         } catch {
           /* retain text */
         }
-        options.recorder.recordJsonBody({ kind: 'json-body', body: bodyValue });
+        options.recorder.recordJsonBody({ kind: 'json-body', body: scrubbed(bodyValue, 'response.body') });
       }
     } catch (error) {
       options.onError?.(error);

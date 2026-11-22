@@ -290,6 +290,11 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
       : transcript.timeline
   ) as typeof snapshot.timeline;
   lastLists.set(snapshot.sessionId, { messages: stableMessages, tools: stableTools, timeline: stableTimeline });
+  // The host appends the successful snapshot report last. Keep preceding notices and snapshot failures visible.
+  const terminalNotice = snapshot.terminal?.notice?.replace(
+    /(?:^|\n\n)Workspace snapshot before this turn: refs\/snapshots\/[\s\S]*$/,
+    '',
+  );
   return {
     sessionId: snapshot.sessionId,
     status: snapshot.status,
@@ -325,7 +330,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     queuePauseReason: snapshot.queuePauseReason,
     tasks: snapshot.tasks.map(taskView),
     // Reducer notices are transcript rows now (see transcriptNotices); only the terminal line stays live.
-    notices: snapshot.terminal?.notice ? [snapshot.terminal.notice] : [],
+    notices: terminalNotice ? [terminalNotice] : [],
     usage: usageText(snapshot.usage),
     codexQuota: snapshot.codexQuota,
     codexFiveHourQuota: snapshot.codexFiveHourQuota,

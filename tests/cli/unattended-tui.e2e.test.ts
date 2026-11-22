@@ -16,8 +16,8 @@ import { resolveSettingsDirectory } from '../../src/config/settings/settings-pat
 // Unattended approval (docs/plans/approvals-and-sandbox/unattended-approval.md) in the built terminal UI, in a
 // real pty, against an OpenAI-compatible double. The double answers the main model and the approval reviewer
 // separately: a request that offers tools is the main model, one without is a review. Criterion A2: no
-// approval prompt reaches the TUI; A7: the limit's list is shown and the session takes a new turn; B4: the
-// snapshot report is shown. Decision 2 (ask_user still asks) has no TUI case: the Bare profile, the only
+// approval prompt reaches the TUI; A7: the limit's list is shown and the session takes a new turn; B4: a
+// successful snapshot report stays out of the TUI. Decision 2 (ask_user still asks) has no TUI case: the Bare profile, the only
 // selectable one, does not offer ask_user (no `user-interaction` capability).
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
@@ -215,7 +215,7 @@ it(
   },
 );
 
-it('shows the workspace snapshot report at the end of an unattended turn', { timeout: TIMEOUT_MS }, async () => {
+it('shows unattended refusals without the successful workspace snapshot report', { timeout: TIMEOUT_MS }, async () => {
   const { baseUrl } = await startProvider([shellCall('c1', 'node -e "1"'), { text: 'TUI_SNAPSHOT_DONE' }]);
   await startTui(baseUrl, 'unattended', (workspace) => {
     const git = (...args: string[]) =>
@@ -228,7 +228,8 @@ it('shows the workspace snapshot report at the end of an unattended turn', { tim
     git('commit', '-qm', 'init');
   }).then(({ submit }) => submit('Check the runtime'));
   await session!.waitForOutput('TUI_SNAPSHOT_DONE', 60_000);
-  await session!.waitForOutput('Workspace snapshot before this turn: refs/snapshots/', 30_000);
+  await session!.waitForOutput('Unattended approval refused 1 request in this run.', 30_000);
   capture('snapshot');
-  expect(session!.getVisibleOutput()).toContain('No files changed since it.');
+  expect(session!.getVisibleOutput()).not.toContain('Workspace snapshot before this turn:');
+  expect(session!.getVisibleOutput()).not.toContain('To put back modified and deleted files:');
 });

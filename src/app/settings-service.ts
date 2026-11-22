@@ -23,7 +23,12 @@ import {
   type SettingsData,
   type SettingsWithSources,
 } from '../config/settings/settings-schema.js';
-import { isTestEnvironment, parseBooleanEnv } from '../config/settings/settings-env.js';
+import {
+  ENV_FALLBACK_CREDENTIAL_KEYS,
+  isTestEnvironment,
+  parseBooleanEnv,
+  withoutSavedCredentials,
+} from '../config/settings/settings-env.js';
 import { flattenSettings, mergeSettings, trackSettingSources } from '../config/settings/settings-merger.js';
 import { buildSettingsWithSources } from '../config/settings/settings-sources.js';
 import { migrateLegacyAncillarySettings } from '../config/settings/ancillary-settings-migration.js';
@@ -247,7 +252,8 @@ export class SettingsService {
         this.startupMigrations.push([`agent.${key}`, pool]);
       }
     }
-    this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
+    const fileEnv = withoutSavedCredentials(env, fileConfig);
+    this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, fileEnv, cli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
     });
@@ -265,7 +271,7 @@ export class SettingsService {
         recoveredSectionKeys: this.recoveryResult.recoveredSectionKeys,
       });
     }
-    this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
+    this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, fileEnv, cli);
     if (!Object.hasOwn((rawFileConfig as any)?.agent ?? {}, 'maxOutputTokens')) {
       this.sources.set(
         'agent.maxOutputTokens',
@@ -574,6 +580,8 @@ export class SettingsService {
    */
   getStartupOverride(key: string): 'env' | 'cli' | undefined {
     const source = trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get(key);
+    // A saved credential wins over its environment variable, so env never overrides it.
+    if (source === 'env' && ENV_FALLBACK_CREDENTIAL_KEYS.has(key)) return undefined;
     return source === 'env' || source === 'cli' ? source : undefined;
   }
 
@@ -1103,7 +1111,8 @@ export class SettingsService {
       return;
     }
 
-    let next = mergeSettings(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli, {
+    const committedEnv = withoutSavedCredentials(this.startupEnv, committed);
+    let next = mergeSettings(DEFAULT_SETTINGS, committed, committedEnv, this.startupCli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
     });
@@ -1113,7 +1122,7 @@ export class SettingsService {
     // env/cli may still name a retired Profile id; keep memory canonical.
     if (next.app) next.app = { ...next.app, activeProfileId: canonicalProfileId(String(next.app.activeProfileId)) };
     this.settings = next;
-    this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
+    this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, committedEnv, this.startupCli);
     if (implicitOutputDefault)
       this.sources.set(
         'agent.maxOutputTokens',

@@ -64,7 +64,12 @@ changes, `/settings` command for user entry).
 - **Environment:** startup overrides built by `buildEnvOverrides()` in
   `settings-env.ts` include OpenRouter/OpenAI credentials and options, logging,
   `NODE_ENV`, `SHELL/COMSPEC`, file-operation diagnostics, and Tavily, Exa,
-  Firecrawl, SearXNG, and web-search provider selection.
+  Firecrawl, SearXNG, and web-search provider selection. The API keys among
+  them (`ENV_FALLBACK_CREDENTIAL_KEYS`: OpenAI, OpenRouter, Tavily, Exa,
+  Firecrawl) are fallbacks, not overrides: `withoutSavedCredentials` drops each
+  from the env layer when `settings.json` holds a non-empty value, so a saved
+  key wins, matching custom providers' stored key over their type-level
+  variable (owner decision 2026-11-22).
   `TERM2_SUPERVISED=1` sets an 80,000-token request input ceiling, an 8,192-token
   output allocation, and local compaction at 60,000 tokens through startup
   overrides. It applies to interactive processes too and does not change

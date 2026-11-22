@@ -312,9 +312,14 @@ section is a real recording behind every provider, replayed offline.
     variables in `SETTING_ENV_VARIABLES`. Not covered: web-search keys given
     only in `settings.json`, and the "configured" state the provider picker
     derives from `CUSTOM_PROVIDER_ENV_KEYS`. Findings:
-    - Precedence differs by provider. For OpenAI, OpenRouter and web search the
-      environment wins over `settings.json`; for the custom types a stored
-      `apiKey` wins over the environment. The tests pin both.
+    - Decided 2026-11-22 and done: a saved key wins everywhere. OpenAI,
+      OpenRouter and web search used to let the environment win over
+      `settings.json`, while the custom types let a stored `apiKey` win. Now a
+      non-empty key in `settings.json` wins on all of them and the variable is
+      the fallback (`ENV_FALLBACK_CREDENTIAL_KEYS` in
+      `src/config/settings/settings-env.ts`). The tests assert the saved key on
+      the wire for OpenAI, OpenRouter and Tavily, and an empty saved Tavily key
+      falling back to the variable.
     - Fixed: with no OpenAI key anywhere the request was sent with the bearer
       value `placeholder`. `openai.provider.ts` now stops before any model
       request and says the key is not configured, as OpenRouter does, unless

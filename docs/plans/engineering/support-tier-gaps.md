@@ -185,14 +185,39 @@ section is a real recording behind every provider, replayed offline.
      complete, so removing it is a contract change. The narrowest change
      would leave `final` in place and omit the partial text when the outcome
      is `failed`.
-   - Confirmed, and not specific to Grok: with `agent.retryAttempts` at n, a
-     provider that keeps answering 503 receives 2 × (n + 1) requests for n of
-     1 or 2, and one request for n of 0. The same counts were seen for
-     `openai`, `grok`, `codex` and both chat custom types. `physicalModelStream`
-     in `src/model/retry.ts` makes n + 1 attempts, and the engine in
-     `@qduc/agent-core` then retries the turn, which runs them again. The
-     final error reports the engine's count, three, for six requests. A fix
-     belongs in `@qduc/agent-core` and needs a decision on what n counts.
+   - Open, waiting on an `@qduc/agent-core` release; not specific to Grok:
+     with `agent.retryAttempts` at n, a provider that keeps answering 503
+     receives 2 × (n + 1) requests for n of 1 or 2, and one request for n of
+     0. The same counts were seen for `openai`, `grok`, `codex` and both chat
+     custom types, and for a connection dropped before any response. The
+     maintainer decided that n counts retries: n + 1 requests, every retry
+     announced as k/n, and the stored notice counting the requests sent.
+     The earlier diagnosis here, that `physicalModelStream` in
+     `src/model/retry.ts` makes n + 1 attempts under the engine's retries, was
+     wrong: with the engine's `request.recovery` it makes one, and the
+     provider factories get `retryAttempts: 0` (`lazyModel` in
+     `src/model/provider.ts`), so the SDK and `RetryingModel` add none
+     (`tests/model/custom-provider-retries.integration.test.ts` counts this at
+     a loopback server). The doubling is entirely `DirectRecovery#transient`
+     in agent-core 0.3.0-alpha.0's `engine/recovery.ts`: up to n silent
+     retries, then one "retrying k/n" turn-level retry that restarts them,
+     stopped by the recovery budget's single automatic replay. Measured on the
+     built CLI: n = 1 shows one `1/1` notice and stores "after 2 attempts" for
+     four requests; n = 2 shows one `1/2` notice and stores "after 1 attempt"
+     (the budget's physical-attempt count) for six. Term2 cannot fix this
+     through the engine's seams: `DirectRecoveryOptions` takes only the retry
+     count, the model-retry count, a budget and a random source; the silent
+     retries never consult the budget, so a budget can only stop the
+     turn-level retry, and then the notice counts no silent request; and no
+     retry count gives n + 1 requests (1, 4, 6, 8 … for counts 0, 1, 2, 3). The
+     proposed agent-core change gives every transient retry one counter and a
+     notice, spends a physical attempt but not the automatic replay, and
+     reports the requests sent; against the built CLI it gives 1, 2 and 3
+     requests on custom chat, OpenAI Responses and Codex, and 2 for Grok at
+     n = 1. The checks for n ≥ 1 in `provider-retries-exhausted-notice.blackbox.ts`
+     and `provider-session-grok-client.blackbox.ts` skip while the pin is
+     0.3.0-alpha.0 and run once it moves. With that change the recovery
+     budget's three physical attempts still cap n above 3 at four requests.
 7. **Record what has only been faked.** Recorded fixtures exist for OpenAI over
    HTTP, Google, OpenCode's Chat and Anthropic protocols, and, recorded through
    OpenRouter, the `openai-compatible`, custom `openai` and `anthropic` custom

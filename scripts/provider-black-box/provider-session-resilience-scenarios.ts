@@ -1218,8 +1218,9 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
           expect(result.timedOut, context).toBe(false);
           expect(result.exitCode, context).toBe(0);
           expect(result.stdout, context).toContain(ANSWER);
-          // Not an exact count: two retry layers currently multiply attempts, which this must not pin.
-          expect(server.requests.length, context).toBeGreaterThanOrEqual(2);
+          // One dropped request, then one retry that succeeds. The engine owns retries; the adapter sends one
+          // request per dispatch (src/model/retry.ts), so a second retry layer would raise this.
+          expect(server.requests, context).toHaveLength(2);
         });
       }
     });

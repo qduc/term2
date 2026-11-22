@@ -51,6 +51,10 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
     // Non-JSON provider errors are already human-readable.
   }
   const reauthentication = findReauthenticationRequiredError(error);
+  // Codex wraps a stream cut short in AmbiguousModelOutcomeError so it is never replayed on the same chain. The
+  // stored kind and retryable describe the failure itself, as on the OpenAI lane, so classify the wrapped cause;
+  // recovery still reads the wrapper through typedDispatchFailure below.
+  const described = describedFailure(error);
   const kind: ModelError['kind'] =
     signal?.aborted || isAbortLikeError(error)
       ? 'cancelled'
@@ -64,14 +68,14 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
       ? 'context_overflow'
       : [400, 404, 413, 422].includes(status ?? 0)
       ? 'invalid_request'
-      : isNetworkProtocolError(error) || isConnectionError(error)
+      : isNetworkProtocolError(described) || isConnectionError(described)
       ? 'network'
       : 'provider';
   const exhausted = isRetryRecoveryBudgetExhaustedError(error);
   const retryable =
     !exhausted &&
     !['cancelled', 'authentication', 'context_overflow', 'invalid_request'].includes(kind) &&
-    (isModelError(error) ? error.retryable : upstream.retryable || isNetworkProtocolError(error));
+    (isModelError(error) ? error.retryable : upstream.retryable || isNetworkProtocolError(described));
   const portable: ModelError = {
     kind,
     // Legacy replaces the provider's capacity text with its own recovery sentence.
@@ -124,6 +128,12 @@ function recoveryEvidence(
     return 'transport_downgrade';
   }
   return undefined;
+}
+
+/** The error to classify kind and retryable from: an ambiguous-outcome wrapper's cause, else the error. */
+function describedFailure(error: unknown): unknown {
+  const typed = typedDispatchFailure(error);
+  return typed instanceof AmbiguousModelOutcomeError && typed.cause !== undefined ? typed.cause : error;
 }
 
 /** Preserve the nearest actual typed dispatch failure through SDK cause wrappers. */

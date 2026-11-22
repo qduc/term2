@@ -353,12 +353,25 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
           return false;
         }
         const finalRecord = legacyFinalResponse(window, emittedCommandMessageIds, legacyRequestId);
-        json(finalRecord);
+        json(event.payload.outcome === 'failed' ? withoutFailedRequestText(finalRecord) : finalRecord);
         if (event.payload.outcome === 'completed') completedText = finalRecord.finalText;
       }
       return true;
     },
   };
+}
+
+/**
+ * A failed turn still emits `final` for the usage and costs scripts read from it, but the text of the request
+ * that failed is only what a cut-off stream delivered, never an answer; the deltas already carried it. That text
+ * is `finalText` and the trailing `assistant_text` items: earlier rounds' text precedes their tool results.
+ */
+function withoutFailedRequestText<T extends { finalText: string; turnItems?: readonly unknown[] }>(record: T): T {
+  const items = record.turnItems;
+  if (items === undefined) return { ...record, finalText: '' };
+  let end = items.length;
+  while (end > 0 && (items[end - 1] as { type?: unknown } | null)?.type === 'assistant_text') end--;
+  return { ...record, finalText: '', turnItems: items.slice(0, end) };
 }
 
 function reportEventError(

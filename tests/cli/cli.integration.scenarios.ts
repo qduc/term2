@@ -346,6 +346,34 @@ function savedShellObservations(history: SavedHistory) {
 }
 type ScriptedShellCall = { callId: ToolCallId; args: (workspace: string) => Record<string, unknown> };
 
+/** The reviewer's system prompt opens with this (shell-auto-approval prompt). */
+const REVIEWER_PROMPT_PREFIX = 'You decide whether tool actions';
+const REVIEWER_REFUSAL = 'REVIEWER-REFUSES-VICTIM';
+
+/** The text of an approval-review request, or undefined for an ordinary model turn. */
+function reviewedCommand(body: Record<string, unknown> | undefined): string | undefined {
+  const messages = body?.messages as { content?: unknown }[] | undefined;
+  const first = messages?.[0]?.content;
+  return typeof first === 'string' && first.startsWith(REVIEWER_PROMPT_PREFIX) ? JSON.stringify(messages) : undefined;
+}
+
+function reviewerVerdictFrames(approve: boolean) {
+  const evaluation = {
+    results: [
+      {
+        reasoning: approve ? 'REVIEWER-APPROVES' : REVIEWER_REFUSAL,
+        riskLevel: approve ? 'low' : 'high',
+        authorization: approve ? 'explicit' : 'weak',
+        confidence: 'high',
+      },
+    ],
+  };
+  return [
+    { id: 'chatcmpl-review', choices: [{ delta: { role: 'assistant', content: JSON.stringify(evaluation) } }] },
+    { id: 'chatcmpl-review', choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ];
+}
+
 /**
  * Runs the built CLI non-interactively with `--auto-approve` against the chat-completions mock. The
  * n-th scripted call is the model's whole n-th response; after the last one the model says "done".
@@ -360,14 +388,22 @@ async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<st
   for (const [name, content] of Object.entries(seed)) fs.writeFileSync(path.join(workspace, name), content);
   const commands = calls.map((call) => String(call.args(workspace).command));
 
-  const mock = await startModelMock(['mock-alpha'], (n) =>
-    n <= calls.length
-      ? shellCallFrames(`chatcmpl-${n}`, calls[n - 1]!.callId, calls[n - 1]!.args(workspace))
+  // `--auto-approve` selects mode `auto`: the approval reviewer decides what the mode leaves for a person
+  // (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 2). It shares this mock, so its
+  // requests are answered with a verdict and do not count as model turns. It refuses a command that touches
+  // the victim file and approves the rest.
+  let turn = 0;
+  const mock = await startModelMock(['mock-alpha'], (_n, body) => {
+    const review = reviewedCommand(body);
+    if (review !== undefined) return reviewerVerdictFrames(!review.includes('victim.txt'));
+    turn += 1;
+    return turn <= calls.length
+      ? shellCallFrames(`chatcmpl-${turn}`, calls[turn - 1]!.callId, calls[turn - 1]!.args(workspace))
       : [
           { id: 'chatcmpl-done', choices: [{ delta: { role: 'assistant', content: 'done' } }] },
           { id: 'chatcmpl-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
-        ],
-  );
+        ];
+  });
   const env = createTestChildEnv({
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, '.config'),
@@ -412,7 +448,8 @@ async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<st
       status,
       stdout,
       stderr,
-      requests: mock.capturedRequests(),
+      // Model turns only; approval-review requests are left out.
+      requests: mock.capturedRequests().filter((body) => reviewedCommand(body) === undefined),
       commands,
       // Read before the root is removed. Also proves the run wrote no project config here.
       files,
@@ -433,10 +470,9 @@ async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<st
 async function runApprovalReuseScenario(callId: ToolCallId) {
   const run = await runShellCallsScenario(
     [
-      // Needs approval only because it asks to run unsandboxed; the command is GREEN, so the
-      // policy answers yes and it runs.
+      // Needs approval only because it asks to run unsandboxed; the reviewer approves it and it runs.
       { callId, args: (w) => ({ command: `echo approved > ${path.join(w, 'approved.txt')}`, sandbox: 'unsandboxed' }) },
-      // The next response: same tool, same id (or again none). RED, so the policy answers no.
+      // The next response: same tool, same id (or again none). RED, so the safety heuristics refuse it.
       { callId, args: (w) => ({ command: `rm ${path.join(w, 'victim.txt')}` }) },
     ],
     { 'victim.txt': 'must survive\n' },
@@ -480,9 +516,10 @@ function expectSecondCallRefused(run: Awaited<ReturnType<typeof runApprovalReuse
   expect(run.approvedMarker, report).toBe('approved\n');
   // ...and the later call was decided on its own: refused, so the file it targets is intact.
   expect(run.victim, report).toBe('must survive\n');
-  // Each call reached the approval policy on its own: two prompts, the second answered no.
-  expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(2);
-  expect(run.stderr, report).toContain('command is RED (dangerous) and cannot be executed automatically');
+  // Each call was decided on its own: the reviewer passed the first (no prompt reached the headless answerer),
+  // the safety heuristics blocked the second, which reached it and was refused.
+  expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(1);
+  expect(run.stderr, report).toContain('Blocked by safety heuristics (RED)');
   expect(run.workspaceEntries).toEqual(['approved.txt', 'victim.txt']);
   // The user saw each call once, the refused one included: one `[tool]` line per call, never more.
   expect(run.toolLines, report).toEqual([expectedToolLine(run.approvedCommand), expectedToolLine(run.refusedCommand)]);
@@ -498,7 +535,7 @@ function expectSecondCallRefused(run: Awaited<ReturnType<typeof runApprovalReuse
     run.refusedCommand,
   ]);
   expect(results.map((result) => result.id)).toEqual(calls.map((call) => call.id));
-  expect(results[1]?.content).toContain('cannot be executed automatically');
+  expect(results[1]?.content).toContain('Blocked by safety heuristics (RED)');
   return { calls, results };
 }
 export function registerCliScenarios(group: 'startup' | 'headless'): void {
@@ -2204,7 +2241,10 @@ fs.createWriteStream = (filename, options) => {
         expect(run.savedCommandRecords[0]).toMatchObject({ isApprovalRejection: true, success: false });
         const { calls, results } = lastWireToolExchange(run.requests);
         expect(JSON.parse(calls[0]!.function.arguments).command).toBe(run.commands[0]);
-        expect(results[0]?.content).toContain(`command is ${level}`);
+        // RED never reaches the reviewer (the safety heuristics block it); YELLOW is the reviewer's refusal.
+        expect(results[0]?.content).toContain(
+          level === 'RED' ? 'Blocked by safety heuristics (RED)' : REVIEWER_REFUSAL,
+        );
         expect(results[0]?.content).not.toContain(marker);
         expect(results[0]?.content.length).toBeLessThan(512);
       },
@@ -2261,14 +2301,15 @@ fs.createWriteStream = (filename, options) => {
       const run = await runShellCallsScenario([
         {
           callId: { kind: 'provider', id: 'call_0' },
-          // Unsandboxed, so it goes through approval: the plan re-emits tool_started for the same execution.
+          // Unsandboxed, so it goes through approval (here the reviewer's): one execution, one [tool] line.
           args: (w) => ({ command: `echo one > ${path.join(w, 'one.txt')}`, sandbox: 'unsandboxed' }),
         },
       ]);
       const report = `exit ${run.status}\nstderr:\n${run.stderr}`;
       expect(run.status, report).toBe(0);
       expect(run.files, report).toEqual({ 'one.txt': 'one\n' });
-      expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(1);
+      // The reviewer approved it before any request opened, so the headless answerer was never asked.
+      expect(run.stderr, report).not.toContain('[approval required]');
       expect(run.toolLines, report).toEqual([expectedToolLine(run.commands[0])]);
       expect(run.savedPlannedCommands).toEqual(run.commands);
       expect(run.savedResultCommands).toEqual(run.commands);
@@ -2283,7 +2324,7 @@ fs.createWriteStream = (filename, options) => {
         const id: ToolCallId = { kind: 'provider', id: 'call_0' };
         const run = await runShellCallsScenario(
           [
-            // RED: the auto-approval policy refuses it.
+            // RED: the safety heuristics refuse it.
             { callId: id, args: (w) => ({ command: `rm ${path.join(w, 'victim.txt')}` }) },
             // Same id, GREEN and no approval needed: it runs.
             { callId: id, args: (w) => ({ command: `echo two > ${path.join(w, 'two.txt')}` }) },
@@ -2297,7 +2338,7 @@ fs.createWriteStream = (filename, options) => {
         expect(run.toolLines, report).toEqual([expectedToolLine(refusedCommand), expectedToolLine(ranCommand)]);
         // Only the first call was refused.
         expect(run.stderr.match(/Approval Rejected:/g), report).toHaveLength(1);
-        expect(run.stderr, report).toContain('command is RED (dangerous) and cannot be executed automatically');
+        expect(run.stderr, report).toContain('Blocked by safety heuristics (RED)');
         expect(run.savedCommandRecords).toEqual([
           { command: refusedCommand, isApprovalRejection: true, success: expect.anything() },
           { command: ranCommand, isApprovalRejection: false, success: true },

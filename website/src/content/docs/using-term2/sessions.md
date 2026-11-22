@@ -95,4 +95,4 @@ term2 --resume last --json "What should we do next?"
 term2 --resume <conversation-id> --fork "Explore an alternative"
 ```
 
-These commands restore the saved history and append a new headless turn. Resuming preserves the session ID; `--fork` writes to a new session instead. Tool execution remains disabled unless you pass `--auto-approve`. A missing session exits with an error rather than silently starting a new conversation.
+These commands restore the saved history and append a new headless turn. Resuming preserves the session ID; `--fork` writes to a new session instead. As in any non-interactive run, only what needs no approval runs unless you pass `--auto-approve` or `--approval-mode`. A missing session exits with an error rather than silently starting a new conversation.

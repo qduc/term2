@@ -96,7 +96,7 @@ const FLAGS: readonly Flag[] = [
   opt(['--goal-criteria'], ' <text>', 'Optional success criteria (max 2,000 characters; requires --goal)'),
   opt(['--profile'], ' <name>', 'Select a profile (bare [default]; standard/full/lite = bare)', undefined, 'required'),
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
-  opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
+  opt(['--auto-approve'], '', 'Let the approval reviewer decide for a non-interactive prompt (--approval-mode auto)'),
   opt(['--approval-mode'], ' <mode>', 'Set approval policy: off, auto, unattended, always', undefined, 'required'),
   opt(['--show-review'], '', 'Show AI assessments in human approval prompts'),
   // Quiet only changes the non-interactive runner; the TUI ignores it, as the current CLI does.
@@ -194,7 +194,7 @@ export const helpText = (): string => `
     -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
         --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
         --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
-        --auto-approve                   Allow tool execution for a non-interactive prompt
+        --auto-approve                   Let the approval reviewer decide for a non-interactive prompt (--approval-mode auto)
         --approval-mode <mode>           Set approval policy: off, auto, unattended, always
         --show-review                    Show AI assessments in human approval prompts
     -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
@@ -218,8 +218,11 @@ export const helpText = (): string => `
     Settings file: ${join(resolveSettingsDirectory(), 'settings.json')}
 
   Notes
-    A prompt passed on the command line runs non-interactively. Tool execution is disabled by default;
-    use --auto-approve to allow tools to run without interactive confirmation.
+    A prompt passed on the command line runs non-interactively and never asks: whatever would wait for a
+    person is refused, and the model continues. Without flags only what needs no approval runs (work inside
+    the workspace, sandboxed shell commands). --auto-approve lets the approval reviewer decide the rest
+    (--approval-mode auto); --approval-mode always allows everything except hooks, Term2's settings and
+    git's hooks and config.
 
     -m/--model with no value (bare --model/-m, or followed only by another flag) opens an
     interactive picker in a TTY session with no prompt; the same picker also opens for an

@@ -16,7 +16,7 @@ Usage:
 | `--model <model>` | `-m` | String | Configured | Model pattern or ID. Supports `provider/id` and optional `:<thinking>` (e.g. `o3-mini:high`). Bare `-m`/`--model` opens the interactive picker in a TTY. |
 | `--provider <provider>` | `-p` | String | Configured | Override the configured provider (e.g. `openai`, `openrouter`, `grok`, `codex`). |
 | `--reasoning <effort>` | `-r` | String | Configured | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`). |
-| `--auto-approve` | — | Boolean | `false` | Enable tools in non-interactive mode. This uses GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell commands remain refused. |
+| `--auto-approve` | — | Boolean | `false` | Non-interactive mode: select `--approval-mode auto`, so the approval reviewer decides what would otherwise be refused. An explicit `--approval-mode` wins; a saved `unattended` or `always` is kept. |
 | `--quiet` | `-q` | Boolean | `false` | Suppress non-error diagnostics on stderr in non-interactive mode. |
 | `--show-reasoning` | — | Boolean | `false` | Stream reasoning/thinking deltas to stderr in non-interactive mode. |
 | `--json` | — | Boolean | `false` | Emit newline-delimited JSON (NDJSON) events on stdout in non-interactive mode. |

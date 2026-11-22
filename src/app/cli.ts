@@ -309,6 +309,11 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     disableFilePersistence: true,
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
+  // --auto-approve selects `auto` for this run: the reviewer decides what the mode leaves for a person, and
+  // anything still left is refused. An explicit --approval-mode wins; a saved `unattended` or `always` is kept
+  // (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 2).
+  if (options.autoApprove && options.approvalMode === undefined && settings.get('shell.autoApproveMode') === 'off')
+    settings.set('shell.autoApproveMode', 'auto', { persist: false });
   const logger = settings.getLoggingService();
   const modelOverrides = await applyModelOverrides(options, settings, logger, false);
   if (typeof modelOverrides === 'string') {

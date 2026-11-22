@@ -70,7 +70,7 @@ Continue a saved session headlessly with `term2 --resume <session-id> "Follow-up
 
 Every session uses the same default experience: a minimal prompt with subagent delegation. Choose models and reasoning effort with `/model` and `/effort`; there is no profile chooser. Legacy profile inputs and saved session metadata remain compatible; see [profile internals](docs/profiles/README.md).
 
-A command-line prompt runs non-interactively, with tool execution disabled by default. `--auto-approve` enables tools without interactive confirmation; use it only when you intend unattended execution. See [scripting](https://qduc.github.io/term2/using-term2/non-interactive/) and [SSH setup](https://qduc.github.io/term2/remote/ssh/).
+A command-line prompt runs non-interactively and never asks: whatever would wait for a person is refused. Without flags only what needs no approval runs (work inside the workspace, sandboxed shell commands); `--auto-approve` lets the approval reviewer decide the rest (`--approval-mode auto`). See [scripting](https://qduc.github.io/term2/using-term2/non-interactive/) and [SSH setup](https://qduc.github.io/term2/remote/ssh/).
 
 The optional [Discord bridge](docs/reference/discord-bridge.md#first-run-checklist)
 attaches to existing opted-in terminal sessions. Start with `term2 discord --help`.
@@ -84,7 +84,7 @@ bridge restart. See the guide for tested scope and remaining limits.
 
 Interactive sessions default to shell auto-approval `off` and an enabled shell sandbox. You can change these settings, so the active configuration matters. The sandbox constrains shell commands; it does not cover providers, external MCP servers, or every tool.
 
-The four approval modes are `off` (ask), `auto` (review, then ask if needed), `unattended` (review, then refuse if needed), and `always` (bypass eligible permission prompts without model review). Set them with `/auto-approve` or `--approval-mode`. Changing modes preserves `sandbox.enabled`. `shell.showReview` / `--show-review` separately controls assessments shown with human prompts; with `off`, it requests advice that cannot approve the action. Saved `advisory` settings migrate to `off` with review display enabled. The headless `--auto-approve` boolean remains a separate option.
+The four approval modes are `off` (ask), `auto` (review, then ask if needed), `unattended` (review, then refuse if needed), and `always` (bypass eligible permission prompts without model review). Set them with `/auto-approve` or `--approval-mode`. Changing modes preserves `sandbox.enabled`. `shell.showReview` / `--show-review` separately controls assessments shown with human prompts; with `off`, it requests advice that cannot approve the action. Saved `advisory` settings migrate to `off` with review display enabled. In a non-interactive run, `--auto-approve` selects `auto`.
 
 In `unattended`, repeated refusals end the run; questions can still ask, and sandbox escapes are refused unless `shell.unattendedEscapeReview` is enabled. `always` can grant eligible runtime network and supported foreground sandbox-escape requests with their one-time scoped grant; it keeps human-only decisions such as `propose_goal` and unsupported escape restrictions. The reviewer catches mistakes, but is not a security boundary. With the sandbox off or unavailable, or over SSH, it is the only layer between automatically reviewed shell commands and your machine. The approvals page lists unattended's limits.
 

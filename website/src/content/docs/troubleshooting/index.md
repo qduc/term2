@@ -44,9 +44,9 @@ Start with the symptom that matches what you see. If you need a configuration fi
 
 **Symptom**: Running `term2 "do something that writes a file"` outputs text but makes no modifications.
 
-**Explanation**: Headless runs need `--auto-approve` to use tools. That flag allows GREEN and YELLOW shell commands. For a refused RED command, check stderr or the JSON event `approval_rejected`. The process can still exit with code 0.
+**Explanation**: A headless run never asks. Without flags, only work that needs no approval runs (edits inside the workspace, sandboxed shell commands); anything else is refused. With the sandbox off, most shell commands need approval. For a refusal, check stderr or the JSON event `approval_rejected`. The process can still exit with code 0.
 
-**Fix**: Pass `--auto-approve`:
+**Fix**: Pass `--auto-approve` to let the approval reviewer decide, or `--approval-mode always` to skip review:
 ```bash
 term2 --auto-approve "Fix the typo in README.md"
 ```

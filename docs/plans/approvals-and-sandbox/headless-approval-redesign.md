@@ -49,12 +49,15 @@ decides what happens to the rest.
 |---|---|---|
 | leftover request | asked | refused, the model continues |
 
-- `unattended` stops being a mode. It was `auto` with nobody present. Its parts
-  (refusal limits, workspace snapshot, refusing a sandbox escape unless
-  `shell.unattendedEscapeReview`) attach to "nobody present".
-- A bare `--auto-approve` means `--approval-mode auto`. An explicit
-  `--approval-mode` wins. Headless with neither is `off`, so only what needs no
-  approval runs, as the help text has always said.
+- `unattended` stays a mode (owner, 2026-11-22: "unattended mode: need
+  permission → deny"). It is how a person chooses the nobody-present rules in
+  the TUI and ACP: whatever needs permission is refused, with its refusal
+  limits, workspace snapshot and escape refusal. No separate "away" switch.
+  This replaced an earlier proposal to retire the mode.
+- A bare `--auto-approve` raises `off` to `auto`. An explicit
+  `--approval-mode` wins, and a saved `unattended` or `always` is kept.
+  Headless with neither is `off`, so only what needs no approval runs, as the
+  help text has always said.
 - `auto` without a usable reviewer model is `off` at the edges: asked, or
   refused when nobody is present. That is the cost-free "workspace only" level.
 - `NonInteractiveApprovalPolicy` is removed. Its YELLOW → chore-tier fallback
@@ -157,12 +160,11 @@ need an independent verifier (`verification` skill).
 4. Scratch area (decision 4).
 5. Headless: leftover requests refused, `--auto-approve` = `auto`,
    `NonInteractiveApprovalPolicy` removed (decisions 1 and 2, headless side).
-6. `unattended` retired as a mode; its parts keyed on presence (decision 2).
+6. Dropped: `unattended` stays a mode (decision 2).
 
-## Open questions
+## Settled questions
 
-- Does the TUI need an "away" switch that applies the nobody-present rules,
-  or does `unattended` in the TUI go away? ACP v1 exposes an `unattended`
-  approval mode (`AcpApprovalMode`) and needs a mapping either way.
-- `.git/config` in the floor breaks `git push -u` and other config-writing git
-  commands inside the sandbox. Confirm before item 3 changes `allowGitConfig`.
+- `unattended` stays a mode; no "away" switch (decision 2).
+- `.git/config` stays writable from the sandbox, so standard git workflows
+  (`git push -u`, `git switch -c x origin/main`) keep working (owner,
+  2026-11-22). File tools still treat it as a floor path.

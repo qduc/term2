@@ -34,6 +34,7 @@ import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-
 import { SSH_LOCAL_ONLY_TOOLS } from './remote-tools.js';
 import { renderDurableGoalContext } from '../session/goal.js';
 import type { DirectContextPort } from '../session/capabilities.js';
+import { scratchDirectoryHint } from '../shared/utils/shell/temp-dir.js';
 
 type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[0]['addToolInterceptor']>[0];
 
@@ -387,11 +388,16 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
           },
         }),
       );
+      // A held shell write to plain /tmp: say where scratch files go (headless-approval-redesign.md, decision 4).
+      const scratch =
+        !remote && (request.toolName === 'shell' || request.toolName === 'bash')
+          ? scratchDirectoryHint(approvalArguments(request.toolName, request.input))
+          : undefined;
       return decision.answer === 'y'
         ? { kind: 'allow' }
         : {
             kind: 'deny',
-            reason: [decision.rejectionReason, firstReview && `Initial review: ${firstReview}`]
+            reason: [decision.rejectionReason, firstReview && `Initial review: ${firstReview}`, scratch]
               .filter(Boolean)
               .join('\n'),
           };

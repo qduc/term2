@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { SandboxManager as RuntimeSandboxManager, SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
-import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
+import { SANDBOX_TEMP_DIR, scratchDirectoryHint } from '../../../shared/utils/shell/temp-dir.js';
 import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
 import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
 import { quoteShellArg } from '../../ssh-service.js';
@@ -172,7 +172,10 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   }
 
   annotateFailure(command: string, stderr: string): string {
-    return loadedManager ? loadedManager.annotateStderrWithSandboxFailures(command, stderr) : stderr;
+    const annotated = loadedManager ? loadedManager.annotateStderrWithSandboxFailures(command, stderr) : stderr;
+    // A write to plain /tmp fails on the sandbox's read-only mount; say where scratch files go instead.
+    const hint = /Read-only file system/.test(stderr) ? scratchDirectoryHint(`${command}\n${stderr}`) : undefined;
+    return hint ? `${annotated}\n${hint}` : annotated;
   }
 
   async #initialize(

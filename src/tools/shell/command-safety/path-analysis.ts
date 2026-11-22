@@ -1,6 +1,8 @@
+import fs from 'node:fs';
 import path from 'path';
 import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
 import type { ILoggingService } from '../../../shared/service-interfaces.js';
+import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
 import {
   SafetyStatus,
   SYSTEM_PATHS,
@@ -121,10 +123,50 @@ function isInHighlySensitiveDir(sliced: string): boolean {
   return false;
 }
 
-export function analyzePathRisk(inputPath: string | undefined, loggingService?: ILoggingService): SafetyStatus {
+/**
+ * A write target under the shared temp directory but outside Term2's scratch area (`SANDBOX_TEMP_DIR`,
+ * the child's `$TMPDIR`). Plain `/tmp` is shared by every user and process, so with the sandbox off a write
+ * there is outside the workspace like any other absolute path; the sandbox already refuses it
+ * (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 4). Reads are unaffected.
+ */
+function isSharedTempWriteTarget(inputPath: string | undefined): boolean {
+  const candidate = inputPath?.trim();
+  if (!candidate || !path.isAbsolute(candidate)) return false;
+  const normalized = path.normalize(candidate);
+  const inShared = ['/tmp', '/private/tmp'].some(
+    (root) => normalized === root || normalized.startsWith(root + path.sep),
+  );
+  // macOS: /tmp is a link to /private/tmp, and either spelling may name the same scratch dir or workspace.
+  const spellings = [
+    normalized,
+    normalized.replace(/^\/private(?=\/tmp(\/|$))/, ''),
+    normalized.replace(/^(?=\/tmp(\/|$))/, '/private'),
+  ];
+  const within = (root: string) =>
+    spellings.some((spelling) => spelling === root || spelling.startsWith(root + path.sep));
+  const workspace = path.resolve(getActiveWorkspaceRoot());
+  let physicalWorkspace = workspace;
+  try {
+    physicalWorkspace = fs.realpathSync(workspace);
+  } catch {
+    // A missing workspace keeps its lexical path.
+  }
+  // A workspace that itself lives under /tmp keeps its own absolute paths inside.
+  return inShared && !within(SANDBOX_TEMP_DIR) && !within(workspace) && !within(physicalWorkspace);
+}
+
+export function analyzePathRisk(
+  inputPath: string | undefined,
+  loggingService?: ILoggingService,
+  options: { readonly write?: boolean } = {},
+): SafetyStatus {
   const logger = getLogger(loggingService);
   const candidate = inputPath?.trim();
   if (!candidate) return SafetyStatus.GREEN;
+  if (options.write && isSharedTempWriteTarget(candidate)) {
+    logger.security('Path risk: write to shared /tmp outside the scratch area', { path: candidate });
+    return SafetyStatus.YELLOW;
+  }
 
   // GREEN: Safe pseudo-devices
   const safeDevices = new Set(['/dev/null', '/dev/stdout', '/dev/stderr', '/dev/zero', '/dev/random', '/dev/urandom']);

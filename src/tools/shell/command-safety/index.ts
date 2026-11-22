@@ -4,6 +4,9 @@ import { SafetyStatus, ALLOWED_COMMANDS, BLOCKED_COMMANDS } from './constants.js
 import { extractWordText } from './utils.js';
 import { hasFindDangerousExecution, hasFindSuspiciousFlags } from './find-helpers.js';
 import { analyzePathRisk } from './path-analysis.js';
+
+/** Redirect operators that write their target; `<`, `<<<` and heredocs only read. */
+const WRITE_REDIRECTS: ReadonlySet<string> = new Set(['>', '>>', '>|', '&>', '&>>', '>&', '<>']);
 import { getCommandHandler } from './handlers/index.js';
 import type { CommandHandlerHelpers } from './handlers/index.js';
 import type { ILoggingService } from '../../../shared/service-interfaces.js';
@@ -120,7 +123,7 @@ export function classifyCommandDetailed(
     if (redirect.target) {
       traverseWord(redirect.target);
       const fileText = extractWordText(redirect.target);
-      const pathStatus = analyzePathRiskWithLogger(fileText);
+      const pathStatus = analyzePathRisk(fileText, logger, { write: WRITE_REDIRECTS.has(redirect.operator) });
       upgradeStatus(pathStatus, `redirect to ${fileText ?? '<unknown>'}`);
     } else {
       upgradeStatus(SafetyStatus.YELLOW, 'redirect to <unknown>');

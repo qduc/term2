@@ -16,7 +16,7 @@ If a command needs documentation outside the workspace, add a read allowance bel
 You can toggle the sandbox at any time with `/sandbox`, or configure policies via `/settings`:
 
 ### `standard` Policy (Default)
-- **Filesystem Writes**: Strictly restricted to the workspace root directory and authorized temporary directories (`/tmp`, OS temp paths).
+- **Filesystem Writes**: Strictly restricted to the workspace root directory and Term2's scratch directory, which shell commands see as `$TMPDIR` (on Linux `/tmp/<user>/term2-nodejs`). Plain `/tmp` is not writable; a write there fails and the error names `$TMPDIR`. With the sandbox off, a shell redirect to plain `/tmp` needs approval like any other path outside the workspace.
 - **Sensitive Path Guard**: Blocks reading from sensitive credentials, secrets, and configuration directories:
   - `~/.ssh`
   - `~/.aws`

@@ -141,13 +141,43 @@ export function protectedWriteForFileTool(
   toolName: string,
   input: unknown,
   cwd: string,
+  options: { readonly anyWorktree?: boolean } = {},
 ): { kind: ProtectedWriteKind; path: string } | undefined {
+  // A caller that cannot tell which checkout the call came from (the approval route, for a worker pinned to a
+  // linked worktree) resolves a relative path from every checkout of the repository; any hit holds the call.
+  const bases = options.anyWorktree ? [cwd, ...linkedWorktreeRoots(cwd)] : [cwd];
   for (const target of fileToolWriteTargets(toolName, input)) {
-    const resolved = path.resolve(cwd, expandHome(target));
-    const kind = protectedWriteKind(resolved, cwd);
-    if (kind) return { kind, path: resolved };
+    const expanded = expandHome(target);
+    for (const base of path.isAbsolute(expanded) ? [cwd] : bases) {
+      const resolved = path.resolve(base, expanded);
+      const kind = protectedWriteKind(resolved, base);
+      if (kind) return { kind, path: resolved };
+    }
   }
   return undefined;
+}
+
+/** The root of each linked worktree of the repository `cwd` belongs to, from `<git dir>/worktrees/<name>/gitdir`. */
+function linkedWorktreeRoots(cwd: string): string[] {
+  const checkout = findGitCheckoutRoot(cwd);
+  if (!checkout) return [];
+  const gitDir = resolveGitWorktreeWritePaths(cwd).commonDir ?? path.join(checkout, '.git');
+  const roots = new Set<string>();
+  if (path.basename(gitDir) === '.git') roots.add(path.dirname(gitDir));
+  try {
+    for (const name of fs.readdirSync(path.join(gitDir, 'worktrees'))) {
+      try {
+        const pointer = fs.readFileSync(path.join(gitDir, 'worktrees', name, 'gitdir'), 'utf8').trim();
+        if (pointer) roots.add(path.dirname(path.resolve(gitDir, 'worktrees', name, pointer)));
+      } catch {
+        // An entry without a readable gitdir is not a usable worktree.
+      }
+    }
+  } catch {
+    // No linked worktrees.
+  }
+  roots.delete(path.resolve(cwd));
+  return [...roots];
 }
 
 function fileToolWriteTargets(toolName: string, input: unknown): string[] {

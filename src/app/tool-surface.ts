@@ -264,9 +264,11 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     refreshSandbox();
     return sandboxAvailable !== false;
   };
-  // A local file-tool write on the approval floor (headless-approval-redesign.md, decision 3).
+  // A local file-tool write on the approval floor (headless-approval-redesign.md, decision 3). The request does
+  // not say which checkout a worker ran in, so a relative path is tried from each of the repository's checkouts.
   const isProtectedWrite = (toolName: string, input: unknown): boolean =>
-    !remote && protectedWriteForFileTool(toolName, input, executionContext.getCwd()) !== undefined;
+    !remote &&
+    protectedWriteForFileTool(toolName, input, executionContext.getCwd(), { anyWorktree: true }) !== undefined;
   // The one review path every surface uses (src/session/approval/approval-route.ts).
   const reviewApproval = createAssistedApprovalReview({
     isSandboxEscape,

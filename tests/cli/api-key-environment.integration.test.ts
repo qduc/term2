@@ -1,5 +1,6 @@
 // Credentials supplied through the environment: which key the built CLI puts on the wire, in which header,
-// and which one wins when `settings.json` supplies one as well.
+// and which one wins when `settings.json` supplies one as well: a non-empty saved key wins and the variable is a
+// fallback, for the built-in providers, web search and custom providers alike.
 //
 // Every case is one headless run of the built CLI against a loopback server with HOME, XDG, TERM2_CONFIG_DIR
 // and temp directories of its own, and a child environment that carries only the key under test.
@@ -166,13 +167,13 @@ describe.concurrent('API keys from the environment, through the built CLI', () =
       expect(requests.map((request) => request.headers.authorization)).toEqual(['Bearer settings-openai-key']);
     });
 
-    it('prefers the environment over settings.json when both supply a key', { timeout: TIMEOUT }, async () => {
+    it('prefers settings.json over the environment when both supply a key', { timeout: TIMEOUT }, async () => {
       const { run, requests } = await openai({
         env: { OPENAI_API_KEY: 'env-openai-key' },
         settingsKey: 'settings-openai-key',
       });
       expect(run.status, describeRun(run)).toBe(0);
-      expect(requests.map((request) => request.headers.authorization)).toEqual(['Bearer env-openai-key']);
+      expect(requests.map((request) => request.headers.authorization)).toEqual(['Bearer settings-openai-key']);
     });
 
     it("sends no other provider's key to OpenAI when it has none of its own", { timeout: TIMEOUT }, async () => {
@@ -238,13 +239,13 @@ describe.concurrent('API keys from the environment, through the built CLI', () =
       expect(requests.map((request) => header(request, 'authorization'))).toEqual(['Bearer settings-openrouter-key']);
     });
 
-    it('prefers the environment over settings.json when both supply a key', { timeout: TIMEOUT }, async () => {
+    it('prefers settings.json over the environment when both supply a key', { timeout: TIMEOUT }, async () => {
       const { run, requests } = await openrouter({
         env: { OPENROUTER_API_KEY: 'env-openrouter-key' },
         settingsKey: 'settings-openrouter-key',
       });
       expect(run.status, describeRun(run)).toBe(0);
-      expect(requests.map((request) => header(request, 'authorization'))).toEqual(['Bearer env-openrouter-key']);
+      expect(requests.map((request) => header(request, 'authorization'))).toEqual(['Bearer settings-openrouter-key']);
     });
 
     it(
@@ -516,10 +517,20 @@ describe.concurrent('API keys from the environment, through the built CLI', () =
       expect(JSON.stringify(modelRequests[1]!.body.input)).toContain(MARKER);
     });
 
-    it('tavily: the environment key wins over a key in settings.json', { timeout: TIMEOUT }, async () => {
+    it('tavily: a key in settings.json wins over the environment key', { timeout: TIMEOUT }, async () => {
       const { run, backend } = await search({
         env: { TAVILY_API_KEY: 'env-tavily-key', WEB_SEARCH_PROVIDER: 'tavily' },
         settings: { webSearch: { tavily: { apiKey: 'settings-tavily-key' } } },
+        redirectHosts: ['api.tavily.com'],
+      });
+      expect(run.status, describeRun(run)).toBe(0);
+      expect(backend.requests.map((request) => JSON.parse(request.body).api_key)).toEqual(['settings-tavily-key']);
+    });
+
+    it('tavily: an empty key in settings.json falls back to the environment key', { timeout: TIMEOUT }, async () => {
+      const { run, backend } = await search({
+        env: { TAVILY_API_KEY: 'env-tavily-key', WEB_SEARCH_PROVIDER: 'tavily' },
+        settings: { webSearch: { tavily: { apiKey: '' } } },
         redirectHosts: ['api.tavily.com'],
       });
       expect(run.status, describeRun(run)).toBe(0);

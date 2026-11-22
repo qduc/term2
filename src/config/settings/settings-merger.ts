@@ -1,5 +1,5 @@
 import { SettingsSchema, type SettingSource, type SettingsData } from './settings-schema.js';
-import type { DeepPartial } from './settings-env.js';
+import { withoutSavedCredentials, type DeepPartial } from './settings-env.js';
 
 type LoggerLike = {
   warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -61,7 +61,8 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
 
 /**
  * Merge multiple settings sources with proper precedence.
- * Precedence: cli > env > config > defaults.
+ * Precedence: cli > env > config > defaults, except that a non-empty API key in
+ * config wins over its environment variable (ENV_FALLBACK_CREDENTIAL_KEYS).
  */
 export function mergeSettings(
   defaults: SettingsData,
@@ -80,7 +81,7 @@ export function mergeSettings(
   deepMerge(result, fileConfig as Record<string, unknown>);
 
   // Merge env
-  deepMerge(result, env as Record<string, unknown>);
+  deepMerge(result, withoutSavedCredentials(env, fileConfig) as Record<string, unknown>);
 
   // Merge cli (highest priority)
   deepMerge(result, cli as Record<string, unknown>);
@@ -162,7 +163,7 @@ export function trackSettingSources(
 
   const flatDefaults = flattenSettings(defaults);
   const flatFileConfig = flattenSettings(fileConfig);
-  const flatEnv = flattenSettings(env);
+  const flatEnv = flattenSettings(withoutSavedCredentials(env, fileConfig));
   const flatCli = flattenSettings(cli);
 
   // For each possible setting key, determine its source

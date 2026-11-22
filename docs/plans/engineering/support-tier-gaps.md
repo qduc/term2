@@ -61,7 +61,8 @@ Ordered by what a miss costs, then by how likely the miss is.
      `codex-auth.json`, `grok-auth.json` and `settings.json` there returned
      their contents to the model. A decision: which of those files the
      sandbox hides, given that a `term2` started inside the sandbox would
-     then not find them.
+     then not find them. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - The sandbox's proxy bridge is `socat TCP-LISTEN:3128`, which opens an
      IPv6 socket. On a kernel without IPv6 the bridge never starts and every
      proxied command fails with "Failed to connect to localhost port 3128"
@@ -117,11 +118,13 @@ Ordered by what a miss costs, then by how likely the miss is.
      reviewer model has rejected it (`decideHeadlessApproval` allows every
      tool that is not the shell). A rejected shell command stays rejected.
      The flag's help says it skips confirmation, so this may be intended; it
-     is not asserted either way.
+     is not asserted either way. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - With the sandbox off, a shell redirect to an absolute path under `/tmp`
      runs without approval in mode `off`, wherever the workspace is, because
      the path classifier treats `/tmp` as safe. Redirects through `..` or `~`
-     are held. The tests assert only the held cases.
+     are held. The tests assert only the held cases. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - The comment on the existing real-sandbox case says the bare profile
      edits through the shell. Bare also has `create_file` and
      `search_replace`, which approval admits, not the sandbox.
@@ -312,9 +315,14 @@ section is a real recording behind every provider, replayed offline.
     variables in `SETTING_ENV_VARIABLES`. Not covered: web-search keys given
     only in `settings.json`, and the "configured" state the provider picker
     derives from `CUSTOM_PROVIDER_ENV_KEYS`. Findings:
-    - Precedence differs by provider. For OpenAI, OpenRouter and web search the
-      environment wins over `settings.json`; for the custom types a stored
-      `apiKey` wins over the environment. The tests pin both.
+    - Decided 2026-11-22 and done: a saved key wins everywhere. OpenAI,
+      OpenRouter and web search used to let the environment win over
+      `settings.json`, while the custom types let a stored `apiKey` win. Now a
+      non-empty key in `settings.json` wins on all of them and the variable is
+      the fallback (`ENV_FALLBACK_CREDENTIAL_KEYS` in
+      `src/config/settings/settings-env.ts`). The tests assert the saved key on
+      the wire for OpenAI, OpenRouter and Tavily, and an empty saved Tavily key
+      falling back to the variable.
     - Fixed: with no OpenAI key anywhere the request was sent with the bearer
       value `placeholder`. `openai.provider.ts` now stops before any model
       request and says the key is not configured, as OpenRouter does, unless

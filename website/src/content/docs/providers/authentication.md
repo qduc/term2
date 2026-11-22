@@ -46,6 +46,8 @@ API keys can be provided through environment variables. Direct Anthropic and Gem
 | **Tavily (Web Search)** | `TAVILY_API_KEY` |
 | **Exa (Web Search)** | `EXA_API_KEY` |
 
+When a key is also saved in `settings.json` (or in a custom provider entry), the saved key wins and the environment variable is ignored. The variable is the fallback for when no key is saved.
+
 ## Persisting Credentials in Settings
 
 Use `/settings` to save an API key in `settings.json`.

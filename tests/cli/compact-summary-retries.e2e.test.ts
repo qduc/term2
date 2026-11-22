@@ -37,7 +37,7 @@ afterEach(async () => {
   root = '';
 });
 
-type SummaryBehaviour = 'http-503' | 'stream-closed-early' | 'ok';
+type SummaryBehaviour = 'http-503' | 'http-503-long-retry-after' | 'stream-closed-early' | 'ok';
 
 async function compactWithFailingSummary(summaryBehaviours: SummaryBehaviour[], retryAttempts: number) {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-compact-retries-')));
@@ -62,9 +62,10 @@ async function compactWithFailingSummary(summaryBehaviours: SummaryBehaviour[], 
       const behaviour: SummaryBehaviour = isSummary
         ? summaryBehaviours[Math.min(summaries++, summaryBehaviours.length - 1)]!
         : 'ok';
-      if (behaviour === 'http-503') {
+      if (behaviour === 'http-503' || behaviour === 'http-503-long-retry-after') {
         // A 1 ms Retry-After keeps the backoff out of the test's wall time; the engine honours it.
-        res.writeHead(503, { 'content-type': 'application/json', 'retry-after': '0.001', connection: 'close' });
+        const retryAfter = behaviour === 'http-503' ? '0.001' : '120';
+        res.writeHead(503, { 'content-type': 'application/json', 'retry-after': retryAfter, connection: 'close' });
         res.end(JSON.stringify({ error: { message: 'summary fixture unavailable' } }));
         return;
       }
@@ -142,8 +143,9 @@ async function compactWithFailingSummary(summaryBehaviours: SummaryBehaviour[], 
   const beforeCompact = session.getVisibleOutput().length;
   await send('/compact');
   const settled = /Context compaction failed:|Context compacted locally/;
-  for (let i = 0; i < 2400 && !settled.test(session.getVisibleOutput().slice(beforeCompact)); i++)
-    await new Promise((resolve) => setTimeout(resolve, 25));
+  await expect
+    .poll(() => settled.test(session!.getVisibleOutput().slice(beforeCompact)), { timeout: 60_000 })
+    .toBe(true);
   await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
   const output = session.getVisibleOutput().slice(beforeCompact);
   const file = fs.readdirSync(conversations).find((name) => name.endsWith('.jsonl'))!;
@@ -183,6 +185,18 @@ it(
     expect(result.summaries, context).toBe(2);
     expect(result.output, context).toContain('Context compaction failed:');
     expect(result.output, context).not.toContain('engine-owned budget reservation');
+  },
+);
+
+it(
+  '/compact does not wait out a Retry-After past the 90 s recovery clock: one summary request, then the error',
+  { timeout: 180_000 },
+  async () => {
+    const result = await compactWithFailingSummary(['http-503-long-retry-after'], 2);
+    const context = JSON.stringify({ ...result, output: result.output.slice(-1500) });
+    expect(result.summaries, context).toBe(1);
+    expect(result.output, context).toContain('Context compaction failed:');
+    expect(result.output, context).toContain('summary fixture unavailable');
   },
 );
 

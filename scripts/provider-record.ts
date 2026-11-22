@@ -13,7 +13,12 @@ import {
 } from './provider-black-box/fixture-self-validation.js';
 import { createFixtureRecorder, createRecordingMiddleware } from './provider-black-box/fixture-recorder.js';
 import { probeRunOptionsFor, runToolContinuationProbe } from './provider-black-box/probe-runner.js';
-import { RecordingLeakError, addLiteral, redactLiterals } from './provider-black-box/recording-secret-scan.js';
+import {
+  RecordingLeakError,
+  addLiteral,
+  displayPath,
+  redactLiterals,
+} from './provider-black-box/recording-secret-scan.js';
 import type { ScrubReport } from './provider-black-box/wire-identity-scrubber.js';
 import type { FixtureTransport } from './provider-black-box/fixture-envelope.js';
 import type { FakeProviderScenario } from './provider-black-box/fake-provider-http-server.js';
@@ -58,11 +63,13 @@ const usage = `Usage:
   Live recording of Codex with your ChatGPT login (two model requests on one WebSocket):
     pnpm provider:record --yes --provider codex --model <model> --probe tool-continuation-v2 --out <absolute dir>
       The login is read the way term2 reads it: term2's codex-auth.json (\`term2 --codex-login\`), else the Codex
-      CLI's ~/.codex/auth.json. Tokens are never printed. Codex and OpenAI-over-WebSocket recordings are
-      scrubbed as they are captured (account, session, installation and turn ids, headers outside an
-      allow-list, rate-limit and plan details), sanitized, and secret-scanned after writing; on a match the
-      files are deleted and the command exits 3. Writes <provider>-<transport>-<probe>.json and a
-      .redactions.json beside it.
+      CLI's ~/.codex/auth.json. Tokens are never printed; the endpoint they go to is, before the first
+      request. Codex and OpenAI-over-WebSocket recordings are scrubbed as they are captured (account,
+      session, installation and turn ids, other identity fields, headers outside an allow-list, every value
+      of a non-response.* event such as codex.rate_limits), sanitized, written under a temporary name and
+      secret-scanned; only files that pass are renamed into place. On a match nothing is kept (a file
+      already at the output path is untouched) and the command exits 3. Writes
+      <provider>-<transport>-<probe>.json and a .redactions.json beside it.
 
   Live recording of any custom provider type against a chosen base URL:
     pnpm provider:record --yes --provider <new id> --type <type> --base-url <url> --api-key-env <ENV NAME>
@@ -272,6 +279,9 @@ async function runLiveRecording(
     },
   });
   const captureReport: ScrubReport = [];
+  // Before any request: where the account's credential is about to be sent.
+  if (scrubbed)
+    console.error(`provider:record: Recording ${providerId} via ${credentialedEndpoint(providerId, transport)}`);
   const nativeFetch = globalThis.fetch;
   let webSocketCapture: import('./provider-black-box/websocket-capture.js').WebSocketCapture | undefined;
   let fallback: ReturnType<typeof credentialed.observeResponsesHttpFallback> | undefined;
@@ -389,8 +399,8 @@ async function runLiveRecording(
       captureReport,
       literals,
     });
-    console.log(written.file);
-    console.log(written.reportFile);
+    console.log(displayPath(written.file));
+    console.log(displayPath(written.reportFile));
   } catch (error) {
     if (error instanceof RecordingLeakError) {
       console.error(`provider:record: ${error.message}`);
@@ -409,11 +419,27 @@ function codexBaseUrl(): string {
   return (process.env.CODEX_BASE_URL || 'https://chatgpt.com/backend-api/codex').replace(/\/+$/, '');
 }
 
+/** The Responses endpoint a credentialed recording sends its token to, as the provider derives it (no userinfo). */
+function credentialedEndpoint(providerId: string, transport: LiveTransport): string {
+  const base =
+    providerId === 'codex' ? codexBaseUrl() : process.env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1';
+  try {
+    const url = new URL(`${base.replace(/\/+$/, '')}/responses`);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    if (transport === 'websocket') url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+    return url.href;
+  } catch {
+    return '(an unparseable base URL)';
+  }
+}
+
 function codexLoginLiterals(credentialed: typeof import('./provider-black-box/credentialed-recording.js')) {
   const login = credentialed.findCodexLogin();
   if (!login)
     fail(`No Codex login found. Looked for ${credentialed.codexLoginLocations()}. Run \`term2 --codex-login\` first.`);
-  console.error(`provider:record: using the Codex login from ${login!.sources[0]}`);
+  console.error(`provider:record: using the Codex login from ${displayPath(login!.sources[0]!)}`);
   return [...login!.literals];
 }
 

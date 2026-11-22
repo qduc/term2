@@ -7,11 +7,16 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseFixtureEnvelope, type FixtureEnvelopeV1, type WsMessageFrame } from './fixture-envelope.js';
 import { plantedWebSocketSecrets, webSocketSelfValidationScenarios } from './fixture-self-validation.js';
-import { startProbeWebSocketResponder, type ProbeWebSocketResponder } from './probe-websocket-responder.js';
+import {
+  plantedResponderIdentity,
+  startProbeWebSocketResponder,
+  type ProbeWebSocketResponder,
+} from './probe-websocket-responder.js';
 import { getProbeScenario } from './probe-scenarios.js';
 import {
   RecordingLeakError,
   addCodexTokenLiterals,
+  addJwtLiterals,
   addLiteral,
   writeScannedRecording,
   type SensitiveLiteral,
@@ -24,6 +29,7 @@ import { replayWebSocketProbeRecording } from './websocket-probe-replay.js';
 // a leak, and the replay of a recording through the registry model. No real credential or network.
 
 const recorderPath = fileURLToPath(new URL('../provider-record.ts', import.meta.url));
+const secretScanPath = fileURLToPath(new URL('./recording-secret-scan.ts', import.meta.url));
 const repoRoot = resolve(dirname(recorderPath), '..');
 const probe = getProbeScenario('tool-continuation-v2');
 
@@ -40,20 +46,28 @@ const credentialVars = [
 ];
 
 function runRecorder(args: string[], env: Record<string, string> = {}): Promise<RecorderResult> {
+  return runChild('pnpm', ['exec', 'tsx', recorderPath, ...args], env);
+}
+
+function runChild(
+  command: string,
+  args: string[],
+  env: Record<string, string> = {},
+): Promise<RecorderResult & { signal: NodeJS.Signals | null }> {
   const childEnv: NodeJS.ProcessEnv = { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' };
   for (const name of credentialVars) delete childEnv[name];
   Object.assign(childEnv, env);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn('pnpm', ['exec', 'tsx', recorderPath, ...args], { cwd: repoRoot, env: childEnv });
+    const child = spawn(command, args, { cwd: repoRoot, env: childEnv });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
     child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
     const timer = setTimeout(() => child.kill('SIGKILL'), 60_000);
     child.once('error', reject);
-    child.once('close', (status) => {
+    child.once('close', (status, signal) => {
       clearTimeout(timer);
-      resolvePromise({ status, stdout, stderr });
+      resolvePromise({ status, signal, stdout, stderr });
     });
   });
 }
@@ -75,11 +89,12 @@ async function fakeCodexLogin(root: string) {
   const accessToken = `${encode({ alg: 'none', typ: 'JWT' })}.${encode({
     exp: Math.floor(Date.now() / 1000) + 3600,
     email: 'probe.owner@example.com',
+    name: 'Probe Owner Fullname',
     'https://api.openai.com/auth': { chatgpt_account_id: accountId, chatgpt_user_id: 'user-fake-0a1b2c3d' },
   })}.fakesignaturevalue123`;
   const tokens = { access_token: accessToken, refresh_token: 'fake-refresh-token-abcdef', account_id: accountId };
-  const codexHome = join(root, 'codex');
   const home = join(root, 'home');
+  const codexHome = join(home, '.codex');
   await mkdir(codexHome, { recursive: true });
   await mkdir(home, { recursive: true });
   await writeFile(join(codexHome, 'auth.json'), JSON.stringify({ tokens }));
@@ -95,6 +110,14 @@ async function fakeCodexLogin(root: string) {
 
 function codexArgs(out: string, extra: string[] = []) {
   return ['--yes', '--provider', 'codex', '--model', 'gpt-5.3-codex', '--probe', probe.id, '--out', out, ...extra];
+}
+
+const REDACTED_TEXT = '[REDACTED]';
+
+function leaves(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value.flatMap(leaves);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(leaves);
+  return [value];
 }
 
 function expectNoSecrets(text: string, secrets: readonly SensitiveLiteral[]) {
@@ -183,6 +206,115 @@ describe('recording secret scan', () => {
       );
       expect(error).toBeInstanceOf(RecordingLeakError);
       expect((error as RecordingLeakError).findings.map((finding) => finding.label)).toContain('JWT-shaped string');
+      expect(existsSync(file)).toBe(false);
+    }));
+});
+
+describe('recording secret scan: encoded, re-cased and nested copies, and JWT claims', () => {
+  const email = 'probe.owner@example.com';
+  const token = 'fake-refresh-token-abcdef0123';
+  const windowsHome = 'C:\\Users\\probe-owner';
+  const literals: SensitiveLiteral[] = [];
+  addLiteral(literals, 'email claim', email);
+  addLiteral(literals, 'refresh token', token);
+  addLiteral(literals, 'home directory path', windowsHome);
+  // Encodes to base64 with '+' and '/' (url-safe: '-' and '_') at every offset.
+  const opaque = 'opaque~key?>value~~1';
+  addLiteral(literals, 'opaque account value', opaque);
+  const b64 = (text: string) => Buffer.from(text).toString('base64');
+  const cases: Array<[string, unknown]> = [
+    ['URL-encoded email', { url: `https://example.invalid/?u=${encodeURIComponent(email)}` }],
+    ['upper-cased email', { text: `contact ${email.toUpperCase()}` }],
+    ['base64 token', { blob: b64(token) }],
+    ['base64 token at an unaligned offset', { blob: b64(`x:${token}:z`) }],
+    ['standard base64 value at offset 1', { blob: b64(`a${opaque}`) }],
+    ['url-safe base64 value', { blob: Buffer.from(opaque).toString('base64url') }],
+    ['url-safe base64 value at offset 2', { blob: Buffer.from(`ab${opaque}`).toString('base64url') }],
+    ['base64 email at offset 1', { blob: b64(`a${email}`) }],
+    ['double-escaped path in nested JSON', { args: JSON.stringify(JSON.stringify({ home: windowsHome })) }],
+    ['nested JSON with a re-cased email', { args: JSON.stringify({ who: email.replace('probe', 'PROBE') }) }],
+  ];
+  it.each(cases)('fails on a %s and deletes the file', (_label, payload) =>
+    withTempDir(async (dir) => {
+      const file = join(dir, 'leaky.json');
+      const error = await writeScannedRecording(file, JSON.stringify({ data: payload }), literals).catch(
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(RecordingLeakError);
+      expect((error as Error).message).not.toContain(token);
+      expect(await readdir(dir)).toEqual([]);
+    }),
+  );
+
+  it('passes a recording that only shares short or benign text with the literals', () =>
+    withTempDir(async (dir) => {
+      const file = join(dir, 'clean.json');
+      await writeScannedRecording(file, JSON.stringify({ text: 'probe owner example', n: 'ZmFrZQ' }), literals);
+      expect(existsSync(file)).toBe(true);
+    }));
+
+  it('takes every string claim of a JWT as a literal, apart from the benign ones', () =>
+    withTempDir(async (dir) => {
+      const claims = {
+        iss: 'https://auth.openai.com',
+        aud: ['https://api.openai.com/v1'],
+        scp: ['openid', 'profile', 'email'],
+        name: 'Probe Owner Fullname',
+        given_name: 'Probeowner',
+        family_name: 'Fixtureson',
+        nickname: 'probey-mc',
+        preferred_username: 'probe_owner_99',
+        picture: 'https://avatars.example.invalid/u/12345.png',
+        groups: ['team-fixture-alpha'],
+        amr: ['pwd'],
+        exp: 1893456000,
+      };
+      const jwt = `${encode({ alg: 'none', typ: 'JWT' })}.${encode(claims)}.c2ln`;
+      const jwtLiterals: SensitiveLiteral[] = [];
+      addJwtLiterals(jwtLiterals, 'id token', jwt);
+      const values = jwtLiterals.map((literal) => literal.value);
+      for (const claim of ['name', 'given_name', 'family_name', 'nickname', 'preferred_username', 'picture'] as const)
+        expect(values, claim).toContain(claims[claim]);
+      expect(values).toContain('team-fixture-alpha');
+      for (const benign of [claims.iss, claims.aud[0], 'openid', 'profile', 'email'])
+        expect(values, benign).not.toContain(benign);
+      // A recording naming the issuer is fine; one carrying the family name is not.
+      const ok = join(dir, 'ok.json');
+      await writeScannedRecording(ok, JSON.stringify({ note: `issued by ${claims.iss}` }), jwtLiterals);
+      expect(existsSync(ok)).toBe(true);
+      const bad = join(dir, 'bad.json');
+      const error = await writeScannedRecording(bad, JSON.stringify({ note: 'hi FIXTURESON' }), jwtLiterals).catch(
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(RecordingLeakError);
+      expect((error as RecordingLeakError).findings[0]!.label).toContain("claim 'family_name'");
+    }));
+});
+
+describe('recording files are only ever kept after a passing scan', () => {
+  it('leaves no file under the final name when the process dies between writing and scanning', () =>
+    withTempDir(async (dir) => {
+      const file = join(dir, 'recording.json');
+      const script = join(dir, 'crash.mts');
+      // The literal's value is read during the scan; once anything is on disk, reading it kills the process.
+      await writeFile(
+        script,
+        `import { readdirSync } from 'node:fs';
+import { writeScannedRecording } from ${JSON.stringify(secretScanPath)};
+const dir = ${JSON.stringify(dir)};
+const literal = {
+  label: 'crash trigger',
+  get value() {
+    if (readdirSync(dir).some((name) => name !== 'crash.mts')) process.kill(process.pid, 'SIGKILL');
+    return 'never-present-literal-value';
+  },
+};
+await writeScannedRecording(${JSON.stringify(file)}, '{"ok":true}\\n', [literal]);
+console.log('scan finished');
+`,
+      );
+      const result = await runChild(process.execPath, ['--import', 'tsx', script]);
+      expect(result.signal, `${result.stdout}\n${result.stderr}`).toBe('SIGKILL');
       expect(existsSync(file)).toBe(false);
     }));
 });
@@ -374,6 +506,117 @@ describe('provider:record --provider codex with a fake login (live path, loopbac
       expect(sends(envelope)).toHaveLength(2);
       const replay = await replayWebSocketProbeRecording(envelope);
       expect(replay.secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    }));
+
+  it('redacts unknown identity fields and every value of a non-response event, and the recording replays', () =>
+    withResponder({ identity: true }, async (server, dir) => {
+      const login = await fakeCodexLogin(dir);
+      const out = join(dir, 'out');
+      const result = await runRecorder(codexArgs(out), {
+        ...login.env,
+        CODEX_BASE_URL: `${server.baseUrl}/backend-api/codex`,
+      });
+      const { raw, envelope } = await readRecording(result, out);
+      for (const [label, value] of Object.entries(plantedResponderIdentity.strings))
+        expect(raw.toLowerCase().includes(value.toLowerCase()), label).toBe(false);
+      for (const [label, value] of Object.entries(plantedResponderIdentity.numbers))
+        expect(raw.includes(String(value)), label).toBe(false);
+      const receives = envelope.turns[0]!.frames.filter(
+        (frame): frame is WsMessageFrame => frame.kind === 'ws-message' && frame.direction === 'receive',
+      );
+      const codexEvents = receives.map((frame) => frame.data as any).filter((data) => /^codex\./.test(data.type));
+      expect(codexEvents.map((event) => event.type)).toEqual(
+        expect.arrayContaining(['codex.rate_limits', 'codex.probe_notice']),
+      );
+      for (const event of codexEvents) {
+        const { type: _type, ...rest } = event;
+        for (const leaf of leaves(rest)) expect([REDACTED_TEXT, 0, true, false, null]).toContain(leaf);
+      }
+      const created = receives.find((frame) => (frame.data as any).type === 'response.created')!.data as any;
+      expect(created.response.id).toBe('resp_<1>');
+      expect(created.response.request_id).not.toBe(plantedResponderIdentity.strings.request_id);
+      const replay = await replayWebSocketProbeRecording(envelope);
+      expect(replay.secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+    }));
+
+  it('exits 3 when the service echoes a JWT display-name claim', () =>
+    withResponder({ leak: 'jwt-name' }, async (server, dir) => {
+      const login = await fakeCodexLogin(dir);
+      const out = join(dir, 'out');
+      const result = await runRecorder(codexArgs(out), {
+        ...login.env,
+        CODEX_BASE_URL: `${server.baseUrl}/backend-api/codex`,
+      });
+      expect(result.status, result.stderr).toBe(3);
+      expect(result.stderr).toContain("claim 'name'");
+      expect(result.stderr).not.toContain('Probe Owner Fullname');
+      expect(await readdir(out)).toEqual([]);
+    }));
+
+  it('scrubs a WebSocket close reason like a message body', () =>
+    withResponder({ closeReason: '{"user_id":"user-close-identity-0001"}' }, async (server, dir) => {
+      const login = await fakeCodexLogin(dir);
+      const out = join(dir, 'out');
+      const result = await runRecorder(codexArgs(out), {
+        ...login.env,
+        CODEX_BASE_URL: `${server.baseUrl}/backend-api/codex`,
+      });
+      const { raw, envelope } = await readRecording(result, out);
+      expect(raw).not.toContain('user-close-identity-0001');
+      expect(envelope.turns[0]!.frames.at(-1)).toMatchObject({
+        kind: 'ws-close',
+        reason: JSON.stringify({ user_id: REDACTED_TEXT }),
+      });
+    }));
+
+  it('keeps an earlier recording at the final path when a new one fails the scan, and leaves no temp file', () =>
+    withResponder({ leak: 'account-id' }, async (server, dir) => {
+      const login = await fakeCodexLogin(dir);
+      const out = join(dir, 'out');
+      await mkdir(out);
+      const earlier = join(out, 'codex-websocket-tool-continuation-v2.json');
+      const earlierReport = join(out, 'codex-websocket-tool-continuation-v2.redactions.json');
+      await writeFile(earlier, '{"earlier":"recording"}\n');
+      await writeFile(earlierReport, '{"earlier":"report"}\n');
+      const result = await runRecorder(codexArgs(out), {
+        ...login.env,
+        CODEX_BASE_URL: `${server.baseUrl}/backend-api/codex`,
+      });
+      expect(result.status, result.stderr).toBe(3);
+      expect(await readFile(earlier, 'utf8')).toBe('{"earlier":"recording"}\n');
+      expect(await readFile(earlierReport, 'utf8')).toBe('{"earlier":"report"}\n');
+      expect((await readdir(out)).sort()).toEqual([
+        'codex-websocket-tool-continuation-v2.json',
+        'codex-websocket-tool-continuation-v2.redactions.json',
+      ]);
+    }));
+
+  it('names the endpoint before any request and prints paths under the home directory as ~', () =>
+    withResponder({}, async (server, dir) => {
+      const login = await fakeCodexLogin(dir);
+      const out = join(login.env.HOME, 'recordings');
+      const result = await runRecorder(codexArgs(out), {
+        ...login.env,
+        CODEX_BASE_URL: `${server.baseUrl}/backend-api/codex`,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const wsUrl = `${server.baseUrl.replace(/^http:/, 'ws:')}/backend-api/codex/responses`;
+      expect(result.stderr).toContain(`Recording codex via ${wsUrl}`);
+      expect(result.stderr).toContain('using the Codex login from ~/.codex/auth.json');
+      expect(result.stdout.trim().split('\n')).toEqual([
+        '~/recordings/codex-websocket-tool-continuation-v2.json',
+        '~/recordings/codex-websocket-tool-continuation-v2.redactions.json',
+      ]);
+      expect(result.stdout + result.stderr).not.toContain(login.env.HOME);
+      expect(existsSync(join(out, 'codex-websocket-tool-continuation-v2.json'))).toBe(true);
+
+      // The endpoint line comes before the first request: it is printed even when no request can be made.
+      const unreachable = await runRecorder(codexArgs(join(dir, 'unreachable')), {
+        ...login.env,
+        CODEX_BASE_URL: 'http://127.0.0.1:1/backend-api/codex',
+      });
+      expect(unreachable.status).toBe(2);
+      expect(unreachable.stderr).toContain('Recording codex via ws://127.0.0.1:1/backend-api/codex/responses');
     }));
 
   it('refuses --transport websocket for a provider without a WebSocket transport', async () => {

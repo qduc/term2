@@ -199,10 +199,11 @@ against the fake provider on loopback. `pnpm provider:record --help` lists the f
      the OpenAI SDK's `ResponsesWS.prototype._createSocket` in the recording process only
      (no product change), recording the handshake (`ws-open` frame: path, scrubbed
      headers, status), every message in both directions, and the close (`ws-close`
-     frame), one turn per socket. Values are scrubbed as they are captured
-     (`wire-identity-scrubber.ts`), the envelope is sanitized, and the written file is
-     secret-scanned against the credentials on the machine (`recording-secret-scan.ts`);
-     a match deletes it and exits 3. `_createSocket` is SDK-internal; the WS
+     frame), one turn per socket. Values, the close reason included, are scrubbed as they
+     are captured (`wire-identity-scrubber.ts`), the envelope is sanitized, and the file is
+     written under a temporary name, secret-scanned against the credentials on the machine
+     (`recording-secret-scan.ts`) and only then renamed into place; a match deletes the
+     temporary file, leaves the final path untouched and exits 3. `_createSocket` is SDK-internal; the WS
      self-validation fails if an SDK upgrade moves it.
   3. *AI SDK transport* (`source/providers/ai-sdk-*.ts`): hooks the AI SDK fetch/transport
      option for OpenRouter.

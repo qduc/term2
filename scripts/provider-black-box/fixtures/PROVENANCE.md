@@ -192,7 +192,7 @@ Two traps found while recording the OpenRouter fixtures: `scanFixtureSecrets` re
 ## Recording Codex (for the owner)
 
 Codex needs a ChatGPT login, so only the maintainer can record it. The run happens on your machine; only
-the output folder comes back, and it has been scrubbed and secret-scanned before it is written.
+the two output files come back, and they have been scrubbed and secret-scanned before they are kept.
 
 Prerequisites: Node 24 and pnpm, a checkout of this repository at the commit that has this section
 (`git pull`), `pnpm install --frozen-lockfile`, and a Codex login: `term2 --codex-login` (term2's own
@@ -214,28 +214,48 @@ outside the repository (without it the files go to `~/.term2/provider-recordings
   stored access token is within five minutes of expiry, one token refresh request to `auth.openai.com`
   comes first, as in any term2 run. The prompts are synthetic (a `fixture` tool called with `a = 1`); no
   file, path or conversation of yours is sent.
+- **What it prints:** before the first request, the endpoint your token is sent to
+  (`Recording codex via wss://chatgpt.com/backend-api/codex/responses`, or the `CODEX_BASE_URL`
+  you set) and the login file it read; paths under your home directory are printed as `~/...`.
+  Stop it (Ctrl-C) if the endpoint is not one you expect.
 - **Output:** `codex-websocket-tool-continuation-v2.json` (the recording: the handshake, every message
   in both directions, and the close) and `codex-websocket-tool-continuation-v2.redactions.json` (the JSON
-  paths that were scrubbed and why, with no values). Send both back.
+  paths that were scrubbed and why, with no values). Send back these two files only. A file named
+  `.<name>.<digits>-<hex>.unscanned` in the folder is what an interrupted run left before its scan:
+  delete it, never send it.
 - **Scrubbed before anything is written** (`scripts/provider-black-box/wire-identity-scrubber.ts`):
   every header value outside an allow-list (`openai-beta`, `originator`, `content-type`, `accept`,
   `version`, `x-codex-beta-features`, `x-openai-internal-codex-responses-lite`), so `authorization`,
   `chatgpt-account-id`, `session-id`, `thread-id`, `x-client-request-id`, `x-codex-window-id`,
   `x-codex-turn-metadata`, `x-codex-installation-id`, `session_id`, `user-agent` and any new header keep
-  their names only; in message bodies, every value under a key naming an account, user, session, thread,
-  turn, window, installation, conversation, organization, project, workspace, device, machine, email,
-  trace, plan, credits, safety or metadata, plus `prompt_cache_key`, `rate_limits`, `org_id` and `sid`
-  (so all of `client_metadata` and the `codex.rate_limits` event's plan and usage numbers); any
-  bearer-, `sk-`- or JWT-shaped string anywhere; binary messages (kept as a byte count). Then
-  `sanitizeFixtureEnvelope` replaces response, item and call ids (`resp_`, `rs_`, `fc_`, `msg_`,
-  `call_`, ...) with placeholders and redacts `encrypted_content`, signatures and fingerprints, and
-  the handshake response's headers are not kept at all.
-- **Secret scan after writing** (`recording-secret-scan.ts`): the written files are read back and
-  searched for every token, refresh token, id token, JWT segment, account id, the email/subject/account/
-  user/organization claims inside the JWTs, the Codex installation id and your home directory path,
-  taken from every Codex credential file the recorder can see, plus anything JWT-shaped and the
-  shared bearer/`sk-`/PEM/high-entropy patterns. A match deletes the files and exits 3, naming the label
-  and JSON path of each match but never the value. Nothing that failed the scan is left on disk.
+  their names only. Every message other than a `response.*` event (the `codex.rate_limits` event in
+  any shape, any other `codex.*` event, `error`) keeps its `type` and its keys, and every string in it
+  becomes `[REDACTED]` and every number 0, so no plan, limit name or usage figure is kept. In
+  `response.*` events and the request, which are kept so the recording replays, a deny-list applies by
+  key: every value under a key naming an account, user, session, thread, turn, window, installation,
+  conversation, organization or org, project, workspace, tenant, owner, customer, billing, payment,
+  subscription, profile, device, machine, IP, country, location, address, phone, email, picture,
+  nickname, trace, plan, credits, safety or metadata, plus `prompt_cache_key`, `rate_limits`, `sid` and
+  name keys such as `display_name`, `given_name` and `family_name` (so all of `client_metadata`); any
+  other id (a string under a key ending in `id`, such as `request_id`) that is not a `resp_`, `rs_`,
+  `fc_`, `msg_` or `call_` id becomes `redacted-id-<n>`; any bearer-, `sk-`- or JWT-shaped string
+  anywhere, the WebSocket close reason included; binary messages (kept as a byte count). This is a
+  deny-list: a field the service adds under a name it does not cover (a plain `name` or `title`, say)
+  is kept, and only the scan below would catch a credential value in it. Then `sanitizeFixtureEnvelope`
+  replaces response, item and call ids with placeholders and redacts `encrypted_content`, signatures and
+  fingerprints, and the handshake response's headers are not kept at all.
+- **Secret scan before anything is kept** (`recording-secret-scan.ts`): both files are written under
+  temporary names in the output folder, read back and searched for every token, refresh token, id
+  token, JWT segment, account id, every string claim inside the JWTs (email, subject, name, nickname,
+  picture, account/user/organization ids, ...; not `iss`, `aud`, scopes, `amr` or `role`, and claims
+  shorter than 4 characters are skipped, 4-7 characters matched as whole words), the Codex installation
+  id and your home directory path, taken from every Codex credential file the recorder can see. Each
+  JSON string is decoded first, nested JSON included, and compared ignoring case and URL-decoded; the
+  URL-encoded and base64 (standard and url-safe) forms of each value are searched for too. Anything
+  JWT-shaped and the shared bearer/`sk-`/PEM/high-entropy patterns also fail it. Only when both files
+  pass are they renamed to their final names. A match deletes the temporary files, leaves anything
+  already at the final paths untouched, and exits 3, naming the label and JSON path of each match but
+  never the value.
 
 Optional, same login and folder, two more requests each: `--transport http` records Codex over HTTP
 (`codex-http-tool-continuation-v2.json`); `--provider openai --transport websocket --model <model>
@@ -243,7 +263,8 @@ Optional, same login and folder, two more requests each: `--transport http` reco
 
 Run `pnpm provider:record --help` for every flag. The tooling is exercised offline on every CI run by
 `websocket-recorder.test.ts` (WebSocket self-validation, the Codex path with a fake login against a
-loopback server, and the scan failing on a leak).
+loopback server, unknown identity fields and `codex.*` events, the close reason, the scan failing on a
+leak in plain, encoded, re-cased or nested form, a crash before the scan, and the printed endpoint).
 
 ## Turning a WebSocket recording into a fixture
 

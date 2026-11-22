@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
   readCodexCliTokens,
@@ -13,7 +12,7 @@ import {
   addCredentialFileLiterals,
   addEnvironmentLiterals,
   addLiteral,
-  writeScannedRecording,
+  writeScannedRecordings,
   type SensitiveLiteral,
 } from './recording-secret-scan.js';
 import type { ScrubReport } from './wire-identity-scrubber.js';
@@ -115,7 +114,8 @@ export function observeResponsesHttpFallback(): { count(): number; restore(): vo
 /**
  * Sanitizes a scrubbed envelope (live ids become placeholders, encrypted reasoning and signatures are
  * dropped), then writes it and its redaction report (paths and reasons only, no values, no live-id table)
- * through the secret scan. Either file failing the scan deletes both and throws.
+ * through the secret scan. Both are written under temporary names and renamed into place only when both
+ * pass; either failing leaves the final paths untouched (no new file, an earlier one kept) and throws.
  */
 export async function writeCredentialedRecording(options: {
   envelope: FixtureEnvelopeV1;
@@ -130,14 +130,12 @@ export async function writeCredentialedRecording(options: {
     capture: options.captureReport,
     sanitizer: report.redactions,
   };
-  await writeScannedRecording(options.file, `${JSON.stringify(envelope, null, 2)}\n`, options.literals);
-  try {
-    await writeScannedRecording(reportFile, `${JSON.stringify(redactions, null, 2)}\n`, options.literals, {
-      fixturePatterns: false,
-    });
-  } catch (error) {
-    await rm(options.file, { force: true });
-    throw error;
-  }
+  await writeScannedRecordings(
+    [
+      { file: options.file, content: `${JSON.stringify(envelope, null, 2)}\n` },
+      { file: reportFile, content: `${JSON.stringify(redactions, null, 2)}\n`, fixturePatterns: false },
+    ],
+    options.literals,
+  );
   return { file: options.file, reportFile };
 }

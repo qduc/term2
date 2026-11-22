@@ -11,12 +11,23 @@
  *   covers `authorization`, `chatgpt-account-id`, `session-id`, `thread-id`, `x-client-request-id`,
  *   `x-codex-installation-id`, `x-codex-window-id`, `x-codex-turn-metadata`, `session_id`, `cookie`,
  *   `user-agent` (it names the OS release) and any header a later product version adds.
+ * - Events (WebSocket messages and SSE `data`) are scrubbed by type first. Only `response.*` events (and
+ *   the `response.create` the client sends) keep their values, under the key rules below; any other event
+ *   (`codex.rate_limits`, an unknown `codex.*` notice, `error`, a message with no `type`) keeps its `type`
+ *   and its shape and loses every other string and number, whatever its keys are called. term2 reads
+ *   `codex.rate_limits` for its numbers only (`event.rate_limits ?? event`), so a replay still sees one.
  * - Message bodies are scrubbed by key. A key with an identity word in it ({@link IDENTITY_KEY_WORDS}, or
  *   one of {@link IDENTITY_KEYS}) has every string under it replaced by `[REDACTED]` and every number by 0;
  *   keys, booleans and nulls are kept so the replay still sees the shape. That covers `client_metadata`
  *   (installation, session, thread, window and turn ids and the turn-metadata JSON), `prompt_cache_key`,
- *   `metadata`, `user`, `safety_identifier`, `session_id`, `conversation`, `account_id`, and the
- *   `codex.rate_limits` payload (`rate_limits`, `plan_type`, `credits`: the account's plan and usage).
+ *   `metadata`, `user`, `safety_identifier`, `session_id`, `conversation`, `account_id`, and identity a
+ *   service might add (`org`, `client_ip`, `country`, `customer_id`, `billing`, `owner`, `tenant`,
+ *   `profile`, `display_name`, ...).
+ * - An id that is not a Responses object id: a string under a key ending in `id`/`ids` (`request_id`,
+ *   `owner.id`) whose value does not start `resp_`, `rs_`, `fc_`, `msg_` or `call_` becomes
+ *   `redacted-id-<n>`, numbered per distinct value within the recording so a replay that matches ids still
+ *   matches them. The Responses ids are left to `sanitizeFixtureEnvelope`, which turns them into
+ *   placeholders.
  * - Credential-looking strings anywhere (a bearer token, an `sk-` key, a JWT) are replaced, whatever the key.
  * - Binary WebSocket messages are not kept: they are recorded as a byte count only.
  *
@@ -39,32 +50,73 @@ export const KEPT_HEADER_VALUES: ReadonlySet<string> = new Set([
   'x-openai-internal-codex-responses-lite',
 ]);
 
-/** Words that mark a body key as identifying the account, user, installation or session. */
+/**
+ * Words that mark a body key as identifying the account, user, installation, session, or where and who the
+ * caller is. None of them is a word in a Responses key term2 reads (`name` alone is not one: it names tools
+ * and function calls; the name-like identity keys are in {@link IDENTITY_KEYS}).
+ */
 export const IDENTITY_KEY_WORDS: ReadonlySet<string> = new Set([
   'account',
+  'address',
+  'avatar',
+  'billing',
+  'city',
   'conversation',
+  'country',
   'credits',
+  'customer',
   'device',
   'email',
   'fingerprint',
+  'geo',
   'installation',
+  'ip',
+  'location',
   'machine',
   'metadata',
+  'nickname',
+  'org',
   'organization',
+  'owner',
+  'payment',
+  'phone',
+  'picture',
   'plan',
+  'profile',
   'project',
   'safety',
   'session',
+  'subscription',
+  'tenant',
   'thread',
   'trace',
   'turn',
   'user',
+  'username',
   'window',
   'workspace',
 ]);
 
 /** Whole keys (normalised to lower snake case) that identify a caller without containing an identity word. */
-export const IDENTITY_KEYS: ReadonlySet<string> = new Set(['prompt_cache_key', 'rate_limits', 'org_id', 'sid']);
+export const IDENTITY_KEYS: ReadonlySet<string> = new Set([
+  'prompt_cache_key',
+  'rate_limits',
+  'sid',
+  'display_name',
+  'full_name',
+  'first_name',
+  'last_name',
+  'given_name',
+  'family_name',
+  'middle_name',
+  'legal_name',
+  'real_name',
+  'preferred_name',
+]);
+
+/** Responses object ids (`resp_`, `rs_`, `fc_`, `msg_`, `call_`): kept here, made placeholders by the sanitizer. */
+const responsesObjectId = /^(?:resp|rs|fc|msg|call)_[A-Za-z0-9_-]+$/;
+const otherIdPlaceholders = new WeakMap<ScrubReport, Map<string, string>>();
 
 const credentialPattern =
   /\bBearer\s+\S{6,}|(?:^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}(?:\.[A-Za-z0-9_-]*)?/;
@@ -81,6 +133,22 @@ export function keyWords(key: string): string[] {
 export function isIdentityKey(key: string): boolean {
   const words = keyWords(key);
   return IDENTITY_KEYS.has(words.join('_')) || words.some((word) => IDENTITY_KEY_WORDS.has(word));
+}
+
+/** `id`, `request_id`, `itemId`, `ids`: a key whose last word is `id` or `ids`. */
+function isIdKey(key: string): boolean {
+  const last = keyWords(key).at(-1);
+  return last === 'id' || last === 'ids';
+}
+
+function scrubOtherId(value: string, path: string, report: ScrubReport): string {
+  if (responsesObjectId.test(value)) return value;
+  let table = otherIdPlaceholders.get(report);
+  if (!table) otherIdPlaceholders.set(report, (table = new Map()));
+  let placeholder = table.get(value);
+  if (!placeholder) table.set(value, (placeholder = `redacted-id-${table.size + 1}`));
+  report.push({ path, reason: 'id outside the Responses object ids' });
+  return placeholder;
 }
 
 export function scrubHeaders(
@@ -139,11 +207,47 @@ export function scrubBody(value: unknown, path: string, report: ScrubReport): un
     for (const [key, child] of Object.entries(value)) {
       const childPath = `${path}.${key}`;
       if (isIdentityKey(key)) result[key] = destroyLeaves(child, childPath, report);
+      else if (isIdKey(key) && typeof child === 'string' && !credentialPattern.test(child))
+        result[key] = scrubOtherId(child, childPath, report);
+      else if (isIdKey(key) && Array.isArray(child))
+        result[key] = child.map((item, index) =>
+          typeof item === 'string' && !credentialPattern.test(item)
+            ? scrubOtherId(item, `${childPath}[${index}]`, report)
+            : scrubBody(item, `${childPath}[${index}]`, report),
+        );
       else result[key] = scrubBody(child, childPath, report);
     }
     return result;
   }
   return value;
+}
+
+/**
+ * Scrubs one event: a WebSocket message or an SSE `data` payload (JSON text is parsed and re-serialized).
+ * A `response.*` event goes through {@link scrubBody}; any other object keeps only its `type`, with every
+ * other string and number destroyed (see the module comment).
+ */
+export function scrubEvent(value: unknown, path: string, report: ScrubReport): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        return JSON.stringify(scrubEvent(JSON.parse(value), path, report));
+      } catch {
+        /* ordinary text */
+      }
+    }
+    return scrubBody(value, path, report);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return scrubBody(value, path, report);
+  const { type, ...rest } = value as Record<string, unknown>;
+  if (typeof type === 'string' && type.startsWith('response.')) return scrubBody(value, path, report);
+  const kept =
+    type === undefined
+      ? {}
+      : { type: typeof type === 'string' && !credentialPattern.test(type) ? type : destroyLeaves(type, path, []) };
+  if (Object.keys(rest).length) report.push({ path, reason: 'values of an event other than response.*' });
+  return { ...kept, ...(destroyLeaves(rest, path, []) as Record<string, unknown>) };
 }
 
 /** Keeps the shape, drops every string and number value. */
@@ -182,5 +286,5 @@ export function scrubWebSocketMessage(raw: unknown, isBinary: boolean, path: str
   } catch {
     /* keep text */
   }
-  return scrubBody(value, path, report);
+  return scrubEvent(value, path, report);
 }

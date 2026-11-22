@@ -13,7 +13,13 @@ import { WebSocketServer, type WebSocket } from 'ws';
  * `leak` makes the server echo a handshake value into the answer text, as a service might in an error or a
  * greeting: `'bearer'` echoes the access token (token-shaped, so the capture-time scrubber removes it),
  * `'account-id'` echoes the `chatgpt-account-id` header value (an opaque id no scrubber rule recognises in
- * free text, so only the post-write secret scan can catch it).
+ * free text, so only the post-write secret scan can catch it), `'jwt-name'` echoes the `name` claim of the
+ * bearer JWT (a display name: only the scan's claim literals can catch it).
+ *
+ * `identity` adds the {@link plantedResponderIdentity} fields a real service might add and no product code
+ * reads (to the response object and the `response.created` event), a top-level-shaped
+ * `codex.rate_limits` event with `code_review_rate_limits`, and an unknown `codex.*` event.
+ * `closeReason` closes the socket from the server, with that reason, after the final answer.
  */
 export type ProbeWebSocketResponder = {
   /** http://127.0.0.1:<port>; the Responses WebSocket URL is `<baseUrl>/responses` (as ws://). */
@@ -25,10 +31,36 @@ export type ProbeWebSocketResponder = {
 };
 
 const CALL_ID = 'call_probe_fixture_0001';
+
+/** Identity-bearing values `identity: true` plants; none may survive into a written recording. */
+export const plantedResponderIdentity = {
+  strings: {
+    org: 'org-planted-identity-0001',
+    client_ip: '203.0.113.77',
+    ip: '198.51.100.23',
+    country: 'Plantedcountry-XY',
+    customer_id: 'cus_planted_customer_0001',
+    billing: 'billing-planted-customer-0001',
+    request_id: '6f1c2a9e-0b7d-4c1e-9a55-2d4e8b7c1f03',
+    owner_name: 'Planted Owner Name',
+    owner_id: 'owner-planted-0001',
+    tenant: 'tenant-planted-0001',
+    profile_name: 'Planted Profile Name',
+    limit_name: 'planted-limit-name-0001',
+    notice: 'planted-codex-notice-0001',
+  },
+  numbers: { primary: 73.4375, secondary: 10079, codeReview: 41.0625, resets: 86399 },
+} as const;
+
 const ITEM_ID = 'fc_probe_fixture_0001';
 
 export async function startProbeWebSocketResponder(
-  options: { leak?: 'bearer' | 'account-id'; http?: boolean } = {},
+  options: {
+    leak?: 'bearer' | 'account-id' | 'jwt-name';
+    http?: boolean;
+    identity?: boolean;
+    closeReason?: string;
+  } = {},
 ): Promise<ProbeWebSocketResponder> {
   const connections: ProbeWebSocketResponder['connections'] = [];
   const sockets = new Set<Socket>();
@@ -64,19 +96,24 @@ export async function startProbeWebSocketResponder(
         ? String(request.headers.authorization ?? '').replace(/^Bearer\s+/i, '')
         : options.leak === 'account-id'
         ? String(request.headers['chatgpt-account-id'] ?? '')
+        : options.leak === 'jwt-name'
+        ? jwtClaim(String(request.headers.authorization ?? ''), 'name')
         : '';
     client.on('message', (raw) => {
       const body = JSON.parse(raw.toString()) as Record<string, any>;
       connection.requests.push(body);
-      for (const frame of framesFor(body, echoed)) client.send(JSON.stringify(frame));
+      const frames = framesFor(body, echoed);
+      for (const frame of frames) client.send(JSON.stringify(frame));
+      if (options.closeReason !== undefined && frames.at(-1)?.type === 'response.completed' && isAnswer(body))
+        client.close(1000, options.closeReason);
     });
   });
   function framesFor(body: Record<string, any>, echoed = ''): Record<string, unknown>[] {
     const responseId = `resp_probe_${String(++responseCount).padStart(4, '0')}`;
-    const hasToolOutput = JSON.stringify(body.input ?? []).includes('function_call_output');
-    return hasToolOutput
+    const frames = isAnswer(body)
       ? answerFrames(responseId, echoed ? `The fixture returned 1 for ${echoed}.` : 'The fixture returned 1.')
       : toolCallFrames(responseId);
+    return options.identity ? withPlantedIdentity(frames) : frames;
   }
   await new Promise<void>((resolve, reject) => {
     httpServer.once('error', reject);
@@ -95,6 +132,54 @@ export async function startProbeWebSocketResponder(
       await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     },
   };
+}
+
+function isAnswer(body: Record<string, any>): boolean {
+  return JSON.stringify(body.input ?? []).includes('function_call_output');
+}
+
+function jwtClaim(authorization: string, claim: string): string {
+  try {
+    const payload = authorization.replace(/^Bearer\s+/i, '').split('.')[1] ?? '';
+    return String(JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))[claim] ?? '');
+  } catch {
+    return '';
+  }
+}
+
+function withPlantedIdentity(frames: Record<string, unknown>[]): Record<string, unknown>[] {
+  const planted = plantedResponderIdentity.strings;
+  const numbers = plantedResponderIdentity.numbers;
+  const fields = {
+    org: planted.org,
+    client_ip: planted.client_ip,
+    ip: planted.ip,
+    country: planted.country,
+    customer_id: planted.customer_id,
+    billing: { customer: planted.billing },
+    request_id: planted.request_id,
+    owner: { name: planted.owner_name, id: planted.owner_id },
+    tenant: planted.tenant,
+    profile: { name: planted.profile_name },
+  };
+  const result = frames.map((frame) => {
+    const response = frame.response as Record<string, unknown> | undefined;
+    const withResponse = response ? { ...frame, response: { ...response, ...fields } } : frame;
+    return frame.type === 'response.created' ? { ...withResponse, ...fields } : withResponse;
+  });
+  result.splice(
+    1,
+    0,
+    {
+      type: 'codex.rate_limits',
+      primary: { used_percent: numbers.primary, window_minutes: 300, resets_in_seconds: numbers.resets },
+      secondary: { used_percent: numbers.secondary, window_minutes: 10080 },
+      limit_name: planted.limit_name,
+      code_review_rate_limits: { primary: { used_percent: numbers.codeReview } },
+    },
+    { type: 'codex.probe_notice', detail: planted.notice, account: { tier: 'planted' } },
+  );
+  return result;
 }
 
 function responseObject(id: string, status: string, output: unknown[]) {

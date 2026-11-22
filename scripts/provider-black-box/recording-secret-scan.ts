@@ -1,38 +1,70 @@
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { basename, dirname, join, sep } from 'node:path';
 import { scanFixtureSecrets } from './fixture-sanitizer.js';
 
 /**
  * The backstop after capture-time scrubbing (`wire-identity-scrubber.ts`) and `sanitizeFixtureEnvelope`:
- * a recording made with real credentials is written, read back from disk, and scanned. If anything matches,
- * the file is deleted and the recorder exits non-zero, naming what matched and where, never the value.
+ * a recording made with real credentials is written under a temporary name beside its final one, read back
+ * from disk, and scanned; only a file that passes is renamed into place. If anything matches, the temporary
+ * files are deleted (an earlier recording at the final path is left alone) and the recorder exits non-zero,
+ * naming what matched and where, never the value. A crash before the rename leaves nothing under the final
+ * name; at most a hidden `.<name>.<pid>-<random>.unscanned` file, which is never a recording to send.
  *
  * It looks for:
  * - every literal the run could have leaked ({@link SensitiveLiteral}): the access, refresh and id tokens
  *   and account id from each Codex credential file the recorder can see (term2's own store, every account in
- *   it, and the Codex CLI's `auth.json`), each JWT's three segments, the identifying claims inside the JWTs
- *   (subject, email, account/user/organization ids), the Codex installation id, an API key passed to the
- *   recording, and the home directory path;
+ *   it, and the Codex CLI's `auth.json`), each JWT's three segments, every string claim inside the JWTs
+ *   apart from {@link BENIGN_JWT_CLAIMS} (subject, email, name, nickname, picture, account/user/organization
+ *   ids, ...), the Codex installation id, an API key passed to the recording, and the home directory path.
+ *   Each JSON string (and object key) is decoded first, nested JSON text included, and compared ignoring
+ *   case, URL-decoded too; the literal's URL-encoded form and its base64 forms (standard and url-safe, at
+ *   every byte offset) are looked for as well;
  * - anything JWT-shaped (`eyJ….eyJ…`), whoever issued it;
  * - the shared patterns of `scanFixtureSecrets` (bearer tokens, `sk-` keys, PEM blocks, high-entropy strings).
  */
 
-export type SensitiveLiteral = { label: string; value: string };
-export type LeakFinding = { label: string; path: string };
+/** `shortWord`: a 4-7 character value (a JWT claim) matched as a whole word only, so it cannot match inside one. */
+export type SensitiveLiteral = { label: string; value: string; shortWord?: boolean };
+export type LeakFinding = { label: string; path: string; file?: string };
 
 /** Values shorter than this are not scanned for: they would match ordinary text (`true`, a short word). */
 const MIN_LITERAL_LENGTH = 8;
+/** JWT claims as short as this are scanned for, as whole words (a 4-letter given name is still a name). */
+const MIN_CLAIM_LENGTH = 4;
+/** JWT claims that name the issuer, audience, key, scopes or sign-in method: the same for every account. */
+export const BENIGN_JWT_CLAIMS: ReadonlySet<string> = new Set([
+  'iss',
+  'aud',
+  'alg',
+  'typ',
+  'kid',
+  'scp',
+  'scope',
+  'amr',
+  'role',
+]);
 const jwtShape = /eyJ[A-Za-z0-9_-]{4,}\.eyJ[A-Za-z0-9_-]{4,}/;
 
 export class RecordingLeakError extends Error {
   constructor(readonly file: string, readonly findings: LeakFinding[]) {
     super(
-      `Secret scan failed; ${file} was deleted and nothing was kept. Matched:\n${findings
-        .map((finding) => `  - ${finding.label} at ${finding.path}`)
+      `Secret scan failed; nothing was written to ${displayPath(
+        file,
+      )} (a file already there is untouched). Matched:\n${findings
+        .map((finding) => `  - ${finding.label} at ${finding.path}${finding.file ? ` (in ${finding.file})` : ''}`)
         .join('\n')}`,
     );
   }
+}
+
+/** A path for the terminal: under the home directory it starts with `~`, so the account name is not printed. */
+export function displayPath(path: string): string {
+  const home = homedir();
+  if (home && home !== sep && (path === home || path.startsWith(home + sep))) return `~${path.slice(home.length)}`;
+  return path;
 }
 
 export function addLiteral(literals: SensitiveLiteral[], label: string, value: unknown): void {
@@ -42,7 +74,14 @@ export function addLiteral(literals: SensitiveLiteral[], label: string, value: u
   if (!literals.some((literal) => literal.value === trimmed)) literals.push({ label, value: trimmed });
 }
 
-/** Adds a JWT, each of its segments, and every identifying string claim inside it. */
+function addClaimLiteral(literals: SensitiveLiteral[], label: string, value: string): void {
+  const trimmed = value.trim();
+  if (trimmed.length >= MIN_LITERAL_LENGTH) return addLiteral(literals, label, trimmed);
+  if (trimmed.length < MIN_CLAIM_LENGTH) return;
+  if (!literals.some((literal) => literal.value === trimmed)) literals.push({ label, value: trimmed, shortWord: true });
+}
+
+/** Adds a JWT, each of its segments, and every string claim inside it except {@link BENIGN_JWT_CLAIMS}. */
 export function addJwtLiterals(literals: SensitiveLiteral[], label: string, token: unknown): void {
   if (typeof token !== 'string') return;
   addLiteral(literals, label, token);
@@ -52,10 +91,9 @@ export function addJwtLiterals(literals: SensitiveLiteral[], label: string, toke
   try {
     const claims = JSON.parse(Buffer.from(segments[1]!, 'base64url').toString('utf8')) as unknown;
     const visit = (value: unknown, key: string): void => {
-      if (typeof value === 'string') {
-        if (/(?:^sub$|email|account|user|org|sid|jti|session|_id$|^id$)/i.test(key))
-          addLiteral(literals, `${label} claim '${key}'`, value);
-      } else if (Array.isArray(value)) value.forEach((item) => visit(item, key));
+      if (BENIGN_JWT_CLAIMS.has(key)) return;
+      if (typeof value === 'string') addClaimLiteral(literals, `${label} claim '${key}'`, value);
+      else if (Array.isArray(value)) value.forEach((item) => visit(item, key));
       else if (value && typeof value === 'object')
         for (const [childKey, child] of Object.entries(value)) visit(child, childKey);
     };
@@ -113,16 +151,17 @@ export function scanRecordingText(
   } catch {
     parsed = text;
   }
-  for (const literal of literals)
-    if (text.includes(literal.value) || text.includes(JSON.stringify(literal.value).slice(1, -1)))
-      findings.push({
-        label: literal.label,
-        path: pathOf(parsed, (value) => value.includes(literal.value)) || '(raw file text)',
-      });
-  if (jwtShape.test(text))
+  const leaves = decodedLeaves(parsed);
+  for (const literal of literals) {
+    const match = literalMatcher(literal);
+    const leaf = leaves.find(match);
+    if (leaf || match({ path: '', text, variants: [text.toLowerCase()] }))
+      findings.push({ label: literal.label, path: leaf?.path || '(raw file text)' });
+  }
+  if (jwtShape.test(text) || leaves.some((leaf) => jwtShape.test(leaf.text)))
     findings.push({
       label: 'JWT-shaped string',
-      path: pathOf(parsed, (value) => jwtShape.test(value)) || '(raw file text)',
+      path: leaves.find((leaf) => jwtShape.test(leaf.text))?.path || '(raw file text)',
     });
   if (options.fixturePatterns !== false)
     for (const finding of scanFixtureSecrets(parsed).findings)
@@ -130,11 +169,72 @@ export function scanRecordingText(
   return findings;
 }
 
+type DecodedLeaf = { path: string; text: string; variants: string[] };
+
+/** Every string value and object key, with nested JSON text expanded; `variants` are lower-cased and URL-decoded. */
+function decodedLeaves(value: unknown, path = '$', out: DecodedLeaf[] = [], depth = 0): DecodedLeaf[] {
+  if (typeof value === 'string') {
+    const variants = [value.toLowerCase()];
+    if (value.includes('%'))
+      try {
+        variants.push(decodeURIComponent(value.replace(/\+/g, ' ')).toLowerCase());
+      } catch {
+        /* not URL-encoded */
+      }
+    out.push({ path, text: value, variants });
+    const trimmed = value.trim();
+    if (depth < 6 && /^["{[]/.test(trimmed))
+      try {
+        decodedLeaves(JSON.parse(trimmed), `${path} (nested JSON)`, out, depth + 1);
+      } catch {
+        /* ordinary text */
+      }
+  } else if (Array.isArray(value)) value.forEach((item, index) => decodedLeaves(item, `${path}[${index}]`, out, depth));
+  else if (value && typeof value === 'object')
+    for (const [key, child] of Object.entries(value)) {
+      decodedLeaves(key, `${path} (an object key)`, out, depth);
+      decodedLeaves(child, `${path}.${key}`, out, depth);
+    }
+  return out;
+}
+
+function literalMatcher(literal: SensitiveLiteral): (leaf: DecodedLeaf) => boolean {
+  const lower = literal.value.toLowerCase();
+  if (literal.shortWord) {
+    const escaped = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const word = new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`);
+    return (leaf) => leaf.variants.some((variant) => word.test(variant));
+  }
+  const plain = [lower, encodeURIComponent(literal.value).toLowerCase()];
+  const encoded = base64Forms(literal.value);
+  return (leaf) =>
+    leaf.variants.some((variant) => plain.some((needle) => variant.includes(needle))) ||
+    encoded.some((needle) => leaf.text.includes(needle));
+}
+
 /**
- * Writes `content` to `file`, reads it back and scans it. On any finding the file is deleted and a
- * {@link RecordingLeakError} is thrown; the caller exits non-zero. `fixturePatterns: false` skips the
- * high-entropy and other `scanFixtureSecrets` patterns (the redaction report is a list of JSON paths, which
- * that heuristic reads as tokens); the literal and JWT checks always run.
+ * The base64 text (standard and url-safe) that encodes `value` wherever it sits in a longer byte string: for
+ * each of the three byte offsets, the characters that depend only on the value's own bytes.
+ */
+function base64Forms(value: string): string[] {
+  const bytes = Buffer.from(value, 'utf8');
+  const forms: string[] = [];
+  for (const offset of [0, 1, 2]) {
+    const encoded = Buffer.concat([Buffer.alloc(offset), bytes])
+      .toString('base64')
+      .replace(/=+$/, '');
+    const remainder = (offset + bytes.length) % 3;
+    const core = encoded.slice([0, 2, 3][offset], encoded.length - (remainder ? remainder + 1 : 0));
+    if (core.length < MIN_LITERAL_LENGTH) continue;
+    forms.push(core, core.replace(/\+/g, '-').replace(/\//g, '_'));
+  }
+  return [...new Set(forms)];
+}
+
+/**
+ * Writes `content` to `file` through the scan: see {@link writeScannedRecordings}. `fixturePatterns: false`
+ * skips the high-entropy and other `scanFixtureSecrets` patterns (the redaction report is a list of JSON
+ * paths, which that heuristic reads as tokens); the literal and JWT checks always run.
  */
 export async function writeScannedRecording(
   file: string,
@@ -142,11 +242,30 @@ export async function writeScannedRecording(
   literals: readonly SensitiveLiteral[],
   options: { fixturePatterns?: boolean } = {},
 ): Promise<void> {
-  await writeFile(file, content, 'utf8');
-  const findings = scanRecordingText(await readFile(file, 'utf8'), literals, options);
-  if (findings.length) {
-    await rm(file, { force: true });
-    throw new RecordingLeakError(file, findings);
+  await writeScannedRecordings([{ file, content, ...options }], literals);
+}
+
+/**
+ * Writes each file under a temporary name in its own directory, reads every one back and scans it, and only
+ * when all pass renames them into place. On any finding (or any error) the temporary files are deleted, the
+ * final paths are not touched, and a {@link RecordingLeakError} names the first file.
+ */
+export async function writeScannedRecordings(
+  files: ReadonlyArray<{ file: string; content: string; fixturePatterns?: boolean }>,
+  literals: readonly SensitiveLiteral[],
+): Promise<void> {
+  const suffix = `${process.pid}-${randomBytes(6).toString('hex')}`;
+  const temps = files.map(({ file }) => join(dirname(file), `.${basename(file)}.${suffix}.unscanned`));
+  try {
+    for (const [index, { content }] of files.entries()) await writeFile(temps[index]!, content, { flag: 'wx' });
+    const findings: LeakFinding[] = [];
+    for (const [index, entry] of files.entries())
+      for (const finding of scanRecordingText(await readFile(temps[index]!, 'utf8'), literals, entry))
+        findings.push({ ...finding, ...(index ? { file: basename(entry.file) } : {}) });
+    if (findings.length) throw new RecordingLeakError(files[0]!.file, findings);
+    for (const [index, { file }] of files.entries()) await rename(temps[index]!, file);
+  } finally {
+    for (const temp of temps) await rm(temp, { force: true });
   }
 }
 
@@ -156,23 +275,4 @@ export function redactLiterals(text: string, literals: readonly SensitiveLiteral
   for (const literal of [...literals].sort((a, b) => b.value.length - a.value.length))
     result = result.split(literal.value).join(`[${literal.label}]`);
   return result.replace(/eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_.-]+/g, '[JWT]');
-}
-
-function pathOf(value: unknown, match: (text: string) => boolean, path = '$'): string {
-  if (typeof value === 'string') return match(value) ? path : '';
-  if (Array.isArray(value)) {
-    for (const [index, item] of value.entries()) {
-      const found = pathOf(item, match, `${path}[${index}]`);
-      if (found) return found;
-    }
-    return '';
-  }
-  if (value && typeof value === 'object') {
-    for (const [key, child] of Object.entries(value)) {
-      if (match(key)) return `${path} (an object key)`;
-      const found = pathOf(child, match, `${path}.${key}`);
-      if (found) return found;
-    }
-  }
-  return '';
 }

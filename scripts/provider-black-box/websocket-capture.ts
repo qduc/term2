@@ -1,5 +1,11 @@
 import type { FixtureRecorder } from './fixture-recorder.js';
-import { scrubHeaders, scrubUrlPath, scrubWebSocketMessage, type ScrubReport } from './wire-identity-scrubber.js';
+import {
+  scrubBody,
+  scrubHeaders,
+  scrubUrlPath,
+  scrubWebSocketMessage,
+  type ScrubReport,
+} from './wire-identity-scrubber.js';
 
 /**
  * WebSocket capture adapter for recordings (plan D6, adapter 2).
@@ -17,9 +23,9 @@ import { scrubHeaders, scrubUrlPath, scrubWebSocketMessage, type ScrubReport } f
  *   events does not change `ws` behaviour (unlike `unexpected-response`, which this deliberately does not
  *   listen to: a listener there would stop `ws` from failing the handshake itself).
  *
- * Every value is scrubbed by `wire-identity-scrubber.ts` as it is captured. Frames are kept per socket and
- * written one turn per socket, in the order the sockets were opened, so concurrent sockets never
- * interleave in one turn.
+ * Every value, the close reason included, is scrubbed by `wire-identity-scrubber.ts` as it is captured.
+ * Frames are kept per socket and written one turn per socket, in the order the sockets were opened, so
+ * concurrent sockets never interleave in one turn.
  *
  * `_createSocket` is an SDK-internal (protected) method. If an SDK upgrade renames it, `install` throws, and
  * a recording that opens no socket fails `assertCaptured`; the WebSocket self-validation in the provider
@@ -96,7 +102,9 @@ export function installResponsesWebSocketCapture(ResponsesWSClass: { prototype: 
       });
     });
     raw.on('close', (code: number, reason: Buffer | string) => {
-      session.frames.push({ kind: 'ws-close', code, reason: String(reason ?? '') });
+      // A close reason is server text like any message: scrubbed by the same rules (JSON reasons by key).
+      const text = Buffer.isBuffer(reason) ? reason.toString('utf8') : String(reason ?? '');
+      session.frames.push({ kind: 'ws-close', code, reason: String(scrubBody(text, `${path}.closeReason`, report)) });
       session.closed = true;
       notify();
     });

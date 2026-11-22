@@ -1,6 +1,6 @@
 import type { FetchMiddleware } from '../../src/model/providers/fetch/compose.js';
 import { sanitizeHeaders } from '../../src/shared/utils/header-sanitizer.js';
-import { scrubBody, scrubHeaders, scrubUrlPath, type ScrubReport } from './wire-identity-scrubber.js';
+import { scrubBody, scrubEvent, scrubHeaders, scrubUrlPath, type ScrubReport } from './wire-identity-scrubber.js';
 import {
   validateFixtureEnvelope,
   type FixtureEnvelopeV1,
@@ -125,7 +125,11 @@ export function createRecordingMiddleware(options: {
       const text = await response.clone().text();
       if ((response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream')) {
         for (const event of parseSseEvents(text))
-          options.recorder.recordSseEvent({ kind: 'sse-event', ...event, data: scrubbed(event.data, 'response.sse') });
+          options.recorder.recordSseEvent({
+            kind: 'sse-event',
+            ...event,
+            data: scrub ? (scrubEvent(event.data, `${path}.response.sse`, scrub) as string) : event.data,
+          });
       } else if (text) {
         let bodyValue: unknown = text;
         try {

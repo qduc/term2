@@ -58,7 +58,10 @@ scenario is the one whose CLI never reached the state it waits for.
   adapter (`websocket-capture.ts`) and the credentialed recording path: the
   `--from-fake websocket` self-validation, `--provider codex` with a fake login against
   `probe-websocket-responder.ts` (both transports), OpenAI over WebSocket, the no-login
-  error, and the secret scan deleting a recording that leaks. It also replays a fresh
+  error, unknown identity fields and `codex.*` events (`identity: true`), the close
+  reason, the printed endpoint and `~` paths, and the secret scan: a leak in plain,
+  URL-encoded, base64, re-cased or nested-JSON form, a JWT display-name claim, an earlier
+  recording surviving a failed scan, and a process killed mid-scan leaving no final file. It also replays a fresh
   recording through `replayWebSocketProbeRecording`, the helper
   `provider-contract.test.ts` uses for committed WebSocket captures.
 - `scripts/provider-black-box/fake-provider-websocket-server.ts` owns the

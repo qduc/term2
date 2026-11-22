@@ -180,14 +180,17 @@ section is a real recording behind every provider, replayed offline.
      provider.
    - Fixed: `GROK_BASE_URL` redirected model requests but not
      `fetchGrokModels`. Both now use `grokBaseUrl`.
-   - Open, a decision: a failed `--json` run emits a `final` event before the
-     `error` event, with empty `finalText` on a 426 and with the partial text
-     when a stream is cut short. `OutputState.endTurn` in
-     `src/clients/headless/output.ts` emits `final` for every ended turn, and
-     two tests read usage and the terminal cause from it on runs that did not
-     complete, so removing it is a contract change. The narrowest change
-     would leave `final` in place and omit the partial text when the outcome
-     is `failed`.
+   - Decided 2026-11-22 and done: a failed `--json` run still emits `final`
+     before `error`, because two tests and scripts read usage and the terminal
+     cause from it, but `OutputState.endTurn` in
+     `src/clients/headless/output.ts` now gives a failed turn no answer: an
+     empty `finalText`, even when an earlier step had text, and no text a step
+     streamed without being accepted (`evidence: 'text_delta'`) in `turnItems`
+     (`withoutUnacceptedText`). Accepted items of earlier steps stay. Both
+     fields used to carry the partial text of a stream cut short; that text
+     still arrives as `text_delta` events.
+     `provider-session-chat-terminal-errors.blackbox.ts` asserts it on both
+     chat rows.
    - Confirmed, and not specific to Grok: with `agent.retryAttempts` at n, a
      provider that keeps answering 503 receives 2 × (n + 1) requests for n of
      1 or 2, and one request for n of 0. The same counts were seen for
@@ -291,15 +294,19 @@ section is a real recording behind every provider, replayed offline.
       - Fixed in the fixture: the Google route showed only `Internal Server
         Error` because the fixture's HTTP 500 body was not Google-shaped. With
         `{error: {code, status, message}}` the product shows the message.
-      - Open, a decision: a WebSocket closed before the terminal event is
-        persisted as `network` and retryable on the OpenAI lane and as
-        `provider` and not retryable on the Codex lane, which wraps the close
-        in `AmbiguousModelOutcomeError` so the request is not replayed on the
-        same chain. The engine decides recovery from the close evidence, which
-        is the same on both lanes, so only the persisted `kind` and
-        `retryable` differ; neither lane offers `/retry turn` after partial
-        text. No doc says which the persisted fields should be. The four rows
-        stay unasserted.
+      - Decided 2026-11-22 and done: a WebSocket closed before the terminal
+        event is persisted as `network` and retryable on both lanes. The Codex
+        lane wraps the close in `AmbiguousModelOutcomeError` so the request is
+        not replayed on the same chain, and `toModelFailure` used to classify
+        the wrapper, giving `provider` and not retryable; it now classifies
+        the wrapped close (`describedFailure` in `src/model/failure.ts`). Only
+        a failure with `connection_interrupted` evidence is unwrapped: the
+        engine recovers those from the evidence, not from `retryable`, and a
+        local-compaction summary already retried them. Other causes Codex wraps
+        (a reset connection, a handshake 502, close code 4000) keep `provider`
+        and not retryable, because the summary retry reads `retryable` without
+        evidence and would start retrying them. Neither lane offers `/retry
+        turn` after partial text. The four rows are now asserted.
 11. **Done: the ledger is checked against the tests.**
     `reconcileExecutionsWithTests`, run by `provider-capability-matrix.test.ts`,
     compares the executed-scenario lists with the titles Vitest collects from

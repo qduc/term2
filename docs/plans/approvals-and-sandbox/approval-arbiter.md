@@ -48,7 +48,12 @@ request; policy denials and unsupported escapes remain enforced there.
 For an open request, `describeApproval` derives `ApprovalProfile` from its kind,
 presentation, offered grants and the app's Docker/escape checks. Its hard gates
 are questions, explicit-user decisions (including `propose_goal`), denied-read
-retries and Docker host control. A question routes to `ask_user` in every mode;
+retries, Docker host control, and file-tool writes on the approval floor
+(`protected-write`: hooks, Term2's settings, git hooks and config;
+`protectedWriteForFileTool` in `src/tools/workspace/protected-write-paths.ts`, decision 3
+of [headless-approval-redesign.md](headless-approval-redesign.md)). For the
+last, `approvalFor` in `src/app/source-tools.ts` also skips the `always`
+bypass, and headless `decideInteraction` denies it. A question routes to `ask_user` in every mode;
 other hard gates route to `ask_user`, or to `refuse` in `unattended`. They do not
 route to review or runtime bypass. A non-reviewable request asks, or is refused
 in `unattended`; `always` can bypass eligible non-hard-gated requests without

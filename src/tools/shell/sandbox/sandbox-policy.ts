@@ -299,6 +299,14 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     }
   }
 
+  // The approval floor (headless-approval-redesign.md, decision 3): the project's `.term2` holds hooks and
+  // remembered read grants inside the writable workspace. The whole directory is read-only to a sandboxed
+  // command: denying only `.term2/hooks` left the parent renameable (`mv .term2 x; mkdir -p .term2/hooks`),
+  // and a deny on a missing child turns the first missing path part into the mount anyway. File tools still
+  // write the rest of `.term2` (skills, for example) under their own checks.
+  // Known gap, the runtime's and not this list's: `.git/hooks` is denied by a mount too, and renaming `.git`
+  // moves that mount aside. Git hooks are on the file-tool floor; the shell side waits on the runtime.
+  const floorWritePaths = options.allowWrite === false ? [] : [path.join(workspaceRoot, '.term2')];
   const allowNetworking = options.allowNetworking ?? false;
   return {
     network: {
@@ -312,7 +320,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       denyRead,
       ...(allowRead ? { allowRead } : {}),
       allowWrite,
-      denyWrite: [protectedApprovalDirectory, ...gitWritePaths.deny],
+      denyWrite: [protectedApprovalDirectory, ...gitWritePaths.deny, ...floorWritePaths],
       allowGitConfig: true,
     },
     credentials: {

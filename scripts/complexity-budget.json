@@ -122,8 +122,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list). Ten lines add the `unattended` approval mode value and declare `shell.unattendedEscapeReview` through the same mandatory touchpoints. Five lines move `shell.maxOutputChars` to `tools.maxOutputChars` with an exported minimum-1000 schema (reused by the legacy-value migration) and its model-facing description. Eleven lines narrow `shell.autoApproveMode` to the four-mode matrix and declare `shell.showReview` through the same mandatory setting touchpoints. The file is one schema of many small setting declarations; splitting it by settings group is the seam when it is next restructured."
     },
     "src/app/source-tools.ts": {
-      "lines": 502,
-      "reason": "Adapts each source tool definition into an agent-core tool: input normalization, approval routing and the invocation context a tool runs with. Two lines forward the turn's interact handle to the shell under SANDBOX_NETWORK_INTERACT, beside the existing APPROVED_SHELL_ESCAPE entry, because this is the one place that builds a direct tool invocation. Moving only that spread would separate it from the sibling invocation keys. Retire this ceiling when invocation-context assembly is extracted from adaptTool as a whole."
+      "lines": 506,
+      "reason": "Adapts each source tool definition into an agent-core tool: input normalization, approval routing and the invocation context a tool runs with. Two lines forward the turn's interact handle to the shell under SANDBOX_NETWORK_INTERACT, beside the existing APPROVED_SHELL_ESCAPE entry, because this is the one place that builds a direct tool invocation. Moving only that spread would separate it from the sibling invocation keys. Retire this ceiling when invocation-context assembly is extracted from adaptTool as a whole. Four lines hold a file-tool write on the approval floor before the `always` bypass in approvalFor (headless-approval-redesign.md, decision 3): the bypass returns before any per-tool check, so the floor test must sit beside it."
     },
     "src/app/settings-service.ts": {
       "lines": 1196,
@@ -226,16 +226,16 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/apply-patch.ts": {
-      "lines": 831,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails. Two lines keep Update and known-change batching guidance beside the existing tool description; extracting only these sentences would fragment one prompt without separating a responsibility. Six lines read the canonical `patch` string from the arguments object as well as from a raw envelope string, so an approval preview of the same call parses what execution will run; retire that increment when apply_patch stops accepting both argument shapes. Retire the reasoning increments when the complete patch description or presentation boundary is extracted."
+      "lines": 833,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails. Two lines keep Update and known-change batching guidance beside the existing tool description; extracting only these sentences would fragment one prompt without separating a responsibility. Six lines read the canonical `patch` string from the arguments object as well as from a raw envelope string, so an approval preview of the same call parses what execution will run; retire that increment when apply_patch stops accepting both argument shapes. Retire the reasoning increments when the complete patch description or presentation boundary is extracted. Two lines (import, one call) put the approval floor first in needsApproval, before the `always` shortcut; the floor must hold in every mode and only needsApproval sees the parsed operations at that point."
     },
     "src/tools/file/code-context.ts": {
       "lines": 796,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/search-replace.ts": {
-      "lines": 630,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Up from 661: the optional read gate for the nearest-line hint, the skip and labelled-failure calls in the batch loop, and the flat-shape canonical schema. Result wording and shape recovery already live in search-replace-protocol.ts; what remains is wiring beside the batch state (file content, the single write). Lower the ceiling when the batch executor moves out of this file."
+      "lines": 633,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Up from 661: the optional read gate for the nearest-line hint, the skip and labelled-failure calls in the batch loop, and the flat-shape canonical schema. Result wording and shape recovery already live in search-replace-protocol.ts; what remains is wiring beside the batch state (file content, the single write). Lower the ceiling when the batch executor moves out of this file. Three lines (two imports, one call) put the approval floor first in needsApproval, before the `always` shortcut, as in apply-patch.ts and create-file.ts."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
       "lines": 606,

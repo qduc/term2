@@ -20,7 +20,7 @@ export type ApprovalRequestShape = {
 };
 
 /** Why a request always needs a person, whatever the mode. */
-export type ApprovalHardGate = 'question' | 'explicit-user' | 'denied-read' | 'docker-host';
+export type ApprovalHardGate = 'question' | 'explicit-user' | 'denied-read' | 'docker-host' | 'protected-write';
 
 export type ApprovalProfile = {
   readonly hardGate?: ApprovalHardGate;
@@ -49,6 +49,11 @@ export function describeApproval(
     readonly isDockerHostControl: (toolName: string, input: unknown) => boolean;
     /** The sandbox is on and this call asks to run outside it (the app knows the sandbox and workspace). */
     readonly isSandboxEscape?: (toolName: string, input: unknown) => boolean;
+    /**
+     * The call writes a path on the approval floor: hooks, Term2's settings, git hooks or config
+     * (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 3).
+     */
+    readonly isProtectedWrite?: (toolName: string, input: unknown) => boolean;
   },
 ): ApprovalProfile {
   const autoGrant = ONE_TIME_GRANTS.find((grant) => request.grants?.includes(grant));
@@ -63,6 +68,8 @@ export function describeApproval(
         request.grants?.some((grant) => grant.startsWith('docker-')) ||
         context.isDockerHostControl(request.toolName, request.input)
       ? 'docker-host'
+      : context.isProtectedWrite?.(request.toolName, request.input) === true
+      ? 'protected-write'
       : undefined;
   const escape =
     autoGrant === 'unsandboxed-once' || context.isSandboxEscape?.(request.toolName, request.input) === true;
@@ -136,7 +143,7 @@ export function approvalRouteFor(
 }
 
 /** Why `unattended` refuses a request without asking the reviewer. */
-function unreviewedRefusalReason(profile: ApprovalProfile): string {
+export function unreviewedRefusalReason(profile: ApprovalProfile): string {
   switch (profile.hardGate) {
     case 'explicit-user':
       return 'this decision requires an explicit answer from the user';
@@ -144,6 +151,8 @@ function unreviewedRefusalReason(profile: ApprovalProfile): string {
       return 'it retries a read the sandbox denied, which only the user may grant';
     case 'docker-host':
       return 'it controls the Docker host, which only the user may grant';
+    case 'protected-write':
+      return "it writes a hook, Term2's settings or git's hooks or config, which only the user may grant";
     default:
       break;
   }

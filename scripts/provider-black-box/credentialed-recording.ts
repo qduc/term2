@@ -96,8 +96,12 @@ export function observeResponsesHttpFallback(): { count(): number; restore(): vo
   const nativeFetch = globalThis.fetch;
   let count = 0;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input instanceof Request ? input.url : String(input);
-    if (/\/responses(?:\/|$)/.test(new URL(url).pathname)) count++;
+    try {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (/\/responses(?:\/|$)/.test(url.pathname)) count++;
+    } catch {
+      /* not an absolute URL; the request itself decides what happens */
+    }
     return nativeFetch(input, init);
   }) as typeof fetch;
   return {

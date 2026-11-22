@@ -60,8 +60,9 @@ decides what happens to the rest.
   help text has always said.
 - `auto` without a usable reviewer model is `off` at the edges: asked, or
   refused when nobody is present. That is the cost-free "workspace only" level.
-- `NonInteractiveApprovalPolicy` is removed. Its YELLOW → chore-tier fallback
-  is replaced by the reviewer.
+- `NonInteractiveApprovalPolicy` no longer approves on its own: it keeps the
+  allowlisted-MCP allowance and the check-in and `propose_goal` refusals, and
+  refuses the rest. Its YELLOW → chore-tier fallback is replaced by the reviewer.
 
 Why: users of a headless run expect it to finish, do the job, stay inside the
 project and keep secrets. The safety level is theirs to choose; asking is not
@@ -159,7 +160,7 @@ need an independent verifier (`verification` skill).
 3. The floor (decision 3).
 4. Scratch area (decision 4).
 5. Headless: leftover requests refused, `--auto-approve` = `auto`,
-   `NonInteractiveApprovalPolicy` removed (decisions 1 and 2, headless side).
+   `NonInteractiveApprovalPolicy` cut to refusals (decisions 1 and 2, headless side).
 6. Dropped: `unattended` stays a mode (decision 2).
 
 ## Settled questions

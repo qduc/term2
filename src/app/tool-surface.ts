@@ -375,7 +375,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       const firstReview = review && review.kind !== 'not_reviewed' ? formatApprovalReview(review) : undefined;
       const decision = await withWorkspace(() =>
         policy.decide({
-          autoApprove: options.autoApprove === true,
+          // A saved `auto` or stricter mode already lets the reviewer decide; only `off` without the flag is
+          // told to use --auto-approve.
+          autoApprove: options.autoApprove === true || settings.get('shell.autoApproveMode') !== 'off',
           approval: {
             agentName: agent.name,
             toolName: request.toolName,

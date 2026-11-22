@@ -82,3 +82,18 @@ it('--auto-approve keeps a saved always: the outside write is made without a rev
   expect(run.reviews, run.report).toHaveLength(0);
   expect(run.written, run.report).toBe(true);
 });
+
+it('--auto-approve keeps a saved unattended: a rejected outside write is refused by unattended', async () => {
+  const run = await writeOutside(['--auto-approve'], rejects, { shell: { autoApproveMode: 'unattended' } });
+  expect(run.reviews, run.report).toHaveLength(1);
+  expect(run.written, run.report).toBe(false);
+  expect(run.results[0]).toContain('Refused by unattended approval');
+});
+
+it('a saved auto without the flag lets the reviewer decide and does not point at --auto-approve', async () => {
+  const run = await writeOutside([], rejects, { shell: { autoApproveMode: 'auto' } });
+  expect(run.reviews, run.report).toHaveLength(1);
+  expect(run.written, run.report).toBe(false);
+  expect(run.results[0]).toContain('No person is available to approve this in a non-interactive run.');
+  expect(run.results[0]).not.toContain('use --auto-approve');
+});

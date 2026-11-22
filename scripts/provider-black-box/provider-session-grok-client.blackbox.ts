@@ -256,6 +256,25 @@ describe('Grok proxy contract', () => {
     }
     expect(retry!.headers['x-grok-conv-id']).toBe(first!.headers['x-grok-conv-id']);
   });
+
+  // agent-core 0.3.0-alpha.0 sent 2 × (n + 1); see provider-retries-exhausted-notice.blackbox.ts.
+  it('sends retryAttempts + 1 requests to a proxy that keeps answering 503', async () => {
+    const result = await runGrok({
+      retryAttempts: 1,
+      cache: { version: '4.5.6', ageMs: 0 },
+      reply: (_request, _number, response) => {
+        // A 1 ms Retry-After keeps the backoff out of the test's wall time.
+        response.writeHead(503, { 'content-type': 'application/json', 'retry-after': '0.001', connection: 'close' });
+        response.end(JSON.stringify({ error: { message: 'overloaded' } }));
+      },
+    });
+    expect(server!.requests.length, `requests the server saw\n${describeRun(result)}`).toBe(2);
+    expect(result.run.exitCode, describeRun(result)).toBe(1);
+    expect(result.events.find((event) => event.type === 'run_summary')).toMatchObject({
+      outcome: 'failed',
+      requests: { total: 2, completed: 0, failed: 2 },
+    });
+  });
 });
 
 describe('Grok emergency Chat Completions lane (TERM2_GROK_API=chat, Experimental)', () => {

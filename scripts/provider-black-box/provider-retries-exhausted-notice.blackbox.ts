@@ -38,8 +38,18 @@ type Route = 'openai-compatible' | 'openai' | 'codex';
 
 type FailedTurn = { notice: string; requests: string[]; retryLines: string[] };
 
-async function failedTurn(behaviour: Behaviour, retryAttempts: number, route: Route = 'openai-compatible') {
+/**
+ * `behaviour` may list one behaviour per request; the last one repeats. `retryAfter` overrides the
+ * Retry-After header a 503 sends.
+ */
+async function failedTurn(
+  behaviours: Behaviour | Behaviour[],
+  retryAttempts: number,
+  route: Route = 'openai-compatible',
+  retryAfter = '0.001',
+) {
   const requests: string[] = [];
+  const sequence = [behaviours].flat();
   server = createServer((request, response) => {
     request.resume();
     // Codex also asks for its model catalog; only model requests are counted.
@@ -49,6 +59,7 @@ async function failedTurn(behaviour: Behaviour, retryAttempts: number, route: Ro
       return;
     }
     requests.push(request.url ?? '');
+    const behaviour = sequence[Math.min(requests.length, sequence.length) - 1]!;
     if (behaviour === 'drop-connection') {
       request.socket.destroy();
       return;
@@ -61,8 +72,11 @@ async function failedTurn(behaviour: Behaviour, retryAttempts: number, route: Ro
     }
     // A 1 ms Retry-After keeps the backoff out of the test's wall time; the engine honours it.
     const status = behaviour === 'http-503' ? 503 : 500;
-    const retryAfter = behaviour === 'http-503' ? '0.001' : '0';
-    response.writeHead(status, { 'content-type': 'application/json', 'retry-after': retryAfter, connection: 'close' });
+    response.writeHead(status, {
+      'content-type': 'application/json',
+      'retry-after': behaviour === 'http-503' ? retryAfter : '0',
+      connection: 'close',
+    });
     response.end(JSON.stringify({ error: { message: 'internal fixture failure' } }));
   });
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
@@ -193,5 +207,31 @@ describe('agent.retryAttempts = n sends n + 1 requests to a provider that keeps 
     expect(turn.requests, context).toHaveLength(5);
     expect(announced(turn), context).toEqual(series(4));
     expect(turn.notice, context).toMatch(/after 5 attempts\b/);
+  });
+
+  // A provider that alternates failure modes is still one request failing again: one counter, n + 1 requests.
+  for (const [label, sequence] of [
+    ['a 503, then streams that end before any output', ['http-503', 'stream-closed-early']],
+    ['a stream that ends before any output, then 503s', ['stream-closed-early', 'http-503']],
+  ] as const) {
+    it(`openai-compatible: ${label} still sends n + 1 requests for retryAttempts 2`, async () => {
+      const turn = await failedTurn([...sequence], 2);
+      const context = JSON.stringify(turn);
+      expect(turn.requests, context).toHaveLength(3);
+      expect(announced(turn), context).toEqual(series(2));
+      expect(turn.notice, context).toMatch(/after 3 attempts\b/);
+    });
+  }
+});
+
+describe('a retry the 90 s recovery clock cannot fit', () => {
+  it('is neither announced nor sent, and the stored notice counts the requests made', async () => {
+    // Retry-After 100 s is past the 90 s recovery clock, so the first retry can never be made.
+    const turn = await failedTurn('http-503', 3, 'openai-compatible', '100');
+    const context = JSON.stringify(turn);
+    expect(turn.requests, context).toHaveLength(1);
+    expect(turn.retryLines, context).toEqual([]);
+    expect(turn.notice, context).toContain('fixture-custom answered with an error after 1 attempt');
+    expect(turn.notice, context).toContain('/retry turn');
   });
 });

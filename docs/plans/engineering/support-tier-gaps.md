@@ -208,13 +208,18 @@ section is a real recording behind every provider, replayed offline.
      failed request one counter; alpha.2 does the same for a stream cut before
      any output (`connection_interrupted`), which now ends with the exhausted
      notice, and raises the default recovery budget's physical-attempt cap
-     from 3 to n when n is larger, so n of 4 sends 5 requests; the 90 s
-     recovery clock still bounds the episode. A stream cut after output was
+     from 3 to n when n is larger, so n of 4 sends 5 requests. alpha.3 puts
+     the pre-output stream cut on the same counter as a failed request, so a
+     provider alternating the two still gets n + 1, and settles a retry the
+     90 s recovery clock cannot fit before announcing it: the turn stops with
+     the exhausted notice for the requests made. A stream cut after output was
      already n + 1 (its partial text withdrawn and retried silently) and is
      unchanged. `provider-retries-exhausted-notice.blackbox.ts` counts 1, 2
      and 3 requests for n of 0, 1 and 2 on custom chat, OpenAI Responses and
      Codex, 2 and 3 for a stream ended before output on chat and Responses,
-     and 5 for n of 4; `provider-session-grok-client.blackbox.ts` counts 2
+     5 for n of 4, 3 for the two alternating sequences at n of 2, and 1
+     request with no retry announced for a Retry-After past the clock;
+     `provider-session-grok-client.blackbox.ts` counts 2
      for Grok at n = 1.
 7. **Record what has only been faked.** Recorded fixtures exist for OpenAI over
    HTTP, Google, OpenCode's Chat and Anthropic protocols, and, recorded through

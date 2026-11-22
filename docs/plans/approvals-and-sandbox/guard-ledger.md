@@ -682,8 +682,14 @@ The September 6 invalid-chain incident supersedes the historical per-logical-
 turn retry envelope below: the shared budget now bounds consecutive recovery
 episodes. ApplicationRunLoop ends an episode only after accepting a terminal
 model completion; partial output, failed streams, and tool activity do not reset
-it. Ordinary failures retain 90,000ms / 3 recovery dispatches / 1 automatic
-replay. The authorized zero-frame timeout exception below uses configured retry
+it. Ordinary failures retain 90,000ms / 1 automatic replay; the physical
+recovery-dispatch cap is max(3, `agent.retryAttempts`) because Term2 supplies no
+budget and `@qduc/agent-core` 0.3.0-alpha.2 raises its default cap to the
+configured retry count (owner decision 2026-11-22: n retries send n + 1 requests).
+That cap is shared by every recovery kind in the episode; each kind keeps its own
+limit. From 0.3.0-alpha.3 a transient retry whose delay cannot fit the remaining
+recovery clock is neither announced nor sent: the turn stops with the
+exhausted-retries notice counting the requests actually made. The authorized zero-frame timeout exception below uses configured retry
 counts and excludes measured receive silence, not recovery overhead. Separate
 total-run containment is unchanged. See
 [the incident contract and red proof](../../research/invalid-chain-worker-recovery.md).

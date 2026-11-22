@@ -231,12 +231,20 @@ section is a real recording behind every provider, replayed offline.
    of any other vendor's server, and `PROVENANCE.md` says so per fixture. For this
    probe the two chat types send identical requests, so the pair does not yet
    exercise anything that differs between them. Still checked against
-   hand-written servers only: OpenAI over WebSocket, and Grok. Codex over
-   WebSocket was recorded on 2026-11-22 with the maintainer's ChatGPT login
-   (`pnpm provider:record --provider codex`: scrubbed at capture,
-   secret-scanned after writing, reviewed by hand) and the capture replays in
-   `provider-contract.test.ts`. OpenAI over WebSocket uses the same command
-   with `--provider openai --transport websocket` and an API key.
+   hand-written servers only: Grok. Codex over WebSocket was recorded on
+   2026-11-22 with the maintainer's ChatGPT login (`pnpm provider:record
+   --provider codex`: scrubbed at capture, secret-scanned after writing,
+   reviewed by hand) and the capture replays in `provider-contract.test.ts`.
+   Decided against (2026-11-22): a separate OpenAI-over-WebSocket recording.
+   The maintainer's judgement is that it is the same wire as Codex: both open
+   the SDK's `ResponsesWS` and speak the same Responses WebSocket protocol, so
+   the Codex capture stands for the server side. Term2's client side is not
+   shared: OpenAI uses `OpenAIResponsesWSModelWithPromptCacheKey`
+   (`openai-responses-model.ts`), Codex `CodexResponsesWSModel`
+   (`codex-responses-model.ts`), and only the Codex class replays real
+   frames; the OpenAI class is checked against the loopback server. If an
+   OpenAI-only WebSocket defect appears, `--provider openai --transport
+   websocket` with an API key records one.
    Decided against: a recording for `llama.cpp` and the local presets. The
    maintainer's judgement is that they have nothing of their own on the wire:
    they speak Chat Completions, which the `openai-compatible` captures cover,

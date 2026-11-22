@@ -22,7 +22,10 @@ record decisions already taken and premises already disproven:
   (`websocket-capture.ts`) and the Codex route in `provider:record` now exist, and the
   maintainer's first live Codex WebSocket capture (2026-11-22,
   `fixtures/codex/tool-continuation-v2-codex-responses.json`) replays through the registry
-  model in `provider-contract.test.ts`. OpenAI over WebSocket is still synthetic only.
+  model in `provider-contract.test.ts`. No separate OpenAI-over-WebSocket recording is
+  planned: the maintainer judged it the same wire as Codex (decision in
+  `support-tier-gaps.md` item 7), though term2's OpenAI WebSocket client class is
+  still exercised only against the loopback server.
   Reviewing that capture found live item ids used as object keys
   (`response.usage.attribution.items`), which the value-only id canonicalization missed;
   `fixture-sanitizer.ts` now canonicalizes id-shaped keys and the recording scan fails on

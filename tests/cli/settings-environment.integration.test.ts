@@ -20,7 +20,9 @@ import {
 // Environment variables that override a setting (SETTING_ENV_VARIABLES, src/config/settings/settings-env.ts),
 // through the built CLI. For each variable the table runs the setting as settings.json alone gives it, the
 // variable alone, and both together: the variable must change what the run does and beat settings.json.
-// The code's precedence is defaults < settings.json < environment < command line.
+// The code's precedence is defaults < settings.json < environment < command line, except for the API keys in
+// ENV_FALLBACK_CREDENTIAL_KEYS, where a non-empty key in settings.json wins and the variable is a fallback
+// (tests/cli/api-key-environment.integration.test.ts).
 //
 // No command prints the effective settings outside the interactive UI, and the UI's settings menu hides several
 // of these keys, so each setting is observed through what it controls, in one headless run per case:

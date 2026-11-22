@@ -199,7 +199,9 @@ Run \`/settings\` to browse settings or \`/settings <key> <value>\` to change on
 In the settings menu, press \`Ctrl+D\` to reset the selected setting.
 
 You can also edit \`settings.json\` in your platform’s application state directory.
-The tables list environment variables where available. Settings marked as
+The tables list environment variables where available. An environment variable overrides the saved value,
+except for API keys: a key saved in \`settings.json\` wins, and the variable is used only when none is saved.
+Settings marked as
 **Runtime Modifiable** can take effect during a session. Restart term2 to apply
 other changes.
 

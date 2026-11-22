@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { access, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
-import { protectedWriteForFileTool } from '../protected-write-paths.js';
+import { protectedWriteForFileTool } from '../workspace/protected-write-paths.js';
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
@@ -116,9 +116,7 @@ export function createCreateFileToolDefinition(deps: {
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;
-      // The approval floor holds in every mode, `always` included, and no session edit grant covers it.
-      if (protectedWriteForFileTool(TOOL_NAME_CREATE_FILE, params, executionContext?.getCwd() || process.cwd()))
-        return true;
+      if (protectedWriteForFileTool(TOOL_NAME_CREATE_FILE, params)) return true; // the floor, in every mode
       if (settingsService.get('shell.autoApproveMode') === 'always') {
         loggingService.security('create_file needsApproval: auto-approved in YOLO mode', {
           path: params.path,

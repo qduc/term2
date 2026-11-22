@@ -47,7 +47,7 @@ presentation, offered grants and the app's Docker/escape checks. Its hard gates
 are questions, explicit-user decisions (including `propose_goal`), denied-read
 retries, Docker host control, and file-tool writes on the approval floor
 (`protected-write`: hooks, Term2's settings, git hooks and config;
-`protectedWriteForFileTool` in `src/tools/protected-write-paths.ts`, decision 3
+`protectedWriteForFileTool` in `src/tools/workspace/protected-write-paths.ts`, decision 3
 of [headless-approval-redesign.md](headless-approval-redesign.md)). For the
 last, `approvalFor` in `src/app/source-tools.ts` also skips the `always`
 bypass, and headless `decideInteraction` denies it. A question routes to `ask_user` in every mode;

@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import envPaths from 'env-paths';
-import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
-import { parseUpstreamApplyPatch } from '../shared/utils/upstream-apply-patch.js';
-import { readSearchReplaceArguments } from './file/search-replace-protocol.js';
-import { findGitCheckoutRoot, resolveGitWorktreeWritePaths } from './shell/sandbox/git-worktree-write-paths.js';
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from './tool-names.js';
-import { expandHome } from './workspace/path-identity.js';
+import { resolveSettingsDirectory } from '../../config/settings/settings-path.js';
+import { parseUpstreamApplyPatch } from '../../shared/utils/upstream-apply-patch.js';
+import { readSearchReplaceArguments } from '../file/search-replace-protocol.js';
+import { findGitCheckoutRoot, resolveGitWorktreeWritePaths } from '../shell/sandbox/git-worktree-write-paths.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../tool-names.js';
+import { expandHome } from './path-identity.js';
+import { getActiveWorkspaceRoot } from './active-workspace-root.js';
 
 /**
  * Writes that change who checks the agent's work: the approval floor
@@ -140,7 +141,7 @@ function physicalPath(target: string, depth = 0): string {
 export function protectedWriteForFileTool(
   toolName: string,
   input: unknown,
-  cwd: string,
+  cwd: string = getActiveWorkspaceRoot(),
   options: { readonly anyWorktree?: boolean } = {},
 ): { kind: ProtectedWriteKind; path: string } | undefined {
   // A caller that cannot tell which checkout the call came from (the approval route, for a worker pinned to a

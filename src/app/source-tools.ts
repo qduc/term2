@@ -7,8 +7,7 @@ import { isCancellationError, isHarnessInvariantError } from '../shared/lib/harn
 import { modelToolJsonSchema } from '../shared/lib/model-tool-json-schema.js';
 import type { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../session/approval/nested-approval-owner.js';
-import { getActiveWorkspaceRoot } from '../tools/workspace/active-workspace-root.js';
-import { protectedWriteForFileTool } from '../tools/protected-write-paths.js';
+import { protectedWriteForFileTool } from '../tools/workspace/protected-write-paths.js';
 import { SANDBOX_NETWORK_INTERACT } from '../tools/shell/sandbox/sandbox-network-approval.js';
 import { APPROVED_SHELL_ESCAPE } from '../tools/system/shell.js';
 import { isDockerHostControlShellApproval } from '../session/approval/shell-sandbox-approval.js';
@@ -195,9 +194,8 @@ async function approvalFor(
       return { kind: 'ask', summary: 'Review sandboxed shell command', detail: input.command };
     return { kind: 'none' };
   }
-  // The approval floor holds in `always` too (headless-approval-redesign.md, decision 3); the bypass below
-  // would otherwise skip the tool's own floor check. Runs in the workspace scope (`withWorkspace`).
-  const protectedWrite = protectedWriteForFileTool(definition.name, input, getActiveWorkspaceRoot());
+  // The floor holds in `always` too: the bypass below would skip the tool's own check (decision 3).
+  const protectedWrite = protectedWriteForFileTool(definition.name, input);
   if (
     !protectedWrite &&
     (policy.kind === 'auto_approve' ||

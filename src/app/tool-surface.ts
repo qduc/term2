@@ -21,7 +21,7 @@ import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-regi
 import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { formatApprovalReview } from '../shared/contracts/approval-review.js';
 import { approvalRouteFor, describeApproval, unreviewedRefusalReason } from '../session/approval/approval-route.js';
-import { protectedWriteForFileTool } from '../tools/protected-write-paths.js';
+import { protectedWriteForFileTool } from '../tools/workspace/protected-write-paths.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';

@@ -34,7 +34,9 @@ export async function* physicalModelStream(input: {
         message: 'A recovery dispatch requires the engine-owned budget reservation.',
       });
     }
-    if (budget.deadlineExceeded || (!shared && attempt > 0 && !budget.claimPhysicalAttempt())) {
+    // The engine admitted a reserved dispatch against the recovery clock before its backoff;
+    // refusing it here after that sleep would drop a retry already announced to the user.
+    if ((budget.deadlineExceeded && !reserved) || (!shared && attempt > 0 && !budget.claimPhysicalAttempt())) {
       throw toModelFailure(new RetryRecoveryBudgetExhaustedError(previousFailure), input.signal);
     }
     let committed = false;

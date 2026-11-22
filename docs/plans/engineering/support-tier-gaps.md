@@ -390,15 +390,24 @@ section is a real recording behind every provider, replayed offline.
     `tests/cli/release-data.integration.test.ts` asserts the wording. Not
     covered: the TUI resume picker, and a log in which only later lines carry
     an unknown version.
-16. **Decide whether `settings.json` gets a version field.** It has none, so an
-    incompatible change cannot be detected on load; the snapshot test protects
-    only the values it asserts on. Two related behaviours seen while capturing
-    the snapshot: the file is written as a full dump of defaults, and that dump
-    includes `memory.directory` as an absolute path computed on the machine
-    that wrote it, so a copied settings file points memory at the old machine's
-    path. Separately, a conversation log records its workspace as an absolute
-    path and resume is refused from any other directory, so a moved or renamed
-    project cannot resume its conversations.
+16. **Decided and done: `settings.json` has a version field.** Owner decision
+    2026-11-22: a top-level `version` with loader-owned migrations keyed by it;
+    machine-specific defaults are no longer written; conversations remain bound
+    to the folder they were started in. `SETTINGS_FILE_VERSION` and the ordered
+    `SETTINGS_FILE_MIGRATIONS` are in `src/config/settings/file/settings-file-version.ts`.
+    A file without `version` is version 0 and is migrated and rewritten at the
+    current version; a newer or non-numeric version is refused at startup with a
+    message naming it, and the file is left unchanged, as an unknown log `v` is.
+    `memory.directory` is written only when set, when it differs from the
+    machine's default, or when the file already held it, so a new file no longer
+    carries an absolute path from the machine that wrote it. An existing dumped
+    value is kept: it cannot be told apart from a chosen one. The rest of the
+    file is still a full dump of defaults; Contract 10 (decision 5) says why.
+    `tests/cli/settings-file-version.integration.test.ts` checks a fresh
+    install, the 1.4.0 snapshot, a newer version and a corrupt file through the
+    built CLI. Known limit: a build without the field (1.4.0 and earlier) drops
+    `version` when it rewrites the file, and the next load migrates it again
+    from version 0.
 17. **Test the automatic triggers.** Done for a custom `openai-compatible`
     provider: `tests/cli/automatic-compaction.integration.test.ts` (headless)
     and `scripts/provider-black-box/automatic-rollover.blackbox.ts` (TUI). They

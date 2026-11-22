@@ -26,6 +26,8 @@ precedence, runtime-mutability classification, and the
 | C10.3 | Startup migration is deterministic, preserves explicit current-format values, registers/normalizes the provider identity required at runtime, and records whether its durable rewrite committed. | A legacy configuration changes meaning, repeatedly re-migrates, or selects an unavailable provider. |
 | C10.4 | Corrupt/schema-invalid bytes are diagnosed and never silently overwritten. Salvageable syntax corruption is recovered through the `SettingsService` public boundary with the original bytes preserved and a truthful recovered result; unsalvageable corruption and schema-invalid files remain fail-stop. | User data is lost or startup becomes an unexplained default reset. |
 | C10.5 | Secret-bearing values have an explicit at-rest and display policy. No public diagnostic or settings display emits credential bytes unless an owner-reviewed policy expressly authorizes it. | API keys reach transcript, terminal scrollback, logs, or an unintended plaintext file. |
+| C10.6 | `settings.json` carries a top-level integer `version`. A file without one is version 0; the loader runs the ordered `SETTINGS_FILE_MIGRATIONS` from the file's version to `SETTINGS_FILE_VERSION` before validation, and every write stamps the current version. A file whose version is newer than the build, or not a whole number, is refused with a message naming the version, with no salvage, quarantine, partial load or rewrite. | A downgrade silently misreads or overwrites a newer file; a format change cannot be detected on load. |
+| C10.7 | A default computed from the running machine (`COMPUTED_PATH_DEFAULT_KEYS`: `memory.directory`) is written only when a write sets it explicitly, its value differs from this machine's default, or the file already holds it and the write is not a reset of it. | A copied `settings.json` points memory at the old machine's absolute path. |
 
 ### Scope and non-claims
 
@@ -52,9 +54,10 @@ treated as unsalvageable and the original fail-stop path runs untouched.
 
 | Concern | Enforcement owner | Recovery/decision owner |
 | --- | --- | --- |
-| Bytes, lock, temp replacement, invalid-file refusal, corruption scan/quarantine | `settings-persistence.ts` (`loadSettingsFromFile`, `saveSettingsToFile`, `acquireSettingsLock`, `scanForRecoverableJson`, `quarantineCorruptSettingsFile`) | `SettingsService` exposes settlement to mutation callers and the recovered result to startup callers; product owner chooses failure UX. |
+| Bytes, lock, temp replacement, invalid-file refusal, corruption scan/quarantine | `src/config/settings/file/`: `settings-persistence.ts` (`loadSettingsFromFile`, `saveSettingsToFile`), `settings-file-lock.ts` (`acquireSettingsLock`), `settings-file-recovery.ts` (`scanForRecoverableJson`, `quarantineCorruptSettingsFile`) | `SettingsService` exposes settlement to mutation callers and the recovered result to startup callers; product owner chooses failure UX. |
 | Schema/defaults/runtime/restart/sensitive-key classifier | `settings-schema.ts` | Settings owner; this record requires a separate credential-byte policy, not implication from `SENSITIVE_SETTING_KEYS`. |
 | Merge/reconciliation/startup migrations | `SettingsService`, `settings-merger.ts`, `ancillary-settings-migration.ts`, `custom-provider-normalization.ts` | Settings owner, with provider registry owner for provider identity compatibility. |
+| File version, version migrations, defaults the file may omit | `src/config/settings/file/settings-file-version.ts` (`SETTINGS_FILE_VERSION`, `SETTINGS_FILE_MIGRATIONS`, `migrateSettingsFileVersion`), called by `loadSettingsFromFile`; `saveSettingsToFile` stamps the version. `persisted-defaults.ts` (`OPTIONAL_DEFAULT_KEYS`, `omitComputedPathDefaults`) | Settings owner. A content change an older build would misread raises the version and adds one migration entry. |
 | Credential readiness/value lookup | `utils/ai/provider-credentials.ts`, provider constructors | Provider credential owner; no provider transport change is authorized. |
 | Interactive display/entry | `/settings` command, provider-management/session UI | UI command owner. Contract 04 retains ordinary runtime application. |
 | Durable settlement result | `SettingsService` (`DurableWriteResult` return from `setDynamic`/`setPersistentDynamic`/`reset`, `getLastDurableWrite`) | `/settings` command renders a truthful message; product owner chooses failure UX for other callers. |
@@ -67,7 +70,8 @@ settlement it does not use.
 
 ## 3. Execution paths sharing the contract
 
-1. Startup: `resolveSettingsDirectory` -> raw file load -> schema validation ->
+1. Startup: `resolveSettingsDirectory` -> raw file load -> file-version check and
+   version migrations (a newer or invalid version stops here) -> schema validation ->
    legacy migrations/default reconciliation -> custom-provider registration ->
    optional rewrite. Corrupt-but-salvageable bytes take the scan fallback,
    quarantine, and rewrite path instead of the fail-stop throw.
@@ -93,6 +97,7 @@ settlement it does not use.
 | Resolution identity | `SettingSource`; defaults < config < env < CLI plus runtime overrides | Contract 04 owns value/source semantics; C10 prevents reconciliation from making a false durable claim. |
 | Provider identity | `providers[].id`, `name`, legacy `identifier`/`displayName`, `agent.modelSelection.provider` | Normalize before registration; distinguish in-memory from durable migration. |
 | Migration identity | former request deadline; ancillary reasoning; legacy provider format; unnormalized selected provider | Raw presence decides whether a modern explicit target wins. |
+| File version | top-level `version` in `settings.json`; absent means 0; not part of `SettingsData`, `SETTING_KEYS` or `/settings` | The loader removes it before validation and returns it as `fileVersion`; `versionRefusal` carries the refusal message. |
 | Credential bytes | Built-in OpenAI/OpenRouter keys; `providers[].apiKey`; Tavily/Exa keys; Codex token-file path | A separate byte classification. Current `SENSITIVE_SETTING_KEYS` contains only shell path and OpenRouter URL/referrer/title. |
 | Durable result | `DurableWriteResult` (`saved` | `not-persisted` with `disabled`/`failed`) returned by `setDynamic`, `setPersistentDynamic`, `reset`; `getLastDurableWrite()` for transaction callers | Known saved/failed settlement at the owner boundary, without conflating Contract 04 effects. |
 | Recovery result | `SettingsCorruptionRecovery` via `getRecoveryResult()` | Truthful `recovered` flag, recovery reason, preserved-bytes path, and salvaged section keys; `recovered: false` otherwise. |
@@ -107,7 +112,8 @@ settlement it does not use.
 | Cancellation | No `AbortSignal`, async task, or cancelled settlement; lock wait is synchronous. | N/A; do not invent cancellation semantics. |
 | Retry | Lock polls up to the configured timeout (default 2 seconds) and reclaims by mtime after the stale threshold (default 30 seconds). No automatic retry follows a save error or caller retry token. | Characterize fresh-lock wait/timeout and stale-mtime reclamation; do not equate stale mtime with dead PID. |
 | Ambiguous outcome | Rename determines the low-level result; mutators now return a typed `DurableWriteResult` and `getLastDurableWrite()` exposes the same evidence to transaction callers. | R10.1 closed the public detection gap. |
-| Migration | Deadline/ancillary/provider-format/selected-provider normalization is in-memory then written through the same writer when a startup migration is recorded. | Green only when a fresh service sees the normalized durable snapshot; failed rewrite is not acknowledged migration. |
+| Migration | Deadline/ancillary/provider-format/selected-provider normalization is in-memory then written through the same writer when a startup migration is recorded. A file below `SETTINGS_FILE_VERSION` is migrated by the loader and counts as a startup migration, so the rewrite stamps the current version. | Green only when a fresh service sees the normalized durable snapshot; failed rewrite is not acknowledged migration. |
+| Newer or invalid file version | `SettingsService` throws `versionRefusal` before the corruption branch, on every surface (headless runs included); the locked writer's reload refuses the same file, so a process started before the file was upgraded reports `not-persisted`/`failed` instead of downgrading it. | Fail-stop with the file byte-for-byte unchanged and no sibling file. |
 | Corruption | Salvable syntax corruption: scan returns a JSON object, original bytes are quarantined to `settings.json.corrupt-<ts>`, a fresh file is rewritten, `getRecoveryResult()` reports `recovered: true`. Unsalvageable syntax or schema-invalid files: `SettingsService` refuses startup. | Green fail-stop behavior preserved; recovery is an additional, truthful path, never a silent overwrite. |
 
 ## 6. Observability and sensitive-byte handling
@@ -185,6 +191,8 @@ repair record).
 | Credential-source behavior | `provider-credentials.test.ts`: `requires credentials for remote custom providers and resolves stored or type environment keys`; `preserves explicitly no-auth local custom providers` | green existing |
 | Credential display | **Decided (2026-08-16): direct display is accepted policy.** `settings-command.test.ts` green test `renders direct credential bytes in /settings queries (President decision: display accepted)` replaces the former R10.2 retained red. No aggregate `providers` query is used. | green (R10.2 retired by owner decision) |
 | Credential bytes at rest | **Decided (2026-08-16): plaintext local storage accepted.** Provider-session credential classes persist locally in `settings.json`; no encryption/keychain added. | decided policy (no change) |
+| File version (C10.6) | `tests/cli/settings-file-version.integration.test.ts` (built CLI, real settings directory): a fresh install writes `version: 1`; the unversioned 1.4.0 snapshot is rewritten at version 1 with every saved value kept; a version-2 file is refused by `--list-models` and by a headless prompt with the file byte-identical and no sibling; a salvageable corrupt file is still quarantined byte-for-byte and its replacement carries `version: 1` | green (red on base `f51b9cd`, all four cases) |
+| Computed path default (C10.7) | same file: a fresh install's `memory` section has no `directory` and the file holds no path under the child's home; the 1.4.0 snapshot keeps its `memory.directory`. Explicit set, reset of the key, of `memory` and of everything were checked with a temporary service-level test (not committed) | green |
 
 Only the single excluded public red (R10.2) was retained; it is now retired by
 the 2026-08-16 President decision above. No red is added for directory
@@ -257,6 +265,31 @@ failure in the Contract 10 files.
    `agent.modelSelection.provider` still references an unnormalized identity, the
    normalization is recorded as a startup migration so the durable file is
    rewritten and a fresh service restart sees the normalized identity.
+
+4. **File version (owner decision 2026-11-22):** `settings.json` gets a
+   top-level `version` and loader-owned migrations keyed by it. Version 1 has
+   the same content format as the unversioned files before it, so the 0 -> 1
+   entry only stamps the number. The shape-detected normalizations above stay
+   outside the version list and run on every load, because a version-0 file
+   may hold any of those shapes. A newer version is refused unchanged, as the
+   conversation log refuses an unknown `v`: this build cannot tell which values
+   it would misread, and rewriting the file would downgrade it. Starting with
+   defaults in memory instead was rejected: a later `/settings` change would
+   then report saved values the file never had (the writer refuses the file).
+   Builds before the field existed (1.4.0 and earlier) strip the unknown key on
+   load and drop it on their next write; the next versioned load treats that
+   file as version 0 and migrates it again.
+5. **Machine-specific defaults (owner decision 2026-11-22):** `memory.directory`
+   is no longer dumped into a new file. The rest of the file is still a full
+   dump of defaults: writing only user-set values would change `getSource()`
+   from `config` to `default` for every unset key, change what `reset` writes
+   (e2e tests such as `settings-reset.e2e.test.ts` read reset defaults back from
+   the file), and let future default changes reach new installs but not old
+   ones, which is a separate product decision. An existing `memory.directory`
+   is kept even when it equals this machine's default: it cannot be told apart
+   from a value the user chose, and dropping it would move memory if
+   `XDG_DATA_HOME` later changed. Conversations stay bound to the folder they
+   were started in, by the same decision.
 
 ### Still requiring owner decision
 

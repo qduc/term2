@@ -1,6 +1,6 @@
 import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
-import { ModelSelectionSchema } from './model-selection.js';
+import { ModelSelectionSchema } from '../model-selection.js';
 
 type RecordValue = Record<string, unknown>;
 const isRecord = (value: unknown): value is RecordValue =>

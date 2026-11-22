@@ -413,7 +413,8 @@ async function main(): Promise<void> {
   for (const dir of Object.values(dirs)) fs.mkdirSync(dir, { recursive: true });
   const settingsDir = path.join(dirs.state, 'term2-nodejs');
   // The settings schema defaults `memory.directory` to the user's data directory, resolved when the
-  // module loads, and settings.json persists it. Point it at the capture directory before importing.
+  // module loads. Releases up to 1.4.0 persisted it in settings.json; later ones write it only when it
+  // was set. Point it at the capture directory before importing either way.
   process.env.HOME = dirs.home;
   process.env.XDG_DATA_HOME = dirs.data;
 

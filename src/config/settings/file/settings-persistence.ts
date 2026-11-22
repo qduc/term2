@@ -1,141 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import deepEqual from 'fast-deep-equal';
 
 import type { ZodTypeAny } from 'zod';
-import type { SettingsData } from './settings-schema.js';
-import { mergeSettings } from './settings-merger.js';
-import { unwrapSchema } from './setting-schema-utils.js';
+import type { SettingsData } from '../settings-schema.js';
+import { mergeSettings } from '../settings-merger.js';
+import { unwrapSchema } from '../setting-schema-utils.js';
+import { acquireSettingsLock, type LockOptions } from './settings-file-lock.js';
+import { scanForRecoverableJson, type SettingsFileRecovery } from './settings-file-recovery.js';
 import { migratePersistedSelections } from './persisted-selection-migration.js';
+import { SETTINGS_FILE_VERSION, migrateSettingsFileVersion } from './settings-file-version.js';
 
 type LoggerLike = {
   warn: (message: string, meta?: Record<string, unknown>) => void;
   error: (message: string, meta?: Record<string, unknown>) => void;
 };
 
-const LOCK_RETRY_MS = 10;
-const LOCK_TIMEOUT_MS = 2_000;
-const STALE_LOCK_MS = 30_000;
-
-/**
- * Evidence that a syntactically corrupt settings file was salvaged by
- * {@link scanForRecoverableJson} before schema validation ran. The file itself
- * is unchanged here: `hadErrors` stays true and the original bytes remain on
- * disk until the SettingsService boundary decides to quarantine them.
- */
-export type SettingsFileRecovery = {
-  recovered: true;
-  reason: string;
-  recoveredSectionKeys: string[];
-};
-
-/**
- * Bounded scan fallback for a settings file whose bytes are not valid JSON:
- * salvage the longest complete JSON object embedded in the corrupt content by
- * trying every object/array start and every matching close candidate. Leading
- * or trailing garbage (for example a prepended log line or an appended crash
- * fragment) is skipped. The iteration cap keeps a pathological all-brackets
- * file from stalling startup; when the cap is hit the file is treated as
- * unrecoverable (the original bytes are preserved untouched).
- */
-function scanForRecoverableJson(content: string): { recovered: unknown; reason: string } | null {
-  const MAX_SCAN_ITERATIONS = 20_000;
-  let iterations = 0;
-
-  for (let start = 0; start < content.length; start++) {
-    const open = content[start];
-    if (open !== '{' && open !== '[') continue;
-    const close = open === '{' ? '}' : ']';
-
-    for (let end = content.length - 1; end > start; end--) {
-      if (++iterations > MAX_SCAN_ITERATIONS) return null;
-      if (content[end] !== close) continue;
-      const candidate = content.slice(start, end + 1);
-      try {
-        const parsed: unknown = JSON.parse(candidate);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return {
-            recovered: parsed,
-            reason: `recovered a JSON object at byte offset ${start} inside corrupt content`,
-          };
-        }
-      } catch {
-        // Try the next candidate end; the longer candidate did not parse.
-      }
-    }
-  }
-
-  return null;
-}
-
 type SettingsMutation = (current: SettingsData) => SettingsData;
-
-type LockOptions = {
-  retryMs?: number;
-  timeoutMs?: number;
-  staleMs?: number;
-};
-
-function waitForLockRetry(retryMs: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, retryMs);
-}
-
-function acquireSettingsLock(settingsDir: string, options: LockOptions = {}): () => void {
-  const lockFile = path.join(settingsDir, 'settings.json.lock');
-  const retryMs = options.retryMs ?? LOCK_RETRY_MS;
-  const staleMs = options.staleMs ?? STALE_LOCK_MS;
-  const deadline = Date.now() + (options.timeoutMs ?? LOCK_TIMEOUT_MS);
-
-  while (true) {
-    try {
-      const fd = fs.openSync(lockFile, 'wx');
-      const token = randomUUID();
-      try {
-        fs.writeFileSync(fd, JSON.stringify({ token, pid: process.pid, createdAt: Date.now() }), 'utf-8');
-      } finally {
-        fs.closeSync(fd);
-      }
-
-      return () => {
-        try {
-          const content = fs.readFileSync(lockFile, 'utf-8');
-          const current: unknown = JSON.parse(content);
-          if (!current || typeof current !== 'object' || (current as { token?: unknown }).token !== token) {
-            return;
-          }
-          fs.unlinkSync(lockFile);
-        } catch (error: unknown) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code !== 'ENOENT' && !(error instanceof SyntaxError)) {
-            throw error;
-          }
-        }
-      };
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        throw error;
-      }
-
-      try {
-        if (Date.now() - fs.statSync(lockFile).mtimeMs > staleMs) {
-          fs.unlinkSync(lockFile);
-          continue;
-        }
-      } catch (lockError: unknown) {
-        if ((lockError as NodeJS.ErrnoException).code === 'ENOENT') {
-          continue;
-        }
-        throw lockError;
-      }
-
-      if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for settings lock at ${lockFile}`);
-      }
-      waitForLockRetry(retryMs);
-    }
-  }
-}
 
 /**
  * Try to parse each top-level section of the settings object independently.
@@ -174,6 +55,13 @@ export function loadSettingsFromFile(opts: {
   recovery?: SettingsFileRecovery;
   migratedSelections?: boolean;
   migratedApprovalPolicy?: boolean;
+  /** The file's `version` before migration (0 for a file without one); absent when there is no file. */
+  fileVersion?: number;
+  /**
+   * Set when the file's `version` is newer than this build or not a valid number. The file is
+   * refused unchanged: there is no salvage, partial load or rewrite, and the writer will not replace it.
+   */
+  versionRefusal?: string;
 } {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
@@ -217,6 +105,23 @@ export function loadSettingsFromFile(opts: {
       }
     }
 
+    // The file version is checked before anything else reads the content, on the
+    // clean and the salvaged path alike: a newer file is refused whole.
+    const versioned = migrateSettingsFileVersion(parsed);
+    if (!versioned.ok) {
+      const refusal = `Settings file at ${settingsFile} cannot be read: ${versioned.message} The file was not changed.`;
+      if (!opts.disableLogging) {
+        opts.loggingService?.error('Refusing a settings file version this build does not support', {
+          settingsFile,
+          reason: versioned.reason,
+          supportedVersion: SETTINGS_FILE_VERSION,
+        });
+      }
+      return { validated: {}, raw: {}, hadErrors: true, errorDetails: [refusal], versionRefusal: refusal };
+    }
+    parsed = versioned.content;
+    const fileVersion = versioned.fromVersion;
+
     // Both startup and locked save reloads pass this file-only boundary.
     // Retired advisory is accepted here before validation, while raw input stays
     // intact for migration detection and diagnosis.
@@ -236,6 +141,7 @@ export function loadSettingsFromFile(opts: {
         hadErrors: true,
         errorDetails: [...errorDetails, error instanceof Error ? error.message : String(error)],
         recovery,
+        fileVersion,
       };
     }
     const validated = opts.schema.safeParse(migration.value);
@@ -259,6 +165,7 @@ export function loadSettingsFromFile(opts: {
         hadErrors: true,
         errorDetails: [...errorDetails, ...schemaIssues],
         recovery,
+        fileVersion,
       };
     }
 
@@ -272,6 +179,7 @@ export function loadSettingsFromFile(opts: {
       recovery,
       migratedSelections: migration.migrated,
       migratedApprovalPolicy,
+      fileVersion,
     };
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -283,24 +191,6 @@ export function loadSettingsFromFile(opts: {
     }
 
     return { validated: {}, raw: {}, hadErrors: true, errorDetails: [errorMsg] };
-  }
-}
-
-/**
- * Move a corrupt `settings.json` aside so its original bytes remain available
- * for diagnosis, leaving the settings directory ready for a fresh atomic
- * replacement. Returns the quarantine path, or undefined when the file could
- * not be moved (the corrupt file then stays in place and later writes refuse
- * to overwrite it).
- */
-export function quarantineCorruptSettingsFile(settingsDir: string): string | undefined {
-  const settingsFile = path.join(settingsDir, 'settings.json');
-  const quarantinePath = path.join(settingsDir, `settings.json.corrupt-${Date.now()}`);
-  try {
-    fs.renameSync(settingsFile, quarantinePath);
-    return quarantinePath;
-  } catch {
-    return undefined;
   }
 }
 
@@ -356,7 +246,9 @@ export function saveSettingsToFile(opts: {
             .join('; ')}`,
         );
       }
-      const settingsToSave = opts.stripSensitiveSettings(next, loaded.raw);
+      // The writer always stamps the version it wrote the content in; the loader
+      // has already migrated an older file to it and refused a newer one above.
+      const settingsToSave = { version: SETTINGS_FILE_VERSION, ...opts.stripSensitiveSettings(next, loaded.raw) };
       const newContent = JSON.stringify(settingsToSave, null, 2);
 
       // Only write if file doesn't exist or content has changed. Compare parsed

@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { agentCredentialPaths } from './agent-credential-paths.js';
 
 /**
  * Information extracted from a sandbox denied-read failure.
@@ -37,6 +38,9 @@ const SENSITIVE_SUBPATHS: readonly string[] = [
   path.join(home, '.gemrc'),
   path.join(home, '.config'),
   path.join(home, '.local'),
+  // Term2's own settings and config directories and other agents' token files: on macOS they sit outside
+  // ~/.config and ~/.local (~/Library/Logs, ~/Library/Preferences), so they are named here too.
+  ...agentCredentialPaths(home, process.env),
 ];
 
 /**

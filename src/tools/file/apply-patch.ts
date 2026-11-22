@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../../shared/utils/apply-diff.js';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { protectedWriteForFileTool } from '../workspace/protected-write-paths.js';
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
@@ -243,6 +244,7 @@ export function createApplyPatchToolDefinition(deps: {
     strictParameters: applyPatchStrictParametersSchema,
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;
+      if (protectedWriteForFileTool(TOOL_NAME_APPLY_PATCH, params)) return true; // the floor, in every mode
       if (settingsService.get('shell.autoApproveMode') === 'always') {
         let operationCount: number | undefined;
         try {

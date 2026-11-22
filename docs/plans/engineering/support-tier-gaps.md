@@ -61,8 +61,8 @@ Ordered by what a miss costs, then by how likely the miss is.
      `codex-auth.json`, `grok-auth.json` and `settings.json` there returned
      their contents to the model. A decision: which of those files the
      sandbox hides, given that a `term2` started inside the sandbox would
-     then not find them. Held 2026-11-22: the owner will redesign what an unattended or
-     sandbox-off run may do, and decides this as part of it.
+     then not find them. Decided 2026-11-22: the sandbox hides Term2's whole config
+     directory and other agents' token files; [headless-approval-redesign.md](../approvals-and-sandbox/headless-approval-redesign.md), decision 5.
    - The sandbox's proxy bridge is `socat TCP-LISTEN:3128`, which opens an
      IPv6 socket. On a kernel without IPv6 the bridge never starts and every
      proxied command fails with "Failed to connect to localhost port 3128"
@@ -98,9 +98,11 @@ Ordered by what a miss costs, then by how likely the miss is.
    gate: it generates request shapes at random and asserts on whether any hard
    gate applies, so each pairing of an `ApprovalHardGate` with an approval mode
    is covered only as often as 1,000 random cases happen to produce it. And
-   behavioural tests still cover four of the sixteen pairs: `question` and
-   `denied-read` in `off`, `docker-host` in `unattended`, and `docker-host` in
-   `off` behind `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS. The pilot's
+   behavioural tests cover eight of the twenty pairs: `question` and
+   `denied-read` in `off`, `docker-host` in `unattended`, `docker-host` in
+   `off` behind `RUN_DOCKER_HOST_CONTROL_INTEGRATION=1` on macOS, and
+   `protected-write` in all four modes (headless, with `--auto-approve`, in
+   `workspace-write-boundary.integration.test.ts`). The pilot's
    `README.md` now gives the registered count.
 4. **The workspace write boundary is now checked for the file tools.**
    `tests/cli/workspace-write-boundary.integration.test.ts` (headless) and
@@ -118,13 +120,14 @@ Ordered by what a miss costs, then by how likely the miss is.
      reviewer model has rejected it (`decideHeadlessApproval` allows every
      tool that is not the shell). A rejected shell command stays rejected.
      The flag's help says it skips confirmation, so this may be intended; it
-     is not asserted either way. Held 2026-11-22: the owner will redesign what an unattended or
-     sandbox-off run may do, and decides this as part of it.
+     is not asserted either way. Decided 2026-11-22: headless never
+     asks, `--auto-approve` means mode `auto`, and the old policy goes;
+     [headless-approval-redesign.md](../approvals-and-sandbox/headless-approval-redesign.md), decisions 1 to 3.
    - With the sandbox off, a shell redirect to an absolute path under `/tmp`
      runs without approval in mode `off`, wherever the workspace is, because
      the path classifier treats `/tmp` as safe. Redirects through `..` or `~`
-     are held. The tests assert only the held cases. Held 2026-11-22: the owner will redesign what an unattended or
-     sandbox-off run may do, and decides this as part of it.
+     are held. The tests assert only the held cases. Decided 2026-11-22: `/tmp` is outside the
+     wall and `$TMPDIR` is the scratch area; [headless-approval-redesign.md](../approvals-and-sandbox/headless-approval-redesign.md), decision 4.
    - The comment on the existing real-sandbox case says the bare profile
      edits through the shell. Bare also has `create_file` and
      `search_replace`, which approval admits, not the sandbox.

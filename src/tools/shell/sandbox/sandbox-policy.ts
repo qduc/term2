@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
+import { agentCredentialPaths } from './agent-credential-paths.js';
 import { resolveGitWorktreeWritePaths } from './git-worktree-write-paths.js';
 import { isSecretKey, SANDBOX_SYSTEM_CA_BUNDLE } from './sandbox-env.js';
 import { resolveProjectNetworkStateDirectory } from './sandbox-network-store.js';
@@ -203,6 +204,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     path.join(home, '.gemrc'),
     path.join(home, '.config', 'hub'),
     path.join(home, '.docker', 'config.json'),
+    ...agentCredentialPaths(home, options.env ?? process.env),
   ];
   const defaultCredentialEnvVars = [
     'AWS_ACCESS_KEY_ID',
@@ -230,7 +232,11 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     Boolean(socketPath),
   );
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
-  const denyRead = readPolicy === 'strict' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;
+  // Strict denies all of home; Term2's directories can sit outside it (TERM2_CONFIG_DIR, XDG overrides).
+  const denyRead =
+    readPolicy === 'strict'
+      ? [home, '/etc', '/var', '/root', '/private/var', ...agentCredentialPaths(home, options.env ?? process.env)]
+      : credentialFiles;
   // Docker Desktop's socket is nested under the credential-denied ~/.docker
   // tree. The sandbox runtime gives allowRead precedence over denyRead, so this
   // exact-path exception permits connecting only to the user-approved daemon
@@ -239,6 +245,13 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const gitPaths = resolveGitWorktreeWritePaths(workspaceRoot);
   const gitWritePaths =
     options.allowWrite !== false && !isPathProtected(workspaceRoot, home) ? gitPaths : { allow: [], deny: [] };
+  // Re-allowed inside denied directories under `standard`. The project cache lives under Term2's settings
+  // directory, which `agentCredentialPaths` denies: Linux re-binds write paths after the deny mount, but
+  // macOS Seatbelt re-allows reads only for `allowRead`, so without this the cache is write-only there.
+  const standardReadExceptions = [
+    ...(options.cacheDirectory ? [options.cacheDirectory] : []),
+    ...dockerSocketReadException,
+  ];
   const allowRead =
     readPolicy === 'strict'
       ? [
@@ -262,8 +275,8 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
           '/usr/local',
           '/opt/homebrew',
         ]
-      : dockerSocketReadException.length > 0
-      ? dockerSocketReadException
+      : standardReadExceptions.length > 0
+      ? standardReadExceptions
       : undefined;
 
   const rawAllowWrite =
@@ -286,6 +299,14 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     }
   }
 
+  // The approval floor (headless-approval-redesign.md, decision 3): the project's `.term2` holds hooks and
+  // remembered read grants inside the writable workspace. The whole directory is read-only to a sandboxed
+  // command: denying only `.term2/hooks` left the parent renameable (`mv .term2 x; mkdir -p .term2/hooks`),
+  // and a deny on a missing child turns the first missing path part into the mount anyway. File tools still
+  // write the rest of `.term2` (skills, for example) under their own checks.
+  // Known gap, the runtime's and not this list's: `.git/hooks` is denied by a mount too, and renaming `.git`
+  // moves that mount aside. Git hooks are on the file-tool floor; the shell side waits on the runtime.
+  const floorWritePaths = options.allowWrite === false ? [] : [path.join(workspaceRoot, '.term2')];
   const allowNetworking = options.allowNetworking ?? false;
   return {
     network: {
@@ -299,7 +320,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       denyRead,
       ...(allowRead ? { allowRead } : {}),
       allowWrite,
-      denyWrite: [protectedApprovalDirectory, ...gitWritePaths.deny],
+      denyWrite: [protectedApprovalDirectory, ...gitWritePaths.deny, ...floorWritePaths],
       allowGitConfig: true,
     },
     credentials: {

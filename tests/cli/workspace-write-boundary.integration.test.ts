@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { integrationCliPath } from '../helpers/integration-cli.js';
@@ -59,13 +60,21 @@ async function run(options: {
   calls: (w: World, at: Layout) => Call[];
   settings?: Record<string, unknown>;
   reviewer?: ReviewerVerdict;
+  args?: string[];
+  prepare?: (w: World) => void;
 }) {
   world = createWorld('term2-boundary');
   const at = layout(world);
+  options.prepare?.(world);
   const calls = options.calls(world, at);
   provider = await startLoopbackProvider({ turns: calls.map((call) => ({ call })), reviewer: options.reviewer });
   writeWorldSettings(world, provider.baseUrl, { sandbox: { enabled: false }, ...options.settings });
-  const result = await runCli(world, integrationCliPath(), ['--profile', 'bare', 'Write the fixture files']);
+  const result = await runCli(world, integrationCliPath(), [
+    '--profile',
+    'bare',
+    ...(options.args ?? []),
+    'Write the fixture files',
+  ]);
   const requests = provider.requests();
   return {
     ...result,
@@ -139,7 +148,10 @@ describe('headless, approval mode off', () => {
     // Each escape was held for approval and answered no by the headless policy: that is the reason given.
     escapes.forEach((escape, index) => {
       expect(result.results[index]?.text, escape.name).toContain(NOT_APPROVED);
-      expect(result.results[index]?.text, escape.name).toContain(HEADLESS_REASON);
+      // A hook write is on the approval floor and says so (headless-approval-redesign.md, decision 3).
+      expect(result.results[index]?.text, escape.name).toContain(
+        escape.name.startsWith('protected hooks') ? 'only the user may grant' : HEADLESS_REASON,
+      );
     });
     expect(approvalRequests(result.stderr)).toHaveLength(escapes.length);
 
@@ -239,5 +251,145 @@ describe('headless, a reviewer model decides', () => {
     expect(result.reviews).toHaveLength(0);
     expect(approvalRequests(result.stderr)).toHaveLength(0);
     expect(fs.readFileSync(result.at.outsideAbs, 'utf8')).toBe('written\n');
+  });
+});
+
+// The approval floor (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 3): a write that
+// changes who checks the agent's work is never automatic, in any mode, `always` included, even with
+// --auto-approve and a reviewer that approves everything. Before this, --auto-approve allowed every such
+// file-tool write in every mode, and `always` skipped the hook check.
+describe('headless, the approval floor', () => {
+  const approves: ReviewerVerdict = { approve: true, reasoning: 'REVIEWER-SAYS-YES' };
+  const ORIGINAL_CONFIG = '[core]\n\tbare = false\n';
+  /** A checkout's `.git` (a directory) with a hook directory and a config file. */
+  const gitCheckout = (w: World) => {
+    fs.mkdirSync(path.join(w.workspace, '.git', 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(w.workspace, '.git', 'config'), ORIGINAL_CONFIG);
+  };
+  const floor: { name: string; call: (w: World) => Call; target: (w: World) => string }[] = [
+    {
+      name: 'project hook',
+      call: () => create('.term2/hooks/pre.sh'),
+      target: (w) => path.join(w.workspace, '.term2', 'hooks', 'pre.sh'),
+    },
+    {
+      name: 'remembered sandbox read grants',
+      call: () => create('.term2/sandbox-allow-paths.json'),
+      target: (w) => path.join(w.workspace, '.term2', 'sandbox-allow-paths.json'),
+    },
+    {
+      name: 'git hook',
+      call: () => create('.git/hooks/pre-commit'),
+      target: (w) => path.join(w.workspace, '.git', 'hooks', 'pre-commit'),
+    },
+    {
+      name: "Term2's config directory",
+      call: (w) => create(path.join(w.env.TERM2_CONFIG_DIR!, 'injected.json')),
+      target: (w) => path.join(w.env.TERM2_CONFIG_DIR!, 'injected.json'),
+    },
+    {
+      name: 'git config.worktree',
+      call: () => create('.git/config.worktree'),
+      target: (w) => path.join(w.workspace, '.git', 'config.worktree'),
+    },
+    {
+      name: "a submodule's hook",
+      call: () => create('.git/modules/sub/hooks/pre-commit'),
+      target: (w) => path.join(w.workspace, '.git', 'modules', 'sub', 'hooks', 'pre-commit'),
+    },
+  ];
+  const gitConfigEdit: Call = {
+    tool: 'search_replace',
+    args: { path: '.git/config', search_content: 'bare = false', replace_content: 'hooksPath = /tmp/evil' },
+  };
+
+  for (const mode of ['off', 'auto', 'unattended', 'always'] as const) {
+    it(
+      `${mode} with --auto-approve: refuses every floor write and still writes inside`,
+      { timeout: 30_000 },
+      async () => {
+        // An inside write after each floor write keeps `unattended` under its limit of 3 refusals in a row.
+        const result = await run({
+          calls: (w) =>
+            [...floor.map((entry) => entry.call(w)), gitConfigEdit].flatMap((call, index) => [
+              call,
+              create(`inside-${index}.txt`),
+            ]),
+          settings: { shell: { autoApproveMode: mode } },
+          reviewer: approves,
+          args: ['--auto-approve'],
+          prepare: gitCheckout,
+        });
+        const w = result.world;
+        const report = `exit ${result.status}\nstderr:\n${result.stderr}`;
+        expect(result.status, report).toBe(0);
+        expect(result.results, report).toHaveLength((floor.length + 1) * 2);
+        floor.forEach((entry, index) => {
+          expect(result.results[index * 2]?.text, entry.name).toMatch(/not approved|Refused/);
+          expect(result.results[index * 2]?.text, entry.name).toContain('only the user may grant');
+          expect(exists(entry.target(w)), entry.name).toBe(false);
+        });
+        expect(result.results[floor.length * 2]?.text, '.git/config').toContain('only the user may grant');
+        expect(fs.readFileSync(path.join(w.workspace, '.git', 'config'), 'utf8')).toBe(ORIGINAL_CONFIG);
+        // The reviewer that approves everything was never asked about a floor write.
+        for (const review of result.reviews) expect(JSON.stringify(review)).not.toMatch(/hooks|sandbox-allow|\.git/);
+        // Controls: every inside write between them ran.
+        for (let index = 0; index <= floor.length; index++)
+          expect(fs.readFileSync(path.join(w.workspace, `inside-${index}.txt`), 'utf8'), `inside-${index}`).toBe(
+            'written\n',
+          );
+      },
+    );
+  }
+
+  // A dangling symlink whose target does not exist yet: the write lands on the target, so the floor must
+  // follow the link (`physicalPath`). apply_patch writes through the link; the gpt-5 model gets that tool.
+  it('always with --auto-approve: apply_patch through a dangling link into .git/hooks is refused', async () => {
+    const result = await run({
+      calls: () => [
+        {
+          tool: 'apply_patch',
+          args: { patch: '*** Begin Patch\n*** Add File: dangling\n+echo hi\n*** End Patch' },
+        },
+      ],
+      settings: {
+        shell: { autoApproveMode: 'always' },
+        agent: { modelSelection: { model: 'gpt-5', provider: 'mockprov' } },
+      },
+      args: ['--auto-approve'],
+      prepare: (w) => {
+        gitCheckout(w);
+        fs.symlinkSync(path.join('.git', 'hooks', 'post-merge'), path.join(w.workspace, 'dangling'));
+      },
+    });
+    const report = `exit ${result.status}\nstderr:\n${result.stderr}`;
+    expect(result.status, report).toBe(0);
+    expect(result.results[0]?.text, report).toContain('only the user may grant');
+    expect(exists(path.join(result.world.workspace, '.git', 'hooks', 'post-merge'))).toBe(false);
+  });
+
+  // In a linked worktree (a worker pinned to one, say), the main checkout's `.term2/hooks` is on the floor too.
+  it("always with --auto-approve: a linked worktree cannot write the main checkout's hooks", async () => {
+    const main = (w: World) => path.join(w.outside, 'main');
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'ignore' });
+    const result = await run({
+      calls: (w) => [create(path.join(main(w), '.term2', 'hooks', 'evil.sh')), create('inside.txt')],
+      settings: { shell: { autoApproveMode: 'always' } },
+      args: ['--auto-approve'],
+      prepare: (w) => {
+        fs.mkdirSync(main(w));
+        git(main(w), 'init', '-q');
+        git(main(w), 'commit', '-q', '--allow-empty', '-m', 'init');
+        // layout() put symlinks in the workspace; the worktree needs an empty or missing directory.
+        fs.rmSync(w.workspace, { recursive: true, force: true });
+        git(main(w), 'worktree', 'add', '-q', w.workspace);
+      },
+    });
+    const report = `exit ${result.status}\nstderr:\n${result.stderr}`;
+    expect(result.status, report).toBe(0);
+    expect(result.results[0]?.text, report).toContain('only the user may grant');
+    expect(exists(path.join(main(result.world), '.term2', 'hooks', 'evil.sh'))).toBe(false);
+    expect(result.results[1]?.text, report).toContain('Created inside.txt');
   });
 });

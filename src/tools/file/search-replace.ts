@@ -13,6 +13,8 @@ import { describeSearchMismatch } from './closest-line.js';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { protectedWriteForFileTool } from '../workspace/protected-write-paths.js';
+import { TOOL_NAME_SEARCH_REPLACE } from '../tool-names.js';
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
@@ -316,6 +318,7 @@ export function createSearchReplaceToolDefinition(deps: {
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;
+      if (protectedWriteForFileTool(TOOL_NAME_SEARCH_REPLACE, params)) return true; // the floor, in every mode
       if (settingsService.get('shell.autoApproveMode') === 'always') {
         loggingService.security('search_replace needsApproval: auto-approved in YOLO mode', {
           operationCount: getSearchReplaceOperations(params).length,

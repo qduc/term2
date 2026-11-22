@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
 import {
   createWorld,
@@ -58,6 +59,13 @@ it.skipIf(process.platform !== 'linux')(
       path.join(w.home, '.ssh', 'id_fixture'),
       path.join(w.home, '.aws', 'credentials'),
       path.join(w.home, '.netrc'),
+      // Term2's own secrets (headless-approval-redesign.md, decision 5). The settings and config
+      // directories are denied whole, so a file no list names (here a `.corrupt-*` copy) is hidden too.
+      path.join(resolveSettingsDirectory({ homeDir: w.home, env: w.env }), 'settings.json.corrupt-1'),
+      path.join(w.env.TERM2_CONFIG_DIR!, 'codex-auth.json'),
+      // Other agents' token files.
+      path.join(w.home, '.codex', 'auth.json'),
+      path.join(w.home, '.claude', '.credentials.json'),
     ];
     for (const file of secrets) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -71,16 +79,22 @@ it.skipIf(process.platform !== 'linux')(
     // An inherited credential: the sandbox environment keeps only an allowlist of variables.
     w.env.AWS_SECRET_ACCESS_KEY = `${SENTINEL}-env`;
 
+    // The live settings file: the host reads it to run, the sandboxed command must not.
+    const settingsFile = path.join(resolveSettingsDirectory({ homeDir: w.home, env: w.env }), 'settings.json');
     const commands = [
       ...secrets.map((file) => `cat ${file}`),
       'echo "env=[$AWS_SECRET_ACCESS_KEY]"',
+      // The project cache lives under the denied settings directory; it must stay usable.
+      'echo CACHE-CONTROL-OK > "$XDG_CACHE_HOME/probe" && cat "$XDG_CACHE_HOME/probe"',
       `cat ${homeControl}`,
       `cat ${workspaceControl}`,
+      `cat ${settingsFile}`,
     ];
     provider = await startLoopbackProvider({
       turns: commands.map((command) => ({ call: { tool: 'shell', args: { command, description: 'Read a fixture' } } })),
     });
     writeWorldSettings(w, provider.baseUrl, { sandbox: { enabled: true } });
+    expect(fs.existsSync(settingsFile)).toBe(true);
     const result = await runCli(w, integrationCliPath(), ['--profile', 'bare', 'Read the fixture files']);
     const requests = provider.requests();
     const report = `exit ${result.status}\nstderr:\n${result.stderr}`;
@@ -98,9 +112,14 @@ it.skipIf(process.platform !== 'linux')(
     }
     // The inherited secret did not reach the command's environment.
     expect(results[secrets.length]).toMatch(/^exit 0[\s\S]*env=\[\]/);
+    expect(results[secrets.length + 1], 'project cache').toMatch(/^exit 0[\s\S]*CACHE-CONTROL-OK/);
     // Controls: the same shell, in the same run, reads ordinary files.
-    expect(results.at(-2)).toMatch(/^exit 0[\s\S]*HOME-CONTROL-OK/);
-    expect(results.at(-1)).toMatch(/^exit 0[\s\S]*WORKSPACE-CONTROL-OK/);
+    expect(results.at(-3)).toMatch(/^exit 0[\s\S]*HOME-CONTROL-OK/);
+    expect(results.at(-2)).toMatch(/^exit 0[\s\S]*WORKSPACE-CONTROL-OK/);
+    // The live settings.json is hidden although the CLI read it to start this run.
+    expect(results.at(-1), settingsFile).toMatch(/^exit [1-9]/);
+    expect(results.at(-1), settingsFile).toMatch(DENIAL);
+    expect(results.at(-1), settingsFile).not.toContain(provider.baseUrl);
 
     // Nothing carrying a sentinel reached the model, the terminal, or the log streams.
     expect(JSON.stringify([requests, provider.reviews()])).not.toContain(SENTINEL);

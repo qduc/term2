@@ -63,7 +63,7 @@ The owner selected these decisions on 2026-11-20.
 1. Before the first tool call of an unattended turn in a local workspace, a commit holding tracked, staged and untracked non-ignored files is written to a shadow repository outside the workspace (decision 7). In a git workspace, `HEAD`, refs, the index, the working tree, the stash and the object store are unchanged: `git status --porcelain`, `git ls-files -s`, `git for-each-ref` and `git count-objects` print the same before and after.
 2. Criterion 1 holds in a primary checkout and in a linked worktree.
 3. A non-git workspace is snapshotted the same way, and no `.git` is created in it. Over SSH, or when the snapshot fails or exceeds its cost bound, the turn proceeds and one notice says there is no snapshot. A snapshot never fails or blocks a turn.
-4. The end-of-turn output, including the refusal-limit report, names the snapshot and the files changed since it.
+4. Headless end-of-turn output names the snapshot and the files changed since it. The TUI omits successful snapshot reports but still shows refusal notices and warns when no snapshot was taken.
 5. A documented restore command is exercised by a test: after a turn that modifies, deletes and creates files, it returns the modified and deleted files to their pre-turn content. The documentation says what it does with files the turn created.
 6. Old snapshots are pruned by a stated rule.
 

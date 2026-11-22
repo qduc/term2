@@ -1,0 +1,1756 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "codex",
+  "wireFamily": "codex-responses",
+  "transport": "websocket",
+  "capture": {
+    "sdkPackage": "openai",
+    "apiSdkVersion": "6.37.0",
+    "model": "gpt-6.1-terra",
+    "modelFamily": "codex",
+    "capturedAt": "2026-11-22T03:24:49.383Z",
+    "recorderVersion": "2",
+    "probeScenario": "tool-continuation-v2"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "ws-open",
+          "urlPath": "/backend-api/codex/responses",
+          "headers": {
+            "authorization": "[REDACTED]",
+            "chatgpt-account-id": "[REDACTED]",
+            "openai-beta": "responses_websockets=2026-02-06",
+            "originator": "codex_exec",
+            "session-id": "[REDACTED]",
+            "thread-id": "[REDACTED]",
+            "x-client-request-id": "[REDACTED]",
+            "x-codex-turn-metadata": "[REDACTED]",
+            "x-codex-window-id": "[REDACTED]"
+          },
+          "status": 101,
+          "seq": 0
+        },
+        {
+          "kind": "ws-message",
+          "direction": "send",
+          "data": {
+            "type": "response.create",
+            "model": "gpt-6.1-terra",
+            "input": [
+              {
+                "type": "message",
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "Call the fixture tool with a = 1, then summarize its result."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+            "tools": [
+              {
+                "type": "function",
+                "name": "fixture",
+                "description": "Returns deterministic fixture data.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["a"],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "reasoning": {
+              "effort": "medium"
+            },
+            "client_metadata": {
+              "x-codex-installation-id": "[REDACTED]",
+              "session_id": "[REDACTED]",
+              "thread_id": "[REDACTED]",
+              "x-codex-window-id": "[REDACTED]",
+              "turn_id": "[REDACTED]",
+              "x-codex-turn-metadata": "[REDACTED]"
+            },
+            "include": ["reasoning.encrypted_content"]
+          },
+          "seq": 1
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "codex.rate_limits",
+            "plan_type": "[REDACTED]",
+            "rate_limits": {
+              "allowed": true,
+              "limit_reached": false,
+              "primary": {
+                "used_percent": 0,
+                "window_minutes": 0,
+                "reset_after_seconds": 0,
+                "reset_at": 0
+              },
+              "secondary": {
+                "used_percent": 0,
+                "window_minutes": 0,
+                "reset_after_seconds": 0,
+                "reset_at": 0
+              }
+            },
+            "code_review_rate_limits": null,
+            "additional_rate_limits": null,
+            "credits": {
+              "has_credits": false,
+              "unlimited": false,
+              "balance": "[REDACTED]"
+            },
+            "promo": null
+          },
+          "seq": 2
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "codex.response.metadata",
+            "headers": {
+              "x-models-etag": "[REDACTED]",
+              "x-codex-turn-state": "[REDACTED]",
+              "x-codex-safety-buffering-enabled": "[REDACTED]",
+              "x-codex-safety-buffering-faster-model": "[REDACTED]"
+            }
+          },
+          "seq": 3
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.created",
+            "sequence_number": 0,
+            "response": {
+              "input_transformations": [],
+              "id": "resp_<1>",
+              "object": "response",
+              "created_at": 1795317891,
+              "completed_at": null,
+              "status": "in_progress",
+              "background": false,
+              "frequency_penalty": 0,
+              "presence_penalty": 0,
+              "moderation": null,
+              "model": "gpt-6.1-terra",
+              "access_programs": {
+                "cyber": "standard"
+              },
+              "previous_response_id": null,
+              "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+              "output": [],
+              "error": null,
+              "incomplete_details": null,
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  },
+                  "output_schema": null,
+                  "strict": true
+                }
+              ],
+              "tool_choice": "auto",
+              "parallel_tool_calls": true,
+              "prompt_cache_key": "[REDACTED]",
+              "prompt_cache_retention": "24h",
+              "text": {
+                "format": {
+                  "type": "text"
+                },
+                "verbosity": "medium"
+              },
+              "top_p": 0.98,
+              "top_logprobs": 0,
+              "temperature": 1,
+              "reasoning": {
+                "effort": "medium",
+                "context": "all_turns",
+                "summary": null,
+                "mode": "standard"
+              },
+              "user": null,
+              "usage": null,
+              "tool_usage": {
+                "image_gen": {
+                  "input_tokens": 0,
+                  "output_tokens": 0,
+                  "total_tokens": 0,
+                  "input_tokens_details": {
+                    "text_tokens": 0,
+                    "image_tokens": 0
+                  },
+                  "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0
+                  }
+                },
+                "web_search": {
+                  "num_requests": 0
+                }
+              },
+              "safety_identifier": "[REDACTED]",
+              "store": false,
+              "metadata": {},
+              "max_output_tokens": null,
+              "max_tool_calls": null,
+              "service_tier": "auto",
+              "truncation": "disabled",
+              "image": {
+                "context_compression": "enabled"
+              }
+            },
+            "safety_buffering": false
+          },
+          "seq": 4
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.in_progress",
+            "sequence_number": 1,
+            "response": {
+              "input_transformations": [],
+              "id": "resp_<1>",
+              "object": "response",
+              "created_at": 1795317891,
+              "completed_at": null,
+              "status": "in_progress",
+              "background": false,
+              "frequency_penalty": 0,
+              "presence_penalty": 0,
+              "moderation": null,
+              "model": "gpt-6.1-terra",
+              "access_programs": {
+                "cyber": "standard"
+              },
+              "previous_response_id": null,
+              "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+              "output": [],
+              "error": null,
+              "incomplete_details": null,
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  },
+                  "output_schema": null,
+                  "strict": true
+                }
+              ],
+              "tool_choice": "auto",
+              "parallel_tool_calls": true,
+              "prompt_cache_key": "[REDACTED]",
+              "prompt_cache_retention": "24h",
+              "text": {
+                "format": {
+                  "type": "text"
+                },
+                "verbosity": "medium"
+              },
+              "top_p": 0.98,
+              "top_logprobs": 0,
+              "temperature": 1,
+              "reasoning": {
+                "effort": "medium",
+                "context": "all_turns",
+                "summary": null,
+                "mode": "standard"
+              },
+              "user": null,
+              "usage": null,
+              "tool_usage": {
+                "image_gen": {
+                  "input_tokens": 0,
+                  "output_tokens": 0,
+                  "total_tokens": 0,
+                  "input_tokens_details": {
+                    "text_tokens": 0,
+                    "image_tokens": 0
+                  },
+                  "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0
+                  }
+                },
+                "web_search": {
+                  "num_requests": 0
+                }
+              },
+              "safety_identifier": "[REDACTED]",
+              "store": false,
+              "metadata": {},
+              "max_output_tokens": null,
+              "max_tool_calls": null,
+              "service_tier": "auto",
+              "truncation": "disabled",
+              "image": {
+                "context_compression": "enabled"
+              }
+            },
+            "safety_buffering": false
+          },
+          "seq": 5
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_item.added",
+            "sequence_number": 2,
+            "output_index": 0,
+            "item": {
+              "type": "function_call",
+              "id": "fc_<2>",
+              "metadata": {
+                "turn_id": "[REDACTED]"
+              },
+              "internal_chat_message_metadata_passthrough": {
+                "turn_id": "[REDACTED]"
+              },
+              "call_id": "call_<3>",
+              "name": "fixture",
+              "arguments": "",
+              "status": "in_progress"
+            }
+          },
+          "seq": 6
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.function_call_arguments.delta",
+            "sequence_number": 3,
+            "item_id": "fc_<2>",
+            "output_index": 0,
+            "delta": "{\"",
+            "obfuscation": "ekvFCo9mO4MPMX"
+          },
+          "seq": 7
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.function_call_arguments.delta",
+            "sequence_number": 4,
+            "item_id": "fc_<2>",
+            "output_index": 0,
+            "delta": "a",
+            "obfuscation": "HdH4nkpK91dvsOf"
+          },
+          "seq": 8
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.function_call_arguments.delta",
+            "sequence_number": 5,
+            "item_id": "fc_<2>",
+            "output_index": 0,
+            "delta": "\":",
+            "obfuscation": "9rKIU3JdnSaD7z"
+          },
+          "seq": 9
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.function_call_arguments.delta",
+            "sequence_number": 6,
+            "item_id": "fc_<2>",
+            "output_index": 0,
+            "delta": "1",
+            "obfuscation": "mE8y3lBpXJfBEp1"
+          },
+          "seq": 10
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.function_call_arguments.delta",
+            "sequence_number": 7,
+            "item_id": "fc_<2>",
+            "output_index": 0,
+            "delta": "}",
+            "obfuscation": "SgNdKu8UCHhFY5a"
+          },
+          "seq": 11
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.function_call_arguments.done",
+            "sequence_number": 8,
+            "item_id": "fc_<2>",
+            "output_index": 0,
+            "arguments": "{\"a\":1}"
+          },
+          "seq": 12
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_item.done",
+            "sequence_number": 9,
+            "output_index": 0,
+            "item": {
+              "type": "function_call",
+              "id": "fc_<2>",
+              "metadata": {
+                "turn_id": "[REDACTED]"
+              },
+              "internal_chat_message_metadata_passthrough": {
+                "create_time": 0,
+                "turn_id": "[REDACTED]"
+              },
+              "call_id": "call_<3>",
+              "name": "fixture",
+              "arguments": "{\"a\":1}",
+              "status": "completed"
+            }
+          },
+          "seq": 13
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.metadata",
+            "sequence_number": 10,
+            "response_id": "resp_<1>",
+            "metadata": {
+              "openai_chatgpt_moderation_metadata": {
+                "prompt": {
+                  "omnimod": {
+                    "protection_type": "[REDACTED]",
+                    "outputs": [
+                      {
+                        "results": [
+                          {
+                            "category_flags": {
+                              "A1": false,
+                              "A2": false,
+                              "A3": false,
+                              "C1": false,
+                              "C11": false,
+                              "C2": false,
+                              "E1": false,
+                              "E2": false,
+                              "E3": false,
+                              "H1": false,
+                              "H2": false,
+                              "H3": false,
+                              "JB1": false,
+                              "K1": false,
+                              "K2": false,
+                              "K3": false,
+                              "K4": false,
+                              "P1": false,
+                              "P2": false,
+                              "P3": false,
+                              "P4": false,
+                              "PD1": false,
+                              "PD4": false,
+                              "S1": false,
+                              "S3+": false,
+                              "S4": false,
+                              "SH": false,
+                              "TXT-C3": false,
+                              "TXT-C4": false,
+                              "V1": false,
+                              "V2+": false,
+                              "V4+": false,
+                              "REFUSED": false,
+                              "CBRN-B1+": false,
+                              "IMG-C1": false,
+                              "IMG-C11": false,
+                              "IMG-C2": false,
+                              "IMG-S1": false,
+                              "IMG-SH": false,
+                              "IMG-V1": false,
+                              "IMG-V2+": false,
+                              "IMG-V4+": false
+                            }
+                          }
+                        ],
+                        "is_blocked": false
+                      }
+                    ]
+                  }
+                },
+                "generation": {},
+                "tool_call": {},
+                "tool_response": {}
+              }
+            }
+          },
+          "seq": 14
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "responsesapi.websocket_timing",
+            "timing_metrics": {
+              "timing_scope": "[REDACTED]",
+              "response_id": "[REDACTED]",
+              "responsesapi_chat_runner_streaming_token_batch_size": 0,
+              "websocket_output_text_delta_tbt_ms": null,
+              "websocket_output_text_delta_count": 0,
+              "pre_inference_ms": 0,
+              "client_tool_pause_total_ms": 0,
+              "total_turn_time_s": 0,
+              "xapi_validation_time_s": 0,
+              "num_engine_calls": 0,
+              "engine_total_prompt_tokens_total": 0,
+              "first_sampled_message_ttft_ms": null,
+              "num_sampled_tokens_total": 0,
+              "critical_path": {
+                "scope": "[REDACTED]",
+                "coverage": "[REDACTED]",
+                "boundary_type": "[REDACTED]",
+                "num_engine_calls": 0,
+                "engine_iapi_total_ms": 0,
+                "sampling_and_stream_total_ms": 0,
+                "responses_harness_unblocked_ms": 0,
+                "responses_pre_inference_ms": 0,
+                "engine_wall_ms": 0,
+                "client_tool_pause_ms": 0,
+                "responses_other_ms": 0,
+                "taas_request_setup_total_ms": null,
+                "taas_provider_wait_total_ms": null,
+                "inference_residual_total_ms": null
+              },
+              "server_timing_total_ms": 0
+            }
+          },
+          "seq": 15
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.completed",
+            "sequence_number": 11,
+            "response": {
+              "input_transformations": [],
+              "id": "resp_<1>",
+              "object": "response",
+              "created_at": 1795317891,
+              "completed_at": 1795317892,
+              "status": "completed",
+              "background": false,
+              "frequency_penalty": 0,
+              "presence_penalty": 0,
+              "moderation": null,
+              "model": "gpt-6.1-terra",
+              "access_programs": {
+                "cyber": "standard"
+              },
+              "previous_response_id": null,
+              "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+              "output": [
+                {
+                  "type": "function_call",
+                  "id": "fc_<2>",
+                  "metadata": {
+                    "turn_id": "[REDACTED]"
+                  },
+                  "internal_chat_message_metadata_passthrough": {
+                    "create_time": 0,
+                    "turn_id": "[REDACTED]"
+                  },
+                  "call_id": "call_<3>",
+                  "name": "fixture",
+                  "arguments": "{\"a\":1}",
+                  "status": "completed"
+                }
+              ],
+              "error": null,
+              "incomplete_details": null,
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  },
+                  "output_schema": null,
+                  "strict": true
+                }
+              ],
+              "tool_choice": "auto",
+              "parallel_tool_calls": true,
+              "prompt_cache_key": "[REDACTED]",
+              "prompt_cache_retention": "24h",
+              "text": {
+                "format": {
+                  "type": "text"
+                },
+                "verbosity": "medium"
+              },
+              "top_p": 0.98,
+              "top_logprobs": 0,
+              "temperature": 1,
+              "reasoning": {
+                "effort": "medium",
+                "context": "all_turns",
+                "summary": null,
+                "mode": "standard"
+              },
+              "user": null,
+              "usage": {
+                "input_tokens": 79,
+                "input_tokens_details": {
+                  "cached_tokens": 0,
+                  "cache_write_tokens": 0,
+                  "cache_write_tokens_details": {
+                    "ttl_30m_tokens": 0,
+                    "ttl_12h_tokens": 0
+                  }
+                },
+                "output_tokens": 17,
+                "output_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "total_tokens": 96,
+                "attribution": {
+                  "items": {
+                    "fc_<6>": {
+                      "input_tokens": 2,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 17
+                    },
+                    "msg_<7>": {
+                      "input_tokens": 19,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0,
+                      "content": [
+                        {
+                          "input_tokens": 19,
+                          "cached_tokens": 0,
+                          "cache_write_tokens": 0,
+                          "output_tokens": 0
+                        }
+                      ]
+                    }
+                  },
+                  "request_fields": {
+                    "instructions": {
+                      "input_tokens": 24,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0
+                    },
+                    "tools": {
+                      "input_tokens": 34,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0
+                    }
+                  }
+                }
+              },
+              "tool_usage": {
+                "image_gen": {
+                  "input_tokens": 0,
+                  "output_tokens": 0,
+                  "total_tokens": 0,
+                  "input_tokens_details": {
+                    "text_tokens": 0,
+                    "image_tokens": 0
+                  },
+                  "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0
+                  }
+                },
+                "web_search": {
+                  "num_requests": 0
+                }
+              },
+              "safety_identifier": "[REDACTED]",
+              "store": false,
+              "metadata": {},
+              "max_output_tokens": null,
+              "max_tool_calls": null,
+              "service_tier": "default",
+              "truncation": "disabled",
+              "image": {
+                "context_compression": "enabled"
+              }
+            },
+            "safety_buffering": false
+          },
+          "seq": 16
+        },
+        {
+          "kind": "ws-message",
+          "direction": "send",
+          "data": {
+            "type": "response.create",
+            "model": "gpt-6.1-terra",
+            "input": [
+              {
+                "type": "function_call_output",
+                "output": "{\"ok\":true,\"value\":1}",
+                "call_id": "call_<3>"
+              },
+              {
+                "type": "message",
+                "role": "user",
+                "content": [
+                  {
+                    "type": "input_text",
+                    "text": "The fixture tool returned its deterministic result. Give the final summary."
+                  }
+                ]
+              }
+            ],
+            "stream": true,
+            "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+            "tools": [
+              {
+                "type": "function",
+                "name": "fixture",
+                "description": "Returns deterministic fixture data.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["a"],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "reasoning": {
+              "effort": "medium"
+            },
+            "client_metadata": {
+              "x-codex-installation-id": "[REDACTED]",
+              "session_id": "[REDACTED]",
+              "thread_id": "[REDACTED]",
+              "x-codex-window-id": "[REDACTED]",
+              "turn_id": "[REDACTED]",
+              "x-codex-turn-metadata": "[REDACTED]"
+            },
+            "previous_response_id": "resp_<1>",
+            "include": ["reasoning.encrypted_content"]
+          },
+          "seq": 17
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "codex.rate_limits",
+            "plan_type": "[REDACTED]",
+            "rate_limits": {
+              "allowed": true,
+              "limit_reached": false,
+              "primary": {
+                "used_percent": 0,
+                "window_minutes": 0,
+                "reset_after_seconds": 0,
+                "reset_at": 0
+              },
+              "secondary": {
+                "used_percent": 0,
+                "window_minutes": 0,
+                "reset_after_seconds": 0,
+                "reset_at": 0
+              }
+            },
+            "code_review_rate_limits": null,
+            "additional_rate_limits": null,
+            "credits": {
+              "has_credits": false,
+              "unlimited": false,
+              "balance": "[REDACTED]"
+            },
+            "promo": null
+          },
+          "seq": 18
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "codex.response.metadata",
+            "headers": {
+              "x-models-etag": "[REDACTED]",
+              "x-codex-turn-state": "[REDACTED]",
+              "x-codex-safety-buffering-enabled": "[REDACTED]",
+              "x-codex-safety-buffering-faster-model": "[REDACTED]"
+            }
+          },
+          "seq": 19
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.created",
+            "sequence_number": 0,
+            "response": {
+              "input_transformations": [],
+              "id": "resp_<4>",
+              "object": "response",
+              "created_at": 1795317893,
+              "completed_at": null,
+              "status": "in_progress",
+              "background": false,
+              "frequency_penalty": 0,
+              "presence_penalty": 0,
+              "moderation": null,
+              "model": "gpt-6.1-terra",
+              "access_programs": {
+                "cyber": "standard"
+              },
+              "previous_response_id": "resp_<1>",
+              "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+              "output": [],
+              "error": null,
+              "incomplete_details": null,
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  },
+                  "output_schema": null,
+                  "strict": true
+                }
+              ],
+              "tool_choice": "auto",
+              "parallel_tool_calls": true,
+              "prompt_cache_key": "[REDACTED]",
+              "prompt_cache_retention": "24h",
+              "prompt_cache_options": {
+                "ttl": "30m",
+                "mode": "implicit",
+                "comparison_response_id": "resp_<1>"
+              },
+              "text": {
+                "format": {
+                  "type": "text"
+                },
+                "verbosity": "medium"
+              },
+              "top_p": 0.98,
+              "top_logprobs": 0,
+              "temperature": 1,
+              "reasoning": {
+                "effort": "medium",
+                "context": "all_turns",
+                "summary": null,
+                "mode": "standard"
+              },
+              "user": null,
+              "usage": null,
+              "tool_usage": {
+                "image_gen": {
+                  "input_tokens": 0,
+                  "output_tokens": 0,
+                  "total_tokens": 0,
+                  "input_tokens_details": {
+                    "text_tokens": 0,
+                    "image_tokens": 0
+                  },
+                  "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0
+                  }
+                },
+                "web_search": {
+                  "num_requests": 0
+                }
+              },
+              "safety_identifier": "[REDACTED]",
+              "store": false,
+              "metadata": {},
+              "max_output_tokens": null,
+              "max_tool_calls": null,
+              "service_tier": "auto",
+              "truncation": "disabled",
+              "image": {
+                "context_compression": "enabled"
+              }
+            },
+            "safety_buffering": false
+          },
+          "seq": 20
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.in_progress",
+            "sequence_number": 1,
+            "response": {
+              "input_transformations": [],
+              "id": "resp_<4>",
+              "object": "response",
+              "created_at": 1795317893,
+              "completed_at": null,
+              "status": "in_progress",
+              "background": false,
+              "frequency_penalty": 0,
+              "presence_penalty": 0,
+              "moderation": null,
+              "model": "gpt-6.1-terra",
+              "access_programs": {
+                "cyber": "standard"
+              },
+              "previous_response_id": "resp_<1>",
+              "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+              "output": [],
+              "error": null,
+              "incomplete_details": null,
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  },
+                  "output_schema": null,
+                  "strict": true
+                }
+              ],
+              "tool_choice": "auto",
+              "parallel_tool_calls": true,
+              "prompt_cache_key": "[REDACTED]",
+              "prompt_cache_retention": "24h",
+              "prompt_cache_options": {
+                "ttl": "30m",
+                "mode": "implicit",
+                "comparison_response_id": "resp_<1>"
+              },
+              "text": {
+                "format": {
+                  "type": "text"
+                },
+                "verbosity": "medium"
+              },
+              "top_p": 0.98,
+              "top_logprobs": 0,
+              "temperature": 1,
+              "reasoning": {
+                "effort": "medium",
+                "context": "all_turns",
+                "summary": null,
+                "mode": "standard"
+              },
+              "user": null,
+              "usage": null,
+              "tool_usage": {
+                "image_gen": {
+                  "input_tokens": 0,
+                  "output_tokens": 0,
+                  "total_tokens": 0,
+                  "input_tokens_details": {
+                    "text_tokens": 0,
+                    "image_tokens": 0
+                  },
+                  "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0
+                  }
+                },
+                "web_search": {
+                  "num_requests": 0
+                }
+              },
+              "safety_identifier": "[REDACTED]",
+              "store": false,
+              "metadata": {},
+              "max_output_tokens": null,
+              "max_tool_calls": null,
+              "service_tier": "auto",
+              "truncation": "disabled",
+              "image": {
+                "context_compression": "enabled"
+              }
+            },
+            "safety_buffering": false
+          },
+          "seq": 21
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_item.added",
+            "sequence_number": 2,
+            "output_index": 0,
+            "item": {
+              "type": "message",
+              "id": "msg_<5>",
+              "metadata": {
+                "turn_id": "[REDACTED]"
+              },
+              "internal_chat_message_metadata_passthrough": {
+                "turn_id": "[REDACTED]"
+              },
+              "role": "assistant",
+              "status": "in_progress",
+              "content": [],
+              "phase": "final_answer"
+            }
+          },
+          "seq": 22
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.content_part.added",
+            "sequence_number": 3,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "part": {
+              "type": "output_text",
+              "text": "",
+              "annotations": [],
+              "logprobs": []
+            }
+          },
+          "seq": 23
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 4,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "The",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "pLy1oOsSyjhho"
+          },
+          "seq": 24
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 5,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": " fixture",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "FV3ut9Pm"
+          },
+          "seq": 25
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 6,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": " returned",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "ZcxTF4x"
+          },
+          "seq": 26
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 7,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": " `",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "Wrts2jYZYTM65V"
+          },
+          "seq": 27
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 8,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "ok",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "WFTrU2IigFjilB"
+          },
+          "seq": 28
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 9,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": ":",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "SiPXhQ2tDbaM1WB"
+          },
+          "seq": 29
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 10,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": " true",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "fqTKXmmbfGZ"
+          },
+          "seq": 30
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 11,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "`",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "Xl5frRL0KccI0Aq"
+          },
+          "seq": 31
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 12,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": " and",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "bNiTGPJmJSl6"
+          },
+          "seq": 32
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 13,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": " `",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "uQTRLsq7NoZMvO"
+          },
+          "seq": 33
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 14,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "value",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "XkNAmJc1Ycu"
+          },
+          "seq": 34
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 15,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": ":",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "Azj5r8k9sHKSQX3"
+          },
+          "seq": 35
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 16,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": " ",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "MyPBs5AxnsernjY"
+          },
+          "seq": 36
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 17,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "1",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "URpgibV5DDM0LzN"
+          },
+          "seq": 37
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.delta",
+            "sequence_number": 18,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "`.",
+            "logprobs": [],
+            "safety_buffering": false,
+            "obfuscation": "Ay8V90BF1aKMxH"
+          },
+          "seq": 38
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.metadata",
+            "sequence_number": 19,
+            "response_id": "resp_<4>",
+            "metadata": {
+              "openai_chatgpt_moderation_metadata": {
+                "prompt": {
+                  "omnimod": {
+                    "protection_type": "[REDACTED]",
+                    "outputs": [
+                      {
+                        "results": [
+                          {
+                            "category_flags": {
+                              "A1": false,
+                              "A2": false,
+                              "A3": false,
+                              "C1": false,
+                              "C11": false,
+                              "C2": false,
+                              "E1": false,
+                              "E2": false,
+                              "E3": false,
+                              "H1": false,
+                              "H2": false,
+                              "H3": false,
+                              "JB1": false,
+                              "K1": false,
+                              "K2": false,
+                              "K3": false,
+                              "K4": false,
+                              "P1": false,
+                              "P2": false,
+                              "P3": false,
+                              "P4": false,
+                              "PD1": false,
+                              "PD4": false,
+                              "S1": false,
+                              "S3+": false,
+                              "S4": false,
+                              "SH": false,
+                              "TXT-C3": false,
+                              "TXT-C4": false,
+                              "V1": false,
+                              "V2+": false,
+                              "V4+": false,
+                              "REFUSED": false,
+                              "CBRN-B1+": false,
+                              "IMG-C1": false,
+                              "IMG-C11": false,
+                              "IMG-C2": false,
+                              "IMG-S1": false,
+                              "IMG-SH": false,
+                              "IMG-V1": false,
+                              "IMG-V2+": false,
+                              "IMG-V4+": false
+                            }
+                          }
+                        ],
+                        "is_blocked": false
+                      }
+                    ]
+                  }
+                },
+                "generation": {},
+                "tool_call": {},
+                "tool_response": {}
+              }
+            }
+          },
+          "seq": 39
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_text.done",
+            "sequence_number": 20,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "text": "The fixture returned `ok: true` and `value: 1`.",
+            "logprobs": []
+          },
+          "seq": 40
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.content_part.done",
+            "sequence_number": 21,
+            "item_id": "msg_<5>",
+            "output_index": 0,
+            "content_index": 0,
+            "part": {
+              "type": "output_text",
+              "text": "The fixture returned `ok: true` and `value: 1`.",
+              "annotations": [],
+              "logprobs": []
+            }
+          },
+          "seq": 41
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.output_item.done",
+            "sequence_number": 22,
+            "output_index": 0,
+            "item": {
+              "type": "message",
+              "id": "msg_<5>",
+              "metadata": {
+                "turn_id": "[REDACTED]"
+              },
+              "internal_chat_message_metadata_passthrough": {
+                "content_token_count": 0,
+                "create_time": 0,
+                "turn_id": "[REDACTED]"
+              },
+              "role": "assistant",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "The fixture returned `ok: true` and `value: 1`.",
+                  "annotations": [],
+                  "logprobs": []
+                }
+              ],
+              "phase": "final_answer"
+            }
+          },
+          "seq": 42
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "responsesapi.websocket_timing",
+            "timing_metrics": {
+              "timing_scope": "[REDACTED]",
+              "response_id": "[REDACTED]",
+              "responsesapi_chat_runner_streaming_token_batch_size": 0,
+              "websocket_output_text_delta_tbt_ms": 0,
+              "websocket_output_text_delta_count": 0,
+              "pre_inference_ms": 0,
+              "client_tool_pause_total_ms": 0,
+              "total_turn_time_s": 0,
+              "xapi_validation_time_s": 0,
+              "num_engine_calls": 0,
+              "engine_total_prompt_tokens_total": 0,
+              "first_sampled_message_ttft_ms": null,
+              "num_sampled_tokens_total": 0,
+              "critical_path": {
+                "scope": "[REDACTED]",
+                "coverage": "[REDACTED]",
+                "boundary_type": "[REDACTED]",
+                "num_engine_calls": 0,
+                "engine_iapi_total_ms": 0,
+                "sampling_and_stream_total_ms": 0
+              },
+              "server_timing_total_ms": 0
+            }
+          },
+          "seq": 43
+        },
+        {
+          "kind": "ws-message",
+          "direction": "receive",
+          "data": {
+            "type": "response.completed",
+            "sequence_number": 23,
+            "response": {
+              "input_transformations": [],
+              "id": "resp_<4>",
+              "object": "response",
+              "created_at": 1795317893,
+              "completed_at": 1795317894,
+              "status": "completed",
+              "background": false,
+              "frequency_penalty": 0,
+              "presence_penalty": 0,
+              "moderation": null,
+              "model": "gpt-6.1-terra",
+              "access_programs": {
+                "cyber": "standard"
+              },
+              "previous_response_id": "resp_<1>",
+              "instructions": "You are a recording probe for a test fixture. Follow the user request exactly and keep answers short.",
+              "output": [
+                {
+                  "type": "message",
+                  "id": "msg_<5>",
+                  "metadata": {
+                    "turn_id": "[REDACTED]"
+                  },
+                  "internal_chat_message_metadata_passthrough": {
+                    "content_token_count": 0,
+                    "create_time": 0,
+                    "turn_id": "[REDACTED]"
+                  },
+                  "role": "assistant",
+                  "status": "completed",
+                  "content": [
+                    {
+                      "type": "output_text",
+                      "text": "The fixture returned `ok: true` and `value: 1`.",
+                      "annotations": [],
+                      "logprobs": []
+                    }
+                  ],
+                  "phase": "final_answer"
+                }
+              ],
+              "error": null,
+              "incomplete_details": null,
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "fixture",
+                  "description": "Returns deterministic fixture data.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["a"],
+                    "additionalProperties": false
+                  },
+                  "output_schema": null,
+                  "strict": true
+                }
+              ],
+              "tool_choice": "auto",
+              "parallel_tool_calls": true,
+              "prompt_cache_key": "[REDACTED]",
+              "prompt_cache_retention": "24h",
+              "prompt_cache_options": {
+                "ttl": "30m",
+                "mode": "implicit",
+                "comparison_response_id": "resp_<1>"
+              },
+              "prompt_cache_diagnostics": {
+                "type": "unavailable"
+              },
+              "text": {
+                "format": {
+                  "type": "text"
+                },
+                "verbosity": "medium"
+              },
+              "top_p": 0.98,
+              "top_logprobs": 0,
+              "temperature": 1,
+              "reasoning": {
+                "effort": "medium",
+                "context": "all_turns",
+                "summary": null,
+                "mode": "standard"
+              },
+              "user": null,
+              "usage": {
+                "input_tokens": 132,
+                "input_tokens_details": {
+                  "cached_tokens": 0,
+                  "cache_write_tokens": 0,
+                  "cache_write_tokens_details": {
+                    "ttl_30m_tokens": 0,
+                    "ttl_12h_tokens": 0
+                  }
+                },
+                "output_tokens": 19,
+                "output_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "total_tokens": 151,
+                "attribution": {
+                  "items": {
+                    "fc_<6>": {
+                      "input_tokens": 19,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0
+                    },
+                    "fc_<8>": {
+                      "input_tokens": 17,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0,
+                      "content": [
+                        {
+                          "input_tokens": 17,
+                          "cached_tokens": 0,
+                          "cache_write_tokens": 0,
+                          "output_tokens": 0
+                        }
+                      ]
+                    },
+                    "msg_<7>": {
+                      "input_tokens": 19,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0,
+                      "content": [
+                        {
+                          "input_tokens": 19,
+                          "cached_tokens": 0,
+                          "cache_write_tokens": 0,
+                          "output_tokens": 0
+                        }
+                      ]
+                    },
+                    "msg_<9>": {
+                      "input_tokens": 17,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0,
+                      "content": [
+                        {
+                          "input_tokens": 17,
+                          "cached_tokens": 0,
+                          "cache_write_tokens": 0,
+                          "output_tokens": 0
+                        }
+                      ]
+                    },
+                    "msg_<10>": {
+                      "input_tokens": 2,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 19,
+                      "content": [
+                        {
+                          "input_tokens": 2,
+                          "cached_tokens": 0,
+                          "cache_write_tokens": 0,
+                          "output_tokens": 19
+                        }
+                      ]
+                    }
+                  },
+                  "request_fields": {
+                    "instructions": {
+                      "input_tokens": 24,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0
+                    },
+                    "tools": {
+                      "input_tokens": 34,
+                      "cached_tokens": 0,
+                      "cache_write_tokens": 0,
+                      "output_tokens": 0
+                    }
+                  }
+                }
+              },
+              "tool_usage": {
+                "image_gen": {
+                  "input_tokens": 0,
+                  "output_tokens": 0,
+                  "total_tokens": 0,
+                  "input_tokens_details": {
+                    "text_tokens": 0,
+                    "image_tokens": 0
+                  },
+                  "output_tokens_details": {
+                    "image_tokens": 0,
+                    "text_tokens": 0
+                  }
+                },
+                "web_search": {
+                  "num_requests": 0
+                }
+              },
+              "safety_identifier": "[REDACTED]",
+              "store": false,
+              "metadata": {},
+              "max_output_tokens": null,
+              "max_tool_calls": null,
+              "service_tier": "default",
+              "truncation": "disabled",
+              "image": {
+                "context_compression": "enabled"
+              }
+            },
+            "safety_buffering": false
+          },
+          "seq": 44
+        },
+        {
+          "kind": "ws-close",
+          "code": 1000,
+          "reason": "OK",
+          "seq": 45
+        }
+      ]
+    }
+  ],
+  "placeholders": {
+    "resp_<1>": "resp_<1>",
+    "fc_<2>": "fc_<2>",
+    "call_<3>": "call_<3>",
+    "resp_<4>": "resp_<4>",
+    "msg_<5>": "msg_<5>",
+    "fc_<6>": "fc_<6>",
+    "msg_<7>": "msg_<7>",
+    "fc_<8>": "fc_<8>",
+    "msg_<9>": "msg_<9>",
+    "msg_<10>": "msg_<10>"
+  }
+}

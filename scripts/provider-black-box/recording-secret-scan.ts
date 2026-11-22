@@ -167,11 +167,18 @@ export function scanRecordingText(
       label: 'JWT-shaped string',
       path: leaves.find((leaf) => jwtShape.test(leaf.text))?.path || '(raw file text)',
     });
+  // Live provider ids are canonicalized to `<kind>_<n>` placeholders before the scan; a raw one left in a value,
+  // an object key or a report path means the sanitizer missed a shape and the capture is not ready to keep.
+  const rawIdLeaf = leaves.find((leaf) => rawProviderId.test(leaf.text));
+  if (rawIdLeaf || rawProviderId.test(text))
+    findings.push({ label: 'raw provider id', path: rawIdLeaf?.path || '(raw file text)' });
   if (options.fixturePatterns !== false)
     for (const finding of scanFixtureSecrets(parsed).findings)
       findings.push({ label: `${finding.kind} pattern`, path: finding.path });
   return findings;
 }
+
+const rawProviderId = /\b(?:resp|rs|fc|msg|call|chatcmpl)_(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{16,}\b/;
 
 type DecodedLeaf = { path: string; text: string; variants: string[] };
 

@@ -19,10 +19,14 @@ record decisions already taken and premises already disproven:
   verified in code, not assumed.
 - The replay suite now has both `fake-provider-http-server.ts` and
   `fake-provider-websocket-server.ts`. The `ResponsesWS` capture adapter
-  (`websocket-capture.ts`) and the Codex route in `provider:record` now exist, but WS
-  replay remains synthetic because no live WS recording has been captured: Codex needs
-  the maintainer's ChatGPT login, so the recording waits on them running the command in
-  `fixtures/PROVENANCE.md` ("Recording Codex"). Credentialed recordings (Codex, OpenAI
+  (`websocket-capture.ts`) and the Codex route in `provider:record` now exist, and the
+  maintainer's first live Codex WebSocket capture (2026-11-22,
+  `fixtures/codex/tool-continuation-v2-codex-responses.json`) replays through the registry
+  model in `provider-contract.test.ts`. OpenAI over WebSocket is still synthetic only.
+  Reviewing that capture found live item ids used as object keys
+  (`response.usage.attribution.items`), which the value-only id canonicalization missed;
+  `fixture-sanitizer.ts` now canonicalizes id-shaped keys and the recording scan fails on
+  any raw `resp_`/`rs_`/`fc_`/`msg_`/`call_` id. Credentialed recordings (Codex, OpenAI
   over WebSocket) are scrubbed at capture time and secret-scanned after writing, unlike
   the raw HTTP recordings, because the person recording is not the one reviewing.
 - Frame granularity is fixed: the envelope stores **logical protocol frames** (parsed

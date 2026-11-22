@@ -42,9 +42,15 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
       shellEnabled: runCodeEnabled,
       editorSurface,
     }),
+    // Local shells always get $TMPDIR as Term2's scratch directory; an SSH host's TMPDIR is its own
+    // (headless-approval-redesign.md, decision 4).
     inlineSections:
-      sandboxEnabled && runCodeEnabled && !executionContext?.isRemote()
-        ? ['Sandboxed shell writes are allowed only inside the workspace and $TMPDIR. Use $TMPDIR for scratch files.']
+      runCodeEnabled && !executionContext?.isRemote()
+        ? [
+            sandboxEnabled
+              ? 'Sandboxed shell writes are allowed only inside the workspace and $TMPDIR. Use $TMPDIR for scratch files.'
+              : 'Use $TMPDIR for scratch files; plain /tmp is outside the workspace and writing there needs approval.',
+          ]
         : [],
   };
 }

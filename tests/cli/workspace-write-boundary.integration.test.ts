@@ -119,6 +119,11 @@ describe('headless, approval mode off', () => {
     { name: 'absolute path in the child scratch directory', call: (w) => create(path.join(w.scratch, 'scratch.txt')) },
     { name: 'shell redirect inside the workspace', call: () => shell('printf x > inside-shell.txt') },
     { name: 'shell redirect into $TMPDIR', call: () => shell('printf x > "$TMPDIR/shell-scratch.txt"') },
+    // Only writes to plain /tmp are outside: an input redirect from it is a read and runs.
+    {
+      name: 'shell input redirect from plain /tmp',
+      call: (w) => shell(`wc -c < ${path.join(w.outside, 'existing.txt')}`),
+    },
   ];
 
   it('refuses every write that leaves the workspace and runs the ones that do not', { timeout: 30_000 }, async () => {

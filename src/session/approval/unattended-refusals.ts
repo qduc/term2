@@ -53,7 +53,8 @@ function describeRequest(request: {
 
 /** The text the model receives as the refused call's result. */
 function refusalMessage(refusal: UnattendedRefusal, limitReached: boolean): string {
-  const scratch = scratchDirectoryHint(refusal.summary);
+  const scratch =
+    refusal.toolName === 'shell' || refusal.toolName === 'bash' ? scratchDirectoryHint(refusal.summary) : undefined;
   const head = `Refused by unattended approval (no person is available to approve): ${refusal.summary}. Reason: ${
     refusal.reason
   }.${scratch ? ` ${scratch}` : ''}`;

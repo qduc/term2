@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'path';
 import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
 import type { ILoggingService } from '../../../shared/service-interfaces.js';
@@ -135,9 +136,23 @@ function isSharedTempWriteTarget(inputPath: string | undefined): boolean {
   const inShared = ['/tmp', '/private/tmp'].some(
     (root) => normalized === root || normalized.startsWith(root + path.sep),
   );
-  const within = (root: string) => normalized === root || normalized.startsWith(root + path.sep);
+  // macOS: /tmp is a link to /private/tmp, and either spelling may name the same scratch dir or workspace.
+  const spellings = [
+    normalized,
+    normalized.replace(/^\/private(?=\/tmp(\/|$))/, ''),
+    normalized.replace(/^(?=\/tmp(\/|$))/, '/private'),
+  ];
+  const within = (root: string) =>
+    spellings.some((spelling) => spelling === root || spelling.startsWith(root + path.sep));
+  const workspace = path.resolve(getActiveWorkspaceRoot());
+  let physicalWorkspace = workspace;
+  try {
+    physicalWorkspace = fs.realpathSync(workspace);
+  } catch {
+    // A missing workspace keeps its lexical path.
+  }
   // A workspace that itself lives under /tmp keeps its own absolute paths inside.
-  return inShared && !within(SANDBOX_TEMP_DIR) && !within(path.resolve(getActiveWorkspaceRoot()));
+  return inShared && !within(SANDBOX_TEMP_DIR) && !within(workspace) && !within(physicalWorkspace);
 }
 
 export function analyzePathRisk(

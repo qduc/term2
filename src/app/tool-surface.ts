@@ -390,7 +390,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       );
       // A held shell write to plain /tmp: say where scratch files go (headless-approval-redesign.md, decision 4).
       const scratch =
-        request.toolName === 'shell' || request.toolName === 'bash'
+        !remote && (request.toolName === 'shell' || request.toolName === 'bash')
           ? scratchDirectoryHint(approvalArguments(request.toolName, request.input))
           : undefined;
       return decision.answer === 'y'

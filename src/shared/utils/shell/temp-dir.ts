@@ -131,7 +131,9 @@ export function resolveSandboxXdgLayout(cwd: string): SandboxXdgLayout {
  * (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 4).
  */
 export function scratchDirectoryHint(text: string): string | undefined {
-  for (const match of text.matchAll(/(?:^|[\s'"=:>(])((?:\/private)?\/tmp(?:\/[^\s'";|&<>()]*)?)/g)) {
+  for (const match of text.matchAll(
+    /(?:^|[\s'"=>(])((?:\/private)?\/tmp(?=[/\s'";|&<>()]|$)(?:\/[^\s'";|&<>()]*)?)/g,
+  )) {
     const target = match[1]!;
     if (target === SANDBOX_TEMP_DIR || target.startsWith(SANDBOX_TEMP_DIR + '/')) continue;
     return `Plain /tmp is outside the workspace. Use $TMPDIR (${SANDBOX_TEMP_DIR}) for scratch files.`;

@@ -7,11 +7,12 @@ import type { DirectHeadlessOptions, HeadlessDecision } from './types.js';
 const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
 
 /**
- * The conservative headless policy. Without `--auto-approve` every tool
- * approval is denied, with the old reason sent to the model. With it, ordinary
- * tools and low/unknown-risk shell commands are allowed; medium/high-risk shell
- * commands are refused because this client cannot reproduce the old evaluator.
- * A question has no headless answerer. The empty answer plus
+ * The fallback headless policy, used when the app supplies no decider (the app's
+ * own decider settles everything but questions). A headless run never asks
+ * (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 1):
+ * the mode already approved what it may before a request opened, so an open
+ * approval is refused with a reason. Without `--auto-approve` the reason keeps
+ * the old wording. A question has no headless answerer. The empty answer plus
  * `stopAfterApprovalResolution` is a selected resolution (the source canonical
  * "no answer" result), not a cancellation; it settles that question and
  * suppresses later model work.
@@ -32,20 +33,10 @@ export function decideHeadlessApproval(interaction: WireInteraction, autoApprove
   if (!autoApprove) {
     return { decision: { kind: 'deny', reason: NON_INTERACTIVE_REJECTION_REASON }, reportRejection: false };
   }
-  if (interaction.toolName !== 'shell' && interaction.toolName !== 'bash') {
-    return { decision: { kind: 'allow' } };
-  }
-  if (interaction.risk === 'medium' || interaction.risk === 'high') {
-    const level = interaction.risk === 'high' ? 'RED (dangerous)' : 'YELLOW (suspicious)';
-    return {
-      decision: {
-        kind: 'deny',
-        reason: `Heuristic validation failed: command is ${level} and cannot be executed automatically`,
-      },
-      reportRejection: true,
-    };
-  }
-  return { decision: { kind: 'allow' } };
+  return {
+    decision: { kind: 'deny', reason: 'No person is available to approve this in a non-interactive run.' },
+    reportRejection: true,
+  };
 }
 
 /** Settle snapshot/live interactions through the same policy. False means the

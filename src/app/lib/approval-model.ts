@@ -136,7 +136,7 @@ export function isDockerRequest(name: string, input: unknown, access: SessionAcc
   );
 }
 
-export function approvalHistory(history: readonly Item[]): ProviderInputItem[] {
+function approvalHistory(history: readonly Item[]): ProviderInputItem[] {
   return history.flatMap((item): ProviderInputItem[] => {
     switch (item.type) {
       case 'user_message':

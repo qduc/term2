@@ -230,13 +230,15 @@ it.each([false, true])(
     ]);
     expect(status, output).toBe(0);
     expect(seen.reviews).toHaveLength(1);
-    expect(seen.main[1].includes(process.version)).toBe(autoApprove);
+    // An explicit --approval-mode wins over --auto-approve, and `off` approves nothing without a person: the
+    // command never runs, with or without the flag (headless-approval-redesign.md, decisions 1 and 2).
+    expect(seen.main[1].includes(process.version)).toBe(false);
     const facts = loggedFacts(conversations);
     expect(facts.find((fact) => fact['type'] === 'interaction_opened')).toMatchObject({
       review: { kind: 'reviewed', approved: false, advisoryOnly: true, showReview: true },
     });
     const closed = facts.find((fact) => fact['type'] === 'interaction_closed');
-    expect(closed).toMatchObject({ resolution: { kind: autoApprove ? 'allow' : 'deny' } });
+    expect(closed).toMatchObject({ resolution: { kind: 'deny' } });
     expect(closed).not.toHaveProperty('automaticApproval');
   },
 );

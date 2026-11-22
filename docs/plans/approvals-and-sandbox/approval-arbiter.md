@@ -26,8 +26,11 @@ assessment visibility in human prompts, not recorded evidence. A reviewed result
 retains its advisory and display flag on the durable open fact even when hidden.
 Saved `advisory` settings migrate before validation to `off` and
 `showReview: true`; live commands reject the retired mode with replacement
-guidance. `--approval-mode` and `--show-review` set these separate preferences;
-the existing headless `--auto-approve` boolean remains separate.
+guidance. `--approval-mode` and `--show-review` set these separate preferences.
+In a non-interactive run, `--auto-approve` raises `off` to `auto` unless
+`--approval-mode` is given, and whatever the route leaves for a person is
+refused ([headless-approval-redesign.md](headless-approval-redesign.md),
+decisions 1 and 2).
 
 Approval mode and `sandbox.enabled` are independent. Changing either preserves
 the other. In particular, `always` leaves ordinary commands using the configured sandbox. ACP v1

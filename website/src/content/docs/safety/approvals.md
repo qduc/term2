@@ -20,7 +20,7 @@ Use `/auto-approve off`, `/auto-approve auto`, `/auto-approve unattended`, or `/
 
 `shell.showReview` is a separate setting, off by default. Enable it to show the assessment when a person must decide. With `off`, it also requests an advisory assessment for eligible requests, which cannot approve them. In `auto` and `unattended`, hiding the assessment does not disable the reviewer or remove recorded review evidence. Saved `advisory` settings migrate to `off` with `shell.showReview = true`; new commands must use the four modes above.
 
-The CLI options `--approval-mode` and `--show-review` select these settings separately. For a non-interactive prompt, the existing `--auto-approve` boolean is a separate execution option; see [non-interactive use](/term2/using-term2/non-interactive/).
+The CLI options `--approval-mode` and `--show-review` select these settings separately. A non-interactive prompt never asks: what would wait for a person is refused. There, `--auto-approve` selects `auto`; see [non-interactive use](/term2/using-term2/non-interactive/).
 
 **Sandbox and approvals are independent.** Switching approval modes preserves your sandbox preference, including in `always`. With the sandbox enabled, `always` can grant an eligible one-time network destination or supported foreground sandbox escape without a model review; it uses the request's scoped grant rather than disabling the sandbox. Background and Docker host-control escapes remain unsupported. Questions, explicit-user decisions such as `propose_goal`, and hard-gated requests that reach the approval router still require a person (or are refused in `unattended`). Use `always` only where you accept its broad permission grants.
 

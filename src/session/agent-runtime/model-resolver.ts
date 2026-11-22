@@ -53,11 +53,6 @@ function getTierModelPoolEntries(tier: AncillaryModelTier, settings: ISettingsSe
   return toTierModelPoolEntries(settings.getDynamic(`agent.${tier}Model`));
 }
 
-/** A tier pool's model ids, without their pinned providers. */
-export function getTierModelPool(tier: AncillaryModelTier, settings: ISettingsService): readonly string[] {
-  return getTierModelPoolEntries(tier, settings).map((entry) => entry.model);
-}
-
 export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: ISettingsService): ExactModelPolicy {
   // Stable first-entry pick: resolution runs from display paths as well as
   // execution paths, so the cursor must not advance here. Round-robin over

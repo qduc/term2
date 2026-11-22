@@ -38,11 +38,10 @@ imports Session, Engine or adopted code, and never opens conversation storage.
    `agent.backgroundWaitTimeoutMs` (default one hour) so the drain/wait bound
    stays app-configured.
 4. Pass `decideApproval` when the app can supply the exact
-   `NonInteractiveApprovalPolicy` decision (including shell safety and the
-   yellow-command evaluator) for a wire interaction. Without it the built-in
-   conservative policy applies: deny without `--auto-approve`; with it allow
-   ordinary tools and low/unknown-risk shell, deny medium/high-risk shell and
-   report that rejection. A question has no headless answerer: the default is
+   `NonInteractiveApprovalPolicy` decision for a wire interaction. Either way
+   a headless run never asks: an open approval request is refused with a
+   reason (an allowlisted MCP tool is the app decider's one allowance), because
+   the approval mode already approved what it may before the request opened. A question has no headless answerer: the default is
    the selected resolution `{kind:'answer', answer:'', stopAfterApprovalResolution:true}`,
    which settles the source canonical no-answer result and suppresses later
    work; it is not cancellation and must not pre-cancel the selected body. A

@@ -1,15 +1,11 @@
 import type { ApprovalDescriptor } from '../../tools/conversation.js';
-import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
-import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
-import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
-import { classifyCommandDetailed } from '../../tools/shell/command-safety/index.js';
 import { TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
 import { CHECK_IN_TOOL_NAME } from '../../tools/conversation.js';
-import { SafetyStatus } from '../../tools/shell/command-safety/constants.js';
-import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
-import { getTierModelPool } from '../agent-runtime/model-resolver.js';
 
 const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
+
+/** Why a request the approval route left for a person is refused when no person is present. */
+const NO_PERSON_REASON = 'No person is available to approve this in a non-interactive run.';
 
 export type NonInteractiveApprovalDecision =
   | { answer: 'y' }
@@ -21,49 +17,35 @@ export type NonInteractiveApprovalDecision =
     };
 
 export interface NonInteractiveApprovalPolicyDeps {
-  settingsService?: ISettingsService;
-  agentClient?: ShellAutoApprovalAgentClient;
-  logger?: ILoggingService;
-  sessionContextService: ISessionContextService;
   mcpAllowlist?: readonly string[];
   isMcpTool?: (name: string) => boolean;
   isMcpAllowed?: (name: string, allowlist: readonly string[]) => boolean;
 }
 
-const noOpLogger: ILoggingService = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  security: () => {},
-  setCorrelationId: () => {},
-  getCorrelationId: () => undefined,
-  clearCorrelationId: () => {},
-};
-
 /**
- * Decides whether a tool approval paused in a non-interactive session can be
- * resumed. This is deliberately policy-only: callers retain the continuation
- * loop and their own output handling.
+ * What a headless run does with a request the approval route left for a person
+ * (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decisions 1 and 2).
+ * Headless never asks, so such a request is refused with a reason and the model
+ * continues. The mode already did all the approving it may do before the request
+ * opened: a sandboxed or in-workspace call needed no approval, `auto` let the
+ * reviewer pass it, `always` bypassed it. Nothing here runs the shell classifier
+ * or a model; the one allowance is an MCP tool the user allowlisted.
+ *
+ * Before 2026-11-22 this policy approved again on its own: every non-shell tool,
+ * and shell commands by classifier and a chore-tier model, including requests
+ * the reviewer had rejected. That second approver is gone.
  */
 export class NonInteractiveApprovalPolicy {
   constructor(private readonly deps: NonInteractiveApprovalPolicyDeps) {}
 
-  async decide(input: {
-    autoApprove: boolean;
-    approval: ApprovalDescriptor;
-    getHistory?: () => unknown[];
-    /** A verdict the shared review already produced for this request; reused instead of a second model call. */
-    priorAdvisory?: { readonly approved: boolean; readonly reasoning: string };
-  }): Promise<NonInteractiveApprovalDecision> {
+  async decide(input: { autoApprove: boolean; approval: ApprovalDescriptor }): Promise<NonInteractiveApprovalDecision> {
     if (!input.autoApprove) {
       return { answer: 'n', rejectionReason: NON_INTERACTIVE_REJECTION_REASON, reportRejection: false };
     }
 
     const { approval } = input;
     // A run check-in (exhausted budget, stall, max turns) is not a tool: answering
-    // it 'y' grants the run more budget or turns. Auto-approval stands in for
-    // tool approvals only, so it never answers a check-in.
+    // it 'y' grants the run more budget or turns, which only a person may do.
     if (approval.checkIn || approval.toolName === CHECK_IN_TOOL_NAME) {
       return {
         answer: 'n',
@@ -72,19 +54,12 @@ export class NonInteractiveApprovalPolicy {
       };
     }
     if (this.deps.isMcpTool?.(approval.toolName) === true) {
-      const allowed = this.deps.mcpAllowlist ?? [];
-      const member = approval.toolName;
-      const matches = this.deps.isMcpAllowed?.(member, allowed) ?? false;
+      const matches = this.deps.isMcpAllowed?.(approval.toolName, this.deps.mcpAllowlist ?? []) ?? false;
       return matches
         ? { answer: 'y' }
-        : {
-            answer: 'n',
-            rejectionReason: NON_INTERACTIVE_REJECTION_REASON,
-            reportRejection: false,
-          };
+        : { answer: 'n', rejectionReason: NON_INTERACTIVE_REJECTION_REASON, reportRejection: false };
     }
-    // propose_goal mutates user-authored durable state; auto-approval modes can
-    // never stand in for the interactive user decision it requires.
+    // propose_goal mutates user-authored durable state.
     if (approval.toolName === TOOL_NAME_PROPOSE_GOAL) {
       return {
         answer: 'n',
@@ -92,75 +67,7 @@ export class NonInteractiveApprovalPolicy {
         reportRejection: false,
       };
     }
-    if (approval.toolName !== 'shell' && approval.toolName !== 'bash') {
-      return { answer: 'y' };
-    }
-
-    const command = approval.argumentsText;
-    const classification = classifyCommandDetailed(command, this.deps.logger);
-    if (classification.status === SafetyStatus.RED) {
-      return {
-        answer: 'n',
-        rejectionReason: 'Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically',
-        reportRejection: true,
-      };
-    }
-
-    // A rejection by the session's review stands whatever the classifier says:
-    // --auto-approve lets an unreviewed GREEN command through, never a rejected one.
-    if (input.priorAdvisory && !input.priorAdvisory.approved) {
-      return {
-        answer: 'n',
-        rejectionReason: `LLM evaluation rejected the command: ${input.priorAdvisory.reasoning}`,
-        reportRejection: true,
-      };
-    }
-
-    if (classification.status !== SafetyStatus.YELLOW || input.priorAdvisory?.approved) {
-      return { answer: 'y' };
-    }
-
-    const autoApproveModel =
-      this.deps.settingsService && this.deps.agentClient
-        ? getTierModelPool('chore', this.deps.settingsService)[0]
-        : undefined;
-    if (!autoApproveModel) {
-      return {
-        answer: 'n',
-        rejectionReason:
-          'Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured',
-        reportRejection: true,
-      };
-    }
-
-    const history = (input.getHistory?.() ?? []) as ProviderInputItem[];
-    try {
-      const callId = approval.callId || '__single__';
-      const advisories = await evaluateShellAutoApprovalAdvisories({
-        commands: [{ id: callId, command }],
-        history,
-        settingsService: this.deps.settingsService,
-        agentClient: this.deps.agentClient!,
-        logger: this.deps.logger ?? noOpLogger,
-        sessionContextService: this.deps.sessionContextService,
-      });
-      const advisory = advisories.get(callId);
-      if (advisory?.approved) {
-        return { answer: 'y' };
-      }
-      return {
-        answer: 'n',
-        rejectionReason: `LLM evaluation rejected the command: ${advisory?.reasoning ?? 'No reasoning provided'}`,
-        reportRejection: true,
-      };
-    } catch (error) {
-      return {
-        answer: 'n',
-        rejectionReason: `LLM auto-approval evaluation failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-        reportRejection: true,
-      };
-    }
+    // The caller appends the shared review's verdict, when one ran.
+    return { answer: 'n', rejectionReason: NO_PERSON_REASON, reportRejection: true };
   }
 }

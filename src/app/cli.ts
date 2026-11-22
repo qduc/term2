@@ -43,6 +43,7 @@ import {
 import type { HeadlessIo } from '../clients/headless/index.js';
 import {
   cliSettingsOverrides,
+  raiseOffForAutoApprove,
   CONTROL_USAGE,
   DISCORD_HELP,
   helpText,
@@ -309,6 +310,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     disableFilePersistence: true,
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
+  raiseOffForAutoApprove(options, settings);
   const logger = settings.getLoggingService();
   const modelOverrides = await applyModelOverrides(options, settings, logger, false);
   if (typeof modelOverrides === 'string') {

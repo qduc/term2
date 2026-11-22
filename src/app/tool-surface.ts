@@ -24,14 +24,9 @@ import { approvalRouteFor, describeApproval, unreviewedRefusalReason } from '../
 import { protectedWriteForFileTool } from '../tools/workspace/protected-write-paths.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
-import type { Item, ReasoningEffort } from '../model/index.js';
+import type { ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
-import {
-  approvalHistory,
-  createApprovalModelClient,
-  createAssistedApprovalReview,
-  isDockerRequest,
-} from './lib/approval-model.js';
+import { createApprovalModelClient, createAssistedApprovalReview, isDockerRequest } from './lib/approval-model.js';
 import { createDirectSubagentTools } from '../delegation/index.js';
 import { createDirectShellTools } from './shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec, sourceToolContext } from './source-tools.js';
@@ -282,10 +277,6 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     withWorkspace,
   });
   const policy = new NonInteractiveApprovalPolicy({
-    settingsService: settings,
-    logger,
-    sessionContextService: selection.sessionContext,
-    agentClient,
     // Exactly the source run_code collision set; MCP adapter owns member identity
     // and allowlist matching. No second name policy or live catalog lookup here.
     ...mcp?.approvalPolicy(new Set([...sourceGraph.map((tool) => tool.name), TOOL_NAME_DESCRIBE])),
@@ -361,7 +352,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       });
     },
     unattended: () => settings.get('shell.autoApproveMode') === 'unattended',
-    async decideInteraction(request, history, review) {
+    async decideInteraction(request, _history, review) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };
       if (request.kind === 'question') {
@@ -383,11 +374,11 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       // The session already reviewed this request before opening it (approval-arbiter.ts); an approval
       // never reaches here. Its verdict informs the no-person fallback instead of a second model call.
       const firstReview = review && review.kind !== 'not_reviewed' ? formatApprovalReview(review) : undefined;
-      // Legacy's headless continuation then decides from the session history,
-      // which does not yet hold the paused response's unresolved calls.
       const decision = await withWorkspace(() =>
         policy.decide({
-          autoApprove: options.autoApprove === true,
+          // A saved `auto` or stricter mode already lets the reviewer decide; only `off` without the flag is
+          // told to use --auto-approve.
+          autoApprove: options.autoApprove === true || settings.get('shell.autoApproveMode') !== 'off',
           approval: {
             agentName: agent.name,
             toolName: request.toolName,
@@ -395,9 +386,6 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
             rawInterruption: null,
             callId,
           },
-          getHistory: () => approvalHistory(settledHistory(history)),
-          // Reuse the verdict above instead of asking the model a second time.
-          ...(review?.kind === 'reviewed' ? { priorAdvisory: review.advisory } : {}),
         }),
       );
       // A held shell write to plain /tmp: say where scratch files go (headless-approval-redesign.md, decision 4).
@@ -477,12 +465,6 @@ function approvalArguments(name: string, input: unknown): string {
     return input.command;
   }
   return JSON.stringify(input) ?? '';
-}
-
-/** History without tool calls that have no result yet. */
-function settledHistory(history: readonly Item[]): readonly Item[] {
-  const settled = new Set(history.flatMap((item) => (item.type === 'tool_result' ? [item.callId] : [])));
-  return history.filter((item) => item.type !== 'tool_call' || settled.has(item.callId));
 }
 
 /** The Session renders the goal per request (planDirectInstructions); drop the unbound source copy. */

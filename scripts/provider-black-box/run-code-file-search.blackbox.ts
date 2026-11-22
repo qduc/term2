@@ -128,7 +128,7 @@ it('grep and glob stay inside the workspace: outside paths are refused and never
   const refusal = (tool: string) =>
     `Refused (needs user approval and could not be completed from inside this script): ${tool}`;
   const results = await runScriptedRunCode({
-    // The product's own approval policy: --auto-approve would approve reads outside the workspace too.
+    // The product's own approval policy: nothing outside the workspace is approved.
     approval: 'default',
     files: FILES,
     scripts: [
@@ -183,6 +183,8 @@ it('grep and glob stay inside the workspace: outside paths are refused and never
 
 it('glob with a pattern that leaves the workspace searches where the pattern points once approved', async () => {
   const results = await runScriptedRunCode({
+    // Approved without a review: --auto-approve now leaves outside reads to the reviewer.
+    approval: 'always',
     files: FILES,
     scripts: [
       { code: "return await tools.glob({ pattern: '../*.txt' });" },

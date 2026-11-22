@@ -5,6 +5,7 @@
  */
 import { join } from 'node:path';
 import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
 import { parseServeArgs, type ServeArgs } from '../host/gateway/serve-args.js';
 import { parseAcpArgs, type AcpArgs } from './serve-args.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
@@ -96,7 +97,7 @@ const FLAGS: readonly Flag[] = [
   opt(['--goal-criteria'], ' <text>', 'Optional success criteria (max 2,000 characters; requires --goal)'),
   opt(['--profile'], ' <name>', 'Select a profile (bare [default]; standard/full/lite = bare)', undefined, 'required'),
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
-  opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
+  opt(['--auto-approve'], '', 'Let the approval reviewer decide for a non-interactive prompt (--approval-mode auto)'),
   opt(['--approval-mode'], ' <mode>', 'Set approval policy: off, auto, unattended, always', undefined, 'required'),
   opt(['--show-review'], '', 'Show AI assessments in human approval prompts'),
   // Quiet only changes the non-interactive runner; the TUI ignores it, as the current CLI does.
@@ -194,7 +195,7 @@ export const helpText = (): string => `
     -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
         --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
         --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
-        --auto-approve                   Allow tool execution for a non-interactive prompt
+        --auto-approve                   Let the approval reviewer decide for a non-interactive prompt (--approval-mode auto)
         --approval-mode <mode>           Set approval policy: off, auto, unattended, always
         --show-review                    Show AI assessments in human approval prompts
     -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
@@ -218,8 +219,11 @@ export const helpText = (): string => `
     Settings file: ${join(resolveSettingsDirectory(), 'settings.json')}
 
   Notes
-    A prompt passed on the command line runs non-interactively. Tool execution is disabled by default;
-    use --auto-approve to allow tools to run without interactive confirmation.
+    A prompt passed on the command line runs non-interactively and never asks: whatever would wait for a
+    person is refused, and the model continues. Without flags only what needs no approval runs (work inside
+    the workspace, sandboxed shell commands). --auto-approve lets the approval reviewer decide the rest
+    (--approval-mode auto); --approval-mode always allows everything except hooks, Term2's settings and
+    git's hooks and config.
 
     -m/--model with no value (bare --model/-m, or followed only by another flag) opens an
     interactive picker in a TTY session with no prompt; the same picker also opens for an
@@ -460,4 +464,17 @@ export function cliSettingsOverrides(options: SessionOptions): {
       ...(options.showReview === undefined ? {} : { showReview: options.showReview }),
     },
   };
+}
+
+/**
+ * `--auto-approve` selects `auto` for a headless run: the approval reviewer decides what `off` would have
+ * asked about, and anything still left is refused. An explicit --approval-mode wins; a saved `unattended`
+ * or `always` is kept (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 2).
+ */
+export function raiseOffForAutoApprove(
+  options: Pick<SessionOptions, 'autoApprove' | 'approvalMode'>,
+  settings: Pick<ISettingsService, 'get' | 'set'>,
+): void {
+  if (options.autoApprove && options.approvalMode === undefined && settings.get('shell.autoApproveMode') === 'off')
+    settings.set('shell.autoApproveMode', 'auto', { persist: false });
 }

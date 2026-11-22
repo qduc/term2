@@ -17,13 +17,19 @@ Pass a prompt as a command-line argument.
 term2 "Explain the purpose of package.json in this project"
 ```
 
-Tool execution requires the separate `--auto-approve` boolean. `--approval-mode` selects `off`, `auto`, `unattended`, or `always`; `--show-review` controls assessment display. Neither flag replaces `--auto-approve`. With execution enabled, `auto` and `unattended` use the shared reviewer; `unattended` refuses unresolved permission requests. Requests that still need permission use the non-interactive fallback policy; this is separate from the approval-mode reviewer. `always` bypasses eligible permission prompts without model review while preserving your sandbox preference. See [approvals](/term2/safety/approvals/) for human-only decisions and unsupported escapes.
+A non-interactive run never asks: whatever would wait for a person is refused with a reason, and the model continues. The approval mode decides how much runs without asking:
+
+- **No flags** (`off`): only what needs no approval runs: file edits inside the workspace and the scratch directory, and shell commands the sandbox contains.
+- **`--auto-approve`** (`auto`): the approval reviewer decides what `off` would have asked about, such as an edit outside the workspace or an unsandboxed command. What it does not approve is refused.
+- **`--approval-mode always`**: everything runs except the [few writes that always need a person](/term2/safety/approvals/) (hooks, Term2's settings, git's hooks and config).
+
+An explicit `--approval-mode` wins over `--auto-approve`, and `--auto-approve` never lowers a saved `unattended` or `always`. `--show-review` controls assessment display. `always` keeps your sandbox preference. See [approvals](/term2/safety/approvals/) for human-only decisions and unsupported escapes.
 
 Replies stream to stdout. Diagnostic logs go to stderr.
 
-## Enabling Tool Execution (`--auto-approve`)
+## Letting the reviewer decide (`--auto-approve`)
 
-To permit the agent to run tools (such as reading files, writing changes, or executing commands), pass `--auto-approve`:
+To let the approval reviewer decide requests beyond the workspace and the sandbox, pass `--auto-approve`:
 
 ```bash
 term2 --auto-approve "Run pnpm typecheck and fix any trivial lint errors"

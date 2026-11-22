@@ -245,6 +245,13 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const gitPaths = resolveGitWorktreeWritePaths(workspaceRoot);
   const gitWritePaths =
     options.allowWrite !== false && !isPathProtected(workspaceRoot, home) ? gitPaths : { allow: [], deny: [] };
+  // Re-allowed inside denied directories under `standard`. The project cache lives under Term2's settings
+  // directory, which `agentCredentialPaths` denies: Linux re-binds write paths after the deny mount, but
+  // macOS Seatbelt re-allows reads only for `allowRead`, so without this the cache is write-only there.
+  const standardReadExceptions = [
+    ...(options.cacheDirectory ? [options.cacheDirectory] : []),
+    ...dockerSocketReadException,
+  ];
   const allowRead =
     readPolicy === 'strict'
       ? [
@@ -268,8 +275,8 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
           '/usr/local',
           '/opt/homebrew',
         ]
-      : dockerSocketReadException.length > 0
-      ? dockerSocketReadException
+      : standardReadExceptions.length > 0
+      ? standardReadExceptions
       : undefined;
 
   const rawAllowWrite =

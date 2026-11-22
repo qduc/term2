@@ -9,6 +9,11 @@ export type SanitizationReport = {
 const secretHeader = /^(authorization|cookie|x-api-key|api-key|proxy-authorization)$/i;
 const dynamicValue = /^(?:resp(?:onse)?|call|chatcmpl|msg|req|rs|fc|gen)[_-][\w-]+$/i;
 const secretValue = /^(?:bearer\s+|sk-[A-Za-z0-9_-]{12,})/i;
+/**
+ * A live provider id used as an object key (Codex's `usage.attribution.items` is keyed by the raw id of every
+ * item). Stricter than {@link dynamicValue} so ordinary keys such as `call_id` or `req_type` stay as they are.
+ */
+const dynamicKey = /^(?:resp(?:onse)?|call|chatcmpl|msg|req|rs|fc|gen)[_-](?=[\w-]*\d)[\w-]{16,}$/i;
 
 export function sanitizeFixtureEnvelope(input: FixtureEnvelopeV1): {
   envelope: FixtureEnvelopeV1;
@@ -49,7 +54,8 @@ export function sanitizeFixtureEnvelope(input: FixtureEnvelopeV1): {
     if (value && typeof value === 'object') {
       const result: Record<string, unknown> = {};
       const isThoughtPart = (value as Record<string, unknown>).thought === true;
-      for (const [key, child] of Object.entries(value)) {
+      for (const [rawKey, child] of Object.entries(value)) {
+        const key = dynamicKey.test(rawKey) ? mapDynamic(rawKey, `${path} (key)`) : rawKey;
         const childPath = `${path}.${key}`;
         if (
           /\.choices\[\d+\]\.delta\.reasoning$/.test(childPath) ||

@@ -6,6 +6,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseFixtureEnvelope, type FixtureEnvelopeV1, type WsMessageFrame } from './fixture-envelope.js';
+import { sanitizeFixtureEnvelope } from './fixture-sanitizer.js';
 import { plantedWebSocketSecrets, webSocketSelfValidationScenarios } from './fixture-self-validation.js';
 import {
   plantedResponderIdentity,
@@ -18,6 +19,7 @@ import {
   addCodexTokenLiterals,
   addJwtLiterals,
   addLiteral,
+  scanRecordingText,
   writeScannedRecording,
   type SensitiveLiteral,
 } from './recording-secret-scan.js';
@@ -292,6 +294,67 @@ describe('recording secret scan: encoded, re-cased and nested copies, and JWT cl
       expect(error).toBeInstanceOf(RecordingLeakError);
       expect((error as RecordingLeakError).findings[0]!.label).toContain("claim 'family_name'");
     }));
+});
+
+// Seen in the owner's first live Codex capture: `response.usage.attribution.items` is keyed by the raw
+// item ids of every item in the conversation, so a live id can arrive as an object key, not a value.
+describe('provider ids used as object keys', () => {
+  const liveMessageId = 'msg_0a80a7f3b0b304c2016b026082c72087d0a2a76c3ea9513240';
+  const liveCallId = 'fc_0a80a7f3b0b304c2016b026084d65887d0b3208d0d74645b5c';
+
+  it('are canonicalized to the same placeholder the id gets as a value, leaving ordinary keys alone', () => {
+    const envelope = {
+      schemaVersion: 1,
+      kind: 'real-traffic-recording',
+      provider: 'codex',
+      wireFamily: 'codex-responses',
+      transport: 'websocket',
+      capture: { probeScenario: 'tool-continuation-v2' },
+      placeholders: {},
+      turns: [
+        {
+          frames: [
+            {
+              kind: 'ws-message',
+              direction: 'receive',
+              seq: 1,
+              data: {
+                type: 'response.completed',
+                response: {
+                  output: [{ id: liveCallId, call_id: 'call_abcdefghijklmnop1234' }],
+                  usage: {
+                    attribution: {
+                      items: { [liveMessageId]: { input_tokens: 3 }, [liveCallId]: { input_tokens: 4 } },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    } as unknown as FixtureEnvelopeV1;
+    const { envelope: sanitized } = sanitizeFixtureEnvelope(envelope);
+    const text = JSON.stringify(sanitized);
+    expect(text).not.toContain('0a80a7f3b0b304c2016b0260');
+    const data = (sanitized.turns[0]!.frames[0] as WsMessageFrame).data as any;
+    const placeholderForCall = data.response.output[0].id;
+    expect(placeholderForCall).toMatch(/^fc_<\d+>$/);
+    expect(Object.keys(data.response.usage.attribution.items)).toContain(placeholderForCall);
+    expect(Object.keys(data.response.usage.attribution.items).every((key) => /^(?:msg|fc)_<\d+>$/.test(key))).toBe(
+      true,
+    );
+    expect(Object.keys(data.response.output[0])).toEqual(['id', 'call_id']);
+  });
+
+  it('fail the secret scan if one ever reaches a recording uncanonicalized', () => {
+    const findings = scanRecordingText(
+      JSON.stringify({ usage: { items: { [liveMessageId]: { input_tokens: 3 } } } }),
+      [],
+    );
+    expect(findings.map((finding) => finding.label)).toContain('raw provider id');
+    expect(scanRecordingText(JSON.stringify({ items: { 'msg_<5>': 1 }, call_id: 'call_<3>' }), [])).toEqual([]);
+  });
 });
 
 describe('recording files are only ever kept after a passing scan', () => {

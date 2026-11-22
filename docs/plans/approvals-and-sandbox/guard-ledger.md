@@ -694,7 +694,10 @@ exhausted-retries notice counting the requests actually made. A dispatch the
 engine reserved (`dispatchClaimed`) was admitted against the clock before its
 backoff, so `physicalModelStream` does not refuse it again on `deadlineExceeded`:
 timer lateness after a delay within ~2 ms of the remaining clock otherwise
-dropped an announced retry (verifier repro: 503, `retry-after: 89.999`, n = 1). The authorized zero-frame timeout exception below uses configured retry
+dropped an announced retry (verifier repro: 503, `retry-after: 89.999`, n = 1).
+The overshoot is that backoff plus request preparation, normally milliseconds;
+it can be longer only when preparation waits on a human run-budget check-in,
+and time spent waiting on a person is not recovery overhead. The authorized zero-frame timeout exception below uses configured retry
 counts and excludes measured receive silence, not recovery overhead. Separate
 total-run containment is unchanged. See
 [the incident contract and red proof](../../research/invalid-chain-worker-recovery.md).

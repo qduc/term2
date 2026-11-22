@@ -18,9 +18,13 @@ record decisions already taken and premises already disproven:
   collapsed into a single delta payload (`summarizeWebsocketResponse`). This is
   verified in code, not assumed.
 - The replay suite now has both `fake-provider-http-server.ts` and
-  `fake-provider-websocket-server.ts`. WS replay remains synthetic because no live WS
-  recording has been captured; the ResponsesWS/Codex live adapter is still the
-  highest-cost follow-up.
+  `fake-provider-websocket-server.ts`. The `ResponsesWS` capture adapter
+  (`websocket-capture.ts`) and the Codex route in `provider:record` now exist, but WS
+  replay remains synthetic because no live WS recording has been captured: Codex needs
+  the maintainer's ChatGPT login, so the recording waits on them running the command in
+  `fixtures/PROVENANCE.md` ("Recording Codex"). Credentialed recordings (Codex, OpenAI
+  over WebSocket) are scrubbed at capture time and secret-scanned after writing, unlike
+  the raw HTTP recordings, because the person recording is not the one reviewing.
 - Frame granularity is fixed: the envelope stores **logical protocol frames** (parsed
   SSE `event:`/`data:` pairs, WS messages, JSON bodies), never TCP chunk boundaries.
   TCP chunking is non-deterministic and unreplayable.
@@ -191,13 +195,25 @@ against the fake provider on loopback. `pnpm provider:record --help` lists the f
   1. *fetch middleware* (`source/providers/fetch/`): a recorder middleware placed
      outside the logging middleware; tees the raw response body without buffering it,
      extracts SSE events/JSON, records sanitized request.
-  2. *`ResponsesWS` events* (`source/providers/`): wraps the socket's `onmessage` and
-     the SDK's outbound send path; records the ordered bidirectional message stream.
+  2. *`ResponsesWS` events* (`scripts/provider-black-box/websocket-capture.ts`): wraps
+     the OpenAI SDK's `ResponsesWS.prototype._createSocket` in the recording process only
+     (no product change), recording the handshake (`ws-open` frame: path, scrubbed
+     headers, status), every message in both directions, and the close (`ws-close`
+     frame), one turn per socket. Values, the close reason included, are scrubbed as they
+     are captured (`wire-identity-scrubber.ts`), the envelope is sanitized, and the file is
+     written under a temporary name, secret-scanned against the credentials on the machine
+     (`recording-secret-scan.ts`) and only then renamed into place; a match deletes the
+     temporary file, leaves the final path untouched and exits 3. `_createSocket` is SDK-internal; the WS
+     self-validation fails if an SDK upgrade moves it.
   3. *AI SDK transport* (`source/providers/ai-sdk-*.ts`): hooks the AI SDK fetch/transport
      option for OpenRouter.
 - **Self-validation (D4):** `pnpm provider:record --from-fake <protocol> <scenario>`
   records from the existing fake server; the result must replay cleanly through the
   replay layer and diff to identity. This runs in CI with no credentials.
+  `--from-fake websocket <scenario>` does the same for the WebSocket adapter with planted
+  credentials and identity fields that must not survive; `websocket-recorder.test.ts`
+  runs it, the Codex route with a fake login against `probe-websocket-responder.ts`, and
+  the scan failing on a leak.
 - Recorder records `capture.apiSdkVersion` from the installed SDK package version.
 
 Acceptance: self-validation loop green in CI; recorder refuses to run without opt-in;
@@ -235,7 +251,9 @@ preserves cross-frame references; PROVENANCE.md entry required for each fixture.
   allow-list (D7).
 - **`fake-provider-websocket-server.ts`:** serves a `WebSocket` endpoint that
   validates outbound message order and replays recorded receives using the envelope's
-  ordered stream (D2). It has synthetic test coverage; no live WS envelope exists yet.
+  ordered stream (D2). With a recorded `ws-open` frame it also checks the handshake path
+  and headers; a scrubbed (`[REDACTED]`) value matches whatever the client sends. It has
+  synthetic test coverage; no live WS envelope exists yet.
 - **Deterministic mutations (D8):** keep the existing synthetic scenarios
   (`error | early-close | incomplete | tool-fragments | reasoning`) as hand-written
   frames; add envelope-driven truncations only where they add coverage (e.g. drop the
@@ -266,9 +284,11 @@ or missing message.
      wired under `fixtures/opencode/`.
   2. Direct Anthropic API capture remains optional and credit-gated; the Anthropic
      wire family is covered by the accepted OpenCode Go fixture.
-  3. OpenAI Responses WebSocket + Codex WebSocket: implement the live `ResponsesWS`
-     capture adapter and capture a bidirectional continuation; current WS coverage
-     remains synthetic.
+  3. OpenAI Responses WebSocket + Codex WebSocket: the live `ResponsesWS` capture
+     adapter, the Codex route and the discovery-based replay in `provider-contract.test.ts`
+     ("real WebSocket captures replay through the registry") exist; capture a
+     bidirectional continuation (the maintainer's run, `fixtures/PROVENANCE.md`) and
+     commit it. Current WS coverage remains synthetic until then.
 - OpenRouter's accepted fixture is large because the model emitted extensive
   reasoning deltas. Decide whether its maintenance value justifies retaining it or
   whether to replace it with a shorter approved model capture; do not remove it

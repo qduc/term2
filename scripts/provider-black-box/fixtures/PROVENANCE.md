@@ -27,8 +27,12 @@ for changes after capture.
   budget) to close that gap. Other Anthropic Messages coverage:
   `opencode/tool-continuation-v1-anthropic.json` (OpenCode Go) and
   `anthropic-openrouter/tool-continuation-v2-anthropic.json` (OpenRouter).
-- **Responses WebSocket/Codex WebSocket** — replay server coverage is synthetic; a
-  live bidirectional `ResponsesWS` capture adapter remains outstanding.
+- **Codex WebSocket / OpenAI Responses WebSocket** — the capture adapter, the Codex route in
+  `provider:record` and the replay path exist (see [Recording Codex](#recording-codex-for-the-owner)
+  and [Turning a WebSocket recording into a fixture](#turning-a-websocket-recording-into-a-fixture));
+  no live recording has been captured yet, so WebSocket replay coverage is still synthetic. It waits on
+  the maintainer running the command below with their own ChatGPT login. Codex over HTTP
+  (`--transport http`) and OpenAI over WebSocket can be recorded with the same tooling.
 - **OpenRouter maintenance** — the three Chat Completions fixtures are live captures of
   `mistralai/mistral-nemo` (2026-11-21), small enough to review whole. They record one
   upstream route (`provider` in the SSE chunks reads `DeepInfra`/`Mistral`); OpenRouter
@@ -184,3 +188,104 @@ for changes after capture.
 Run `pnpm provider:record --from-fake chat-completions success --provider fixture --model chat-fixture --out /absolute/private/path`, then `pnpm provider:fixture:prepare <recording>` and review the generated artifact. `--accept` places the reviewed envelope at `scripts/provider-black-box/fixtures/fixture/fake_chat-completions_success.json`, replacing the committed fixture. Live recording additionally requires `--yes`, credentials, an explicit `--probe`, and a real wire capture; it is never part of PR tests. To record a custom provider type against another base URL (for example OpenRouter's Messages or Chat Completions endpoint), add `--type <type> --base-url <url> --api-key-env <ENV NAME>`; see `pnpm provider:record --help`.
 
 Two traps found while recording the OpenRouter fixtures: `scanFixtureSecrets` reports a false `high-entropy` finding on every `model` field when the model id is 40 or more characters, so record with a model whose id is shorter; and OpenAI-family models on OpenRouter can be routed through the account's own OpenAI key and fail with HTTP 402 when that key has no credit, so prefer a model served by OpenRouter's own providers. The v1 probe prompt does not name the tool argument and Claude Haiku 4.5 asks for it instead of calling the tool, so record Claude models with `tool-continuation-v2`.
+
+## Recording Codex (for the owner)
+
+Codex needs a ChatGPT login, so only the maintainer can record it. The run happens on your machine; only
+the two output files come back, and they have been scrubbed and secret-scanned before they are kept.
+
+Prerequisites: Node 24 and pnpm, a checkout of this repository at the commit that has this section
+(`git pull`), `pnpm install --frozen-lockfile`, and a Codex login: `term2 --codex-login` (term2's own
+login, preferred), or a logged-in Codex CLI (`~/.codex/auth.json`, used as term2 uses it: its access token
+only, which must not be about to expire).
+
+The command (from the repository root):
+
+```bash
+pnpm provider:record --yes --provider codex --model gpt-5.3-codex --probe tool-continuation-v2 \
+  --out "$HOME/term2-codex-recording"
+```
+
+Use a Codex model your plan offers; `gpt-5.3-codex` is term2's default. `--out` must be an absolute path
+outside the repository (without it the files go to `~/.term2/provider-recordings`).
+
+- **Cost:** two model requests (`response.create`: the probe prompt, then the tool result and a
+  follow-up chained by `previous_response_id`) on one WebSocket connection, with retries off. If term2's
+  stored access token is within five minutes of expiry, one token refresh request to `auth.openai.com`
+  comes first, as in any term2 run. The prompts are synthetic (a `fixture` tool called with `a = 1`); no
+  file, path or conversation of yours is sent.
+- **What it prints:** before the first request, the endpoint your token is sent to
+  (`Recording codex via wss://chatgpt.com/backend-api/codex/responses`, or the `CODEX_BASE_URL`
+  you set) and the login file it read; paths under your home directory are printed as `~/...`.
+  Stop it (Ctrl-C) if the endpoint is not one you expect.
+- **Output:** `codex-websocket-tool-continuation-v2.json` (the recording: the handshake, every message
+  in both directions, and the close) and `codex-websocket-tool-continuation-v2.redactions.json` (the JSON
+  paths that were scrubbed and why, with no values). Send back these two files only. Ctrl-C or a
+  closed terminal during the scan removes the hidden `.<name>.<digits>-<hex>.unscanned` copies; only
+  a crash or a hard kill leaves one behind. Delete any such file, never send it.
+- **Scrubbed before anything is written** (`scripts/provider-black-box/wire-identity-scrubber.ts`):
+  every header value outside an allow-list (`openai-beta`, `originator`, `content-type`, `accept`,
+  `version`, `x-codex-beta-features`, `x-openai-internal-codex-responses-lite`), so `authorization`,
+  `chatgpt-account-id`, `session-id`, `thread-id`, `x-client-request-id`, `x-codex-window-id`,
+  `x-codex-turn-metadata`, `x-codex-installation-id`, `session_id`, `user-agent` and any new header keep
+  their names only. Every message other than a `response.*` event (the `codex.rate_limits` event in
+  any shape, any other `codex.*` event, `error`) keeps its `type` and its keys, and every string in it
+  becomes `[REDACTED]` and every number 0, so no plan, limit name or usage figure is kept. In
+  `response.*` events and the request, which are kept so the recording replays, a deny-list applies by
+  key: every value under a key naming an account, user, session, thread, turn, window, installation,
+  conversation, organization or org, project, workspace, tenant, owner, customer, billing, payment,
+  subscription, profile, device, machine, IP, country, location, address, phone, email, picture,
+  nickname, trace, plan, credits, safety or metadata, plus `prompt_cache_key`, `rate_limits`, `sid` and
+  name keys such as `display_name`, `given_name` and `family_name` (so all of `client_metadata`); any
+  other id (a string under a key ending in `id`, such as `request_id`) that is not a `resp_`, `rs_`,
+  `fc_`, `msg_` or `call_` id becomes `redacted-id-<n>`; any bearer-, `sk-`- or JWT-shaped string
+  anywhere, the WebSocket close reason included; binary messages (kept as a byte count). This is a
+  deny-list: a field the service adds under a name it does not cover (a plain `name` or `title`, say)
+  is kept, and only the scan below would catch a credential value in it. Then `sanitizeFixtureEnvelope`
+  replaces response, item and call ids with placeholders and redacts `encrypted_content`, signatures and
+  fingerprints, and the handshake response's headers are not kept at all.
+- **Secret scan before anything is kept** (`recording-secret-scan.ts`): both files are written under
+  temporary names in the output folder, read back and searched for every token, refresh token, id
+  token, JWT segment, account id, every string claim inside the JWTs (email, subject, name, nickname,
+  picture, account/user/organization ids, ...; not `iss`, `aud`, scopes, `amr` or `role`, and claims
+  shorter than 4 characters are skipped, 4-7 characters matched as whole words), the Codex installation
+  id and your home directory path, taken from every Codex credential file the recorder can see. Each
+  JSON string is decoded first, nested JSON included, and compared ignoring case and URL-decoded; the
+  URL-encoded and base64 (standard and url-safe) forms of each value are searched for too. Anything
+  JWT-shaped and the shared bearer/`sk-`/PEM/high-entropy patterns also fail it. Only when both files
+  pass are they renamed to their final names. A match deletes the temporary files, leaves anything
+  already at the final paths untouched, and exits 3, naming the label and JSON path of each match but
+  never the value.
+
+Optional, same login and folder, two more requests each: `--transport http` records Codex over HTTP
+(`codex-http-tool-continuation-v2.json`); `--provider openai --transport websocket --model <model>
+--probe tool-continuation-v1` records OpenAI's Responses WebSocket with `OPENAI_API_KEY`.
+
+Run `pnpm provider:record --help` for every flag. The tooling is exercised offline on every CI run by
+`websocket-recorder.test.ts` (WebSocket self-validation, the Codex path with a fake login against a
+loopback server, unknown identity fields and `codex.*` events, the close reason, the scan failing on a
+leak in plain, encoded, re-cased or nested form, a crash before the scan, and the printed endpoint).
+
+## Turning a WebSocket recording into a fixture
+
+1. Put the received `.json` (not the `.redactions.json`) somewhere outside the repository.
+2. `pnpm provider:fixture:prepare <file>` and read `<file>.review.json`: `secretScan.safe` must be true,
+   the handshake and every send/receive should read as the probe, and no value you do not recognise as
+   protocol should remain. A scan finding here is a high-entropy false positive or a real leak; do not
+   commit until it is explained.
+3. `TERM2_FIXTURE_REVIEWER="<name>" pnpm provider:fixture:prepare <file> --accept` writes
+   `fixtures/codex/tool-continuation-v2-codex-responses.json` (filed by provider, named by probe and wire
+   family) and appends a line here; expand that line to the form of the entries above (endpoint, model,
+   what was redacted, what the capture does and does not show).
+4. `pnpm build`, then `NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts
+   scripts/provider-black-box/provider-contract.test.ts scripts/provider-black-box/fixture-security.test.ts
+   scripts/provider-black-box/fixture-drift.test.ts`. The "real WebSocket captures replay through the
+   registry" block in `provider-contract.test.ts` finds every committed WebSocket fixture with a recorded
+   handshake and replays it through `replayWebSocketProbeRecording` (`websocket-probe-replay.ts`): the
+   registry model, the same probe and session context, a fake login, and the fake WebSocket server
+   checking the handshake and every outbound message. No test code is needed for a new capture.
+5. Update item 7 of `docs/plans/engineering/support-tier-gaps.md` and Phase 4 of
+   `docs/plans/engineering/real-traffic-record-replay-fixtures.md`.
+
+This procedure was rehearsed with a recording made against the loopback responder
+(`probe-websocket-responder.ts`) and a fake login; that rehearsal fixture was not committed.

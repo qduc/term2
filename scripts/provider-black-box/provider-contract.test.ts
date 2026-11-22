@@ -13,7 +13,11 @@ import { RetryingModel } from '../../src/model/providers/retrying-model.js';
 import { isTransientRetryableError } from '../../src/model/failure/retry-error-classification.js';
 import type { ILoggingService, ISettingsService } from '../../src/shared/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
-import { readFixtureEnvelope } from './fixture-envelope.js';
+import { readFixtureEnvelope, parseFixtureEnvelope, type FixtureEnvelopeV1 } from './fixture-envelope.js';
+import { replayWebSocketProbeRecording } from './websocket-probe-replay.js';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fixtureRequest, fixtureTool, multiTurnFixture } from './provider-wire-fixtures.js';
 import { getProbeScenario } from './probe-scenarios.js';
 
@@ -1235,6 +1239,59 @@ describe('provider boundary contracts through the registry', () => {
     expect(server.requests).toHaveLength(2);
   });
 });
+
+/**
+ * Live WebSocket captures (`provider:record --transport websocket`, Codex or OpenAI) replay through the
+ * registry with the probe they were recorded with. Discovered from the fixture tree, so committing a
+ * prepared capture under `fixtures/<provider>/` is all it takes to add its replay; see
+ * `fixtures/PROVENANCE.md` ("Turning a Codex recording into a fixture"). Until one is committed the
+ * placeholder below is reported as skipped.
+ */
+const liveWebSocketFixtures = discoverLiveWebSocketFixtures();
+
+describe('real WebSocket captures replay through the registry', () => {
+  if (!liveWebSocketFixtures.length)
+    it.skip('no live Codex/OpenAI WebSocket capture is committed yet (see fixtures/PROVENANCE.md)', () => {});
+  for (const { name, fixture } of liveWebSocketFixtures) {
+    it(`${name} replays its tool continuation over WebSocket`, async () => {
+      const replay = await replayWebSocketProbeRecording(fixture);
+      const allEvents = [...replay.firstEvents, ...replay.secondEvents];
+      // A Codex stream reports the call as a `tool_call` event and again in the completion's output.
+      const callIds = allEvents
+        .flatMap((event: any) => (event.type === 'tool_call' ? [event] : event.output ?? []))
+        .filter((event: any) => event.type === 'tool_call')
+        .map((event: any) => event.id ?? event.callId);
+      expect(new Set(callIds).size).toBe(1);
+      expect(replay.secondEvents.filter((event) => event.type === 'text_delta').length).toBeGreaterThan(0);
+      expect(replay.secondEvents.at(-1)).toMatchObject({ type: 'completion' });
+      const receivedTypes = fixture.turns.flatMap((turn) =>
+        turn.frames.flatMap((frame) =>
+          frame.kind === 'ws-message' && frame.direction === 'receive' ? [(frame.data as any)?.type] : [],
+        ),
+      );
+      expect(receivedTypes).toContain('response.function_call_arguments.delta');
+      expect(receivedTypes.filter((type) => type === 'response.completed')).toHaveLength(2);
+    });
+  }
+});
+
+function discoverLiveWebSocketFixtures(): Array<{ name: string; fixture: FixtureEnvelopeV1 }> {
+  const root = fileURLToPath(new URL('./fixtures', import.meta.url));
+  const found: Array<{ name: string; fixture: FixtureEnvelopeV1 }> = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.name.endsWith('.json')) {
+        const fixture = parseFixtureEnvelope(readFileSync(path, 'utf8'));
+        const live = fixture.turns.some((turn) => turn.frames.some((frame) => frame.kind === 'ws-open'));
+        if (fixture.transport === 'websocket' && live) found.push({ name: relative(root, path), fixture });
+      }
+    }
+  };
+  walk(root);
+  return found.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 async function runProviderCase(providerCase: ProviderCase, scenario: 'success' | 'tool-fragments') {
   server = await startFakeProviderHttpServer({ scenario, protocol: providerCase.protocol });

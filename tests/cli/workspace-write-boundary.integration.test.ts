@@ -117,11 +117,22 @@ describe('headless, approval mode off', () => {
     { name: 'protected hooks directory inside the workspace', call: () => create('.term2/hooks/pre.sh') },
     { name: 'shell redirect with ..', call: () => shell('printf x > ../outside/shell-dotdot.txt') },
     { name: 'shell redirect to ~', call: () => shell('printf x > ~/shell-tilde.txt') },
+    // Plain /tmp is outside the workspace (headless-approval-redesign.md, decision 4); the world lives under it.
+    {
+      name: 'shell redirect to plain /tmp outside the scratch area',
+      call: (w) => shell(`printf x > ${path.join(w.outside, 'shell-tmp.txt')}`),
+    },
   ];
   const controls: { name: string; call: (w: World) => Call }[] = [
     { name: 'relative path that stays inside', call: () => create('sub/../inside.txt') },
     { name: 'absolute path in the child scratch directory', call: (w) => create(path.join(w.scratch, 'scratch.txt')) },
     { name: 'shell redirect inside the workspace', call: () => shell('printf x > inside-shell.txt') },
+    { name: 'shell redirect into $TMPDIR', call: () => shell('printf x > "$TMPDIR/shell-scratch.txt"') },
+    // Only writes to plain /tmp are outside: an input redirect from it is a read and runs.
+    {
+      name: 'shell input redirect from plain /tmp',
+      call: (w) => shell(`wc -c < ${path.join(w.outside, 'existing.txt')}`),
+    },
   ];
 
   it('refuses every write that leaves the workspace and runs the ones that do not', { timeout: 30_000 }, async () => {
@@ -131,6 +142,8 @@ describe('headless, approval mode off', () => {
     const { world: w, at } = result;
     expect(result.status, result.stderr).toBe(0);
     expect(result.results).toHaveLength(escapes.length + controls.length);
+    // The /tmp case is only an escape from the scratch area when the world itself is under /tmp.
+    expect(w.outside.startsWith('/tmp/'), 'test worlds live under /tmp').toBe(true);
 
     // Each escape was held for approval and answered no by the headless policy: that is the reason given.
     escapes.forEach((escape, index) => {
@@ -148,6 +161,8 @@ describe('headless, approval mode off', () => {
     expect(fs.readdirSync(at.sibling)).toEqual([]);
     expect(exists(path.join(w.home, 'tilde.txt'))).toBe(false);
     expect(exists(path.join(w.home, 'shell-tilde.txt'))).toBe(false);
+    const tmpIndex = escapes.findIndex((escape) => escape.name.startsWith('shell redirect to plain /tmp'));
+    expect(result.results[tmpIndex]?.text, 'names the scratch area').toContain('Use $TMPDIR');
     expect(exists(path.join(w.workspace, '.term2', 'hooks', 'pre.sh'))).toBe(false);
 
     // The controls ran without being held, so the refusals above are not a blanket refusal.
@@ -157,6 +172,7 @@ describe('headless, approval mode off', () => {
     expect(fs.readFileSync(path.join(w.workspace, 'inside.txt'), 'utf8')).toBe('written\n');
     expect(fs.readFileSync(path.join(w.scratch, 'scratch.txt'), 'utf8')).toBe('written\n');
     expect(fs.readFileSync(path.join(w.workspace, 'inside-shell.txt'), 'utf8')).toBe('x');
+    expect(fs.readFileSync(path.join(w.scratch, 'shell-scratch.txt'), 'utf8')).toBe('x');
   });
 });
 

@@ -1,5 +1,6 @@
 import { sanitizeApprovalReviewText, type ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { Fact } from '../facts.js';
+import { scratchDirectoryHint } from '../../shared/utils/shell/temp-dir.js';
 
 /**
  * Unattended approval: a request nobody may answer is refused to the model, and
@@ -52,7 +53,11 @@ function describeRequest(request: {
 
 /** The text the model receives as the refused call's result. */
 function refusalMessage(refusal: UnattendedRefusal, limitReached: boolean): string {
-  const head = `Refused by unattended approval (no person is available to approve): ${refusal.summary}. Reason: ${refusal.reason}.`;
+  const scratch =
+    refusal.toolName === 'shell' || refusal.toolName === 'bash' ? scratchDirectoryHint(refusal.summary) : undefined;
+  const head = `Refused by unattended approval (no person is available to approve): ${refusal.summary}. Reason: ${
+    refusal.reason
+  }.${scratch ? ` ${scratch}` : ''}`;
   return limitReached
     ? `${head} The refusal limit for this run was reached, so the run stops here.`
     : `${head} Do not retry it or route around it. Take a different approach that needs no approval, or finish and report what you could not do.`;

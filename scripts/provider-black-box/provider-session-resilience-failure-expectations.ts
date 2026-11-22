@@ -49,15 +49,17 @@ const wsClose = (code: number, reason: string) =>
   `WebSocket connection closed before a terminal response event. (code=${code} reason="${reason}" unsent=0)`;
 
 /**
- * `kind`, `retryable` and `notice` are unasserted for the WebSocket closes on purpose: the same wire failure is
- * `network`/`retryable: true` with no `/retry turn` notice on openai-websocket and `provider`/`retryable: false`
- * on codex-websocket. Left open until the two lanes agree.
+ * A WebSocket closed before the terminal event is stored as `network` and retryable on both lanes (owner decision
+ * 2026-11-22): the stored fields describe the failure. Codex wraps the close in `AmbiguousModelOutcomeError` so the
+ * request is never replayed on the same chain, and `toModelFailure` classifies the close itself, not the wrapper.
+ * Recovery is decided from the close evidence, the same on both lanes, so neither offers `/retry turn` after the
+ * partial text.
  */
 const wsClosed = (code: number, reason: string): FailureExpectation => ({
-  kind: undefined,
+  kind: 'network',
   message: wsClose(code, reason),
-  retryable: undefined,
-  notice: undefined,
+  retryable: true,
+  notice: 'none',
   partial: 'partial',
 });
 

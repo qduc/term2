@@ -61,7 +61,8 @@ Ordered by what a miss costs, then by how likely the miss is.
      `codex-auth.json`, `grok-auth.json` and `settings.json` there returned
      their contents to the model. A decision: which of those files the
      sandbox hides, given that a `term2` started inside the sandbox would
-     then not find them.
+     then not find them. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - The sandbox's proxy bridge is `socat TCP-LISTEN:3128`, which opens an
      IPv6 socket. On a kernel without IPv6 the bridge never starts and every
      proxied command fails with "Failed to connect to localhost port 3128"
@@ -117,11 +118,13 @@ Ordered by what a miss costs, then by how likely the miss is.
      reviewer model has rejected it (`decideHeadlessApproval` allows every
      tool that is not the shell). A rejected shell command stays rejected.
      The flag's help says it skips confirmation, so this may be intended; it
-     is not asserted either way.
+     is not asserted either way. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - With the sandbox off, a shell redirect to an absolute path under `/tmp`
      runs without approval in mode `off`, wherever the workspace is, because
      the path classifier treats `/tmp` as safe. Redirects through `..` or `~`
-     are held. The tests assert only the held cases.
+     are held. The tests assert only the held cases. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - The comment on the existing real-sandbox case says the bare profile
      edits through the shell. Bare also has `create_file` and
      `search_replace`, which approval admits, not the sandbox.
@@ -177,47 +180,37 @@ section is a real recording behind every provider, replayed offline.
      provider.
    - Fixed: `GROK_BASE_URL` redirected model requests but not
      `fetchGrokModels`. Both now use `grokBaseUrl`.
-   - Open, a decision: a failed `--json` run emits a `final` event before the
-     `error` event, with empty `finalText` on a 426 and with the partial text
-     when a stream is cut short. `OutputState.endTurn` in
-     `src/clients/headless/output.ts` emits `final` for every ended turn, and
-     two tests read usage and the terminal cause from it on runs that did not
-     complete, so removing it is a contract change. The narrowest change
-     would leave `final` in place and omit the partial text when the outcome
-     is `failed`.
-   - Open, waiting on an `@qduc/agent-core` release; not specific to Grok:
-     with `agent.retryAttempts` at n, a provider that keeps answering 503
-     receives 2 × (n + 1) requests for n of 1 or 2, and one request for n of
-     0. The same counts were seen for `openai`, `grok`, `codex` and both chat
-     custom types, and for a connection dropped before any response. The
-     maintainer decided that n counts retries: n + 1 requests, every retry
-     announced as k/n, and the stored notice counting the requests sent.
-     The earlier diagnosis here, that `physicalModelStream` in
-     `src/model/retry.ts` makes n + 1 attempts under the engine's retries, was
-     wrong: with the engine's `request.recovery` it makes one, and the
-     provider factories get `retryAttempts: 0` (`lazyModel` in
-     `src/model/provider.ts`), so the SDK and `RetryingModel` add none
-     (`tests/model/custom-provider-retries.integration.test.ts` counts this at
-     a loopback server). The doubling is entirely `DirectRecovery#transient`
-     in agent-core 0.3.0-alpha.0's `engine/recovery.ts`: up to n silent
-     retries, then one "retrying k/n" turn-level retry that restarts them,
-     stopped by the recovery budget's single automatic replay. Measured on the
-     built CLI: n = 1 shows one `1/1` notice and stores "after 2 attempts" for
-     four requests; n = 2 shows one `1/2` notice and stores "after 1 attempt"
-     (the budget's physical-attempt count) for six. Term2 cannot fix this
-     through the engine's seams: `DirectRecoveryOptions` takes only the retry
-     count, the model-retry count, a budget and a random source; the silent
-     retries never consult the budget, so a budget can only stop the
-     turn-level retry, and then the notice counts no silent request; and no
-     retry count gives n + 1 requests (1, 4, 6, 8 … for counts 0, 1, 2, 3). The
-     proposed agent-core change gives every transient retry one counter and a
-     notice, spends a physical attempt but not the automatic replay, and
-     reports the requests sent; against the built CLI it gives 1, 2 and 3
-     requests on custom chat, OpenAI Responses and Codex, and 2 for Grok at
-     n = 1. The checks for n ≥ 1 in `provider-retries-exhausted-notice.blackbox.ts`
-     and `provider-session-grok-client.blackbox.ts` skip while the pin is
-     0.3.0-alpha.0 and run once it moves. With that change the recovery
-     budget's three physical attempts still cap n above 3 at four requests.
+   - Decided 2026-11-22 and done: a failed `--json` run still emits `final`
+     before `error`, because two tests and scripts read usage and the terminal
+     cause from it, but `OutputState.endTurn` in
+     `src/clients/headless/output.ts` now gives a failed turn no answer: an
+     empty `finalText`, even when an earlier step had text, and no text a step
+     streamed without being accepted (`evidence: 'text_delta'`) in `turnItems`
+     (`withoutUnacceptedText`). Accepted items of earlier steps stay. Both
+     fields used to carry the partial text of a stream cut short; that text
+     still arrives as `text_delta` events.
+     `provider-session-chat-terminal-errors.blackbox.ts` asserts it on both
+     chat rows.
+   - Decided 2026-11-22 and fixed in `@qduc/agent-core` 0.3.0-alpha.1
+     (qduc/agent-runtime#17): `agent.retryAttempts` = n sends n + 1 requests
+     to a provider that keeps failing before any output, every retry announced
+     as k/n and the stored notice counting the requests sent. Before, n of 1 or
+     2 sent 2 × (n + 1) requests, on `openai`, `grok`, `codex` and both chat
+     custom types, and for a connection dropped before any response. An
+     earlier diagnosis here, that `physicalModelStream` in `src/model/retry.ts`
+     retries under the engine, was wrong: with the engine's `request.recovery`
+     it makes one attempt, and the provider factories get `retryAttempts: 0`
+     (`lazyModel` in `src/model/provider.ts`), so the SDK and `RetryingModel`
+     add none (`tests/model/custom-provider-retries.integration.test.ts`). The
+     doubling was `DirectRecovery#transient` in 0.3.0-alpha.0: up to n silent
+     retries, then one "retrying k/n" turn-level retry that restarted them.
+     It now has one counter, and each retry spends a physical attempt but not
+     the automatic replay. `provider-retries-exhausted-notice.blackbox.ts`
+     counts 1, 2 and 3 requests for n of 0, 1 and 2 on custom chat, OpenAI
+     Responses and Codex, and `provider-session-grok-client.blackbox.ts` 2 for
+     Grok at n = 1. The recovery budget's three physical attempts still cap n
+     above 3 at four requests, and the `connection_interrupted` path (a stream
+     cut after it started) has a similar shape and was not changed.
 7. **Record what has only been faked.** Recorded fixtures exist for OpenAI over
    HTTP, Google, OpenCode's Chat and Anthropic protocols, and, recorded through
    OpenRouter, the `openai-compatible`, custom `openai` and `anthropic` custom
@@ -313,15 +306,19 @@ section is a real recording behind every provider, replayed offline.
       - Fixed in the fixture: the Google route showed only `Internal Server
         Error` because the fixture's HTTP 500 body was not Google-shaped. With
         `{error: {code, status, message}}` the product shows the message.
-      - Open, a decision: a WebSocket closed before the terminal event is
-        persisted as `network` and retryable on the OpenAI lane and as
-        `provider` and not retryable on the Codex lane, which wraps the close
-        in `AmbiguousModelOutcomeError` so the request is not replayed on the
-        same chain. The engine decides recovery from the close evidence, which
-        is the same on both lanes, so only the persisted `kind` and
-        `retryable` differ; neither lane offers `/retry turn` after partial
-        text. No doc says which the persisted fields should be. The four rows
-        stay unasserted.
+      - Decided 2026-11-22 and done: a WebSocket closed before the terminal
+        event is persisted as `network` and retryable on both lanes. The Codex
+        lane wraps the close in `AmbiguousModelOutcomeError` so the request is
+        not replayed on the same chain, and `toModelFailure` used to classify
+        the wrapper, giving `provider` and not retryable; it now classifies
+        the wrapped close (`describedFailure` in `src/model/failure.ts`). Only
+        a failure with `connection_interrupted` evidence is unwrapped: the
+        engine recovers those from the evidence, not from `retryable`, and a
+        local-compaction summary already retried them. Other causes Codex wraps
+        (a reset connection, a handshake 502, close code 4000) keep `provider`
+        and not retryable, because the summary retry reads `retryable` without
+        evidence and would start retrying them. Neither lane offers `/retry
+        turn` after partial text. The four rows are now asserted.
 11. **Done: the ledger is checked against the tests.**
     `reconcileExecutionsWithTests`, run by `provider-capability-matrix.test.ts`,
     compares the executed-scenario lists with the titles Vitest collects from
@@ -337,9 +334,14 @@ section is a real recording behind every provider, replayed offline.
     variables in `SETTING_ENV_VARIABLES`. Not covered: web-search keys given
     only in `settings.json`, and the "configured" state the provider picker
     derives from `CUSTOM_PROVIDER_ENV_KEYS`. Findings:
-    - Precedence differs by provider. For OpenAI, OpenRouter and web search the
-      environment wins over `settings.json`; for the custom types a stored
-      `apiKey` wins over the environment. The tests pin both.
+    - Decided 2026-11-22 and done: a saved key wins everywhere. OpenAI,
+      OpenRouter and web search used to let the environment win over
+      `settings.json`, while the custom types let a stored `apiKey` win. Now a
+      non-empty key in `settings.json` wins on all of them and the variable is
+      the fallback (`ENV_FALLBACK_CREDENTIAL_KEYS` in
+      `src/config/settings/settings-env.ts`). The tests assert the saved key on
+      the wire for OpenAI, OpenRouter and Tavily, and an empty saved Tavily key
+      falling back to the variable.
     - Fixed: with no OpenAI key anywhere the request was sent with the bearer
       value `placeholder`. `openai.provider.ts` now stops before any model
       request and says the key is not configured, as OpenRouter does, unless
@@ -400,15 +402,24 @@ section is a real recording behind every provider, replayed offline.
     `tests/cli/release-data.integration.test.ts` asserts the wording. Not
     covered: the TUI resume picker, and a log in which only later lines carry
     an unknown version.
-16. **Decide whether `settings.json` gets a version field.** It has none, so an
-    incompatible change cannot be detected on load; the snapshot test protects
-    only the values it asserts on. Two related behaviours seen while capturing
-    the snapshot: the file is written as a full dump of defaults, and that dump
-    includes `memory.directory` as an absolute path computed on the machine
-    that wrote it, so a copied settings file points memory at the old machine's
-    path. Separately, a conversation log records its workspace as an absolute
-    path and resume is refused from any other directory, so a moved or renamed
-    project cannot resume its conversations.
+16. **Decided and done: `settings.json` has a version field.** Owner decision
+    2026-11-22: a top-level `version` with loader-owned migrations keyed by it;
+    machine-specific defaults are no longer written; conversations remain bound
+    to the folder they were started in. `SETTINGS_FILE_VERSION` and the ordered
+    `SETTINGS_FILE_MIGRATIONS` are in `src/config/settings/file/settings-file-version.ts`.
+    A file without `version` is version 0 and is migrated and rewritten at the
+    current version; a newer or non-numeric version is refused at startup with a
+    message naming it, and the file is left unchanged, as an unknown log `v` is.
+    `memory.directory` is written only when set, when it differs from the
+    machine's default, or when the file already held it, so a new file no longer
+    carries an absolute path from the machine that wrote it. An existing dumped
+    value is kept: it cannot be told apart from a chosen one. The rest of the
+    file is still a full dump of defaults; Contract 10 (decision 5) says why.
+    `tests/cli/settings-file-version.integration.test.ts` checks a fresh
+    install, the 1.4.0 snapshot, a newer version and a corrupt file through the
+    built CLI. Known limit: a build without the field (1.4.0 and earlier) drops
+    `version` when it rewrites the file, and the next load migrates it again
+    from version 0.
 17. **Test the automatic triggers.** Done for a custom `openai-compatible`
     provider: `tests/cli/automatic-compaction.integration.test.ts` (headless)
     and `scripts/provider-black-box/automatic-rollover.blackbox.ts` (TUI). They

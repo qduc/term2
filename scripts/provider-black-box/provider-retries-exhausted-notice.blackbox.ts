@@ -1,5 +1,4 @@
 import { createServer, type Server } from 'node:http';
-import { readFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,16 +15,11 @@ import { createIsolatedWorkspaceLease, type IsolatedWorkspaceLease } from './pro
  */
 
 /**
- * @qduc/agent-core 0.3.0-alpha.0 retries a request that fails before any output
- * on two schedules: up to n silent retries, then a "retrying k/n" turn-level retry
- * that restarts them, capped by its one automatic replay. A provider that keeps
- * failing therefore sees 2 × (n + 1) requests for n >= 1 (`#transient` in its
- * `engine/recovery.ts`). The n >= 1 cases run once the pin moves past that release;
- * a release that still multiplies retries then fails them.
+ * @qduc/agent-core 0.3.0-alpha.0 sent 2 × (n + 1) requests for n >= 1: up to n
+ * silent retries, then a "retrying k/n" turn-level retry that restarted them
+ * (`#transient` in its `engine/recovery.ts`). 0.3.0-alpha.1 sends n + 1; these
+ * cases fail on an engine that multiplies retries again.
  */
-const PINNED_ENGINE_MULTIPLIES_RETRIES =
-  (JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { dependencies: Record<string, string> })
-    .dependencies['@qduc/agent-core'] === '0.3.0-alpha.0';
 
 let server: Server | undefined;
 let lease: IsolatedWorkspaceLease | undefined;
@@ -155,20 +149,17 @@ describe('agent.retryAttempts = n sends n + 1 requests to a provider that keeps 
   for (const route of ['openai-compatible', 'openai', 'codex'] as const) {
     for (const retryAttempts of [0, 1, 2]) {
       const requests = retryAttempts + 1;
-      it.skipIf(retryAttempts > 0 && PINNED_ENGINE_MULTIPLIES_RETRIES)(
-        `${route}: retryAttempts ${retryAttempts} sends ${requests} request(s), one notice per retry`,
-        async () => {
-          const turn = await failedTurn('http-503', retryAttempts, route);
-          const context = JSON.stringify(turn);
-          expect(turn.requests, context).toHaveLength(requests);
-          // Every retry is announced as k/n, and the stored notice counts the requests that were sent.
-          expect(
-            turn.retryLines.map((line) => /\((\d+)\/(\d+)\)/.exec(line)?.slice(1)),
-            context,
-          ).toEqual(Array.from({ length: retryAttempts }, (_, index) => [`${index + 1}`, `${retryAttempts}`]));
-          expect(turn.notice, context).toMatch(new RegExp(`after ${requests} attempts?\\b`));
-        },
-      );
+      it(`${route}: retryAttempts ${retryAttempts} sends ${requests} request(s), one notice per retry`, async () => {
+        const turn = await failedTurn('http-503', retryAttempts, route);
+        const context = JSON.stringify(turn);
+        expect(turn.requests, context).toHaveLength(requests);
+        // Every retry is announced as k/n, and the stored notice counts the requests that were sent.
+        expect(
+          turn.retryLines.map((line) => /\((\d+)\/(\d+)\)/.exec(line)?.slice(1)),
+          context,
+        ).toEqual(Array.from({ length: retryAttempts }, (_, index) => [`${index + 1}`, `${retryAttempts}`]));
+        expect(turn.notice, context).toMatch(new RegExp(`after ${requests} attempts?\\b`));
+      });
     }
   }
 });

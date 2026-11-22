@@ -1,7 +1,7 @@
 /** Stateful presentation of one headless run. Owns legacy JSON ordering and
  * streamed/final text reconciliation, never admission, cancellation or task life.
  */
-import type { WireBudgetEvidence, WireEvent } from '../../protocol/wire.js';
+import type { WireBudgetEvidence, WireEvent, WireFinalWindow } from '../../protocol/wire.js';
 import { retryLine, toolStartLine } from './format.js';
 import {
   formatGoalClosedByCheck,
@@ -352,13 +352,28 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
           });
           return false;
         }
-        const finalRecord = legacyFinalResponse(window, emittedCommandMessageIds, legacyRequestId);
+        const failed = event.payload.outcome === 'failed';
+        const finalRecord = legacyFinalResponse(
+          failed ? withoutUnacceptedText(window) : window,
+          emittedCommandMessageIds,
+          legacyRequestId,
+        );
         json(finalRecord);
         if (event.payload.outcome === 'completed') completedText = finalRecord.finalText;
       }
       return true;
     },
   };
+}
+
+/**
+ * A failed turn still emits `final` for the usage and costs scripts read from it, but it has no answer: its
+ * finalText is empty, and text a model step streamed without being accepted (`evidence: 'text_delta'`) is left
+ * out of turnItems; the deltas already carried it. Accepted items of earlier steps stay.
+ */
+function withoutUnacceptedText(window: WireFinalWindow): WireFinalWindow {
+  const items = window.items.filter((entry) => entry.evidence !== 'text_delta');
+  return { ...window, items, record: { ...window.record, finalText: '', turnItems: items.map(({ item }) => item) } };
 }
 
 function reportEventError(

@@ -13,7 +13,6 @@ import {
 } from '../config/profiles/legacy-adapter.js';
 import {
   DEFAULT_SETTINGS,
-  OPTIONAL_DEFAULT_KEYS,
   RUNTIME_MODIFIABLE_SETTINGS,
   SENSITIVE_SETTING_KEYS,
   SettingsSchema,
@@ -30,11 +29,14 @@ import { migrateLegacyAncillarySettings } from '../config/settings/ancillary-set
 import {
   hasMissingKeys,
   loadSettingsFromFile,
+  OPTIONAL_DEFAULT_KEYS,
+  omitComputedPathDefaults,
   quarantineCorruptSettingsFile,
   saveSettingsToFile,
+  SETTINGS_FILE_VERSION,
   stripSensitiveSettings,
-  type SettingsFileRecovery,
-} from '../config/settings/settings-persistence.js';
+  type ComputedDefaultIntent,
+} from '../config/settings/file/index.js';
 import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
 
 /**
@@ -211,7 +213,15 @@ export class SettingsService {
       recovery,
       migratedSelections,
       migratedApprovalPolicy,
+      fileVersion,
+      versionRefusal,
     } = this.loadFromFile();
+
+    if (versionRefusal) {
+      // A newer (or unreadable) file version is refused before salvage or
+      // quarantine: the file is left exactly as it is, and the writer refuses it too.
+      throw new Error(versionRefusal);
+    }
 
     if (configFileExisted && fileHadErrors) {
       if (!recovery?.recovered) {
@@ -333,6 +343,8 @@ export class SettingsService {
     // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
     const shouldUpdateFile = configFileExisted && this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
     const shouldMigrateLegacyProviderFormat = configFileExisted && this.hasLegacyProviderFormat(rawFileConfig);
+    // The loader migrated an older file version in memory; the rewrite stamps the current one.
+    const migratedFileVersion = configFileExisted && fileVersion !== undefined && fileVersion < SETTINGS_FILE_VERSION;
     if (shouldMigrateLegacyProviderFormat) {
       this.startupMigrations.push(['providers', fileConfig.providers]);
     }
@@ -363,6 +375,7 @@ export class SettingsService {
       }
     } else if (
       (shouldUpdateFile ||
+        migratedFileVersion ||
         shouldMigrateLegacyProviderFormat ||
         normalizedSelectedProviderId ||
         migratedLegacyAncillarySettings ||
@@ -376,6 +389,7 @@ export class SettingsService {
           this.loggingService.debug('Updated settings file with defaults and/or migrations', {
             settingsFile: settingsFilePath,
             updatedMissingDefaults: shouldUpdateFile,
+            migratedFileVersion: migratedFileVersion ? { from: fileVersion, to: SETTINGS_FILE_VERSION } : false,
             migratedLegacyProviders: shouldMigrateLegacyProviderFormat,
             migratedLegacyAncillarySettings,
           });
@@ -735,7 +749,9 @@ export class SettingsService {
     // settlement is the caller's evidence: only a `saved` result may be
     // reported as a durable replacement.
     const durableResult: DurableWriteResult = persist
-      ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent)
+      ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent, undefined, {
+          set: [key],
+        })
       : { status: 'not-persisted', reason: 'disabled' };
     this.lastDurableWrite = durableResult;
 
@@ -819,7 +835,12 @@ export class SettingsService {
 
     this.sources.set(key, 'config');
 
-    const durableResult = this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent);
+    const durableResult = this.saveToFile(
+      (current) => this.applyPersistedSetting(current, key, value),
+      outputIntent,
+      undefined,
+      { set: [key] },
+    );
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
@@ -866,6 +887,7 @@ export class SettingsService {
         // removes superseded leaf overlays without reinstalling a stale snapshot.
         for (const change of canonicalChanges) this.recordRuntimeOverride(change.key, change.value, 'config');
       },
+      { set: canonicalChanges.map((change) => change.key) },
     );
     this.lastDurableWrite = durableResult;
     if (durableResult.status !== 'saved') return durableResult;
@@ -936,6 +958,8 @@ export class SettingsService {
         return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
       },
       !key || key === 'agent.maxOutputTokens' || key === 'agent' ? 'reset' : 'preserve',
+      undefined,
+      { reset: key ? [key] : 'all' },
     );
     this.lastDurableWrite = durableResult;
 
@@ -999,15 +1023,7 @@ export class SettingsService {
    * Load settings from file
    * Returns both raw (pre-Zod) and validated data
    */
-  private loadFromFile(): {
-    validated: Partial<SettingsData>;
-    raw: any;
-    hadErrors: boolean;
-    errorDetails?: string[];
-    recovery?: SettingsFileRecovery;
-    migratedSelections?: boolean;
-    migratedApprovalPolicy?: boolean;
-  } {
+  private loadFromFile(): ReturnType<typeof loadSettingsFromFile> {
     return loadSettingsFromFile({
       settingsDir: this.settingsDir,
       schema: SettingsSchema,
@@ -1137,6 +1153,7 @@ export class SettingsService {
     mutate?: (current: SettingsData) => SettingsData,
     outputIntent: 'preserve' | 'explicit' | 'reset' = 'preserve',
     onCommitted?: () => void,
+    computedDefaultIntent: ComputedDefaultIntent = {},
   ): DurableWriteResult {
     if (this.disableFilePersistence) {
       return { status: 'not-persisted', reason: 'disabled' };
@@ -1156,6 +1173,7 @@ export class SettingsService {
           (outputIntent === 'preserve' && !Object.hasOwn((raw as any)?.agent ?? {}, 'maxOutputTokens'));
         if (implicitOutputDefault && cleaned.agent)
           delete (cleaned.agent as Partial<SettingsData['agent']>).maxOutputTokens;
+        omitComputedPathDefaults(cleaned, raw, computedDefaultIntent);
         return cleaned;
       },
       disableLogging: this.disableLogging,

@@ -121,6 +121,12 @@ describe('Chat Completions runtime types: terminal errors through the shipped CL
           code: 'provider',
         },
       ]);
+      // `final` still comes before `error` on a failed run, for the usage it carries, but it never hands back the
+      // partial text as if it were the answer.
+      const final = events.find((event) => event.type === 'final');
+      expect(final, machine.result.stdout).toBeDefined();
+      expect(final!.finalText).toBe('');
+      expect(JSON.stringify(final)).not.toContain(PARTIAL);
       expect(events.find((event) => event.type === 'run_summary')).toMatchObject({ outcome: 'failed' });
       assertFailedTurn(await readFacts(machine.workspace), {
         message: INCOMPLETE_STREAM_MESSAGE,

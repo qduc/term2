@@ -97,6 +97,47 @@ export function buildEnvOverrides(): Partial<SettingsData> {
 }
 
 /**
+ * Credentials whose environment variable is a fallback, not an override: a
+ * non-empty key saved in settings.json wins (owner decision 2026-11-22), the
+ * same order custom providers already use for their stored key. Every other
+ * env-mapped setting keeps env > settings.json.
+ */
+export const ENV_FALLBACK_CREDENTIAL_KEYS: ReadonlySet<string> = new Set([
+  'agent.openrouter.apiKey',
+  'agent.openai.apiKey',
+  'webSearch.tavily.apiKey',
+  'webSearch.exa.apiKey',
+  'webSearch.firecrawl.apiKey',
+]);
+
+/**
+ * The env layer with every fallback credential removed that `config` already
+ * supplies as a non-empty string. Returns `env` itself when nothing is removed.
+ */
+export function withoutSavedCredentials<T extends object>(env: T, config: unknown): T {
+  let result: T | undefined;
+  for (const key of ENV_FALLBACK_CREDENTIAL_KEYS) {
+    const saved = readPath(config, key);
+    if (typeof saved !== 'string' || saved.trim().length === 0) continue;
+    if (readPath(result ?? env, key) === undefined) continue;
+    result ??= structuredClone(env);
+    const parts = key.split('.');
+    const parent = readPath(result, parts.slice(0, -1).join('.')) as Record<string, unknown>;
+    delete parent[parts[parts.length - 1]!];
+  }
+  return result ?? env;
+}
+
+function readPath(source: unknown, key: string): unknown {
+  let value = source;
+  for (const part of key.split('.')) {
+    if (value === null || typeof value !== 'object') return undefined;
+    value = (value as Record<string, unknown>)[part];
+  }
+  return value;
+}
+
+/**
  * Environment variable behind each env-mapped setting, for messages that tell
  * the user what overrides a saved value. Keep in step with buildEnvOverrides.
  */

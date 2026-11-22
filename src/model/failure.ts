@@ -51,6 +51,9 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
     // Non-JSON provider errors are already human-readable.
   }
   const reauthentication = findReauthenticationRequiredError(error);
+  const typed = typedDispatchFailure(error);
+  const evidence = recoveryEvidence(error, typed, scope, status);
+  const described = describedFailure(error, typed, evidence);
   const kind: ModelError['kind'] =
     signal?.aborted || isAbortLikeError(error)
       ? 'cancelled'
@@ -64,14 +67,14 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
       ? 'context_overflow'
       : [400, 404, 413, 422].includes(status ?? 0)
       ? 'invalid_request'
-      : isNetworkProtocolError(error) || isConnectionError(error)
+      : isNetworkProtocolError(described) || isConnectionError(described)
       ? 'network'
       : 'provider';
   const exhausted = isRetryRecoveryBudgetExhaustedError(error);
   const retryable =
     !exhausted &&
     !['cancelled', 'authentication', 'context_overflow', 'invalid_request'].includes(kind) &&
-    (isModelError(error) ? error.retryable : upstream.retryable || isNetworkProtocolError(error));
+    (isModelError(error) ? error.retryable : upstream.retryable || isNetworkProtocolError(described));
   const portable: ModelError = {
     kind,
     // Legacy replaces the provider's capacity text with its own recovery sentence.
@@ -88,8 +91,6 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
   };
   if (exhausted || kind === 'cancelled' || kind === 'authentication' || kind === 'context_overflow')
     return new ModelFailure(portable, error);
-  const typed = typedDispatchFailure(error);
-  const evidence = recoveryEvidence(error, typed, scope, status);
   return new ModelFailure(portable, typed ?? error, evidence);
 }
 
@@ -124,6 +125,19 @@ function recoveryEvidence(
     return 'transport_downgrade';
   }
   return undefined;
+}
+
+/**
+ * The error to classify kind and retryable from. Codex wraps a WebSocket closed before the terminal event in
+ * AmbiguousModelOutcomeError so it is never replayed on the same chain; the stored fields describe the close
+ * itself, as on the OpenAI lane. Only that case is unwrapped: the engine recovers it from its
+ * connection_interrupted evidence, not from retryable. Other wrapped causes keep the wrapper's classification,
+ * because a compaction summary retry reads retryable without evidence and would start retrying them.
+ */
+function describedFailure(error: unknown, typed: Error | undefined, evidence: ModelRecoveryEvidence | undefined) {
+  return evidence === 'connection_interrupted' && typed instanceof AmbiguousModelOutcomeError && typed.cause
+    ? typed.cause
+    : error;
 }
 
 /** Preserve the nearest actual typed dispatch failure through SDK cause wrappers. */

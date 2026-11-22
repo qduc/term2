@@ -123,3 +123,18 @@ export function resolveSandboxXdgLayout(cwd: string): SandboxXdgLayout {
 
   return { root, config, cache, data, state };
 }
+
+/**
+ * One line pointing the model at its scratch area when `text` (a command, or a sandbox error) names a path
+ * under plain `/tmp` outside it, or undefined. Models reach for `/tmp` for one-shot files; the sandbox and
+ * the approval route treat it as outside the workspace, so the refusal or error says where to go instead
+ * (docs/plans/approvals-and-sandbox/headless-approval-redesign.md, decision 4).
+ */
+export function scratchDirectoryHint(text: string): string | undefined {
+  for (const match of text.matchAll(/(?:^|[\s'"=:>(])((?:\/private)?\/tmp(?:\/[^\s'";|&<>()]*)?)/g)) {
+    const target = match[1]!;
+    if (target === SANDBOX_TEMP_DIR || target.startsWith(SANDBOX_TEMP_DIR + '/')) continue;
+    return `Plain /tmp is outside the workspace. Use $TMPDIR (${SANDBOX_TEMP_DIR}) for scratch files.`;
+  }
+  return undefined;
+}

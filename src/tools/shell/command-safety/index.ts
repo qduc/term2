@@ -120,7 +120,7 @@ export function classifyCommandDetailed(
     if (redirect.target) {
       traverseWord(redirect.target);
       const fileText = extractWordText(redirect.target);
-      const pathStatus = analyzePathRiskWithLogger(fileText);
+      const pathStatus = analyzePathRisk(fileText, logger, { write: true });
       upgradeStatus(pathStatus, `redirect to ${fileText ?? '<unknown>'}`);
     } else {
       upgradeStatus(SafetyStatus.YELLOW, 'redirect to <unknown>');

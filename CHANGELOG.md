@@ -1,3 +1,29 @@
+## [2.0.0] - 2026-11-22
+
+### Breaking Changes
+
+- Headless runs no longer use `--auto-approve` to turn tools on. Without the flag, the configured approval mode applies; the default `off` mode still permits tool calls that need no approval. With the flag, Term2 selects reviewer-backed `auto` unless an explicit or stronger saved mode takes precedence. Requests that still need a person are refused instead of prompting. See the [headless migration guide](https://qduc.github.io/term2/using-term2/non-interactive/#upgrading-from-1x) before upgrading scripts.
+- Replace the `advisory` approval mode with `off` and `--show-review`. Saved `advisory` settings migrate automatically; update explicit CLI arguments and keep sandbox selection separate from approval mode.
+
+### Features
+
+- Add an `unattended` approval mode for longer runs without live approval prompts. It reviews eligible requests, refuses what it cannot approve, and stops after repeated refusals. Workspace snapshots provide a recovery point for unattended turns.
+- Set `tools.maxOutputChars` to cap model-facing tool results consistently, not just shell output.
+
+### Improvements
+
+- Keep changes to Term2's settings and to hooks and Git configuration behind human approval. The shell sandbox also hides Term2 settings and credential files from sandboxed commands.
+- Use `$TMPDIR` for sandboxed shell scratch files. Writes directly to `/tmp` are no longer permitted by the sandbox.
+- Version the saved settings format, stop persisting the machine-specific memory path, and prefer a saved provider API key over an environment variable for the same provider.
+- Reorganize terminal commands and settings to make related controls easier to find.
+
+### Bug Fixes
+
+- Send each reported provider retry once and count it correctly. Retry supported connections that drop before a response begins, and show the provider's error when `/compact` exhausts its retries.
+- Classify dropped Codex WebSocket connections as network failures and keep interrupted partial replies out of the final `--json` result.
+- Improve errors for cut-off streams, failed logins, unreadable conversations, and Grok's HTTP 426 response. Stop inserting placeholder credentials for local providers.
+- Fix terminal layout update loops and make reopening the model picker reliable.
+
 ## [1.4.0] - 2026-11-19
 
 ### Features

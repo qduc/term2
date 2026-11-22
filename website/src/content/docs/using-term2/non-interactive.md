@@ -19,13 +19,17 @@ term2 "Explain the purpose of package.json in this project"
 
 A non-interactive run never asks: whatever would wait for a person is refused with a reason, and the model continues. The approval mode decides how much runs without asking:
 
-- **No flags** (`off`): only what needs no approval runs: file edits inside the workspace and the scratch directory, and shell commands the sandbox contains.
+- **`--approval-mode off`** (the default unless you saved another mode): only what needs no approval runs, such as eligible file edits inside the workspace and shell commands the sandbox contains.
 - **`--auto-approve`** (`auto`): the approval reviewer decides what `off` would have asked about, such as an edit outside the workspace or an unsandboxed command. What it does not approve is refused.
-- **`--approval-mode always`**: everything runs except the [few writes that always need a person](/term2/safety/approvals/) (hooks, Term2's settings, git's hooks and config).
+- **`--approval-mode always`**: bypasses eligible permission prompts without review. It does not override [human-only decisions or sandbox restrictions](/term2/safety/approvals/).
 
 An explicit `--approval-mode` wins over `--auto-approve`, and `--auto-approve` never lowers a saved `unattended` or `always`. `--show-review` controls assessment display. `always` keeps your sandbox preference. See [approvals](/term2/safety/approvals/) for human-only decisions and unsupported escapes.
 
 Replies stream to stdout. Diagnostic logs go to stderr.
+
+### Upgrading from 1.x
+
+In 1.4, leaving out `--auto-approve` disabled tools. Starting in 2.0, leaving it out uses your configured approval mode (default `off`), which still permits tool calls that do not require approval. Do not rely on omitting the flag to make a script text-only. Scripts that pass `--auto-approve` now use the approval reviewer rather than the old shell risk heuristic, unless an explicit or stronger saved mode takes precedence. Pass `--approval-mode off` to keep review from granting permissions; this does not disable tools.
 
 ## Letting the reviewer decide (`--auto-approve`)
 
@@ -67,14 +71,6 @@ Stream thinking/reasoning deltas from reasoning-capable models (e.g. o1, o3, Gro
 
 ```bash
 term2 --show-reasoning "Solve this mathematical recurrence relation"
-```
-
-### Default Execution
-
-A headless session loads project instructions and can use the shell and `run_code` when you pass `--auto-approve`.
-
-```bash
-term2 "Explain the difference between disk usage and apparent file size"
 ```
 
 ## Pauses and Exit Codes

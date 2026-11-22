@@ -70,7 +70,7 @@ Continue a saved session headlessly with `term2 --resume <session-id> "Follow-up
 
 Every session uses the same default experience: a minimal prompt with subagent delegation. Choose models and reasoning effort with `/model` and `/effort`; there is no profile chooser. Legacy profile inputs and saved session metadata remain compatible; see [profile internals](docs/profiles/README.md).
 
-A command-line prompt runs non-interactively and never asks: whatever would wait for a person is refused. Without flags only what needs no approval runs (work inside the workspace, sandboxed shell commands); `--auto-approve` lets the approval reviewer decide the rest (`--approval-mode auto`). See [scripting](https://qduc.github.io/term2/using-term2/non-interactive/) and [SSH setup](https://qduc.github.io/term2/remote/ssh/).
+A command-line prompt runs non-interactively and never asks: whatever would wait for a person is refused. In the default `off` mode, tool calls that need no approval can still run. `--auto-approve` selects `auto` unless an explicit or stronger saved mode takes precedence. If you relied on omitting the flag to disable tools in 1.x, see the [scripting migration guide](https://qduc.github.io/term2/using-term2/non-interactive/#upgrading-from-1x). See also [SSH setup](https://qduc.github.io/term2/remote/ssh/).
 
 The optional [Discord bridge](docs/reference/discord-bridge.md#first-run-checklist)
 attaches to existing opted-in terminal sessions. Start with `term2 discord --help`.

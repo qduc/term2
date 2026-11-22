@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { integrationCliPath } from '../helpers/integration-cli.js';
@@ -270,6 +271,16 @@ describe('headless, the approval floor', () => {
       call: (w) => create(path.join(w.env.TERM2_CONFIG_DIR!, 'injected.json')),
       target: (w) => path.join(w.env.TERM2_CONFIG_DIR!, 'injected.json'),
     },
+    {
+      name: 'git config.worktree',
+      call: () => create('.git/config.worktree'),
+      target: (w) => path.join(w.workspace, '.git', 'config.worktree'),
+    },
+    {
+      name: "a submodule's hook",
+      call: () => create('.git/modules/sub/hooks/pre-commit'),
+      target: (w) => path.join(w.workspace, '.git', 'modules', 'sub', 'hooks', 'pre-commit'),
+    },
   ];
   const gitConfigEdit: Call = {
     tool: 'search_replace',
@@ -314,4 +325,55 @@ describe('headless, the approval floor', () => {
       },
     );
   }
+
+  // A dangling symlink whose target does not exist yet: the write lands on the target, so the floor must
+  // follow the link (`physicalPath`). apply_patch writes through the link; the gpt-5 model gets that tool.
+  it('always with --auto-approve: apply_patch through a dangling link into .git/hooks is refused', async () => {
+    const result = await run({
+      calls: () => [
+        {
+          tool: 'apply_patch',
+          args: { patch: '*** Begin Patch\n*** Add File: dangling\n+echo hi\n*** End Patch' },
+        },
+      ],
+      settings: {
+        shell: { autoApproveMode: 'always' },
+        agent: { modelSelection: { model: 'gpt-5', provider: 'mockprov' } },
+      },
+      args: ['--auto-approve'],
+      prepare: (w) => {
+        gitCheckout(w);
+        fs.symlinkSync(path.join('.git', 'hooks', 'post-merge'), path.join(w.workspace, 'dangling'));
+      },
+    });
+    const report = `exit ${result.status}\nstderr:\n${result.stderr}`;
+    expect(result.status, report).toBe(0);
+    expect(result.results[0]?.text, report).toContain('only the user may grant');
+    expect(exists(path.join(result.world.workspace, '.git', 'hooks', 'post-merge'))).toBe(false);
+  });
+
+  // In a linked worktree (a worker pinned to one, say), the main checkout's `.term2/hooks` is on the floor too.
+  it("always with --auto-approve: a linked worktree cannot write the main checkout's hooks", async () => {
+    const main = (w: World) => path.join(w.outside, 'main');
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: 'ignore' });
+    const result = await run({
+      calls: (w) => [create(path.join(main(w), '.term2', 'hooks', 'evil.sh')), create('inside.txt')],
+      settings: { shell: { autoApproveMode: 'always' } },
+      args: ['--auto-approve'],
+      prepare: (w) => {
+        fs.mkdirSync(main(w));
+        git(main(w), 'init', '-q');
+        git(main(w), 'commit', '-q', '--allow-empty', '-m', 'init');
+        // layout() put symlinks in the workspace; the worktree needs an empty or missing directory.
+        fs.rmSync(w.workspace, { recursive: true, force: true });
+        git(main(w), 'worktree', 'add', '-q', w.workspace);
+      },
+    });
+    const report = `exit ${result.status}\nstderr:\n${result.stderr}`;
+    expect(result.status, report).toBe(0);
+    expect(result.results[0]?.text, report).toContain('only the user may grant');
+    expect(exists(path.join(main(result.world), '.term2', 'hooks', 'evil.sh'))).toBe(false);
+    expect(result.results[1]?.text, report).toContain('Created inside.txt');
+  });
 });

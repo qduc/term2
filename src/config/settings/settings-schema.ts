@@ -1178,9 +1178,20 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.HOOKS_TIMEOUT_MS,
 ]);
 
-// Some settings with default values are optional to persist
-// Absence preserves inherited output-allocation provenance on disk.
-export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens']);
+/**
+ * Defaults computed from the machine that runs Term2 (an absolute path under its data
+ * directory). settings.json holds one only when a write sets it, it differs from this
+ * machine's default, or the file already held it: a dumped copy would point another
+ * machine, or another XDG_DATA_HOME, at this machine's path. Every other default is
+ * still written in full.
+ */
+export const COMPUTED_PATH_DEFAULT_KEYS = new Set<string>(['memory.directory']);
+
+// Some settings with default values are optional to persist, so their absence
+// does not trigger a startup rewrite. Absence of agent.maxOutputTokens preserves
+// inherited output-allocation provenance on disk; a computed path default is
+// left out so the file stays portable.
+export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens', ...COMPUTED_PATH_DEFAULT_KEYS]);
 
 // Default settings
 export const DEFAULT_SETTINGS: SettingsData = {

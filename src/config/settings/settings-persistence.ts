@@ -8,6 +8,7 @@ import type { SettingsData } from './settings-schema.js';
 import { mergeSettings } from './settings-merger.js';
 import { unwrapSchema } from './setting-schema-utils.js';
 import { migratePersistedSelections } from './persisted-selection-migration.js';
+import { SETTINGS_FILE_VERSION, migrateSettingsFileVersion } from './settings-file-version.js';
 
 type LoggerLike = {
   warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -174,6 +175,13 @@ export function loadSettingsFromFile(opts: {
   recovery?: SettingsFileRecovery;
   migratedSelections?: boolean;
   migratedApprovalPolicy?: boolean;
+  /** The file's `version` before migration (0 for a file without one); absent when there is no file. */
+  fileVersion?: number;
+  /**
+   * Set when the file's `version` is newer than this build or not a valid number. The file is
+   * refused unchanged: there is no salvage, partial load or rewrite, and the writer will not replace it.
+   */
+  versionRefusal?: string;
 } {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
@@ -217,6 +225,23 @@ export function loadSettingsFromFile(opts: {
       }
     }
 
+    // The file version is checked before anything else reads the content, on the
+    // clean and the salvaged path alike: a newer file is refused whole.
+    const versioned = migrateSettingsFileVersion(parsed);
+    if (!versioned.ok) {
+      const refusal = `Settings file at ${settingsFile} cannot be read: ${versioned.message} The file was not changed.`;
+      if (!opts.disableLogging) {
+        opts.loggingService?.error('Refusing a settings file version this build does not support', {
+          settingsFile,
+          reason: versioned.reason,
+          supportedVersion: SETTINGS_FILE_VERSION,
+        });
+      }
+      return { validated: {}, raw: {}, hadErrors: true, errorDetails: [refusal], versionRefusal: refusal };
+    }
+    parsed = versioned.content;
+    const fileVersion = versioned.fromVersion;
+
     // Both startup and locked save reloads pass this file-only boundary.
     // Retired advisory is accepted here before validation, while raw input stays
     // intact for migration detection and diagnosis.
@@ -236,6 +261,7 @@ export function loadSettingsFromFile(opts: {
         hadErrors: true,
         errorDetails: [...errorDetails, error instanceof Error ? error.message : String(error)],
         recovery,
+        fileVersion,
       };
     }
     const validated = opts.schema.safeParse(migration.value);
@@ -259,6 +285,7 @@ export function loadSettingsFromFile(opts: {
         hadErrors: true,
         errorDetails: [...errorDetails, ...schemaIssues],
         recovery,
+        fileVersion,
       };
     }
 
@@ -272,6 +299,7 @@ export function loadSettingsFromFile(opts: {
       recovery,
       migratedSelections: migration.migrated,
       migratedApprovalPolicy,
+      fileVersion,
     };
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -356,7 +384,9 @@ export function saveSettingsToFile(opts: {
             .join('; ')}`,
         );
       }
-      const settingsToSave = opts.stripSensitiveSettings(next, loaded.raw);
+      // The writer always stamps the version it wrote the content in; the loader
+      // has already migrated an older file to it and refused a newer one above.
+      const settingsToSave = { version: SETTINGS_FILE_VERSION, ...opts.stripSensitiveSettings(next, loaded.raw) };
       const newContent = JSON.stringify(settingsToSave, null, 2);
 
       // Only write if file doesn't exist or content has changed. Compare parsed

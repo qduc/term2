@@ -203,6 +203,11 @@ The tables list environment variables where available. Settings marked as
 **Runtime Modifiable** can take effect during a session. Restart term2 to apply
 other changes.
 
+The file's top-level \`version\` records its format; term2 migrates an older file
+on load and refuses to start with a file from a newer term2, leaving it unchanged.
+\`memory.directory\` is written only when you set it, so a copied file uses the
+new machine's default memory directory.
+
 Legacy profile fields remain in the schema for [compatibility](https://github.com/qduc/term2/blob/main/docs/profiles/README.md).
 See [session defaults](/term2/modes/) for the controls available in the terminal.
 

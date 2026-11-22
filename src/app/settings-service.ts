@@ -12,6 +12,7 @@ import {
   profileIdFromLegacyModeSetting,
 } from '../config/profiles/legacy-adapter.js';
 import {
+  COMPUTED_PATH_DEFAULT_KEYS,
   DEFAULT_SETTINGS,
   OPTIONAL_DEFAULT_KEYS,
   RUNTIME_MODIFIABLE_SETTINGS,
@@ -36,6 +37,7 @@ import {
   type SettingsFileRecovery,
 } from '../config/settings/settings-persistence.js';
 import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
+import { SETTINGS_FILE_VERSION } from '../config/settings/settings-file-version.js';
 
 /**
  * Result of a public settings mutation at the SettingsService owner boundary.
@@ -96,6 +98,50 @@ function setSettingValue(target: Record<string, any>, key: string, value: unknow
     current = current[part];
   }
   current[parts[parts.length - 1]] = cloneSettingValue(value);
+}
+
+/** Which keys a write names: an explicit set always writes a computed path default; a reset forgets it. */
+type ComputedDefaultIntent = { set?: readonly string[]; reset?: readonly string[] | 'all' };
+
+function hasSettingPath(target: unknown, key: string): boolean {
+  let current: unknown = target;
+  for (const part of key.split('.')) {
+    if (!current || typeof current !== 'object' || !Object.hasOwn(current, part)) return false;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return true;
+}
+
+function readSettingPath(target: unknown, key: string): unknown {
+  let current: unknown = target;
+  for (const part of key.split('.')) {
+    if (!current || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+/**
+ * Leave a computed path default (COMPUTED_PATH_DEFAULT_KEYS) out of the bytes written. It is
+ * written when this write sets it explicitly, when its value differs from this machine's
+ * default, or when the file on disk already holds it and this write is not a reset of it.
+ * An existing value equal to the default is kept: it cannot be told apart from a value the
+ * user chose, and dropping it would move memory if XDG_DATA_HOME later changed.
+ */
+function omitComputedPathDefaults(cleaned: Partial<SettingsData>, raw: unknown, intent: ComputedDefaultIntent): void {
+  for (const key of COMPUTED_PATH_DEFAULT_KEYS) {
+    if (intent.set?.includes(key)) continue;
+    if (!hasSettingPath(cleaned, key)) continue;
+    if (JSON.stringify(readSettingPath(cleaned, key)) !== JSON.stringify(readSettingPath(DEFAULT_SETTINGS, key))) {
+      continue;
+    }
+    const resetHere =
+      intent.reset === 'all' || (intent.reset ?? []).some((reset) => reset === key || key.startsWith(`${reset}.`));
+    if (!resetHere && hasSettingPath(raw, key)) continue;
+    const parts = key.split('.');
+    const parent = readSettingPath(cleaned, parts.slice(0, -1).join('.')) as Record<string, unknown>;
+    delete parent[parts[parts.length - 1]!];
+  }
 }
 
 function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Array<[string, unknown]> {
@@ -211,7 +257,15 @@ export class SettingsService {
       recovery,
       migratedSelections,
       migratedApprovalPolicy,
+      fileVersion,
+      versionRefusal,
     } = this.loadFromFile();
+
+    if (versionRefusal) {
+      // A newer (or unreadable) file version is refused before salvage or
+      // quarantine: the file is left exactly as it is, and the writer refuses it too.
+      throw new Error(versionRefusal);
+    }
 
     if (configFileExisted && fileHadErrors) {
       if (!recovery?.recovered) {
@@ -333,6 +387,8 @@ export class SettingsService {
     // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
     const shouldUpdateFile = configFileExisted && this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
     const shouldMigrateLegacyProviderFormat = configFileExisted && this.hasLegacyProviderFormat(rawFileConfig);
+    // The loader migrated an older file version in memory; the rewrite stamps the current one.
+    const migratedFileVersion = configFileExisted && fileVersion !== undefined && fileVersion < SETTINGS_FILE_VERSION;
     if (shouldMigrateLegacyProviderFormat) {
       this.startupMigrations.push(['providers', fileConfig.providers]);
     }
@@ -363,6 +419,7 @@ export class SettingsService {
       }
     } else if (
       (shouldUpdateFile ||
+        migratedFileVersion ||
         shouldMigrateLegacyProviderFormat ||
         normalizedSelectedProviderId ||
         migratedLegacyAncillarySettings ||
@@ -376,6 +433,7 @@ export class SettingsService {
           this.loggingService.debug('Updated settings file with defaults and/or migrations', {
             settingsFile: settingsFilePath,
             updatedMissingDefaults: shouldUpdateFile,
+            migratedFileVersion: migratedFileVersion ? { from: fileVersion, to: SETTINGS_FILE_VERSION } : false,
             migratedLegacyProviders: shouldMigrateLegacyProviderFormat,
             migratedLegacyAncillarySettings,
           });
@@ -735,7 +793,9 @@ export class SettingsService {
     // settlement is the caller's evidence: only a `saved` result may be
     // reported as a durable replacement.
     const durableResult: DurableWriteResult = persist
-      ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent)
+      ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent, undefined, {
+          set: [key],
+        })
       : { status: 'not-persisted', reason: 'disabled' };
     this.lastDurableWrite = durableResult;
 
@@ -819,7 +879,12 @@ export class SettingsService {
 
     this.sources.set(key, 'config');
 
-    const durableResult = this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent);
+    const durableResult = this.saveToFile(
+      (current) => this.applyPersistedSetting(current, key, value),
+      outputIntent,
+      undefined,
+      { set: [key] },
+    );
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
@@ -866,6 +931,7 @@ export class SettingsService {
         // removes superseded leaf overlays without reinstalling a stale snapshot.
         for (const change of canonicalChanges) this.recordRuntimeOverride(change.key, change.value, 'config');
       },
+      { set: canonicalChanges.map((change) => change.key) },
     );
     this.lastDurableWrite = durableResult;
     if (durableResult.status !== 'saved') return durableResult;
@@ -936,6 +1002,8 @@ export class SettingsService {
         return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
       },
       !key || key === 'agent.maxOutputTokens' || key === 'agent' ? 'reset' : 'preserve',
+      undefined,
+      { reset: key ? [key] : 'all' },
     );
     this.lastDurableWrite = durableResult;
 
@@ -1007,6 +1075,8 @@ export class SettingsService {
     recovery?: SettingsFileRecovery;
     migratedSelections?: boolean;
     migratedApprovalPolicy?: boolean;
+    fileVersion?: number;
+    versionRefusal?: string;
   } {
     return loadSettingsFromFile({
       settingsDir: this.settingsDir,
@@ -1137,6 +1207,7 @@ export class SettingsService {
     mutate?: (current: SettingsData) => SettingsData,
     outputIntent: 'preserve' | 'explicit' | 'reset' = 'preserve',
     onCommitted?: () => void,
+    computedDefaultIntent: ComputedDefaultIntent = {},
   ): DurableWriteResult {
     if (this.disableFilePersistence) {
       return { status: 'not-persisted', reason: 'disabled' };
@@ -1156,6 +1227,7 @@ export class SettingsService {
           (outputIntent === 'preserve' && !Object.hasOwn((raw as any)?.agent ?? {}, 'maxOutputTokens'));
         if (implicitOutputDefault && cleaned.agent)
           delete (cleaned.agent as Partial<SettingsData['agent']>).maxOutputTokens;
+        omitComputedPathDefaults(cleaned, raw, computedDefaultIntent);
         return cleaned;
       },
       disableLogging: this.disableLogging,

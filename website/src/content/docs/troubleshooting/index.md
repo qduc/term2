@@ -77,6 +77,10 @@ Non-interactive context pauses exit with code 2 and a resume hint. Review the li
 - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
 - **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\settings.json`
 
+If term2 refuses to start with "it is settings version N, written by a newer Term2", a newer
+term2 wrote the file. Upgrade term2, or move the file aside to start with default settings; the
+file is left unchanged.
+
 OAuth tokens are stored separately under `envPaths('term2').config` (Linux example: `~/.config/term2-nodejs/`; macOS Preferences). `TERM2_CONFIG_DIR` overrides it; this is not the settings state/log directory.
 
 ### Application Logs

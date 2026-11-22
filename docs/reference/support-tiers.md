@@ -177,7 +177,7 @@ an earlier release must still load, or be migrated, after an upgrade.
 | What | Version marker | Tier | Reason |
 | --- | --- | --- | --- |
 | Conversation log (`<id>.jsonl`) | `LOG_FORMAT_VERSION`; the reader rejects other versions | Core | |
-| Settings (`settings.json`) | none in the file; `persisted-selection-migration.ts` rewrites old values | Core | No version field means an incompatible change cannot be detected on load. |
+| Settings (`settings.json`) | top-level `version` (`SETTINGS_FILE_VERSION`); a file without one is version 0 and migrated on load, a newer one is refused unchanged; `persisted-selection-migration.ts` still rewrites old values | Core | |
 | Provider credentials (`codex-auth.json`, `grok-auth.json`) | none found | Core | Tier of the provider. Losing them forces a new login. |
 | Memory store (`index.json`, `items/`) | `version: 1`, validated on read | Supported | |
 | Input history (`tui-history-next.json`) | none found | Supported | |

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, sep } from 'node:path';
@@ -92,8 +92,12 @@ export function addJwtLiterals(literals: SensitiveLiteral[], label: string, toke
     const claims = JSON.parse(Buffer.from(segments[1]!, 'base64url').toString('utf8')) as unknown;
     const visit = (value: unknown, key: string): void => {
       if (BENIGN_JWT_CLAIMS.has(key)) return;
-      if (typeof value === 'string') addClaimLiteral(literals, `${label} claim '${key}'`, value);
-      else if (Array.isArray(value)) value.forEach((item) => visit(item, key));
+      if (typeof value === 'string') {
+        addClaimLiteral(literals, `${label} claim '${key}'`, value);
+        // A provider-prefixed subject (`google-oauth2|1048…`) carries an account number a recording could echo alone.
+        if (value.includes('|'))
+          for (const part of value.split('|')) addClaimLiteral(literals, `${label} claim '${key}' (part)`, part);
+      } else if (Array.isArray(value)) value.forEach((item) => visit(item, key));
       else if (value && typeof value === 'object')
         for (const [childKey, child] of Object.entries(value)) visit(child, childKey);
     };
@@ -256,6 +260,13 @@ export async function writeScannedRecordings(
 ): Promise<void> {
   const suffix = `${process.pid}-${randomBytes(6).toString('hex')}`;
   const temps = files.map(({ file }) => join(dirname(file), `.${basename(file)}.${suffix}.unscanned`));
+  // Ctrl-C (or a terminal closing) mid-scan must not leave an unscanned copy beside the recordings to send.
+  const interrupted = (signal: NodeJS.Signals): void => {
+    for (const temp of temps) rmSync(temp, { force: true });
+    process.kill(process.pid, signal);
+  };
+  const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+  for (const signal of signals) process.once(signal, interrupted);
   try {
     for (const [index, { content }] of files.entries()) await writeFile(temps[index]!, content, { flag: 'wx' });
     const findings: LeakFinding[] = [];
@@ -265,6 +276,7 @@ export async function writeScannedRecordings(
     if (findings.length) throw new RecordingLeakError(files[0]!.file, findings);
     for (const [index, { file }] of files.entries()) await rename(temps[index]!, file);
   } finally {
+    for (const signal of signals) process.off(signal, interrupted);
     for (const temp of temps) await rm(temp, { force: true });
   }
 }

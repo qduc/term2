@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -267,6 +267,7 @@ describe('recording secret scan: encoded, re-cased and nested copies, and JWT cl
         picture: 'https://avatars.example.invalid/u/12345.png',
         groups: ['team-fixture-alpha'],
         amr: ['pwd'],
+        sub: 'google-oauth2|104857600000000000001',
         exp: 1893456000,
       };
       const jwt = `${encode({ alg: 'none', typ: 'JWT' })}.${encode(claims)}.c2ln`;
@@ -276,6 +277,8 @@ describe('recording secret scan: encoded, re-cased and nested copies, and JWT cl
       for (const claim of ['name', 'given_name', 'family_name', 'nickname', 'preferred_username', 'picture'] as const)
         expect(values, claim).toContain(claims[claim]);
       expect(values).toContain('team-fixture-alpha');
+      // A provider-prefixed subject also yields its bare account number, which a recording could echo alone.
+      expect(values).toContain('104857600000000000001');
       for (const benign of [claims.iss, claims.aud[0], 'openid', 'profile', 'email'])
         expect(values, benign).not.toContain(benign);
       // A recording naming the issuer is fine; one carrying the family name is not.
@@ -316,6 +319,44 @@ console.log('scan finished');
       const result = await runChild(process.execPath, ['--import', 'tsx', script]);
       expect(result.signal, `${result.stdout}\n${result.stderr}`).toBe('SIGKILL');
       expect(existsSync(file)).toBe(false);
+    }));
+
+  it('removes its unscanned temporary files when interrupted (Ctrl-C) between writing and scanning', () =>
+    withTempDir(async (dir) => {
+      const script = join(dir, 'interrupt.mts');
+      // While the first file is scanned, Ctrl-C arrives; blocking briefly makes sure it is pending before the
+      // scan awaits its read of the second file, so the handler runs with both temporary files on disk.
+      await writeFile(
+        script,
+        `import { readdirSync } from 'node:fs';
+import { writeScannedRecordings } from ${JSON.stringify(secretScanPath)};
+const dir = ${JSON.stringify(dir)};
+let sent = false;
+const literal = {
+  label: 'interrupt trigger',
+  get value() {
+    if (!sent && readdirSync(dir).some((name) => name.endsWith('.unscanned'))) {
+      sent = true;
+      process.kill(process.pid, 'SIGINT');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+    }
+    return 'never-present-literal-value';
+  },
+};
+await writeScannedRecordings(
+  [
+    { file: ${JSON.stringify(join(dir, 'recording.json'))}, content: '{"ok":true}\\n' },
+    { file: ${JSON.stringify(join(dir, 'recording.redactions.json'))}, content: '{"redactions":[]}\\n' },
+  ],
+  [literal],
+);
+await new Promise((resolve) => setTimeout(resolve, 5_000));
+console.log('scan finished');
+`,
+      );
+      const result = await runChild(process.execPath, ['--import', 'tsx', script]);
+      expect(result.signal, `${result.stdout}\n${result.stderr}`).toBe('SIGINT');
+      expect(readdirSync(dir)).toEqual(['interrupt.mts']);
     }));
 });
 

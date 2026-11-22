@@ -220,9 +220,9 @@ outside the repository (without it the files go to `~/.term2/provider-recordings
   Stop it (Ctrl-C) if the endpoint is not one you expect.
 - **Output:** `codex-websocket-tool-continuation-v2.json` (the recording: the handshake, every message
   in both directions, and the close) and `codex-websocket-tool-continuation-v2.redactions.json` (the JSON
-  paths that were scrubbed and why, with no values). Send back these two files only. A file named
-  `.<name>.<digits>-<hex>.unscanned` in the folder is what an interrupted run left before its scan:
-  delete it, never send it.
+  paths that were scrubbed and why, with no values). Send back these two files only. Ctrl-C or a
+  closed terminal during the scan removes the hidden `.<name>.<digits>-<hex>.unscanned` copies; only
+  a crash or a hard kill leaves one behind. Delete any such file, never send it.
 - **Scrubbed before anything is written** (`scripts/provider-black-box/wire-identity-scrubber.ts`):
   every header value outside an allow-list (`openai-beta`, `originator`, `content-type`, `accept`,
   `version`, `x-codex-beta-features`, `x-openai-internal-codex-responses-lite`), so `authorization`,

@@ -61,7 +61,8 @@ Ordered by what a miss costs, then by how likely the miss is.
      `codex-auth.json`, `grok-auth.json` and `settings.json` there returned
      their contents to the model. A decision: which of those files the
      sandbox hides, given that a `term2` started inside the sandbox would
-     then not find them.
+     then not find them. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - The sandbox's proxy bridge is `socat TCP-LISTEN:3128`, which opens an
      IPv6 socket. On a kernel without IPv6 the bridge never starts and every
      proxied command fails with "Failed to connect to localhost port 3128"
@@ -117,11 +118,13 @@ Ordered by what a miss costs, then by how likely the miss is.
      reviewer model has rejected it (`decideHeadlessApproval` allows every
      tool that is not the shell). A rejected shell command stays rejected.
      The flag's help says it skips confirmation, so this may be intended; it
-     is not asserted either way.
+     is not asserted either way. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - With the sandbox off, a shell redirect to an absolute path under `/tmp`
      runs without approval in mode `off`, wherever the workspace is, because
      the path classifier treats `/tmp` as safe. Redirects through `..` or `~`
-     are held. The tests assert only the held cases.
+     are held. The tests assert only the held cases. Held 2026-11-22: the owner will redesign what an unattended or
+     sandbox-off run may do, and decides this as part of it.
    - The comment on the existing real-sandbox case says the bare profile
      edits through the shell. Bare also has `create_file` and
      `search_replace`, which approval admits, not the sandbox.

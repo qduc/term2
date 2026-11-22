@@ -23,12 +23,7 @@ import {
   type SettingsData,
   type SettingsWithSources,
 } from '../config/settings/settings-schema.js';
-import {
-  ENV_FALLBACK_CREDENTIAL_KEYS,
-  isTestEnvironment,
-  parseBooleanEnv,
-  withoutSavedCredentials,
-} from '../config/settings/settings-env.js';
+import { isTestEnvironment, parseBooleanEnv, withoutSavedCredentials } from '../config/settings/settings-env.js';
 import { flattenSettings, mergeSettings, trackSettingSources } from '../config/settings/settings-merger.js';
 import { buildSettingsWithSources } from '../config/settings/settings-sources.js';
 import { migrateLegacyAncillarySettings } from '../config/settings/ancillary-settings-migration.js';
@@ -580,8 +575,6 @@ export class SettingsService {
    */
   getStartupOverride(key: string): 'env' | 'cli' | undefined {
     const source = trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get(key);
-    // A saved credential wins over its environment variable, so env never overrides it.
-    if (source === 'env' && ENV_FALLBACK_CREDENTIAL_KEYS.has(key)) return undefined;
     return source === 'env' || source === 'cli' ? source : undefined;
   }
 

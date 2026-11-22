@@ -248,8 +248,8 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       '@qduc/agent-core':
-        specifier: 0.3.0-alpha.3
-        version: 0.3.0-alpha.3
+        specifier: 0.3.0-alpha.4
+        version: 0.3.0-alpha.4
       '@qduc/web-fetch':
         specifier: ^0.1.4
         version: 0.1.4
@@ -1121,8 +1121,8 @@ packages:
   '@pondwader/socks5-server@1.0.10':
     resolution: {integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg==}
 
-  '@qduc/agent-core@0.3.0-alpha.3':
-    resolution: {integrity: sha512-xsEJna2dsuEeH5gC/1gcSD6zdZuNo6rTQoBE9oHj52IEKgoGYsswbdtelW6LqUfWRwnlxeGifvAFqRCU463K1Q==}
+  '@qduc/agent-core@0.3.0-alpha.4':
+    resolution: {integrity: sha512-pvJ996MT6qFjtsQI/HTt3CqfBcKp2EhQUjKzdmnpUC86PdnmJc3mx05VkB1t2PzgvbokrUqy/cnNa0WyYs/BZg==}
     engines: {node: '>=24'}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz':
@@ -4797,7 +4797,7 @@ snapshots:
 
   '@pondwader/socks5-server@1.0.10': {}
 
-  '@qduc/agent-core@0.3.0-alpha.3': {}
+  '@qduc/agent-core@0.3.0-alpha.4': {}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz': {}
 

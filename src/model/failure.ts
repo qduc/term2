@@ -51,10 +51,9 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
     // Non-JSON provider errors are already human-readable.
   }
   const reauthentication = findReauthenticationRequiredError(error);
-  // Codex wraps a stream cut short in AmbiguousModelOutcomeError so it is never replayed on the same chain. The
-  // stored kind and retryable describe the failure itself, as on the OpenAI lane, so classify the wrapped cause;
-  // recovery still reads the wrapper through typedDispatchFailure below.
-  const described = describedFailure(error);
+  const typed = typedDispatchFailure(error);
+  const evidence = recoveryEvidence(error, typed, scope, status);
+  const described = describedFailure(error, typed, evidence);
   const kind: ModelError['kind'] =
     signal?.aborted || isAbortLikeError(error)
       ? 'cancelled'
@@ -92,8 +91,6 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
   };
   if (exhausted || kind === 'cancelled' || kind === 'authentication' || kind === 'context_overflow')
     return new ModelFailure(portable, error);
-  const typed = typedDispatchFailure(error);
-  const evidence = recoveryEvidence(error, typed, scope, status);
   return new ModelFailure(portable, typed ?? error, evidence);
 }
 
@@ -130,10 +127,17 @@ function recoveryEvidence(
   return undefined;
 }
 
-/** The error to classify kind and retryable from: an ambiguous-outcome wrapper's cause, else the error. */
-function describedFailure(error: unknown): unknown {
-  const typed = typedDispatchFailure(error);
-  return typed instanceof AmbiguousModelOutcomeError && typed.cause !== undefined ? typed.cause : error;
+/**
+ * The error to classify kind and retryable from. Codex wraps a WebSocket closed before the terminal event in
+ * AmbiguousModelOutcomeError so it is never replayed on the same chain; the stored fields describe the close
+ * itself, as on the OpenAI lane. Only that case is unwrapped: the engine recovers it from its
+ * connection_interrupted evidence, not from retryable. Other wrapped causes keep the wrapper's classification,
+ * because a compaction summary retry reads retryable without evidence and would start retrying them.
+ */
+function describedFailure(error: unknown, typed: Error | undefined, evidence: ModelRecoveryEvidence | undefined) {
+  return evidence === 'connection_interrupted' && typed instanceof AmbiguousModelOutcomeError && typed.cause
+    ? typed.cause
+    : error;
 }
 
 /** Preserve the nearest actual typed dispatch failure through SDK cause wrappers. */

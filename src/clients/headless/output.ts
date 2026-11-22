@@ -1,7 +1,7 @@
 /** Stateful presentation of one headless run. Owns legacy JSON ordering and
  * streamed/final text reconciliation, never admission, cancellation or task life.
  */
-import type { WireBudgetEvidence, WireEvent } from '../../protocol/wire.js';
+import type { WireBudgetEvidence, WireEvent, WireFinalWindow } from '../../protocol/wire.js';
 import { retryLine, toolStartLine } from './format.js';
 import {
   formatGoalClosedByCheck,
@@ -352,8 +352,13 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
           });
           return false;
         }
-        const finalRecord = legacyFinalResponse(window, emittedCommandMessageIds, legacyRequestId);
-        json(event.payload.outcome === 'failed' ? withoutFailedRequestText(finalRecord) : finalRecord);
+        const failed = event.payload.outcome === 'failed';
+        const finalRecord = legacyFinalResponse(
+          failed ? withoutUnacceptedText(window) : window,
+          emittedCommandMessageIds,
+          legacyRequestId,
+        );
+        json(finalRecord);
         if (event.payload.outcome === 'completed') completedText = finalRecord.finalText;
       }
       return true;
@@ -362,16 +367,13 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
 }
 
 /**
- * A failed turn still emits `final` for the usage and costs scripts read from it, but the text of the request
- * that failed is only what a cut-off stream delivered, never an answer; the deltas already carried it. That text
- * is `finalText` and the trailing `assistant_text` items: earlier rounds' text precedes their tool results.
+ * A failed turn still emits `final` for the usage and costs scripts read from it, but it has no answer: its
+ * finalText is empty, and text a model step streamed without being accepted (`evidence: 'text_delta'`) is left
+ * out of turnItems; the deltas already carried it. Accepted items of earlier steps stay.
  */
-function withoutFailedRequestText<T extends { finalText: string; turnItems?: readonly unknown[] }>(record: T): T {
-  const items = record.turnItems;
-  if (items === undefined) return { ...record, finalText: '' };
-  let end = items.length;
-  while (end > 0 && (items[end - 1] as { type?: unknown } | null)?.type === 'assistant_text') end--;
-  return { ...record, finalText: '', turnItems: items.slice(0, end) };
+function withoutUnacceptedText(window: WireFinalWindow): WireFinalWindow {
+  const items = window.items.filter((entry) => entry.evidence !== 'text_delta');
+  return { ...window, items, record: { ...window.record, finalText: '', turnItems: items.map(({ item }) => item) } };
 }
 
 function reportEventError(

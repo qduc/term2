@@ -180,10 +180,12 @@ section is a real recording behind every provider, replayed offline.
    - Decided 2026-11-22 and done: a failed `--json` run still emits `final`
      before `error`, because two tests and scripts read usage and the terminal
      cause from it, but `OutputState.endTurn` in
-     `src/clients/headless/output.ts` now blanks its `finalText` and drops the
-     trailing `assistant_text` items of `turnItems` when the outcome is
-     `failed` (`withoutFailedRequestText`). Both used to carry the partial text
-     of a stream cut short; that text still arrives as `text_delta` events.
+     `src/clients/headless/output.ts` now gives a failed turn no answer: an
+     empty `finalText`, even when an earlier step had text, and no text a step
+     streamed without being accepted (`evidence: 'text_delta'`) in `turnItems`
+     (`withoutUnacceptedText`). Accepted items of earlier steps stay. Both
+     fields used to carry the partial text of a stream cut short; that text
+     still arrives as `text_delta` events.
      `provider-session-chat-terminal-errors.blackbox.ts` asserts it on both
      chat rows.
    - Confirmed, and not specific to Grok: with `agent.retryAttempts` at n, a
@@ -294,11 +296,14 @@ section is a real recording behind every provider, replayed offline.
         lane wraps the close in `AmbiguousModelOutcomeError` so the request is
         not replayed on the same chain, and `toModelFailure` used to classify
         the wrapper, giving `provider` and not retryable; it now classifies
-        the wrapped cause (`describedFailure` in `src/model/failure.ts`). The
-        engine decides recovery from the close evidence, which was and is the
-        same on both lanes, and does not read `retryable` when evidence is
-        present, so only the stored fields changed; neither lane offers
-        `/retry turn` after partial text. The four rows are now asserted.
+        the wrapped close (`describedFailure` in `src/model/failure.ts`). Only
+        a failure with `connection_interrupted` evidence is unwrapped: the
+        engine recovers those from the evidence, not from `retryable`, and a
+        local-compaction summary already retried them. Other causes Codex wraps
+        (a reset connection, a handshake 502, close code 4000) keep `provider`
+        and not retryable, because the summary retry reads `retryable` without
+        evidence and would start retrying them. Neither lane offers `/retry
+        turn` after partial text. The four rows are now asserted.
 11. **Done: the ledger is checked against the tests.**
     `reconcileExecutionsWithTests`, run by `provider-capability-matrix.test.ts`,
     compares the executed-scenario lists with the titles Vitest collects from

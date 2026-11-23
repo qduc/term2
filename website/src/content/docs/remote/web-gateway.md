@@ -1,9 +1,25 @@
 ---
-title: Web Gateway (term2 serve)
-description: Running the private gateway for external clients and programmatic control.
+title: Web Interface and Gateway
+description: Start the bundled local browser interface or run the private gateway separately.
 ---
 
-`term2 serve` starts a private gateway for clients that need to manage term2 sessions. Start it with `--pairing` or `--bff-key`.
+## Start the browser interface
+
+Install or update `@qduc/term2`, then run:
+
+```bash
+term2-web
+```
+
+Open `http://127.0.0.1:3000`. The command starts both the browser app and its private gateway; you don't need a checkout, a separate build, or a pairing code. Press `Ctrl+C` to stop both. If port 3000 is already taken, run `PORT=3001 term2-web`.
+
+On your first visit, open **Local owner controls** in the sidebar, select a workspace folder, and start a new agent chat.
+
+This is a single-user interface bound to loopback, with read-only workspace grants under your home directory. Don't expose it through a proxy or port forward to other users. The signing key and Unix socket are temporary; gateway session state persists across launches.
+
+## Run the gateway separately
+
+For an external client, `term2 serve` starts just the private gateway. Use `--pairing` or `--bff-key`.
 
 ## Start a local gateway
 
@@ -15,11 +31,7 @@ term2 serve --local-owner developer --pairing
 
 The gateway stays in the foreground and prints the pairing code to stderr. Configure the code in the client backend, not in a browser; it expires after five minutes. Workspace access is read-only by default. To use the separate web client, follow the matching server and client setup below. Stop the gateway with `Ctrl+C`.
 
-## Separate Web Client
-
-The gateway ships with `@qduc/term2`. The Next.js app in `web-client/` has its own build.
-
-**Use matching source builds of the server and web client.** Older published or gated builds may not support the browser client and can return `503 agent_wire_v2_unavailable`. The root and web builds at this revision pin `@qduc/agent-wire` 0.2.3.
+## Browser session behavior
 
 The browser loads a session snapshot and reconnects from the last sequence it applied. Stored event sequences can have gaps. Live observations have no cursor. Reload restores recorded history without restarting the turn or undoing tool effects.
 
@@ -61,24 +73,20 @@ term2 serve --local-owner developer --pairing
 
 Listens on the local Unix domain socket at `<effective-state-dir>/gateway.sock` (for example, `~/.local/state/term2-nodejs/gateway-next/gateway.sock` on Linux) with read-only workspace access restricted to your home directory. The one-time pairing code is printed to stderr and expires after five minutes; configure it in the BFF, never in the browser. In paired mode, the BFF may assert the `--local-owner` identity.
 
-### Matching packed server and production BFF
+### Running the browser app separately from source
 
-Before v1.0 publication, use a local tarball and browser build from the same source revision. The current development manifest still says `0.40.0`; that version label alone does not identify the native candidate. Configure the CLI's provider/model first; provider credentials stay in the server process.
+Use this setup only if you need to run the browser app separately, for example while developing `web-client/`. Build the gateway and browser app from the same source revision. Configure the CLI's provider/model first; provider credentials stay in the server process.
 
 From the repository root:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm build
-pnpm pack --pack-destination /absolute/path/to/packages
-npm install --prefix /absolute/path/to/server /absolute/path/to/packages/qduc-term2-0.40.0.tgz
-/absolute/path/to/server/node_modules/.bin/term2 serve \
+node dist/cli.js serve \
   --state-dir /absolute/path/to/new-native-state \
   --workspace-root /absolute/path/to/projects \
   --local-owner local-owner --pairing
 ```
-
-Native dependencies must finish their installation scripts. If using pnpm for the packed installation, approve/build the same native dependencies allowed by the repository's `pnpm-workspace.yaml`; an installed package with ignored native builds is not a verified installation. On a network that requires `HTTPS_PROXY`, Node.js 24's fetch also requires the operator's `NODE_USE_ENV_PROXY=1`; setting proxy variables alone does not opt fetch into them.
 
 In a separate terminal, configure and build the BFF from that same checkout:
 

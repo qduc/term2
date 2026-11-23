@@ -249,13 +249,14 @@ jobs:
         id: setup
         with:
           lane: e2e
+          web-client: 'true'
       - name: Run E2E process cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
       - name: Check golden parity
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node parity/run.mjs check --cli dist/cli.js
       # What users install is the tarball, not the checkout: pack the build this job just tested,
-      # install it outside the repository and replay a recorded provider turn against it.
+      # install it outside the repository, launch the web UI and replay a recorded provider turn.
       # publish.yml runs the same two commands before it publishes.
       - name: Smoke-test the packed tarball
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}

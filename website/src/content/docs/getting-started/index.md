@@ -17,8 +17,8 @@ diff before committing changes.
 
 Use [`term2 --resume`](/term2/using-term2/sessions/) to reopen a saved
 conversation. For a remote project, [connect over SSH](/term2/remote/ssh/).
-The [Web Gateway](/term2/remote/web-gateway/) serves external clients such as
-the separate `web-client/` app.
+Run [`term2-web`](/term2/remote/web-gateway/) to start the local browser interface
+and its private gateway together.
 
 ## Project instructions and skills
 

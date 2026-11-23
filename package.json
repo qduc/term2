@@ -23,7 +23,8 @@
     "url": "https://github.com/qduc/term2/issues"
   },
   "bin": {
-    "term2": "dist/cli.js"
+    "term2": "dist/cli.js",
+    "term2-web": "dist/web.js"
   },
   "exports": {
     ".": {
@@ -64,6 +65,7 @@
     "test:vitest:coverage": "cross-env NODE_ENV=test vitest run --coverage",
     "lint": "eslint . && prettier --check .",
     "lint-fix": "eslint --fix . && prettier --write .",
+    "prepack": "node scripts/build-web.mjs",
     "prepublishOnly": "node scripts/check-release-identity.mjs",
     "release": "./scripts/release.sh",
     "logs": "node tools/log_viewer/src/server.js",
@@ -92,11 +94,14 @@
     "ink": "^7.0.1",
     "ink-prompt": "^0.4.3",
     "jiti": "^2.7.0",
+    "jsonwebtoken": "^9.0.3",
     "koffi": "2.14.1",
     "marked": "^17.0.1",
     "meow": "^11.0.0",
+    "next": "16.2.4",
     "openai": "^6.9.1",
-    "react": "^19.0.0",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
     "ssh2": "^1.17.0",
     "unbash": "^3.0.0",
     "winston": "^3.18.3",

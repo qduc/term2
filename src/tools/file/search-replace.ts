@@ -287,9 +287,9 @@ const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _t
 };
 
 const SEARCH_REPLACE_DESCRIPTION =
-  'Replace text in a file. Exact matches are preferred; fallbacks tolerate line-ending, indentation, whitespace, escaping and minor multi-line differences. Each search must match once unless match_all is true.\n' +
-  'Gap matching: to replace or delete a large block without reproducing it, put <...> on its own line in search_content between a head and a tail anchor. The whole span, anchors included, is replaced, so a wrong anchor silently deletes code: anchor on a few distinctive lines, never a lone }, return, or blank line. Omit the anchors from replace_content to delete them with the block; repeat them to delete only the middle.\n' +
-  'Not for creating files; inside run_code, use tools.create_file(...). Returns one line per replacement: Updated <path> or Error: <reason>.';
+  'Replace text in a file. Exact matches are preferred; fallbacks tolerate whitespace, indentation, line-ending and escaping differences. Each search must match once unless match_all.\n' +
+  'Gap matching: put <...> on its own line between a head and tail anchor to replace a large block without retyping it. The whole span is replaced, so anchor on a few distinctive lines, never a lone } or blank line. Omit the anchors from replace_content to delete them too; repeat them to keep them.\n' +
+  'To create files, use create_file; inside run_code, use tools.create_file(...).';
 
 export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;
@@ -309,7 +309,7 @@ export function createSearchReplaceToolDefinition(deps: {
     name: 'search_replace',
     description: SEARCH_REPLACE_DESCRIPTION,
     scriptedReturnShape:
-      'string: one status line per operation, newline-joined — "Updated <path> (N match)" | "Created <path> (new file)" | "Error: \u2026"',
+      'one line per operation: "Updated <path> (N match)" | "Created <path> (new file)" | "Error: \u2026"',
     effect: 'mutating',
     canRequireApproval: true,
     scriptedReturnSchema: z.string(),

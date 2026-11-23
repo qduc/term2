@@ -12,12 +12,9 @@ import { boundToolResultText, resolveResultMaxBytesForCall } from '../../shared/
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../shared/utils/shell/shell-output.js';
 
 /** Without a configured search provider `web_search` is not offered, so the description must not point at it. */
-const webFetchDescription = (searchAvailable: boolean) =>
-  'Fetch a web page as Markdown: title, URL, table of contents and content. ' +
-  (searchAvailable
-    ? 'Use it for a specific URL referenced by tools.web_search(...) inside run_code or by the user, not for broad queries. '
-    : 'Use it for a specific URL referenced by the user, not for broad queries. ') +
-  'Content beyond max_chars is saved to a file; read the "Full output saved to" path for more.';
+const webFetchDescription = (_searchAvailable: boolean) =>
+  'Fetch a URL as Markdown (title, contents, text): for a specific page, not broad queries. ' +
+  'Output beyond max_chars is saved to the "Full output saved to" path.';
 
 const DEFAULT_MAX_CHARS = 10000;
 const MAX_CHARS_LIMIT = 200000;

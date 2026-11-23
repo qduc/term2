@@ -92,28 +92,22 @@ export function createRunCodeToolDefinition(options: CreateRunCodeToolOptions) {
 /** Describe only capability members actually bound by the host. */
 function renderAgentCapabilitySection(bridge: RunCodeAgentSpecBridge): string {
   const members = getRunCodeAgentCapabilityMembers(bridge);
-  const lines: string[] = [
-    '## Agent capability',
-    '',
-    'When present, a flat `agent` global (not in `tools.*`) launches agents from the script:',
-  ];
+  const lines: string[] = ['## Agent capability', 'When present, `agent` (not in `tools.*`) launches agents:'];
   if (members.includes('run')) {
     lines.push(
-      '- `agent.run({ spec, worktree? })` awaits one agent and resolves to its result (status, finalText, filesChanged, toolsUsed, ...). ' +
-        'Use `Promise.all` only for independent runs with the same requirements, and catch per-call rejections. ' +
-        "Child approvals go to the user and do not count against the script's timeout; an interrupted child rejects.",
+      '- `agent.run({ spec, worktree? })` awaits one and resolves to `{ status, finalText, filesChanged, toolsUsed, ... }`. ' +
+        "Parallelize only independent runs with identical requirements; catch per-call rejections. Child approval waits don't consume the timeout.",
     );
   }
   if (members.includes('start')) {
     lines.push(
-      "- `agent.start({ spec, name? })` starts a background run that outlives the script, resolving to `{ runId, name?, role, status: 'running' }`; its completion is notified later. " +
-        '`agent.status({ runId? })`, `agent.result({ runId })` and `agent.cancel({ target })` peek at, await, or cancel it.',
+      "- `agent.start({ spec, name? })` starts a background run that outlives the script (`{ runId, status: 'running' }`, completion notified); " +
+        '`agent.status({ runId? })`, `agent.result({ runId })`, `agent.cancel({ target })` peek, await, cancel.',
     );
   }
   lines.push(
-    "- `spec`: `{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`, limited to this session's tools, scopes and worktree; excess rejects as `Agent specification rejected: ...`.",
-    `- Per script: at most ${RUN_CODE_LIMITS.maxAgentStarts} launches, ${RUN_CODE_LIMITS.maxAgentConcurrency} parallel foreground runs, ` +
-      `and ${RUN_CODE_LIMITS.maxAgentCalls} agent.* calls, separate from the tools.* budget.`,
+    "- `spec`: `{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`, capped at this session's authority (excess rejects).",
+    `- Per script: at most ${RUN_CODE_LIMITS.maxAgentStarts} launches, ${RUN_CODE_LIMITS.maxAgentConcurrency} parallel, ${RUN_CODE_LIMITS.maxAgentCalls} agent.* calls.`,
   );
   return lines.join('\n');
 }

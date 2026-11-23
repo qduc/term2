@@ -109,17 +109,16 @@ const formatFindFilesCommandMessage: FormatCommandMessage = (item, index, toolCa
   ];
 };
 
-const GLOB_EMPTY_RESULT_DESCRIPTION =
-  'If nothing is found, check the pattern and path; ignored and hidden files are skipped unless no_ignore: true (fd only).';
+const GLOB_EMPTY_RESULT_DESCRIPTION = 'Ignored and hidden files are skipped unless no_ignore: true (fd only).';
 const GLOB_DESCRIPTION =
-  'Find files in the workspace by name or glob pattern. ' +
-  'Not for searching contents (inside run_code, use tools.grep(...)) or finding code related to a symbol (use tools.code_context_search(...) inside run_code). ' +
-  'Returns up to max_results paths, one per line, noting truncation. ' +
+  'Find workspace files by name or glob pattern. ' +
+  'Not for content search (inside run_code, use tools.grep(...)). ' +
+  'Returns up to max_results paths. ' +
   GLOB_EMPTY_RESULT_DESCRIPTION;
 const GLOB_DESCRIPTION_OUTSIDE =
-  'Find files on the filesystem by name or glob pattern. ' +
-  'Not for searching contents (inside run_code, use tools.grep(...)). ' +
-  'Returns up to max_results paths, one per line, noting truncation. ' +
+  'Find files anywhere on the filesystem by name or glob pattern. ' +
+  'Not for content search (inside run_code, use tools.grep(...)). ' +
+  'Returns up to max_results paths. ' +
   GLOB_EMPTY_RESULT_DESCRIPTION;
 
 export const createFindFilesToolDefinition = (
@@ -145,8 +144,7 @@ export const createFindFilesToolDefinition = (
   } = deps;
   return {
     name: 'glob',
-    scriptedReturnShape:
-      '{ paths: string[], total: number, truncated: boolean }, or a plain string for a validation error',
+    scriptedReturnShape: '{ paths: string[], total: number, truncated: boolean }, or an error string',
     // Successful scripted calls return this object; validation errors retain
     // the legacy string result, so both are part of the exact script contract.
     scriptedReturnSchema: z.union([

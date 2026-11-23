@@ -114,6 +114,9 @@ function scriptedReturnDescription(tool: ToolRegistry[number]): { value: string;
 
 const oneLine = (text: string): string => {
   const collapsed = text.replace(/\s+/g, ' ').trim();
+  // The first sentence states what the tool does; the rest is direct-call guidance.
+  const firstSentence = /^.*?[.!?](?=\s|$)/.exec(collapsed)?.[0];
+  if (firstSentence && firstSentence.length <= MAX_DESCRIPTION_CHARS) return firstSentence;
   return collapsed.length <= MAX_DESCRIPTION_CHARS
     ? collapsed
     : `${collapsed.slice(0, MAX_DESCRIPTION_CHARS).trimEnd()}…`;
@@ -196,16 +199,10 @@ export function renderToolsHeader(
   // tools that satisfy isDirectlyCallable, so their full descriptions are
   // already in the request; repeating a clipped copy here only costs tokens.
   const described = essential.map((tool) => ({ tool, direct: isDirectlyCallable(tool) }));
-  const anyDirect = described.some((entry) => entry.direct);
   const lines = [
-    anyDirect
-      ? 'Available inside the script (parameter shapes are approximate; tools you can also call directly are described in their own definitions):'
-      : 'Available inside the script (parameter shapes are approximate):',
+    'In the script (shapes approximate):',
     ...(essential.length > 0
-      ? [
-          'Essential tools:',
-          ...described.map(({ tool, direct }) => renderDetailedEntry(tool, { omitDescription: direct })),
-        ]
+      ? ['Main tools:', ...described.map(({ tool, direct }) => renderDetailedEntry(tool, { omitDescription: direct }))]
       : []),
     ...(other.length > 0 ? [...(essential.length > 0 ? [''] : []), ...otherLines] : []),
   ];

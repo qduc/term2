@@ -14,16 +14,15 @@ export const SESSION_ROLLOVER_BRIEF_DESCRIPTION =
   'The handoff brief the successor starts from; under 8,000 characters.';
 
 export const SESSION_ROLLOVER_DESCRIPTION =
-  'Request a session rollover only when a system reminder prompts it or the user asks; never on your own. ' +
-  'If the successor needs state the brief cannot hold (plans, findings, task state), first save it to a durable workspace artifact (doc, notes file, or commit; not /tmp) and point to it. ' +
-  "The brief is the successor's only context; write it for a capable engineer with no memory of this session, covering:\n" +
-  '- goal, done condition, and standing user constraints or preferences\n' +
-  '- completed effects with durable pointers (paths, commits, docs), marked verified or assumed\n' +
-  '- costly-to-rediscover knowledge: diagnosis, root causes, key files and symbols, approaches ruled out and why\n' +
-  '- the next open step, concrete enough to act on, and unresolved decisions\n' +
-  '- live background work (handle, status, next action); handles survive rollover, so do not wait on them just to rotate\n' +
-  'If this session established a lasting preference, project decision, or reusable lesson, update persistent memory (not repository facts, not the handoff itself). ' +
-  'Keep the brief well under 8,000 characters: point to artifacts instead of copying them, and omit narrative history.';
+  'Roll over only when a system reminder prompts it or the user asks. ' +
+  'If the successor needs state the brief cannot hold, first save it to a durable workspace file or commit (not /tmp) and point to it. ' +
+  "The brief is the successor's only context; write it for an engineer with no memory of this session:\n" +
+  '- goal, done condition, standing user constraints\n' +
+  '- completed work with pointers (paths, commits), marked verified or assumed\n' +
+  '- costly knowledge: diagnosis, key files, approaches ruled out and why\n' +
+  '- next concrete step and open decisions\n' +
+  '- live background handles and status (they survive rollover; do not wait on them)\n' +
+  'Save lasting preferences, decisions or lessons to persistent memory. Stay well under 8,000 characters: point to artifacts, skip narrative.';
 
 const sessionRolloverParameters = z
   .object({

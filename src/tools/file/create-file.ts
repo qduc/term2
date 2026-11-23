@@ -19,9 +19,7 @@ import {
 import { ExecutionContext } from '../execution-context.js';
 
 const CREATE_FILE_DESCRIPTION =
-  'Create a file; replacing an existing one requires overwrite=true. ' +
-  'Not for editing a file; inside run_code, use tools.search_replace(...). ' +
-  'Returns Created <path>, Overwrote <path>, or Error: <reason>.';
+  'Create a file (overwrite=true to replace one). To edit, use search_replace; inside run_code, use tools.search_replace(...).';
 
 const createFileParametersSchema = z.object({
   path: z.string().describe('The absolute or relative path to the new file.'),
@@ -108,8 +106,7 @@ export function createCreateFileToolDefinition(deps: {
   return {
     name: TOOL_NAME_CREATE_FILE,
     description: CREATE_FILE_DESCRIPTION,
-    scriptedReturnShape:
-      'string status: "Created <path>" | "Overwrote <path>" on success; "Error: \u2026" on failure (approval denials reject instead)',
+    scriptedReturnShape: '"Created <path>" | "Overwrote <path>" | "Error: \u2026" (approval denials reject)',
     effect: 'mutating',
     canRequireApproval: true,
     scriptedReturnSchema: z.string(),

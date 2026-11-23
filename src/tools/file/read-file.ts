@@ -22,14 +22,14 @@ import {
 import { saveOutputArtifact } from '../../shared/utils/shell/shell-output.js';
 
 const READ_FILE_DESCRIPTION =
-  'Read a file from the workspace, optionally a 1-indexed line range. Images are returned as image content. ' +
-  'Prefer the whole file (under 1,000 lines) or large windows over many small chunks. ' +
-  'Not for searching across files (inside run_code, use tools.grep(...)). ' +
-  'Returns the path, total line count and the lines; large results are truncated and the full payload saved to the "Full output saved to" path.';
+  'Read a file, optionally a 1-indexed line range; images return as image content. ' +
+  'Prefer whole files (under 1,000 lines) or large windows to small chunks. ' +
+  'Not for cross-file search (inside run_code, use tools.grep(...)). ' +
+  'Large results are truncated; read the "Full output saved to" path for the rest.';
 const READ_FILE_DESCRIPTION_OUTSIDE =
-  'Read a file from the filesystem, optionally a 1-indexed line range. Images are returned as image content. ' +
-  'Prefer the whole file (under 1,000 lines) or large windows over many small chunks. ' +
-  'Returns the path, total line count and the lines; large results are truncated and the full payload saved to the "Full output saved to" path.';
+  'Read a file anywhere on the filesystem, optionally a 1-indexed line range; images return as image content. ' +
+  'Prefer whole files (under 1,000 lines) or large windows to small chunks. ' +
+  'Large results are truncated; read the "Full output saved to" path for the rest.';
 const READ_FILE_DESCRIPTION_ORCHESTRATOR =
   'Inspect a known file directly, including to understand a small or clear area of the workspace. ' +
   'Image files are returned as image content for visual models. ' +
@@ -229,7 +229,7 @@ export const createReadFileToolDefinition = (
   return {
     name: 'read_file',
     scriptedReturnShape:
-      'the { path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } object for a text file; content parts [{ type: "text" | "image", ... }] for an image file; a plain string for an error message',
+      '{ path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } for text; content parts for an image; an "Error: …" string on error',
     description: orchestratorMode
       ? READ_FILE_DESCRIPTION_ORCHESTRATOR
       : allowOutsideWorkspace

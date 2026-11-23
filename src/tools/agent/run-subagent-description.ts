@@ -5,28 +5,22 @@
  */
 export function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
-    'Delegate a bounded task to a subagent (agent_spec for a custom agent, role for a preset). It runs in its own context and returns only a summary. ' +
+    'Delegate a bounded task to a subagent (agent_spec for a custom agent, role for a preset); it works in its own context and returns a summary. ' +
     (backgroundEnabled
-      ? '"foreground" (explorer and librarian only) returns the result in this call; "background" returns a handle now and notifies on completion, for long or parallel independent work.\n\n'
-      : 'This session runs it in the foreground and returns the structured result in this turn.\n\n') +
-    '## When to delegate\n' +
-    'Default to doing the work yourself: investigating, implementing, testing and adjusting form one loop, since a test result can change the diagnosis. ' +
-    "Delegate only a unit that separates cleanly: it can start without another unit's result, is useful on its own, and can be judged against the same criteria as its siblings. " +
-    'Give parallel runs the same starting point, requirements and assumptions so their reports compare. ' +
-    'Use a fresh reviewer when an independent judgment is worth the extra run.\n\n' +
-    "You own the outcome: a report is a claim, not a result. Check its important claims against the evidence, resolve disagreements between runs, and finish the work. A reviewer's approval is not a guarantee.\n\n" +
-    '## Task\n' +
-    'The subagent does not see your conversation. Give one objective, ownership boundary and done condition, plus scope, non-discoverable findings or decisions, constraints, acceptance criteria and validation as applicable. ' +
-    'Skip what it already gets: role instructions, tool guidance, worktree hygiene, environment, root `AGENTS.md`, skills.\n' +
-    "- Explorer: concrete evidence for a bounded question; breadth or depth, never both. Not diagnosis, a fix recommendation, an approach choice, or the user's whole deliverable.\n" +
-    '- Worker: one cohesive implementation unit.\n' +
-    '- Mentor: one decision or challenge question.\n' +
-    '- Reviewer: the artifact (diff range, files, plan), the original requirement as criteria, and concrete scenarios to check; label your own reasoning separately. It gathers evidence only through explorers.\n' +
-    '- Librarian: one history question (memory, prior sessions) or one memory-maintenance topic.\n\n' +
-    'For isolated worker edits, run `git worktree add .worktrees/<slug> -b <slug>` under the workspace root and pass its basename or branch as `worktree`; any writable agent may use it, and this session is not re-rooted.\n\n' +
+      ? '"foreground" (explorer, librarian) returns the result now; "background" returns a handle and notifies on completion.\n\n'
+      : 'It runs in the foreground and returns its result in this turn.\n\n') +
+    'Do the work yourself by default: investigate, implement and test in one loop, since results change the diagnosis. ' +
+    'Delegate only units that start independently, stand alone, and can be judged by shared criteria; give parallel runs the same inputs so reports compare. ' +
+    'Use a fresh reviewer for an independent check. Reports are claims: verify the key ones, resolve conflicts, and finish the work yourself.\n\n' +
+    'The subagent cannot see this conversation. State one objective, ownership boundary and done condition, plus non-discoverable findings, constraints and acceptance criteria; skip the role, tool, environment, AGENTS.md and skills context it already has.\n' +
+    '- explorer: evidence for one bounded question, breadth or depth; never diagnosis, recommendations, or your whole deliverable\n' +
+    '- worker: one cohesive implementation unit\n' +
+    '- mentor: one decision or challenge\n' +
+    '- reviewer: the artifact, the original requirement as criteria, concrete scenarios; label your own reasoning separately\n' +
+    '- librarian: one history or memory-maintenance question\n\n' +
+    'Isolated worker edits: `git worktree add .worktrees/<slug> -b <slug>`, then pass the basename or branch as `worktree`.' +
     (backgroundEnabled
-      ? 'A "running" status means the launch succeeded: do not relaunch or call get_subagent_result before the completion notification; end the turn and wait.'
-      : 'Independent explorer and librarian calls in one response may run in parallel; keep worker and dependent calls serial. ' +
-        'The result has status (completed, failed, cancelled, or interrupted), final text, tools used, and files changed.')
+      ? '\n\n"running" means launched: end the turn and wait for the notification; do not relaunch or call get_subagent_result first.'
+      : '\n\nIndependent explorer and librarian calls in one response may run in parallel; keep worker and dependent calls serial.')
   );
 }

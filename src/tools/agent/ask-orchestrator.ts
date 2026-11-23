@@ -3,9 +3,7 @@ import type { FormatCommandMessage, ScriptedToolDefinition } from '../types.js';
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../format-helpers.js';
 
 const ASK_ORCHESTRATOR_DESCRIPTION =
-  'Ask the orchestrator for a decision that genuinely blocks this execution. ' +
-  'This pauses only this tool call until the orchestrator replies; it does not contact the user. ' +
-  'State the specific decision or information needed, then continue with the answer.';
+  'Ask the orchestrator (not the user) for a decision that blocks you; only this call waits. State exactly what you need.';
 
 const askOrchestratorSchema = z.object({
   question: z

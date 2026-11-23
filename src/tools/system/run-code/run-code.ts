@@ -52,25 +52,17 @@ const maxOutputChars = (): number => getTrimConfig().maxCharacters;
 // sibling reads, and oversized returns were clipped or re-read. Rewording is
 // fine; dropping one of those instructions is a regression.
 const RUN_CODE_DESCRIPTION =
-  'Run a JavaScript program; return the value you want the model to receive. Call tools as ' +
-  "`tools.<name>(params)` with their documented parameters; each returns a promise of the tool's normal result, " +
-  'and a failed call, including an approval denial, rejects. Only the catalogue below is available in the script, ' +
-  'even tools you can call directly. Prefer one script over many tool calls for loops, fan-outs over many files, ' +
-  'or multi-step work whose intermediate values you do not need. The script has no filesystem, network, timers, ' +
-  'require, or eval; approval prompts pause it until decided. `console.log` is shown only on failure, timeout, or ' +
-  'with `include_console: true`.\n\n' +
-  `At most ${RUN_CODE_LIMITS.maxCalls} tools.* calls per script. For independent reads, use \`Promise.allSettled\` ` +
-  'and map rejections to `{error: r.reason.message}` so successful siblings survive. If the call budget runs out, ' +
-  'return the partial results and use another run_code call only for unattempted work. Do not repeat completed ' +
-  'tool effects. Return only the fields, line ranges, or summaries you need: output is capped at the tool output ' +
-  'limit (20,000 characters unless changed). If a result says `Full output saved to`, read that path with ' +
-  '`read_file` instead of repeating calls. A scripted `read_file` result with `truncated: true` holds only part ' +
-  'of the file: read the remaining ranges or its `fullOutputPath` before computing over the whole file. Use ' +
-  '`tools.describe(name)` rather than guessing parameters or returned fields. Pass text containing backticks or ' +
-  '`${...}` (patches, file content) through the `inputs` parameter and read the global `inputs`; never embed it ' +
-  'in code. Code plus inputs must fit in 65,536 bytes. ' +
-  'Example: `const r = await Promise.allSettled(["a.ts", "b.ts"].map((path) => tools.read_file({ path }))); ' +
-  'return r.map((x) => x.status === "fulfilled" ? x.value.content?.slice(0, 2000) : { error: x.reason.message });`';
+  'Run a JavaScript program and return the value the model should receive. Call tools as `tools.<name>(params)`; ' +
+  'each returns a promise, and a failure or approval denial rejects. Only the tools listed below exist in the ' +
+  'script. Use one script instead of many tool calls for loops, fan-outs, or multi-step work. No filesystem, ' +
+  'network, timers, require, or eval. `console.log` shows only on failure or with `include_console: true`.\n\n' +
+  `Limit: ${RUN_CODE_LIMITS.maxCalls} tools.* calls; when exhausted, return partial results and run only ` +
+  'unattempted work next. Never repeat completed effects. Read independently with `Promise.allSettled`, mapping ' +
+  'rejections to `{error: r.reason.message}`. Return only what you need (output cap: 20,000 characters); ' +
+  'follow `Full output saved to` paths. A `read_file` result with `truncated: true` holds only part of ' +
+  'the file: read the rest or its `fullOutputPath`. Use `tools.describe(name)` instead of guessing. Put text with ' +
+  'backticks or `${...}` in `inputs` and read the global `inputs`, never inline in code. Code plus inputs: at most ' +
+  '65,536 bytes.';
 
 export type RunCodeExecutionResult =
   | (string & { readonly [RUN_CODE_EXECUTION_RESULT]: RunCodeExecution })

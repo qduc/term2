@@ -157,11 +157,9 @@ async function checkRgAvailability(executionContext?: ExecutionContext): Promise
 const buildGrepDescription = (globAvailable: boolean, orchestratorMode: boolean): string => {
   const fileListTool = globAvailable ? 'glob' : 'shell';
   const base =
-    'Search file contents for a pattern: regex by default, fixed_strings for a literal; use normal JSON escaping. ' +
-    `Not for listing files by name (inside run_code, use ${
-      fileListTool === 'glob' ? 'tools.glob(...)' : 'shell'
-    }) or tracing relationships between files (inside run_code, use tools.code_context_search(...)). ` +
-    'Returns up to 50 path:line:text matches (more from inside run_code), noting truncation.';
+    'Search file contents (regex; fixed_strings for literals). ' +
+    `Not for finding files by name (inside run_code, use ${fileListTool === 'glob' ? 'tools.glob(...)' : 'shell'}). ` +
+    'Returns up to 50 path:line:text matches (more from inside run_code).';
   if (!orchestratorMode) {
     return base;
   }
@@ -205,7 +203,7 @@ export const createGrepToolDefinition = (
     name: 'grep',
     description: buildGrepDescription(globAvailable, orchestratorMode),
     scriptedReturnShape:
-      'string: newline-delimited "path:line: text" match lines; "No matches found." when none; a trailing "Note:" line when the result was capped',
+      'string of "path:line: text" lines, or "No matches found."; a trailing "Note:" line when capped',
     scriptedReturnSchema: z.string(),
     parameters: searchParametersSchema,
     canRequireApproval: true,

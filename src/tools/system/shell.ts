@@ -666,18 +666,16 @@ const formatShellCommandMessage: FormatCommandMessage = (item, index, toolCallAr
 export const SHELL_DELEGATION_POINTER = '; use `run_subagent` instead';
 
 const getShellDescription = (searchViaShell: boolean, background = true) =>
-  'Run one shell command. ' +
   (searchViaShell
-    ? 'Not for writing files: use the specialized tools. '
-    : 'Not for reading, writing or searching files: use the specialized tools. ') +
-  'Avoid multi-line inline scripts (escaping breaks); write a temporary script and run it. ' +
-  `Not for complex multi-step edits or broad codebase exploration${SHELL_DELEGATION_POINTER}. ` +
-  'Long output is truncated and saved to a file. ' +
+    ? 'Run one shell command; not for writing files (use the dedicated tools). '
+    : 'Run one shell command; not for reading, writing or searching files (use the dedicated tools). ') +
+  'Avoid multi-line inline scripts: write a script file and run it. ' +
+  `Not for multi-step edits or broad exploration${SHELL_DELEGATION_POINTER}. ` +
   (background
-    ? 'For notifications from a background job, set background: true with monitor in the same call and wait for shell_output instead of polling. ' +
-      'Give long-running work an explicit finite timeout_ms sized to it: the 120s foreground and 30min background defaults are not ceilings, and a watcher or full-suite run is killed at the background default otherwise. '
-    : 'Give long-running work an explicit finite timeout_ms sized to it: the 120s default is not a ceiling. ') +
-  'On a timeout, diagnose; do not blindly re-run a command whose effects may already have landed.';
+    ? 'For background notifications, set background: true with monitor and await shell_output. ' +
+      'Size timeout_ms for long work: the 120s and 30min background defaults are not ceilings. '
+    : 'Size timeout_ms for long work: the 120s default is not a ceiling. ') +
+  'After a timeout, diagnose before re-running: effects may have landed.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
   'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
   'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling. Known long-running work (watchers, full-suite validation) needs an explicit finite timeout_ms sized to the job: the background default is not a ceiling, and a timeout is a deadline to diagnose, not a license to re-run a command whose earlier effects may already have landed.';

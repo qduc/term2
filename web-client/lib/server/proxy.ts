@@ -12,11 +12,20 @@ export const rpc = {
   candidatesSelect: '/private/agent/v1/workspace/candidates/select',
   models: '/private/agent/v1/models',
   settings: '/private/agent/v1/settings',
+  providerPresets: '/private/agent/v1/providers/presets',
+  providers: '/private/agent/v1/providers',
+  providerDelete: (providerId: string) => `/private/agent/v1/providers/${providerId}`,
+  skills: '/private/agent/v1/skills',
   sessions: '/private/agent/v1/sessions',
   session: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}`,
   messages: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/messages`,
   commands: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/commands`,
   abort: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/abort`,
+  rewindTargets: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/rewind-targets`,
+  rewind: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/rewind`,
+  queue: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/queue`,
+  tasks: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/tasks`,
+  files: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/files`,
   interactions: (sessionId: string, interactionId: string) =>
     `/private/agent/v1/sessions/${sessionId}/interactions/${interactionId}`,
   sessionConfig: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/config`,
@@ -91,6 +100,7 @@ export async function forward(
     sessionId?: string;
     body?: Record<string, unknown>;
     query?: string;
+    timeoutMs?: number;
   },
 ): Promise<NextResponse> {
   const response = await client.request({

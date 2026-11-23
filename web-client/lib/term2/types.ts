@@ -45,7 +45,70 @@ export interface SessionListItem {
   createdAt: string;
   updatedAt: string;
   latestSequence: number;
+  title?: string;
+  model?: { provider: string; model: string };
 }
+
+export interface ProviderPresetEntry {
+  id: string;
+  name: string;
+  category: string;
+  docsUrl: string;
+  builtinProviderId?: string;
+  type?: string;
+  baseUrl?: string;
+}
+
+export type ProviderWriteInput =
+  | { action: 'toggle'; id: string; disabled: boolean }
+  | { action: 'save'; originalId?: string | null; name: string; type: string; baseUrl?: string; apiKey?: string };
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+  isProjectLevel: boolean;
+}
+
+export interface WorkspaceFileEntry {
+  path: string;
+  type: 'file' | 'directory';
+}
+
+export interface RewindTargetSummary {
+  targetId: string;
+  messageId: string;
+  turnId?: string;
+  text: string;
+  discardedTurns: number;
+  discardedMessages: number;
+  editedFiles?: string[];
+  affectedFiles?: string[];
+}
+
+export interface ImageAttachmentPayload {
+  type: 'image';
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+  data: string;
+}
+
+export type MessageDeliveryMode = 'auto' | 'steer' | 'follow_up' | 'reject_if_busy';
+
+export interface MessageSubmitOptions {
+  delivery?: MessageDeliveryMode;
+  expectedSteerTurnId?: string;
+  skill?: string;
+  attachments?: ImageAttachmentPayload[];
+}
+
+export type QueueManageAction =
+  | { action: 'edit'; messageId: string; text: string }
+  | { action: 'retract'; messageId: string }
+  | { action: 'resume' }
+  | { action: 'discard' };
+
+export type TaskControlAction =
+  | { action: 'cancel' | 'check_in' | 'foreground' | 'background'; taskId: string }
+  | { action: 'drain_notifications'; clientRequestId: string };
 
 export interface PendingInteraction {
   version: 1;
@@ -196,7 +259,7 @@ export interface SettingsProjection {
     safety: {
       sandbox: 'enabled' | 'disabled' | 'unavailable';
       showReview?: boolean;
-      approval: 'off' | 'advisory' | 'auto' | 'unsafe-active' | 'hidden';
+      approval: 'off' | 'advisory' | 'auto' | 'unattended' | 'unsafe-active' | 'hidden';
       backgroundShell: 'disabled-by-gateway';
       workspaceAccess: 'read' | 'read_write';
       network: 'denied' | 'configured' | 'confirmation-required';
@@ -711,6 +774,8 @@ export function parseProjection(value: unknown): SessionProjection {
       'transcript',
       'interaction',
       'sessionConfig',
+      'title',
+      'model',
     ],
     [
       'id',
@@ -737,6 +802,17 @@ export function parseProjection(value: unknown): SessionProjection {
     transcript: input.transcript,
     interaction: null,
   };
+  if (input.title !== undefined) {
+    projection.title = stringValue(input.title, 256);
+  }
+  if (input.model !== undefined) {
+    const model = objectValue(input.model);
+    exactKeys(model, ['provider', 'model']);
+    projection.model = {
+      provider: stringValue(model.provider, 256),
+      model: stringValue(model.model, 256),
+    };
+  }
   if (input.sessionConfig !== undefined) {
     const config = objectValue(input.sessionConfig);
     exactKeys(config, [

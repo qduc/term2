@@ -12,21 +12,23 @@
  * ignored. Theme handling is unchanged; the chrome itself is a slim
  * breadcrumb bar (workspace / session title) with ghost icon buttons.
  */
-import { Sun, Moon, Settings, PanelLeft, PanelRight, Plus } from 'lucide-react';
+import { Sun, Moon, Settings, PanelLeft, PanelRight, Plus, CircleHelp, Folder } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface ChatHeaderProps {
   isStreaming: boolean;
   onNewChat?: () => void;
-  /** Label for the mobile new-chat button; reflects whether it resumes an existing session. */
+  /** Label for the new-chat button. */
   newChatLabel?: string;
-  /** Accepted for call-site compatibility; model selection is not part of the slice. */
+  /** Accepted for call-site compatibility; model selection lives in Term2ModelPicker. */
   model: string;
-  /** Accepted for call-site compatibility; model selection is not part of the slice. */
+  /** Accepted for call-site compatibility. */
   onModelChange: (model: string) => void;
-  /** Accepted for call-site compatibility; the header always renders the title block. */
+  /** Accepted for call-site compatibility. */
   showModelSelector?: boolean;
   onOpenSettings?: () => void;
+  onOpenHelp?: () => void;
+  onOpenFolder?: () => void;
   onToggleLeftSidebar?: () => void;
   onToggleRightSidebar?: () => void;
   showLeftSidebarButton?: boolean;
@@ -43,6 +45,8 @@ interface ChatHeaderProps {
 
 export function ChatHeader({
   onOpenSettings,
+  onOpenHelp,
+  onOpenFolder,
   onToggleLeftSidebar,
   onToggleRightSidebar,
   showLeftSidebarButton = false,
@@ -72,7 +76,7 @@ export function ChatHeader({
     'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-black/[0.05] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.07] dark:hover:text-zinc-100';
 
   return (
-    <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between gap-2 px-2 sm:px-3">
+    <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-black/[0.04] px-2 sm:px-3 dark:border-white/[0.05]">
       <div className="flex min-w-0 flex-1 items-center gap-1">
         {showLeftSidebarButton && onToggleLeftSidebar && (
           <button
@@ -86,28 +90,27 @@ export function ChatHeader({
           </button>
         )}
 
-        {/* New Chat Button - Mobile Only */}
-        {onNewChat && (
-          <button
-            onClick={onNewChat}
-            className={`md:hidden ${iconButton}`}
-            title={newChatLabel}
-            aria-label={newChatLabel}
-            type="button"
-          >
-            <Plus className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-        )}
-
         <div className="ml-1 flex min-w-0 items-center gap-1.5 text-sm">
           {subtitle && (
             <>
-              <span
-                className="hidden shrink-0 text-zinc-500 sm:inline dark:text-zinc-400"
-                title={subtitleTooltip || undefined}
-              >
-                {subtitle}
-              </span>
+              {onOpenFolder ? (
+                <button
+                  type="button"
+                  onClick={onOpenFolder}
+                  title={subtitleTooltip || 'Switch or add folder'}
+                  className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-zinc-500 transition-colors hover:bg-black/[0.04] hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100"
+                >
+                  <Folder className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  <span className="max-w-[10rem] truncate">{subtitle}</span>
+                </button>
+              ) : (
+                <span
+                  className="hidden shrink-0 text-zinc-500 sm:inline dark:text-zinc-400"
+                  title={subtitleTooltip || undefined}
+                >
+                  {subtitle}
+                </span>
+              )}
               <span aria-hidden className="hidden text-zinc-300 sm:inline dark:text-zinc-600">
                 /
               </span>
@@ -117,7 +120,19 @@ export function ChatHeader({
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex shrink-0 items-center gap-1">
+        {onNewChat && (
+          <button
+            onClick={onNewChat}
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-black/[0.08] px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-black/[0.04] hover:text-zinc-950 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06]"
+            title={newChatLabel}
+            aria-label={newChatLabel}
+            type="button"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+            <span className="hidden sm:inline">{newChatLabel}</span>
+          </button>
+        )}
         {onExit && (
           <button
             onClick={onExit}
@@ -125,6 +140,11 @@ export function ChatHeader({
             type="button"
           >
             {exitLabel}
+          </button>
+        )}
+        {onOpenHelp && (
+          <button onClick={onOpenHelp} className={iconButton} title="Help & shortcuts" aria-label="Help and shortcuts" type="button">
+            <CircleHelp className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </button>
         )}
         {showSettingsButton && (
@@ -146,7 +166,6 @@ export function ChatHeader({
           )}
         </button>
 
-        {/* Right Sidebar Toggle - Mobile Only */}
         {showRightSidebarButton && onToggleRightSidebar && (
           <button
             onClick={onToggleRightSidebar}

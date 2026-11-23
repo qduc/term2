@@ -82,13 +82,28 @@ export function isPairingRegisterBody(body: unknown): body is { publicKeyPem: st
 }
 
 function isSafeSettingsValue(value: unknown): boolean {
-  return (
+  if (
     value === null ||
     typeof value === 'string' ||
     typeof value === 'number' ||
     typeof value === 'boolean' ||
     (Array.isArray(value) && value.every((item) => typeof item === 'string'))
-  );
+  ) {
+    return true;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    return (
+      Object.keys(record).length === 2 &&
+      typeof record.model === 'string' &&
+      record.model.trim().length > 0 &&
+      record.model.length <= 512 &&
+      typeof record.provider === 'string' &&
+      record.provider.trim().length > 0 &&
+      record.provider.length <= 256
+    );
+  }
+  return false;
 }
 
 export function isCredentialWriteBody(body: unknown): body is { value: string } {
@@ -173,13 +188,6 @@ export function isOpaqueId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
 }
 
-export function hasAttachments(body: unknown): boolean {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
-  return Object.keys(body as Record<string, unknown>).some((key) =>
-    ['images', 'attachments', 'attachmentIds'].includes(key),
-  );
-}
-
 export function isTurnBody(body: unknown): body is { turnId: string } {
   return (
     !!body &&
@@ -240,4 +248,113 @@ export function parseEventCursor(value: string | null): { value: number | null; 
   if (!/^(?:0|[1-9][0-9]{0,14})$/.test(value)) return { value: null, error: 'cursor_invalid' };
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? { value: parsed } : { value: null, error: 'cursor_invalid' };
+}
+
+export function isProviderWriteBody(body: unknown): body is import('./server-contracts.js').ProviderWriteInput {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const v = body as Record<string, unknown>;
+  if (v.action === 'toggle') {
+    return (
+      Object.keys(v).every((k) => ['action', 'id', 'disabled'].includes(k)) &&
+      typeof v.id === 'string' &&
+      v.id.length > 0 &&
+      v.id.length <= 256 &&
+      typeof v.disabled === 'boolean'
+    );
+  }
+  if (v.action === 'save') {
+    const validTypes = ['openai', 'openai-compatible', 'llama.cpp', 'anthropic', 'google', 'opencode'];
+    return (
+      Object.keys(v).every((k) => ['action', 'originalId', 'name', 'type', 'baseUrl', 'apiKey'].includes(k)) &&
+      typeof v.name === 'string' &&
+      v.name.trim().length > 0 &&
+      v.name.length <= 256 &&
+      typeof v.type === 'string' &&
+      validTypes.includes(v.type) &&
+      (v.originalId === undefined ||
+        v.originalId === null ||
+        (typeof v.originalId === 'string' && v.originalId.length <= 256)) &&
+      (v.baseUrl === undefined || (typeof v.baseUrl === 'string' && v.baseUrl.length <= 2048)) &&
+      (v.apiKey === undefined || (typeof v.apiKey === 'string' && v.apiKey.length <= 16_384))
+    );
+  }
+  return false;
+}
+
+export function isRewindBody(
+  body: unknown,
+): body is { targetId: string; clientRequestId: string; expectedRevision?: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const v = body as Record<string, unknown>;
+  return (
+    Object.keys(v).every((k) => ['targetId', 'clientRequestId', 'expectedRevision'].includes(k)) &&
+    typeof v.targetId === 'string' &&
+    v.targetId.length > 0 &&
+    v.targetId.length <= 256 &&
+    isOpaqueId(v.clientRequestId) &&
+    (v.expectedRevision === undefined || (typeof v.expectedRevision === 'string' && v.expectedRevision.length > 0))
+  );
+}
+
+export function isQueueBody(
+  body: unknown,
+): body is
+  | { action: 'edit'; messageId: string; text: string }
+  | { action: 'retract'; messageId: string }
+  | { action: 'resume' }
+  | { action: 'discard' } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const v = body as Record<string, unknown>;
+  if (v.action === 'resume' || v.action === 'discard') return Object.keys(v).length === 1;
+  if (v.action === 'retract') {
+    return Object.keys(v).every((k) => k === 'action' || k === 'messageId') && isOpaqueId(v.messageId);
+  }
+  if (v.action === 'edit') {
+    return (
+      Object.keys(v).every((k) => ['action', 'messageId', 'text'].includes(k)) &&
+      isOpaqueId(v.messageId) &&
+      typeof v.text === 'string' &&
+      v.text.trim().length > 0 &&
+      v.text.length <= 128_000
+    );
+  }
+  return false;
+}
+
+export function isTaskControlBody(
+  body: unknown,
+): body is
+  | { action: 'cancel' | 'check_in' | 'foreground' | 'background'; taskId: string }
+  | { action: 'drain_notifications'; clientRequestId: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const v = body as Record<string, unknown>;
+  if (v.action === 'drain_notifications') {
+    return Object.keys(v).every((k) => k === 'action' || k === 'clientRequestId') && isOpaqueId(v.clientRequestId);
+  }
+  return (
+    Object.keys(v).every((k) => k === 'action' || k === 'taskId') &&
+    ['cancel', 'check_in', 'foreground', 'background'].includes(String(v.action)) &&
+    typeof v.taskId === 'string' &&
+    v.taskId.length > 0 &&
+    v.taskId.length <= 256
+  );
+}
+
+const IMAGE_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+export function isImageAttachments(value: unknown): value is Array<{ type: 'image'; mediaType: string; data: string }> {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 4) return false;
+  return value.every((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const v = item as Record<string, unknown>;
+    return (
+      Object.keys(v).every((k) => k === 'type' || k === 'mediaType' || k === 'data') &&
+      v.type === 'image' &&
+      typeof v.mediaType === 'string' &&
+      IMAGE_MEDIA_TYPES.has(v.mediaType) &&
+      typeof v.data === 'string' &&
+      v.data.length > 0 &&
+      v.data.length <= 7_000_000 &&
+      /^[A-Za-z0-9+/=]+$/.test(v.data)
+    );
+  });
 }

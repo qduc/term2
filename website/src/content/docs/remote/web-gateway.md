@@ -11,13 +11,19 @@ Install or update `@qduc/term2`, then run:
 term2-web
 ```
 
-Open `http://127.0.0.1:3000`. The command starts both the browser app and its private gateway; you don't need a checkout, a separate build, or a pairing code. Press `Ctrl+C` to stop both. If port 3000 is already taken, run `PORT=3001 term2-web`.
+Open `http://127.0.0.1:3000`. The command starts both the browser app and its private gateway; you don't need a checkout, a separate build, or a pairing code. Press `Ctrl+C` to stop both. If port 3000 is already taken, run `term2-web --port 3001` (or `PORT=3001 term2-web`).
 
-On your first visit, select **Choose a folder**. Browse to the folder you want help with, confirm that term2 can read it, then select **Use this folder** and **Open chat**. Use **Chat history** to return to an earlier chat.
+On your first visit, follow the two-step checklist to **Connect** an AI provider (API key, OAuth sign-in, or preset/custom server) and **Browse** for a folder to work in, confirm access, and select **Start a new chat**. Use the left sidebar to switch folders, start multiple chats in the same folder, or return to an earlier chat.
 
 The web app uses the same saved settings and provider credentials as the CLI. If you already set up a provider there, don't enter the key again. Start `term2-web` from the same shell environment if your CLI gets its credentials from environment variables. If a chat needs an API key that hasn't been configured, it will point you to **Settings**.
 
-This is a single-user interface bound to loopback, with read-only workspace grants under your home directory. Don't expose it through a proxy or port forward to other users. The signing key and Unix socket are temporary; gateway session state persists across launches.
+This is a single-user interface bound to loopback, with read-only workspace grants under your home directory by default. To allow read-and-write folder grants (every file edit still asks for your approval), pass `--allow-write` and optionally narrow allowed directories with `--workspace-root <dir>`:
+
+```bash
+term2-web --allow-write --workspace-root ~/projects
+```
+
+Don't expose it through a proxy or port forward to other users. The signing key and Unix socket are temporary; gateway session state persists across launches.
 
 ## Run the gateway separately
 

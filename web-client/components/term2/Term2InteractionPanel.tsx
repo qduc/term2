@@ -176,6 +176,11 @@ export function Term2InteractionPanel({
       </div>
       {askUser && (
         <div className="px-4 pt-3">
+          {askUser.questions.length > 1 && (
+            <p className="mb-1 text-xs font-medium text-teal-700 dark:text-teal-400">
+              Question {askUser.currentQuestionIndex + 1} of {askUser.questions.length}
+            </p>
+          )}
           <p id={questionId} className="font-medium text-zinc-900 dark:text-zinc-100">
             {question?.question}
           </p>
@@ -189,16 +194,21 @@ export function Term2InteractionPanel({
                   <label
                     key={optionIndex}
                     title={option.description}
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-black/[0.1] px-3 py-1.5 text-sm transition-colors hover:bg-zinc-50 has-[:checked]:border-teal-500/50 has-[:checked]:bg-teal-500/10 dark:border-white/10 dark:hover:bg-white/[0.05]"
+                    className="inline-flex cursor-pointer items-start gap-2 rounded-lg border border-black/[0.1] px-3 py-2 text-sm transition-colors hover:bg-zinc-50 has-[:checked]:border-teal-500/50 has-[:checked]:bg-teal-500/10 dark:border-white/10 dark:hover:bg-white/[0.05]"
                   >
                     <input
                       type="checkbox"
-                      className="accent-teal-600"
+                      className="mt-0.5 accent-teal-600"
                       checked={selected.has(optionIndex)}
                       disabled={disabled || busy}
                       onChange={() => toggleOption(optionIndex)}
                     />
-                    {option.label}
+                    <span>
+                      <span className="block font-medium">{option.label}</span>
+                      {option.description && (
+                        <span className="block text-xs text-zinc-500 dark:text-zinc-400">{option.description}</span>
+                      )}
+                    </span>
                   </label>
                 ))
               : question?.options.map((option, optionIndex) => (
@@ -206,11 +216,16 @@ export function Term2InteractionPanel({
                     type="button"
                     key={optionIndex}
                     title={option.description}
-                    className={secondaryButton}
+                    className={`${secondaryButton} text-left`}
                     disabled={disabled || busy}
                     onClick={() => void submit(`option:${optionIndex}`)}
                   >
-                    {option.label}
+                    <span className="block">{option.label}</span>
+                    {option.description && (
+                      <span className="mt-0.5 block text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                        {option.description}
+                      </span>
+                    )}
                   </button>
                 ))}
           </div>
@@ -234,7 +249,13 @@ export function Term2InteractionPanel({
               className={field}
               value={answer}
               onChange={(event) => setAnswer(event.target.value.slice(0, 16384))}
-              placeholder="Or type your own answer"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && answer.trim() && !disabled && !busy) {
+                  event.preventDefault();
+                  void submit('custom', answer);
+                }
+              }}
+              placeholder="Or type your own answer…"
               disabled={disabled || busy}
             />
             <button

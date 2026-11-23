@@ -19,8 +19,16 @@ import {
   type SettingsProjection,
   type SettingsWriteResult,
   type ModelSummary,
+  type MessageSubmitOptions,
+  type ProviderPresetEntry,
+  type ProviderWriteInput,
+  type QueueManageAction,
+  type RewindTargetSummary,
+  type SkillSummary,
+  type TaskControlAction,
   type Term2CommandId,
   type Term2CommandResult,
+  type WorkspaceFileEntry,
   TERM2_COMMAND_IDS,
   TERM2_WIRE_PROTOCOL,
   TERM2_COMMAND_OUTCOMES_BY_COMMAND,
@@ -409,7 +417,7 @@ export function validateSettings(value: unknown): SettingsProjection {
   only(safety, ['sandbox', 'approval', 'backgroundShell', 'workspaceAccess', 'network', 'showReview']);
   if (
     !['enabled', 'disabled', 'unavailable'].includes(String(safety.sandbox)) ||
-    !['off', 'advisory', 'auto', 'unsafe-active', 'hidden'].includes(String(safety.approval)) ||
+    !['off', 'advisory', 'auto', 'unattended', 'unsafe-active', 'hidden'].includes(String(safety.approval)) ||
     safety.backgroundShell !== 'disabled-by-gateway' ||
     !['read', 'read_write'].includes(String(safety.workspaceAccess)) ||
     !['denied', 'configured', 'confirmation-required'].includes(String(safety.network)) ||
@@ -541,7 +549,7 @@ function validateSessionItem(value: unknown): SessionPage['sessions'][number] {
   const input = object(value);
   if (
     Object.keys(input).some(
-      (key) => !['id', 'workspaceId', 'status', 'createdAt', 'updatedAt', 'latestSequence'].includes(key),
+      (key) => !['id', 'workspaceId', 'status', 'createdAt', 'updatedAt', 'latestSequence', 'title', 'model'].includes(key),
     )
   )
     throw new Term2ApiError(503, 'Invalid agent response');
@@ -553,6 +561,14 @@ function validateSessionItem(value: unknown): SessionPage['sessions'][number] {
     (input.latestSequence as number) < 0
   )
     throw new Term2ApiError(503, 'Invalid agent response');
+  const title = typeof input.title === 'string' && input.title.trim() ? input.title.slice(0, 200) : undefined;
+  let model: { provider: string; model: string } | undefined;
+  if (input.model && typeof input.model === 'object' && !Array.isArray(input.model)) {
+    const m = input.model as Record<string, unknown>;
+    if (typeof m.provider === 'string' && typeof m.model === 'string') {
+      model = { provider: m.provider.slice(0, 256), model: m.model.slice(0, 512) };
+    }
+  }
   return {
     id: id(input.id),
     workspaceId: id(input.workspaceId),
@@ -560,6 +576,8 @@ function validateSessionItem(value: unknown): SessionPage['sessions'][number] {
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
     latestSequence: input.latestSequence as number,
+    ...(title ? { title } : {}),
+    ...(model ? { model } : {}),
   };
 }
 function validateWorkspacePage(value: unknown): WorkspacePage {
@@ -847,11 +865,147 @@ export const term2Client = {
       throw apiError(error);
     }
   },
-  submitMessage(sessionId: string, text: string, clientRequestId: string, signal?: AbortSignal) {
+  submitMessage(
+    sessionId: string,
+    text: string,
+    clientRequestId: string,
+    signalOrOptions?: AbortSignal | MessageSubmitOptions,
+    maybeSignal?: AbortSignal,
+  ) {
+    const isSignal = signalOrOptions instanceof AbortSignal;
+    const options = isSignal ? undefined : signalOrOptions;
+    const signal = isSignal ? signalOrOptions : maybeSignal;
+    const payload: Record<string, unknown> = { text, clientRequestId };
+    if (options?.delivery) payload.delivery = options.delivery;
+    if (options?.expectedSteerTurnId) payload.expectedSteerTurnId = options.expectedSteerTurnId;
+    if (options?.skill) payload.skill = options.skill;
+    if (options?.attachments && options.attachments.length > 0) payload.attachments = options.attachments;
     return postJson(
       `/agent/sessions/${encodeURIComponent(sessionId)}/messages`,
-      { text, clientRequestId },
+      payload,
       validateMessage,
+      signal,
+    );
+  },
+  listProviderPresets(signal?: AbortSignal) {
+    return getJson(
+      '/term2/providers/presets',
+      (value): { presets: ProviderPresetEntry[]; types: string[] } => {
+        const input = object(value);
+        const presets = Array.isArray(input.presets) ? (input.presets as ProviderPresetEntry[]) : [];
+        const types = Array.isArray(input.types) ? (input.types as string[]) : [];
+        return { presets, types };
+      },
+      signal,
+    );
+  },
+  writeProvider(input: ProviderWriteInput, signal?: AbortSignal) {
+    return postJson(
+      '/term2/providers',
+      input,
+      (value): { ok: boolean; error?: string; fieldErrors?: Record<string, string> } => {
+        const record = object(value);
+        return {
+          ok: record.ok === true,
+          ...(typeof record.error === 'string' ? { error: record.error } : {}),
+          ...(record.fieldErrors && typeof record.fieldErrors === 'object'
+            ? { fieldErrors: record.fieldErrors as Record<string, string> }
+            : {}),
+        };
+      },
+      signal,
+    );
+  },
+  deleteProvider(providerId: string, signal?: AbortSignal) {
+    return deleteJson(
+      `/term2/providers/${encodeURIComponent(providerId)}`,
+      (value): { ok: boolean } => ({ ok: object(value).ok === true }),
+      signal,
+    );
+  },
+  listSkills(signal?: AbortSignal) {
+    return getJson(
+      '/term2/skills',
+      (value): { skills: SkillSummary[] } => {
+        const input = object(value);
+        return { skills: Array.isArray(input.skills) ? (input.skills as SkillSummary[]) : [] };
+      },
+      signal,
+    );
+  },
+  listRewindTargets(sessionId: string, signal?: AbortSignal) {
+    return getJson(
+      `/agent/sessions/${encodeURIComponent(id(sessionId))}/rewind-targets`,
+      (value): { targets: RewindTargetSummary[] } => {
+        const input = object(value);
+        const raw = Array.isArray(input.targets) ? input.targets : [];
+        const targets: RewindTargetSummary[] = [];
+        for (const item of raw) {
+          if (!item || typeof item !== 'object') continue;
+          const r = item as Record<string, unknown>;
+          const targetId = typeof r.targetId === 'string' ? r.targetId : typeof r.id === 'string' ? r.id : '';
+          if (!targetId) continue;
+          targets.push({
+            targetId,
+            messageId: typeof r.messageId === 'string' ? r.messageId : targetId,
+            ...(typeof r.turnId === 'string' ? { turnId: r.turnId } : {}),
+            text:
+              typeof r.label === 'string'
+                ? r.label
+                : typeof r.text === 'string'
+                  ? r.text
+                  : typeof r.prompt === 'string'
+                    ? r.prompt
+                    : '',
+            discardedTurns: typeof r.discardedTurns === 'number' ? r.discardedTurns : 0,
+            discardedMessages: typeof r.discardedMessages === 'number' ? r.discardedMessages : 0,
+            ...(Array.isArray(r.editedFiles) ? { editedFiles: r.editedFiles.filter((f): f is string => typeof f === 'string') } : {}),
+            ...(Array.isArray(r.affectedFiles) ? { affectedFiles: r.affectedFiles.filter((f): f is string => typeof f === 'string') } : {}),
+          });
+        }
+        return { targets };
+      },
+      signal,
+    );
+  },
+  rewindSession(
+    sessionId: string,
+    body: { targetId: string; clientRequestId: string; expectedRevision?: string },
+    signal?: AbortSignal,
+  ) {
+    return postJson(
+      `/agent/sessions/${encodeURIComponent(id(sessionId))}/rewind`,
+      body,
+      (value) => object(value),
+      signal,
+    );
+  },
+  manageQueue(sessionId: string, body: QueueManageAction, signal?: AbortSignal) {
+    return postJson(
+      `/agent/sessions/${encodeURIComponent(id(sessionId))}/queue`,
+      body,
+      (value): { ok: boolean } => ({ ok: object(value).ok === true }),
+      signal,
+    );
+  },
+  controlTask(sessionId: string, body: TaskControlAction, signal?: AbortSignal) {
+    return postJson(
+      `/agent/sessions/${encodeURIComponent(id(sessionId))}/tasks`,
+      body,
+      (value): { ok: boolean } => ({ ok: object(value).ok === true }),
+      signal,
+    );
+  },
+  listSessionFiles(sessionId: string, signal?: AbortSignal) {
+    return getJson(
+      `/agent/sessions/${encodeURIComponent(id(sessionId))}/files`,
+      (value): { entries: WorkspaceFileEntry[]; truncated: boolean } => {
+        const input = object(value);
+        return {
+          entries: Array.isArray(input.entries) ? (input.entries as WorkspaceFileEntry[]) : [],
+          truncated: input.truncated === true,
+        };
+      },
       signal,
     );
   },

@@ -6,7 +6,12 @@ import { commandFailure, publicError, unavailable } from './server-errors.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { parseWireCommand } from '../protocol/parse.js';
 import { projectServerSession } from './server-projection.js';
-import { invokeServerCommand, projectServerNativeCommand, safeNativeCommandResult } from './server-commands.js';
+import {
+  invokeServerCommand,
+  projectServerNativeCommand,
+  projectServerRewind,
+  safeNativeCommandResult,
+} from './server-commands.js';
 import { AGENT_WIRE_V2_RUNTIME_AVAILABLE, encodeAgentConfigureResultV2 } from './server-wire-v2.js';
 import * as validate from './server-validation.js';
 
@@ -51,6 +56,15 @@ export async function handleSessionRoute(
               state: 'pending' as const,
               interaction: interactions.project(connection.snapshot.sessionId, pending),
               turnId: pending.turnId,
+              ...(pending.taskOwner
+                ? {
+                    subagent: {
+                      agentId: pending.taskOwner.id,
+                      role: pending.taskOwner.role ?? 'subagent',
+                      ...(pending.taskOwner.name ? { name: pending.taskOwner.name } : {}),
+                    },
+                  }
+                : {}),
             }
           : budget
           ? {
@@ -94,17 +108,28 @@ export async function handleSessionRoute(
     }
     case 'message_submit': {
       const direct = input.url.searchParams.get('format') === 'direct';
-      if (!direct && validate.hasAttachments(body))
-        return publicError(422, 'attachments_not_enabled', 'Attachments are not available');
       const message = directMessage(body, direct);
       if (!message) return invalid('message request is invalid');
+      let submitText = message.text;
+      if (message.skill) {
+        if (!dependencies.presentation?.prepareSkillText) return unavailable('skill injection');
+        const prepared = await dependencies.presentation.prepareSkillText(
+          principal,
+          connection.snapshot,
+          message.skill,
+          message.text,
+        );
+        if (prepared === null) return invalid('unknown skill');
+        submitText = prepared;
+      }
       const command = parseWireCommand({
         type: 'submit',
         requestId: message.clientRequestId,
-        text: message.text,
+        text: submitText,
         origin: { kind: 'api', id: claims.sub },
         ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
         ...(message.delivery !== undefined ? { delivery: message.delivery } : {}),
+        ...(message.expectedSteerTurnId !== undefined ? { expectedSteerTurnId: message.expectedSteerTurnId } : {}),
       });
       const result = await connection.send(command);
       if (!result.ok) return commandFailure(result);
@@ -237,6 +262,51 @@ export async function handleSessionRoute(
         status: 202,
         body: { sessionId: connection.sessionId, turnId: result.result.turnId, accepted: true },
       };
+    }
+    case 'session_rewind_targets': {
+      const result = await connection.send({ type: 'list_rewind_targets' });
+      if (!result.ok) return commandFailure(result);
+      if (result.kind !== 'rewind_targets') return unavailable('rewind targets');
+      return { status: 200, body: { targets: result.targets } };
+    }
+    case 'session_rewind': {
+      if (!validate.isRewindBody(body)) return invalid('rewind request is invalid');
+      const result = await connection.send({
+        type: 'rewind',
+        commandId: body.clientRequestId,
+        targetId: body.targetId,
+        admission: 'idle',
+        ...(body.expectedRevision ? { expectedRevision: body.expectedRevision } : {}),
+      });
+      return projectServerRewind(result);
+    }
+    case 'session_queue': {
+      if (!validate.isQueueBody(body)) return invalid('queue request is invalid');
+      const command: WireCommand =
+        body.action === 'edit'
+          ? { type: 'queue_edit', messageId: body.messageId, text: body.text }
+          : body.action === 'retract'
+          ? { type: 'queue_retract', messageId: body.messageId }
+          : body.action === 'resume'
+          ? { type: 'queue_resume' }
+          : { type: 'queue_discard' };
+      const result = await connection.send(command);
+      if (!result.ok) return commandFailure(result);
+      return { status: 200, body: { ok: true } };
+    }
+    case 'session_task_control': {
+      if (!validate.isTaskControlBody(body)) return invalid('task control request is invalid');
+      const command: WireCommand =
+        body.action === 'drain_notifications'
+          ? { type: 'drain_background_notifications', requestId: body.clientRequestId }
+          : { type: 'task_control', taskId: body.taskId, action: body.action };
+      const result = await connection.send(command);
+      if (!result.ok) return commandFailure(result);
+      return { status: 200, body: { ok: true, result } };
+    }
+    case 'session_files': {
+      if (!dependencies.presentation?.listFiles) return unavailable('workspace file listing');
+      return { status: 200, body: await dependencies.presentation.listFiles(principal, connection.snapshot) };
     }
     default:
       return publicError(403, 'gateway_unavailable', 'gateway operation is unavailable');
@@ -389,22 +459,40 @@ function rejectedAdmission(reason: string): ServerResult {
 function directMessage(
   body: unknown,
   direct: boolean,
-): { text: string; clientRequestId: string; attachments?: unknown; delivery?: unknown } | null {
+): {
+  text: string;
+  clientRequestId: string;
+  attachments?: unknown;
+  delivery?: unknown;
+  expectedSteerTurnId?: string;
+  skill?: string;
+} | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const value = body as Record<string, unknown>;
-  const allowed = direct ? ['text', 'clientRequestId', 'attachments', 'delivery'] : ['text', 'clientRequestId'];
+  const allowed = ['text', 'clientRequestId', 'attachments', 'delivery', 'expectedSteerTurnId', 'skill'];
   if (
     Object.keys(value).some((key) => !allowed.includes(key)) ||
     typeof value.text !== 'string' ||
     value.text.length > 128_000 ||
-    !validate.isOpaqueId(value.clientRequestId) ||
-    (!value.text.length && (!direct || !Array.isArray(value.attachments) || !value.attachments.length))
+    !validate.isOpaqueId(value.clientRequestId)
   )
     return null;
+  if (!direct && value.attachments !== undefined && !validate.isImageAttachments(value.attachments)) return null;
+  if (
+    value.delivery !== undefined &&
+    (typeof value.delivery !== 'string' || !['auto', 'steer', 'follow_up', 'reject_if_busy'].includes(value.delivery))
+  )
+    return null;
+  if (value.expectedSteerTurnId !== undefined && !validate.isOpaqueId(value.expectedSteerTurnId)) return null;
+  if (value.skill !== undefined && (typeof value.skill !== 'string' || !value.skill.trim() || value.skill.length > 128))
+    return null;
+  if (!value.text.length && (!Array.isArray(value.attachments) || !value.attachments.length)) return null;
   return {
     text: value.text,
     clientRequestId: value.clientRequestId,
     ...(value.attachments !== undefined ? { attachments: value.attachments } : {}),
     ...(value.delivery !== undefined ? { delivery: value.delivery } : {}),
+    ...(typeof value.expectedSteerTurnId === 'string' ? { expectedSteerTurnId: value.expectedSteerTurnId } : {}),
+    ...(typeof value.skill === 'string' ? { skill: value.skill.trim() } : {}),
   };
 }

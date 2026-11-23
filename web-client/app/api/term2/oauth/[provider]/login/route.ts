@@ -12,6 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
       purpose: 'oauth_login',
       method: 'POST',
       rpcPath: rpc.oauthLogin(provider),
+      timeoutMs: 120_000,
     });
   } catch (error) {
     return errorResponse(error);

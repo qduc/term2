@@ -10,6 +10,7 @@ import type { ServerRequest, ServerResult, ServerTransportOptions } from './serv
 import { mapServerError, publicError, ServerHttpError as HttpIngressError } from './server-errors.js';
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
+const MAX_MESSAGE_REQUEST_BYTES = 12 * 1024 * 1024;
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 export type DirectServerTransportOptions = ServerTransportOptions & {
   authentication: ServerAuthentication;
@@ -163,7 +164,10 @@ export class DirectServerTransport {
         }
         result = await this.#options.handler({
           claims,
-          body: await readBody(request),
+          body: await readBody(
+            request,
+            claims.purpose === 'message_submit' ? MAX_MESSAGE_REQUEST_BYTES : MAX_REQUEST_BYTES,
+          ),
           request,
           url,
           ...(typeof correlationId === 'string' ? { correlationId } : {}),
@@ -211,7 +215,7 @@ async function prepareSocket(socketPath: string): Promise<void> {
     if (error.code !== 'ENOENT') throw error;
   });
 }
-async function readBody(request: IncomingMessage): Promise<unknown> {
+async function readBody(request: IncomingMessage, maxBytes = MAX_REQUEST_BYTES): Promise<unknown> {
   if (request.method === 'GET') return null;
   const type = request.headers['content-type'];
   if (type && !String(type).toLowerCase().startsWith('application/json'))
@@ -234,7 +238,7 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
     const data = (chunk: Buffer | string) => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       bytes += buffer.length;
-      if (bytes > MAX_REQUEST_BYTES) {
+      if (bytes > maxBytes) {
         cleanup();
         request.resume();
         reject(new HttpIngressError(413, 'request_too_large', 'gateway request is too large'));

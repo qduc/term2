@@ -29,10 +29,15 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
   );
   if (oauthDelete && method === 'DELETE')
     return { purpose: 'oauth_delete', interactionId: `${oauthDelete[1]}\u0000${oauthDelete[2]}` };
+  if (method === 'GET' && pathname === '/private/agent/v1/providers/presets') return { purpose: 'provider_presets' };
+  if (method === 'POST' && pathname === '/private/agent/v1/providers') return { purpose: 'provider_write' };
+  const providerDelete = pathname.match(/^\/private\/agent\/v1\/providers\/([A-Za-z0-9_.-]{1,256})$/);
+  if (providerDelete && method === 'DELETE') return { purpose: 'provider_delete', interactionId: providerDelete[1] };
+  if (method === 'GET' && pathname === '/private/agent/v1/skills') return { purpose: 'skills_list' };
   if (method === 'POST' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_create' };
   if (method === 'GET' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_list' };
   const match = pathname.match(
-    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|interactions\/([A-Za-z0-9_:-]{1,256})))?$/,
+    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|rewind-targets|rewind|queue|tasks|files|interactions\/([A-Za-z0-9_:-]{1,256})))?$/,
   );
   if (!match) return null;
   const sessionId = match[1]!;
@@ -42,6 +47,11 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
   if (method === 'GET' && match[2] === 'events') return { purpose: 'events_connect', sessionId };
   if (method === 'POST' && match[2] === 'config') return { purpose: 'session_update', sessionId };
   if (method === 'POST' && match[2] === 'commands') return { purpose: 'command_invoke', sessionId };
+  if (method === 'GET' && match[2] === 'rewind-targets') return { purpose: 'session_rewind_targets', sessionId };
+  if (method === 'POST' && match[2] === 'rewind') return { purpose: 'session_rewind', sessionId };
+  if (method === 'POST' && match[2] === 'queue') return { purpose: 'session_queue', sessionId };
+  if (method === 'POST' && match[2] === 'tasks') return { purpose: 'session_task_control', sessionId };
+  if (method === 'GET' && match[2] === 'files') return { purpose: 'session_files', sessionId };
   if (method === 'POST' && match[2]?.startsWith('interactions/'))
     return { purpose: 'interaction_resolve', sessionId, interactionId: match[3] };
   return null;

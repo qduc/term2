@@ -19,6 +19,10 @@ export const ASSERTION_PURPOSES = Object.freeze([
   'oauth_login',
   'oauth_select',
   'oauth_delete',
+  'provider_presets',
+  'provider_write',
+  'provider_delete',
+  'skills_list',
   'session_update',
   'session_list',
   'session_create',
@@ -28,6 +32,11 @@ export const ASSERTION_PURPOSES = Object.freeze([
   'command_invoke',
   'abort',
   'events_connect',
+  'session_rewind_targets',
+  'session_rewind',
+  'session_queue',
+  'session_task_control',
+  'session_files',
 ]);
 
 const PURPOSES = new Set(ASSERTION_PURPOSES);
@@ -258,6 +267,10 @@ export function createAgentAssertion({
       'oauth_login',
       'oauth_select',
       'oauth_delete',
+      'provider_presets',
+      'provider_write',
+      'provider_delete',
+      'skills_list',
       'session_update',
     ].includes(purpose);
   if (noWorkspace && purpose !== 'session_update' && (workspaceId !== undefined || sessionId !== undefined)) {
@@ -574,6 +587,7 @@ export class Term2GatewayClient {
     body,
     query = '',
     preserveConfigureResult = false,
+    timeoutMs,
     correlationId = randomUUID(),
   } = {}) {
     this.#assertEnabled();
@@ -585,7 +599,12 @@ export class Term2GatewayClient {
     // endpoint GET, but never send session_read upstream as GET.
     const upstreamMethod = purpose === 'session_read' ? 'POST' : method;
     const options = this.#requestOptions({ method: upstreamMethod, rpcPath, query, assertion, body, correlationId });
-    return this.#send(options, body, { correlationId, stream: false, configureSessionId: preserveConfigureResult && purpose === 'session_update' ? sessionId : undefined });
+    return this.#send(options, body, {
+      correlationId,
+      stream: false,
+      timeoutMs,
+      configureSessionId: preserveConfigureResult && purpose === 'session_update' ? sessionId : undefined,
+    });
   }
 
   async request(args = {}) {
@@ -625,10 +644,11 @@ export class Term2GatewayClient {
     return this.#retryAfterPairing(() => this.#streamOnce(args));
   }
 
-  #send(options, body, { correlationId, stream, signal, configureSessionId }) {
+  #send(options, body, { correlationId, stream, signal, configureSessionId, timeoutMs: explicitTimeoutMs }) {
     return new Promise((resolve, reject) => {
       let settled = false;
-      const timeoutMs = stream ? this.gatewayConfig.streamTimeoutMs : this.gatewayConfig.requestTimeoutMs;
+      const timeoutMs =
+        explicitTimeoutMs ?? (stream ? this.gatewayConfig.streamTimeoutMs : this.gatewayConfig.requestTimeoutMs);
       let timer;
       let abortHandler;
       const cleanupAbortListener = () => {

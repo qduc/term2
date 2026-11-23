@@ -5,13 +5,24 @@ import { buildEnvOverrides } from '../config/settings/settings-env.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 
 import type { ILoggingService } from '../shared/service-interfaces.js';
-import { getProviderIds } from '../model/providers/index.js';
-import { loadProviderItems } from '../model/providers/provider-service.js';
+import { getAllProviders, getProvider, getProviderIds } from '../model/providers/index.js';
+import {
+  deleteCustomProvider,
+  loadProviderItems,
+  PROVIDER_TYPES,
+  saveProvider,
+} from '../model/providers/provider-service.js';
+import { PROVIDER_PRESETS } from '../model/providers/provider-presets.js';
 import { listOAuthAccounts, removeOAuthAccount, setActiveOAuthAccount } from '../model/providers/oauth-accounts.js';
 import { loginToCodex } from '../model/providers/codex-auth.js';
 import { loginToGrok } from '../model/providers/grok-auth.js';
 import { ModelCatalogSession } from '../model/models/model-catalog-session.js';
-import { getAvailableProviderIds, resolveProviderCredentials } from '../model/provider-credentials.js';
+import {
+  getAvailableProviderIds,
+  isProviderDisabled,
+  resolveProviderCredentials,
+  setProviderDisabled,
+} from '../model/provider-credentials.js';
 import type {
   CredentialDescription,
   DirectCredentialBackend,
@@ -117,14 +128,70 @@ export function createDirectAccountPorts(service: ProductSettings): {
   return {
     credentials: { describe: (providerId) => describeCredential(service, providerId) },
     providers: {
-      list: () =>
-        loadProviderItems(service).map((provider) => ({
+      list: () => {
+        const activeProvider = service.get('agent.modelSelection').provider || 'openai';
+        const items = loadProviderItems(service).map((provider) => ({
           id: provider.id,
           label: provider.label,
           isCustom: provider.isCustom,
           active: provider.isActive,
           disabled: provider.isDisabled,
-        })),
+        }));
+        const seen = new Set(items.map((item) => item.id));
+        for (const builtIn of getAllProviders()) {
+          if (builtIn.isRuntimeDefined || seen.has(builtIn.id)) continue;
+          items.push({
+            id: builtIn.id,
+            label: builtIn.label,
+            isCustom: false,
+            active: builtIn.id === activeProvider,
+            disabled: isProviderDisabled(service, builtIn.id),
+          });
+        }
+        return items.sort((a, b) => a.label.localeCompare(b.label, 'en'));
+      },
+      presets: () => ({ presets: PROVIDER_PRESETS, types: PROVIDER_TYPES }),
+      write: (input) => {
+        if (input.action === 'toggle') {
+          setProviderDisabled(service, input.id, input.disabled);
+          catalog.invalidate(input.id);
+          return { ok: true };
+        }
+        if (!(PROVIDER_TYPES as readonly string[]).includes(input.type)) {
+          return { ok: false, error: 'Unsupported provider type.' };
+        }
+        if (input.originalId) {
+          const existing = getProvider(input.originalId);
+          if (!existing || !existing.isRuntimeDefined) {
+            return { ok: false, error: 'Built-in providers cannot be edited here.' };
+          }
+        }
+        const saved = saveProvider(
+          service,
+          {
+            name: input.name,
+            type: input.type as (typeof PROVIDER_TYPES)[number],
+            ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
+            ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+          },
+          input.originalId ?? null,
+        );
+        if (saved.success) {
+          catalog.clear();
+        }
+        return {
+          ok: saved.success,
+          ...(saved.errorMessage ? { error: saved.errorMessage } : {}),
+          ...(saved.fieldErrors ? { fieldErrors: saved.fieldErrors } : {}),
+        };
+      },
+      remove: (id) => {
+        const existing = getProvider(id);
+        if (!existing || !existing.isRuntimeDefined) return false;
+        deleteCustomProvider(service, id);
+        catalog.invalidate(id);
+        return true;
+      },
     },
     oauth: {
       list: (provider) =>
@@ -142,7 +209,8 @@ export function createDirectAccountPorts(service: ProductSettings): {
       remove: (provider, accountId) => removeOAuthAccount(provider, accountId),
     },
     models: {
-      providerIds: () => getAvailableProviderIds(service, getProviderIds()),
+      providerIds: () =>
+        getAvailableProviderIds(service, getProviderIds()).filter((id) => !isProviderDisabled(service, id)),
       load: (providerId) => catalog.load(providerId),
     },
   };

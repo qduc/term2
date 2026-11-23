@@ -76,7 +76,17 @@ export function describeCommand(command: Term2Command): { verb: string; target: 
   const verbs = VERBS[command.toolName];
   const active = command.status === 'running';
   const target = targetOf(parseArgs(command.argumentsText));
-  return { verb: command.status === 'pending' ? `Pending ${command.toolName} (not started)` : verbs ? (active ? verbs[0] : verbs[1]) : command.toolName, target };
+  return {
+    verb:
+      command.status === 'pending'
+        ? `Waiting to run ${command.toolName}`
+        : verbs
+          ? active
+            ? verbs[0]
+            : verbs[1]
+          : command.toolName,
+    target,
+  };
 }
 
 export function StatusIcon({ status }: { status: Term2Command['status'] }) {
@@ -112,6 +122,11 @@ function EditDiff({ command }: { command: Term2Command }) {
       ...args.search_content.split('\n').map((text) => ({ kind: '-' as const, text })),
       ...args.replace_content.split('\n').map((text) => ({ kind: '+' as const, text })),
     ];
+  } else if (command.toolName === 'create_file' && typeof args.content === 'string') {
+    lines = args.content
+      .split('\n')
+      .slice(0, 200)
+      .map((text) => ({ kind: '+' as const, text }));
   } else {
     return null;
   }

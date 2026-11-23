@@ -46,6 +46,10 @@ const LOCAL_OWNER_PURPOSES = new Set([
   'oauth_login',
   'oauth_select',
   'oauth_delete',
+  'provider_presets',
+  'provider_write',
+  'provider_delete',
+  'skills_list',
 ]);
 export type DirectServerOptions = {
   transport: ServerTransportOptions;

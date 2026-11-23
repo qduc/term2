@@ -107,6 +107,29 @@ export class ServerGlobalRoutes {
             }))
           : settingsMissing();
       }
+      case 'provider_presets':
+        return config?.listProviderPresets
+          ? { status: 200, body: await config.listProviderPresets() }
+          : settingsMissing();
+      case 'provider_write':
+        if (!config?.writeProvider) return settingsMissing();
+        if (!validate.isProviderWriteBody(body)) return invalid('provider');
+        return this.#serialize('settings', async () => ({
+          status: 200,
+          body: await config.writeProvider!(body),
+        }));
+      case 'provider_delete':
+        return config?.deleteProvider
+          ? this.#serialize('settings', async () => {
+              const result = await config.deleteProvider!(route.interactionId!);
+              if (!result.ok) return publicError(400, 'validation_error', 'only custom providers can be deleted');
+              return { status: 200, body: result };
+            })
+          : settingsMissing();
+      case 'skills_list':
+        return this.dependencies.skills
+          ? { status: 200, body: { skills: await this.dependencies.skills() } }
+          : { status: 200, body: { skills: [] } };
       default:
         return null;
     }

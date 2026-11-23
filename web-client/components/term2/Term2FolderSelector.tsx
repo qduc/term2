@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Folder, Loader2 } from 'lucide-react';
 import { term2Client, Term2ApiError } from '../../lib/api/term2';
 import type { BrowseEntry, CandidateValidation } from '../../lib/term2/types';
 
@@ -23,17 +24,19 @@ interface BreadcrumbItem {
 
 export function Term2FolderSelector({
   homeFolder,
+  allowWrite = false,
   onSelected,
 }: {
   homeFolder?: string;
+  allowWrite?: boolean;
   onSelected?: (workspace: SelectedTerm2Workspace) => void;
 }) {
-  const [path, setPath] = useState('');
+  const [path, setPath] = useState(homeFolder ?? '');
   const [rootPath, setRootPath] = useState<string>('');
   const [validation, setValidation] = useState<CandidateValidation | null>(null);
   const [entries, setEntries] = useState<BrowseEntry[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
-  const [access, setAccess] = useState<'read' | 'read_write'>('read');
+  const [access, setAccess] = useState<'read' | 'read_write'>(allowWrite ? 'read_write' : 'read');
   const [boundaryApproved, setBoundaryApproved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export function Term2FolderSelector({
   const showError = (reason: unknown) => {
     setError(reason instanceof Term2ApiError ? cleanUserFacingMessage(reason.message) : 'Workspace operation failed');
   };
-  const openFolder = async (folder: string, trail: BreadcrumbItem[] = [], start = folder) => {
+  const openFolder = useCallback(async (folder: string, trail: BreadcrumbItem[] = [], start = folder) => {
     setBusy(true);
     setError(null);
     setSelected(null);
@@ -67,13 +70,21 @@ export function Term2FolderSelector({
     } finally {
       setBusy(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (homeFolder) {
+      void openFolder(homeFolder);
+    }
+  }, [homeFolder, openFolder]);
+
   const select = async () => {
     if (!candidateId || !validation?.valid || !validation.selectable || !boundaryApproved) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await term2Client.selectCandidate(candidateId, access);
+      const effectiveAccess = allowWrite ? access : 'read';
+      const result = await term2Client.selectCandidate(candidateId, effectiveAccess);
       const workspace: SelectedTerm2Workspace = {
         workspaceId: result.workspaceId,
         displayName: result.displayName,
@@ -92,24 +103,35 @@ export function Term2FolderSelector({
   return (
     <section
       aria-labelledby="term2-folder-heading"
-      className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+      className="space-y-3"
     >
       <p id="term2-folder-heading" className="text-sm text-zinc-600 dark:text-zinc-300">
         Choose the folder with the files you want help with.{' '}
-        {homeFolder && 'In this app, term2 can read files in that folder but cannot edit them.'}
+        {!allowWrite && (
+          <span>
+            This session is currently read-only — launch with{' '}
+            <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-xs dark:bg-zinc-800">
+              term2-web --allow-write
+            </code>{' '}
+            to allow editing files.
+          </span>
+        )}
       </p>
-      {homeFolder && (
+      {homeFolder && !currentPath && (
         <button
           type="button"
           disabled={busy}
           onClick={() => void openFolder(homeFolder)}
-          className="mt-3 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-600"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-white/[0.06]"
         >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Folder className="h-4 w-4" />}
           Browse home folder
         </button>
       )}
-      <details className="mt-3" open={!homeFolder || undefined}>
-        <summary className="cursor-pointer text-sm underline">Enter a folder path instead</summary>
+      <details open={!homeFolder || undefined}>
+        <summary className="cursor-pointer text-xs font-medium text-teal-700 hover:underline dark:text-teal-400">
+          Enter a folder path directly
+        </summary>
         <form
           className="mt-2 flex gap-2"
           onSubmit={(event) => {
@@ -283,30 +305,32 @@ export function Term2FolderSelector({
             />{' '}
             Allow term2 to access files in this folder
           </label>
-          {!homeFolder && (
+          {allowWrite && (
             <>
-              <label className="mt-2 block text-xs text-zinc-500" htmlFor="term2-folder-access">
+              <label className="mt-2.5 block text-xs font-medium text-zinc-500" htmlFor="term2-folder-access">
                 Folder permissions
               </label>
               <select
                 id="term2-folder-access"
                 value={access}
                 onChange={(event) => setAccess(event.target.value as 'read' | 'read_write')}
-                className="mt-1 rounded-lg border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-600"
+                className="mt-1 rounded-lg border border-zinc-300 bg-transparent px-2.5 py-1.5 text-sm dark:border-zinc-600"
               >
+                <option value="read_write">Read and write (can edit files with approval)</option>
                 <option value="read">Read only</option>
-                <option value="read_write">Read and write</option>
               </select>
             </>
           )}
-          <button
-            type="button"
-            onClick={() => void select()}
-            disabled={busy || !boundaryApproved}
-            className="mt-3 rounded-lg bg-violet-700 px-3 py-1.5 text-sm text-white disabled:opacity-40"
-          >
-            Use this folder
-          </button>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void select()}
+              disabled={busy || !boundaryApproved}
+              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Use this folder
+            </button>
+          </div>
           {selected && (
             <p className="mt-2 text-sm text-emerald-700" title={selected.fullPath || selected.displayName}>
               Selected workspace: {selected.displayName}

@@ -46,6 +46,9 @@ description: Keyboard shortcuts for input, approvals, menus, and tasks.
 | `Up` / `Down` | Any Menu | Navigate menu list items. |
 | `Enter` | Any Menu | Select highlighted item. |
 | `Escape` | Any Menu | Close menu or go back to parent menu. |
+| `Ctrl + A` / `Ctrl + E` | Menu text input | Move the cursor to the start / end of the input. |
+| `Ctrl` or `Alt` + `Left` / `Right` | Any Menu | Move the cursor backward / forward by one word. |
+| `Alt + B` / `Alt + F` | Any Menu | Move the cursor backward / forward by one word. |
 | `Ctrl + R` | Model Menu | Refresh provider model catalog from API (bypass cache). |
 | `Ctrl + F` | Model Menu | Toggle model as a favorite (`agent.favoriteModels`). |
 | `Ctrl + N` | Model Menu (Favorites) | Assign a short nickname to the selected model (`agent.modelNicknames`). |

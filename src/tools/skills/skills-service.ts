@@ -8,11 +8,18 @@ export interface SkillInfo {
   name: string;
   description: string;
   location: string; // absolute path to SKILL.md
+  /** The scope directory the skill was found under; the catalog lists each once. */
+  scopeRoot?: string;
   isProjectLevel: boolean;
   disableModelInvocation?: boolean;
   body: string; // body content of the skill (markdown only, frontmatter stripped)
   rawContent: string; // full contents of SKILL.md including frontmatter
 }
+
+/** A longer description is cut, as Claude Code does, so one skill cannot crowd out the rest. */
+const MAX_SKILL_DESCRIPTION_CHARS = 1_536;
+/** A catalog above this is logged as a warning: about 2% of a 200k-token window, the share Codex budgets. */
+const LARGE_CATALOG_CHARS = 16_000;
 
 const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
 
@@ -86,6 +93,7 @@ export class SkillsService {
       try {
         const skill = this.loadAndParseSkill(skillMdPath, isProjectLevel);
         if (skill) {
+          skill.scopeRoot = basePath;
           const existing = this.skills.get(skill.name);
           if (existing) {
             // Same physical file scanned under both user and project scopes — not a real collision.
@@ -216,35 +224,50 @@ export class SkillsService {
   }
 
   /**
-   * Render the available skills catalog XML block.
+   * Render the available skills catalog: each scope directory once, then one line per skill.
+   * A skill's SKILL.md is `<scope>/<name>/SKILL.md` unless its entry names another path.
    */
-  getSkillCatalog(options: { loadVia?: 'tool' | 'shell' } = {}): string {
+  getSkillCatalog(options: { loadVia?: 'tool' | 'shell' | 'read_file' } = {}): string {
     const modelSkills = this.getAvailableSkillsForModel();
     if (modelSkills.length === 0) return '';
 
-    const skillBlocks = modelSkills
-      .map(
-        (s) => `  <skill>
-    <name>${s.name}</name>
-    <description>${s.description}</description>
-    <location>${s.location}</location>
-  </skill>`,
-      )
-      .join('\n');
+    const byScope = new Map<string, SkillInfo[]>();
+    for (const skill of modelSkills) {
+      const scope = skill.scopeRoot ?? path.dirname(path.dirname(skill.location));
+      byScope.set(scope, [...(byScope.get(scope) ?? []), skill]);
+    }
+    const entry = (scope: string, skill: SkillInfo): string => {
+      const relative = path.relative(scope, skill.location);
+      const conventional = relative === path.join(skill.name, 'SKILL.md');
+      const description =
+        skill.description.length > MAX_SKILL_DESCRIPTION_CHARS
+          ? `${skill.description.slice(0, MAX_SKILL_DESCRIPTION_CHARS - 1).trimEnd()}…`
+          : skill.description;
+      return `- ${skill.name}${conventional ? '' : ` (${relative})`}: ${description}`;
+    };
+    const blocks = [...byScope].map(([scope, skills]) => [scope, ...skills.map((s) => entry(scope, s))].join('\n'));
 
     const loadInstruction =
       options.loadVia === 'shell'
-        ? `When a task matches a skill's description, read the SKILL.md at its
-location with the shell to load its full instructions.`
-        : `When a task matches a skill's description, call the activate_skill tool
-with the skill's name to load its full instructions.`;
+        ? 'When a task matches a skill, read its SKILL.md with the shell to load its full instructions.'
+        : options.loadVia === 'read_file'
+        ? 'When a task matches a skill, read its SKILL.md with read_file to load its full instructions.'
+        : "When a task matches a skill, call the activate_skill tool with the skill's name to load its full instructions.";
 
-    return `The following skills provide specialized instructions for specific tasks.
+    const catalog = `The following skills provide specialized instructions for specific tasks.
 ${loadInstruction}
+Each skill's SKILL.md is at <folder>/<name>/SKILL.md, under the folder line above it, unless its entry shows another path.
 
 <available_skills>
-${skillBlocks}
+${blocks.join('\n\n')}
 </available_skills>`;
+    const summary = `Skills catalog: ${modelSkills.length} skills, ${catalog.length} characters in every request that carries it.`;
+    if (catalog.length > LARGE_CATALOG_CHARS) {
+      this.logger.warn(`${summary} Consider disable-model-invocation: true on skills that need not be offered.`);
+    } else {
+      this.logger.debug(summary);
+    }
+    return catalog;
   }
 
   /**

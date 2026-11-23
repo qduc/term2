@@ -379,9 +379,19 @@ export function buildInstructions(
     inlineSections.push(getSearchViaShellAddendum({ executionContext }));
   }
 
+  // The catalog tells the child how to load a skill, so it must name a way the child was offered;
+  // a child that can read no SKILL.md gets no catalog.
+  const offered = new Set(toolDefinitions.map((tool) => tool.name));
+  const loadVia = offered.has('activate_skill')
+    ? 'tool'
+    : offered.has('shell')
+    ? 'shell'
+    : offered.has('read_file')
+    ? 'read_file'
+    : undefined;
   let skillsInstructions = '';
-  if (skillsService) {
-    const catalog = skillsService.getSkillCatalog();
+  if (skillsService && loadVia) {
+    const catalog = skillsService.getSkillCatalog({ loadVia });
     if (catalog) {
       skillsInstructions = `\n\n${catalog}`;
     }

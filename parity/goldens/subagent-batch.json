@@ -27,27 +27,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "72bf04ea010edeba"
+              "schema": "c7b8c9f3a26f43c4"
             },
             {
               "name": "read_file",
-              "schema": "1abd153e33995e7d"
+              "schema": "16fa2570da77a172"
             },
             {
               "name": "create_file",
-              "schema": "a84adf3549ed55dc"
+              "schema": "06daab07f79695a9"
             },
             {
               "name": "search_replace",
-              "schema": "b4234835362af15a"
+              "schema": "0b384da44e462f22"
             },
             {
               "name": "run_subagent",
-              "schema": "27ae137b708622b3"
+              "schema": "96c0c4a4f760b97e"
             },
             {
               "name": "run_code",
-              "schema": "8cd22baab7edc792"
+              "schema": "7d503875bd16cd0c"
             }
           ],
           "other": {
@@ -93,27 +93,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "72bf04ea010edeba"
+              "schema": "c7b8c9f3a26f43c4"
             },
             {
               "name": "read_file",
-              "schema": "1abd153e33995e7d"
+              "schema": "16fa2570da77a172"
             },
             {
               "name": "create_file",
-              "schema": "a84adf3549ed55dc"
+              "schema": "06daab07f79695a9"
             },
             {
               "name": "search_replace",
-              "schema": "b4234835362af15a"
+              "schema": "0b384da44e462f22"
             },
             {
               "name": "run_subagent",
-              "schema": "27ae137b708622b3"
+              "schema": "96c0c4a4f760b97e"
             },
             {
               "name": "run_code",
-              "schema": "8cd22baab7edc792"
+              "schema": "7d503875bd16cd0c"
             }
           ],
           "other": {
@@ -144,51 +144,51 @@
           "tools": [
             {
               "name": "ask_orchestrator",
-              "schema": "4d631c9c6764c68a"
+              "schema": "453fb37e3e9c28e3"
             },
             {
               "name": "memory_list",
-              "schema": "bce936d1342a1002"
+              "schema": "8df964d71dc5c243"
             },
             {
               "name": "memory_get",
-              "schema": "d329bf813fd3673d"
+              "schema": "ff451f169aed0e5e"
             },
             {
               "name": "memory_search",
-              "schema": "2d0ff54ea1fe2793"
+              "schema": "03c23aa53813ab9a"
             },
             {
               "name": "memory_retrieve",
-              "schema": "e017c3bc994b0076"
+              "schema": "8277adecb4477fea"
             },
             {
               "name": "read_file",
-              "schema": "f6b762b9d0128cd2"
+              "schema": "686ace76b6cef886"
             },
             {
               "name": "grep",
-              "schema": "ec389fe2e44e22b7"
+              "schema": "abc131de31ffd39f"
             },
             {
               "name": "glob",
-              "schema": "3654b9a1c8a3c587"
+              "schema": "422e61db9a4ede28"
             },
             {
               "name": "read_code_outline",
-              "schema": "0c9fbd8e575023a1"
+              "schema": "e8c4f9b8f052e8b9"
             },
             {
               "name": "code_context_search",
-              "schema": "dd305b1569353c8f"
+              "schema": "38c52a80bcb56074"
             },
             {
               "name": "web_fetch",
-              "schema": "84052e62285e97a5"
+              "schema": "1093585e83ddb04d"
             },
             {
               "name": "shell",
-              "schema": "7fae5bab22379e75"
+              "schema": "ca0d8458c7742998"
             }
           ],
           "other": {
@@ -252,27 +252,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "72bf04ea010edeba"
+              "schema": "c7b8c9f3a26f43c4"
             },
             {
               "name": "read_file",
-              "schema": "1abd153e33995e7d"
+              "schema": "16fa2570da77a172"
             },
             {
               "name": "create_file",
-              "schema": "a84adf3549ed55dc"
+              "schema": "06daab07f79695a9"
             },
             {
               "name": "search_replace",
-              "schema": "b4234835362af15a"
+              "schema": "0b384da44e462f22"
             },
             {
               "name": "run_subagent",
-              "schema": "27ae137b708622b3"
+              "schema": "96c0c4a4f760b97e"
             },
             {
               "name": "run_code",
-              "schema": "8cd22baab7edc792"
+              "schema": "7d503875bd16cd0c"
             }
           ],
           "other": {

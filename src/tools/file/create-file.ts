@@ -19,15 +19,13 @@ import {
 import { ExecutionContext } from '../execution-context.js';
 
 const CREATE_FILE_DESCRIPTION =
-  'Create a new file with the specified content. Replace existing files requires setting overwrite=true. ' +
-  'Do NOT use this to edit existing files; inside run_code, use tools.search_replace(...) instead. ' +
-  'Returns Created <path>, Overwrote <path>, or Error: <reason>.';
+  'Create a file (overwrite=true to replace one). To edit, use search_replace; inside run_code, use tools.search_replace(...).';
 
 const createFileParametersSchema = z.object({
-  path: z.string().describe('The absolute or relative path to the new file.'),
-  content: z.string().describe('The initial content for the new file.'),
-  overwrite: z.boolean().optional().default(false).describe('Whether to overwrite an existing file.'),
-  confirmOverwriteCode: z.string().optional().describe('Confirmation code from a previous failed attempt.'),
+  path: z.string(),
+  content: z.string(),
+  overwrite: z.boolean().optional().default(false),
+  confirmOverwriteCode: z.string().optional().describe('Code from a previous failed overwrite attempt.'),
 });
 
 export type CreateFileToolParams = z.infer<typeof createFileParametersSchema>;
@@ -108,8 +106,7 @@ export function createCreateFileToolDefinition(deps: {
   return {
     name: TOOL_NAME_CREATE_FILE,
     description: CREATE_FILE_DESCRIPTION,
-    scriptedReturnShape:
-      'string status: "Created <path>" | "Overwrote <path>" on success; "Error: \u2026" on failure (approval denials reject instead)',
+    scriptedReturnShape: '"Created <path>" | "Overwrote <path>" | "Error: \u2026" (approval denials reject)',
     effect: 'mutating',
     canRequireApproval: true,
     scriptedReturnSchema: z.string(),

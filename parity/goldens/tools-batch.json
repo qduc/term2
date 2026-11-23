@@ -27,27 +27,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "72bf04ea010edeba"
+              "schema": "c7b8c9f3a26f43c4"
             },
             {
               "name": "read_file",
-              "schema": "1abd153e33995e7d"
+              "schema": "16fa2570da77a172"
             },
             {
               "name": "create_file",
-              "schema": "a84adf3549ed55dc"
+              "schema": "06daab07f79695a9"
             },
             {
               "name": "search_replace",
-              "schema": "b4234835362af15a"
+              "schema": "0b384da44e462f22"
             },
             {
               "name": "run_subagent",
-              "schema": "27ae137b708622b3"
+              "schema": "96c0c4a4f760b97e"
             },
             {
               "name": "run_code",
-              "schema": "8cd22baab7edc792"
+              "schema": "7d503875bd16cd0c"
             }
           ],
           "other": {
@@ -93,27 +93,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "72bf04ea010edeba"
+              "schema": "c7b8c9f3a26f43c4"
             },
             {
               "name": "read_file",
-              "schema": "1abd153e33995e7d"
+              "schema": "16fa2570da77a172"
             },
             {
               "name": "create_file",
-              "schema": "a84adf3549ed55dc"
+              "schema": "06daab07f79695a9"
             },
             {
               "name": "search_replace",
-              "schema": "b4234835362af15a"
+              "schema": "0b384da44e462f22"
             },
             {
               "name": "run_subagent",
-              "schema": "27ae137b708622b3"
+              "schema": "96c0c4a4f760b97e"
             },
             {
               "name": "run_code",
-              "schema": "8cd22baab7edc792"
+              "schema": "7d503875bd16cd0c"
             }
           ],
           "other": {

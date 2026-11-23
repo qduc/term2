@@ -22,20 +22,14 @@ import {
 import { saveOutputArtifact } from '../../shared/utils/shell/shell-output.js';
 
 const READ_FILE_DESCRIPTION =
-  'Read file content from the workspace (like cat command). Supports reading specific line ranges. ' +
-  'Image files are returned as image content for visual models. ' +
-  'Use this to inspect a known file or verify a specific claim about a location. ' +
-  'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
-  'Do NOT use this to search for text across files (inside run_code, use tools.grep(...) instead). ' +
-  'Returns the file path, total line count, and the requested lines. ' +
-  'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
+  'Read a file, optionally a 1-indexed line range; images return as image content. ' +
+  'Prefer whole files (under 1,000 lines) or large windows to small chunks. ' +
+  'Not for cross-file search (inside run_code, use tools.grep(...)). ' +
+  'Large results are truncated; read the "Full output saved to" path for the rest.';
 const READ_FILE_DESCRIPTION_OUTSIDE =
-  'Read file content from the filesystem (like cat command). Supports reading specific line ranges. ' +
-  'Image files are returned as image content for visual models. ' +
-  'Use this to inspect a known file or verify a specific claim about a location. ' +
-  'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
-  'Returns the file path, total line count, and the requested lines. ' +
-  'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
+  'Read a file anywhere on the filesystem, optionally a 1-indexed line range; images return as image content. ' +
+  'Prefer whole files (under 1,000 lines) or large windows to small chunks. ' +
+  'Large results are truncated; read the "Full output saved to" path for the rest.';
 const READ_FILE_DESCRIPTION_ORCHESTRATOR =
   'Inspect a known file directly, including to understand a small or clear area of the workspace. ' +
   'Image files are returned as image content for visual models. ' +
@@ -135,13 +129,9 @@ function detectImageMediaType(buffer: Buffer, filePath: string): string | undefi
 }
 
 const readFileParametersSchema = z.object({
-  path: z.string().describe('File path relative to workspace root'),
-  start_line: relaxedNumber
-    .int()
-    .positive()
-    .optional()
-    .describe('Starting line number (1-indexed). Optional; give a line range when you know the exact range to read.'),
-  end_line: relaxedNumber.int().positive().optional().describe('Ending line number (1-indexed, inclusive).'),
+  path: z.string().describe('Relative to the workspace root.'),
+  start_line: relaxedNumber.int().positive().optional().describe('1-indexed; give a range when you know it.'),
+  end_line: relaxedNumber.int().positive().optional().describe('Inclusive.'),
 });
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;
@@ -235,7 +225,7 @@ export const createReadFileToolDefinition = (
   return {
     name: 'read_file',
     scriptedReturnShape:
-      'the { path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } object for a text file; content parts [{ type: "text" | "image", ... }] for an image file',
+      '{ path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } for text; content parts for an image; an "Error: …" string on error',
     description: orchestratorMode
       ? READ_FILE_DESCRIPTION_ORCHESTRATOR
       : allowOutsideWorkspace

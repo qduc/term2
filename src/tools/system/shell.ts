@@ -69,24 +69,19 @@ export const APPROVED_SHELL_ESCAPE = Symbol('approved shell escape');
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
 const monitorOptionsSchema = z.object({
-  pattern: z
-    .string()
-    .optional()
-    .describe('Regular expression matched against each complete output line; absent matches any line.'),
-  stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Which output stream to monitor. Defaults to both.'),
+  pattern: z.string().optional().describe('Regex per output line; omit to match all.'),
+  stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Default both.'),
   idle_ms: relaxedNumber
     .int()
     .nonnegative()
     .optional()
-    .describe(
-      'Quiet window in milliseconds that coalesces a burst of matches into one notification. Defaults to 1500.',
-    ),
+    .describe('Quiet ms that batch matches into one notification. Default 1500.'),
   notify_limit: relaxedNumber
     .int()
     .nonnegative()
     .optional()
-    .describe('Maximum number of notifications before the watch retires. 0 means unlimited; defaults to 0.'),
-  once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
+    .describe('Notifications before the watch retires; 0 (default) is unlimited.'),
+  once: z.boolean().optional().describe('Same as notify_limit 1.'),
 });
 
 const checkInOptionsSchema = z.object({
@@ -102,12 +97,8 @@ const checkInOptionsSchema = z.object({
 });
 
 export const shellParametersSchema = z.object({
-  command: z.string().min(1).describe('Single shell command to execute.'),
-  description: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Optional human-readable description to display for this shell call.'),
+  command: z.string().min(1).describe('One shell command.'),
+  description: z.string().min(1).optional().describe('Short label shown to the user.'),
   timeout_ms: relaxedNumber
     .int()
     .positive()
@@ -119,22 +110,12 @@ export const shellParametersSchema = z.object({
     .int()
     .positive()
     .optional()
-    .describe(
-      'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to, and cannot exceed, the configured tool output limit (20000 characters unless changed).',
-    ),
-  sandbox: shellSandboxModeSchema.describe(
-    'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
-  ),
-  background: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Run locally in the background and return a job ID immediately. Defaults to false.'),
+    .describe('Output character cap; defaults to, and cannot exceed, the tool output limit.'),
+  sandbox: shellSandboxModeSchema.describe('unsandboxed requires user approval.'),
+  background: z.boolean().optional().default(false).describe('Return a job ID immediately. Default false.'),
   monitor: monitorOptionsSchema
     .optional()
-    .describe(
-      'When background is true, attach an output monitor in this same call. The job keeps running and matching output is delivered as shell_output notifications.',
-    ),
+    .describe('With background: true, deliver matching output as shell_output notifications.'),
   check_in: checkInOptionsSchema
     .optional()
     .describe('When background is true, configure or mute proactive check-ins for this job.'),
@@ -666,18 +647,16 @@ const formatShellCommandMessage: FormatCommandMessage = (item, index, toolCallAr
 export const SHELL_DELEGATION_POINTER = '; use `run_subagent` instead';
 
 const getShellDescription = (searchViaShell: boolean, background = true) =>
-  'Execute a single shell command. ' +
-  'Long output is truncated and the full output is saved to a file; ' +
   (searchViaShell
-    ? 'Do NOT use this to write. Use the specialized tools for those tasks. '
-    : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
-  'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
-  `Do NOT use this for complex multi-step edits or broad codebase exploration${SHELL_DELEGATION_POINTER}. ` +
+    ? 'Run one shell command; not for writing files (use the dedicated tools). '
+    : 'Run one shell command; not for reading, writing or searching files (use the dedicated tools). ') +
+  'Avoid multi-line inline scripts: write a script file and run it. ' +
+  `Not for multi-step edits or broad exploration${SHELL_DELEGATION_POINTER}. ` +
   (background
-    ? 'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling. ' +
-      'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s foreground and 30min background defaults are not ceilings, do not guarantee completion, and a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms. '
-    : 'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s default is not a ceiling and does not guarantee completion. ') +
-  'A timeout is a deadline, not a retry grant: when a command times out, diagnose the failure and do not blindly re-run a command whose earlier effects may already have landed.';
+    ? 'For background notifications, set background: true with monitor and await shell_output. ' +
+      'Size timeout_ms for long work: the 120s and 30min background defaults are not ceilings. '
+    : 'Size timeout_ms for long work: the 120s default is not a ceiling. ') +
+  'After a timeout, diagnose before re-running: effects may have landed.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
   'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
   'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling. Known long-running work (watchers, full-suite validation) needs an explicit finite timeout_ms sized to the job: the background default is not a ceiling, and a timeout is a deadline to diagnose, not a license to re-run a command whose earlier effects may already have landed.';
@@ -686,9 +665,7 @@ const foregroundShellParameters = shellParametersSchema
   .omit({ background: true, monitor: true, check_in: true })
   .extend({
     // The long-running timeout advice is stated once, in the foreground description it is paired with.
-    timeout_ms: shellParametersSchema.shape.timeout_ms.describe(
-      'Optional timeout in milliseconds for each command. Defaults to shell.timeout if not specified.',
-    ),
+    timeout_ms: shellParametersSchema.shape.timeout_ms.describe('Timeout in ms; default shell.timeout.'),
   });
 
 /**

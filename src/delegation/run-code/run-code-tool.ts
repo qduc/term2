@@ -48,6 +48,10 @@ export function bindRunCodeNestedApprovalOwner(tools: ToolRegistry, owner: Neste
 export function createRunCodeToolDefinition(options: CreateRunCodeToolOptions) {
   let nestedApprovalOwner = options.nestedApprovalOwner;
   let boundRegistry: ToolRegistry | undefined;
+  const agentReference = (): string =>
+    options.agentSpecBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentSpecBridge)
+      ? renderAgentCapabilitySection(options.agentSpecBridge)
+      : '';
   const definition = createDefinition({
     getToolRegistry: options.getToolRegistry,
     catalogOtherTools: options.catalogOtherTools,
@@ -70,10 +74,13 @@ export function createRunCodeToolDefinition(options: CreateRunCodeToolOptions) {
         nestedCompatibility: options.nestedCompatibility,
         ...(options.agentSpecAuthority ? { agentSpecAuthority: options.agentSpecAuthority } : {}),
         ...(options.agentSpecBridge ? { agentBridge: options.agentSpecBridge } : {}),
+        agentCapabilityReference: agentReference,
       }),
+    // The full agent API is fetched on demand; every request carries only this pointer.
     agentCapabilitySection: () =>
-      options.agentSpecBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentSpecBridge)
-        ? renderAgentCapabilitySection(options.agentSpecBridge)
+      agentReference()
+        ? '## Agent capability\nAn `agent` global (not in `tools.*`) launches child agents from the script ' +
+          "(agent.run, agent.start, agent.status, agent.result, agent.cancel). Call `tools.describe('agent')` for its API before first use."
         : '',
   });
   const bindable = definition as HostBindable;
@@ -92,38 +99,22 @@ export function createRunCodeToolDefinition(options: CreateRunCodeToolOptions) {
 /** Describe only capability members actually bound by the host. */
 function renderAgentCapabilitySection(bridge: RunCodeAgentSpecBridge): string {
   const members = getRunCodeAgentCapabilityMembers(bridge);
-  const lines: string[] = [
-    '## Agent capability',
-    '',
-    'When present, a flat `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:',
-  ];
+  const lines: string[] = ['## Agent capability', 'When present, `agent` (not in `tools.*`) launches agents:'];
   if (members.includes('run')) {
     lines.push(
-      '- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result ' +
-        '(status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` only for independent runs given the same requirements, and catch per-call ' +
-        'rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. ' +
-        'When a session approval owner is bound, child tool approval pauses surface to the user and resume ' +
-        'the exact child execution; the work clock pauses only while all calls await approval. ' +
-        'Without that owner, or for non-tool interruptions, the child rejects rather than reporting completion.',
+      '- `agent.run({ spec, worktree? })` awaits one and resolves to `{ status, finalText, filesChanged, toolsUsed, ... }`. ' +
+        "Parallelize only independent runs with identical requirements; catch per-call rejections. Child approval waits don't consume the timeout.",
     );
   }
   if (members.includes('start')) {
     lines.push(
-      '- `agent.start({ spec, name? })` starts a conversation-scoped background run and ' +
-        "resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout. " +
-        '`continue_run_id` is rejected by this script capability until stored-run authority can be verified.',
-      '- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled ' +
-        'result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session ' +
-        'notification lane even after this script returns.',
+      "- `agent.start({ spec, name? })` starts a background run that outlives the script (`{ runId, status: 'running' }`, completion notified); " +
+        '`agent.status({ runId? })`, `agent.result({ runId })`, `agent.cancel({ target })` peek, await, cancel.',
     );
   }
   lines.push(
-    '- `spec` is a plain AgentSpec (`{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`). ' +
-      "The host attenuates it against this session's authority before launch: requests beyond parent tools, " +
-      'scopes, or the worktree scope reject per call as `Agent specification rejected: ...`; the raw spec is ' +
-      'never forwarded to any launch path.',
-    `- Per-script limits, separate from the tools.* budget: at most ${RUN_CODE_LIMITS.maxAgentStarts} agent launches, ` +
-      `${RUN_CODE_LIMITS.maxAgentConcurrency} parallel foreground runs, and ${RUN_CODE_LIMITS.maxAgentCalls} agent.* calls.`,
+    "- `spec`: `{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`, capped at this session's authority (excess rejects).",
+    `- Per script: at most ${RUN_CODE_LIMITS.maxAgentStarts} launches, ${RUN_CODE_LIMITS.maxAgentConcurrency} parallel, ${RUN_CODE_LIMITS.maxAgentCalls} agent.* calls.`,
   );
   return lines.join('\n');
 }

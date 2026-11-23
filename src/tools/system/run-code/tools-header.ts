@@ -114,6 +114,9 @@ function scriptedReturnDescription(tool: ToolRegistry[number]): { value: string;
 
 const oneLine = (text: string): string => {
   const collapsed = text.replace(/\s+/g, ' ').trim();
+  // The first sentence states what the tool does; the rest is direct-call guidance.
+  const firstSentence = /^.*?[.!?](?=\s|$)/.exec(collapsed)?.[0];
+  if (firstSentence && firstSentence.length <= MAX_DESCRIPTION_CHARS) return firstSentence;
   return collapsed.length <= MAX_DESCRIPTION_CHARS
     ? collapsed
     : `${collapsed.slice(0, MAX_DESCRIPTION_CHARS).trimEnd()}…`;
@@ -149,39 +152,33 @@ export function renderCompactSignature(tool: {
 
 /**
  * The header bullet for a fully rendered tool: signature, one-line description
- * and declared return shape. `omitDescription` drops the one-line description
- * for a tool whose full description the model already has from its direct
- * definition in the same request.
+ * and declared return shape. A `direct` tool keeps only its return shape: its
+ * full definition is already in the same request.
  */
-function renderDetailedEntry(tool: ToolRegistry[number], options: { omitDescription?: boolean } = {}): string {
-  const description =
-    !options.omitDescription && typeof tool.description === 'string' && tool.description
-      ? ` — ${oneLine(tool.description)}`
-      : '';
+function renderDetailedEntry(tool: ToolRegistry[number], options: { direct?: boolean } = {}): string {
   const scriptedReturn = scriptedReturnDescription(tool);
-  const returns = `\n    returns ${scriptedReturn.value}${
-    scriptedReturn.legacy ? ` (guidance: ${scriptedReturn.legacy})` : ''
-  }`;
+  // The authored shape is more precise than the schema union it describes, so it replaces it.
+  const returns = `\n    returns ${scriptedReturn.legacy ?? scriptedReturn.value}`;
+  // A directly offered tool's parameters and description are already in the same request.
+  if (options.direct) return `- tools.${tool.name}(same parameters as the direct tool)${returns}`;
+  const description = typeof tool.description === 'string' && tool.description ? ` — ${oneLine(tool.description)}` : '';
   return `- ${renderCompactSignature(tool)}${description}${returns}`;
 }
 
 function renderCompactEntry(tool: ToolRegistry[number]): string {
-  // Mirror renderDetailedEntry: surface the declared return shape as guidance
-  // even when no scriptedReturnSchema makes the contract precise, so a script
+  // Mirror renderDetailedEntry: prefer the declared return shape, so a script
   // sees the actual result shape instead of a bare 'returns unknown'.
   const scriptedReturn = scriptedReturnDescription(tool);
-  const returns = ` — returns ${scriptedReturn.value}`;
-  const guidance = scriptedReturn.legacy ? ` (guidance: ${scriptedReturn.legacy})` : '';
-  return `- ${renderCompactSignature(tool)}${returns}${guidance}`;
+  return `- ${renderCompactSignature(tool)} — returns ${scriptedReturn.legacy ?? scriptedReturn.value}`;
 }
 
 /**
  * Renders the catalogue of `tools.*` members a script can call.
  *
  * Parameter signatures are approximate structural renderings. Script return
- * types, when present, are rendered from the owner schema; missing contracts
- * are explicitly shown as unknown rather than inferred from prose, with any
- * declared prose shape surfaced alongside as guidance.
+ * shapes come from the tool's declared `scriptedReturnShape` when it has one,
+ * else from the owner schema; with neither, they are shown as unknown rather
+ * than inferred from prose.
  */
 export function renderToolsHeader(
   registry: ToolRegistry,
@@ -200,16 +197,10 @@ export function renderToolsHeader(
   // tools that satisfy isDirectlyCallable, so their full descriptions are
   // already in the request; repeating a clipped copy here only costs tokens.
   const described = essential.map((tool) => ({ tool, direct: isDirectlyCallable(tool) }));
-  const anyDirect = described.some((entry) => entry.direct);
   const lines = [
-    anyDirect
-      ? 'Available inside the script (parameter shapes are approximate; tools you can also call directly are described in their own definitions):'
-      : 'Available inside the script (parameter shapes are approximate):',
+    'In the script (shapes approximate):',
     ...(essential.length > 0
-      ? [
-          'Essential tools:',
-          ...described.map(({ tool, direct }) => renderDetailedEntry(tool, { omitDescription: direct })),
-        ]
+      ? ['Main tools:', ...described.map(({ tool, direct }) => renderDetailedEntry(tool, { direct }))]
       : []),
     ...(other.length > 0 ? [...(essential.length > 0 ? [''] : []), ...otherLines] : []),
   ];

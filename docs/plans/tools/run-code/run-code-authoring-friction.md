@@ -282,3 +282,145 @@ tool that `isDirectlyCallable` reports as direct. When `run_code` is offered,
 satisfy that predicate, so the full description is already in the same request.
 If a profile ever offers `run_code` with a different direct surface, restore the
 one-liner for the tools it hides.
+
+## Model-facing text compression, second pass (2026-11-23)
+
+Two passes on 2026-11-23 cut every root request by about 17% (`pnpm prefix:report`:
+`tui-root` 25,217 to 20,721 characters, `headless-root` 21,825 to 18,132) and child
+requests by 10 to 18%. Every instruction in the list above was kept. What went:
+
+- duplicated guidance: two `Promise.allSettled` sentences, two "take only what you need"
+  sentences, two background-handle warnings in `run_subagent`;
+- host plumbing the model cannot act on: `continue_run_id` authority, "the raw spec is
+  never forwarded", the session approval owner, the notification lane;
+- in the catalogue (`renderToolsHeader`), the schema-rendered return union when the
+  tool declares a `scriptedReturnShape`. The authored shape was printed beside it as
+  "(guidance: ...)" and said the same thing more precisely; it now replaces the union.
+  The read_file and glob shapes gained their plain-string error branch so nothing in
+  the union is lost;
+- wordy phrasing in read_file, create_file, grep, glob, code_context_search,
+  read_code_outline, web_fetch and the child `shell`, and in grep and glob parameters.
+
+`session_rollover` now has one source in
+`src/tools/session-rollover/session-rollover-tool.ts`, which `src/session/rollover.ts`
+imports. Pointers to `run_code` keep the exact clause forms
+`src/delegation/subagents/dead-tool-references.ts` deletes for children without it.
+
+Checked against the original build with real models through OpenRouter: Claude Sonnet
+5.5, Claude Haiku 5.5, GPT-6.2 Sol and Gemini 4 Neon, two runs each of ten headless
+probes (resilient fan-out read, backtick text through `inputs`, counting in a large log,
+not delegating a trivial question, delegating a TODO search, explorer symbol trace,
+deleting a 50-line function with `search_replace`, two parallel `agent.run` calls, a
+slow shell command, overwriting a file). Graded 69/76 before and 70/76 after; the
+change cost 7% less for the same runs. Excluded as probe artifacts: the
+`search_replace` and `create_file` probes on GPT, whose model-keyed tool set offers
+`apply_patch` instead. The shell probe fails for Haiku and GPT on both builds where the
+container lacks `bwrap`; they stop at the sandbox error rather than retry unsandboxed.
+
+A direct-API `session_rollover` probe (the recorded TUI root request plus a short
+history; an explicit rollover request versus an ordinary next task) caught one
+regression in an intermediate draft: "First save state the brief cannot hold ..." read
+as mandatory, and GPT-6.2 wrote a handoff file instead of rolling over (8/9 to 5/9).
+The original wording made it conditional ("state the successor must not lose"); the
+shipped text says "If the successor needs state the brief cannot hold, first save it
+..." and GPT and Haiku went to 9/9. No model rolled over unprompted on either build.
+Sonnet 5.5 often runs a read-only check (`git status`, `ls tests`) of a claim it had
+not verified before rolling over, on both builds.
+
+Weaker earlier models (Sonnet 4.5, GPT-5-mini) failed the large-log probe on every run
+before and after: they read the log once in a script, ignored `truncated: true`, and
+reported 89 of 236 ERROR lines. The description now says a truncated scripted
+`read_file` holds only part of the file; current models pass that probe either way.
+
+## Half-length descriptions (2026-11-23, third pass)
+
+Every Term2-authored tool description except the memory tools (73 to 89 characters
+already) is now at or under half its length before these passes. All descriptions
+together are 47% of the original on the TUI root (14,548 to 6,964 characters) and 42 to
+44% on explorer and worker children; the TUI root prefix is 68% of the original
+(25,217 to 17,356), the rest being parameter schemas and the system prompt. To get
+there:
+
+- the catalogue shows a tool's first sentence instead of a 140-character clip, and the
+  `scriptedReturnShape` strings are compact;
+- the `run_code` worked example was dropped; each must-keep instruction above is still
+  stated, in one clause where it had a sentence;
+- "returns ..." clauses were dropped where the result explains itself (`read_file`,
+  `create_file`, `search_replace`), and so were secondary pointers (`glob` and
+  `code_context_search` to each other, `web_fetch` to `web_search`).
+
+Checked against the original build (2026-11-23, `bwrap` installed so the shell probe
+exercises the sandbox; edit probes name no tool, since GPT models are offered
+`apply_patch` instead of `search_replace` and `create_file`):
+
+- headless probes, ten scenarios, two runs per model: Sonnet 5.5 and GPT-6.2 Sol
+  passed the same cells before and after (one GPT `agent-run` failure on each build);
+- the direct-API `session_rollover` probe, all four models: 34/40 before, 36/40 after,
+  no unprompted rollover on either build, briefs as specific (all cite the commit).
+
+Haiku 5.5 and Gemini 4 Neon were rerun after the workspace budget was raised (it had
+been exceeded mid-run; BYOK requests are excluded from the budget but still blocked once
+it trips). All four models together: 78/80 before, 76/80 after. Both lost passes were the
+large-log probe's output-size check: the answers were right, but Haiku returned a raw
+17,360-character grep dump and Gemini 7,268 characters, against 362 to 5,610 before.
+The draft had shortened "Return only the fields, line ranges, or summaries you need" to
+"Return only what you need", dropping the concrete list. Restoring it ("Return only the
+fields, line ranges or summaries you need, never raw dumps") brought that probe to 7/8 on
+both builds (Haiku and Gemini, four runs each) with Haiku back at 362 to 799 characters.
+The concrete list is load-bearing for small models; keep it.
+
+## Presented parameter schemas (2026-11-23, fourth pass)
+
+The parameter schemas the model sees were trimmed to about 70% of their original size
+(TUI root 8,878 to 6,223 characters), bringing the TUI root prefix to 59% of the
+original (25,217 to 14,961). Validation is unchanged:
+
+- `run_subagent` presents a compact `agent_spec` (`presentedAgentSpecField` in
+  `src/tools/agent/run-subagent.ts`) without `permissions.tools`, which only narrows
+  the `tools` list the model writes itself, and without `.readonly()`, which rendered as
+  `readOnly` annotations. `canonicalParameters` is built from the full schema, and every
+  consumer that validates, normalizes or authorizes a call reads it first; a check of
+  five inputs (valid, `permissions.tools`, unknown tool, unknown tool under
+  `permissions.tools`, unknown field) gave the same verdicts as the original build.
+- Parameter descriptions that restated the parameter name were removed; the rest keep
+  only defaults, limits and the gap-anchor and return-value reminders.
+
+The 50% pass had dropped web_fetch's pointer to web_search; the provider black-box test
+"web_search is offered to root and explorer only when a search provider is configured"
+caught it, and the conditional pointer is back in its original wording.
+
+Real-model probes against the original build, after the edit: Sonnet 5.5 and Haiku 5.5
+and Gemini 4 Neon passed the same cells (74/76 before, 69/72 after on the cells that
+ran) except Haiku `agent-run`, which failed 1/2 before and 2/2 after for one cause on
+both builds: its glob-only children miscount. That is a glob bug, not the schemas: with
+the `find` fallback (no `fd` installed), `**/*.md` misses top-level files (`README.md`)
+and `**/*.js` under `src` misses `src/a.js`, while `src/**/*.js` and `*.js` match
+correctly. The `session_rollover` probe gave 17/19 explicit and 12/12 unprompted against
+18/24 and 16/16. GPT-6.2 runs are BYOK through an OpenAI key that ran out of credits
+mid-run, so GPT has only partial coverage of this pass (13 of 20 headless runs).
+Running the provider black-box suite while probes ran rebuilt `dist/` under them and
+broke 25 runs, which were rerun; run it only when no built-CLI reader is active.
+
+## Tiered experiment beyond 59% (2026-11-23)
+
+Four further cuts were built separately and measured against the original build with
+Sonnet 5.5, Haiku 5.5 and Gemini 4 Neon (GPT-6.2's BYOK key had no credits). Two were
+kept; the TUI root prefix is now 56% of the original (25,217 to 14,132 characters).
+
+- Kept. The catalogue no longer repeats the signatures of tools the request already
+  offers directly (`read_file`, `create_file`, `search_replace`): they render as
+  `tools.<name>(same parameters as the direct tool)` with their return shape. The chat
+  wire no longer repeats `"type": "function"` inside each function object. Headless
+  probes 59/60 before and after; provider black-box suite green.
+- Kept. The Agent capability section is a two-line pointer; `tools.describe('agent')`
+  returns the full API (`agentCapabilityReference` in `run-code-runtime.ts`). In 12
+  agent-run probes every model called `tools.describe('agent')` once before
+  `agent.run`, and 11 passed; the miss was Haiku's glob-only children miscounting (the
+  `find`-fallback `**/` bug above), as on the original build. Sonnet and Gemini sessions
+  that used `agent.run` sent fewer input tokens overall than before despite the lookup.
+- Rejected. Hiding rarely used options from the presented schemas (`agent_spec`
+  `permissions`/`budget`/`model`, `name`, `continue_run_id`, `check_in`, shell `monitor`
+  tuning) took a direct-API probe that asks for each option from 30/45 to 0/45: models
+  use these options when a request needs them, so hiding them removes the feature.
+- Not built. Offering `session_rollover` only after a rollover reminder would remove
+  the only way a user can ask for a rollover: there is no `/rollover` command.

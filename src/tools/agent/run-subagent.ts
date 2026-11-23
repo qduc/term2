@@ -20,20 +20,16 @@ const FOREGROUND_ROLES = ['explorer', 'worker', 'reviewer', 'librarian'] as cons
 const WAITABLE_ROLES = ['explorer', 'librarian'] as const;
 const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 const ALL_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
-// The explorer sentence stays: the description's Task Requirements state narrower deliverables, not
-// "recommendations" or "the parent task itself".
-const SUBAGENT_TASK_DESCRIPTION =
-  'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.';
+// What explorer may and may not be asked is stated once, in the description's explorer bullet.
+const SUBAGENT_TASK_DESCRIPTION = 'The delegated unit: one objective, ownership boundary and done condition.';
+const AGENT_SPEC_TOOLS_DESCRIPTION = 'Tools to give it; default: read-only workspace tools.';
+const AGENT_SPEC_DESCRIPTION = 'A custom agent instead of role and task.';
 
 export const agentSpecSchema = z
   .object({
-    goal: z.string().describe('The goal for this general-purpose agent invocation.'),
+    goal: z.string(),
     context: z.record(z.string(), z.unknown()).optional(),
-    tools: z
-      .array(z.enum(AGENT_SPEC_TOOL_NAMES))
-      .readonly()
-      .optional()
-      .describe('Optional allowlist of child-buildable tools; omitted defaults to read-only workspace tools.'),
+    tools: z.array(z.enum(AGENT_SPEC_TOOL_NAMES)).readonly().optional().describe(AGENT_SPEC_TOOLS_DESCRIPTION),
     permissions: z
       .object({
         tools: z.array(z.enum(AGENT_SPEC_TOOL_NAMES)).readonly().optional(),
@@ -51,61 +47,48 @@ export const agentSpecSchema = z
       .optional(),
     budget: z
       .object({
-        maxTurns: z.number().int().positive().optional().describe('Maximum model turns; defaults to 200.'),
-        maxTokens: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe('Provider output-token cap per model response, not an aggregate run token budget.'),
+        maxTurns: z.number().int().positive().optional().describe('Default 200.'),
+        maxTokens: z.number().int().positive().optional().describe('Output-token cap per response.'),
       })
       .strict()
-      .optional()
-      .describe('Only enforced per-invocation budgets are accepted.'),
+      .optional(),
   })
   .strict();
+
+/**
+ * The agent spec the model is shown. `permissions.tools` only narrows `tools`, which the
+ * model writes itself, so it is left out, and the arrays drop `.readonly()`, which renders
+ * as a `readOnly` annotation. Validation still uses the full {@link agentSpecSchema}.
+ */
+const presentedAgentSpecField = agentSpecSchema
+  .extend({
+    tools: z.array(z.enum(AGENT_SPEC_TOOL_NAMES)).optional().describe(AGENT_SPEC_TOOLS_DESCRIPTION),
+    permissions: agentSpecSchema.shape.permissions.unwrap().omit({ tools: true }).optional(),
+  })
+  .optional()
+  .describe(AGENT_SPEC_DESCRIPTION);
 
 /** Input contract for the injected launcher; runtime resolution stays host-side. */
 type AgentSpec = z.infer<typeof agentSpecSchema>;
 
 const backgroundFields = {
-  name: z
-    .string()
-    .regex(SUBAGENT_RUN_NAME_PATTERN)
-    .optional()
-    .describe(
-      'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens. Background only.',
-    ),
+  name: z.string().regex(SUBAGENT_RUN_NAME_PATTERN).optional().describe('Background run alias.'),
   continue_run_id: z
     .string()
     .optional()
-    .describe(
-      'Continue a completed background run using its runId. Background only; writable generic runs and workers cannot continue.',
-    ),
+    .describe('Continue a completed background run by runId (not workers or writable runs).'),
   check_in: z
     .object({
-      enabled: z
-        .boolean()
-        .optional()
-        .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
-      interval_seconds: relaxedNumber
-        .int()
-        .positive()
-        .optional()
-        .describe('Custom interval in seconds between proactive check-ins.'),
+      enabled: z.boolean().optional().describe('Default true.'),
+      interval_seconds: relaxedNumber.int().positive().optional(),
     })
     .optional()
-    .describe('Optional check-in configuration for this background subagent. Background only.'),
+    .describe('Background check-in settings.'),
 };
 
 // Creating the worktree first, and not re-rooting this session, is stated once, in the tool description.
 const worktreeField = {
-  worktree: z
-    .string()
-    .optional()
-    .describe(
-      'For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into.',
-    ),
+  worktree: z.string().optional().describe('Existing git worktree (basename or branch) to pin a writable child into.'),
 };
 
 const runSubagentSchema = z
@@ -113,11 +96,9 @@ const runSubagentSchema = z
     execution: z
       .enum(['foreground', 'background'])
       .describe('"foreground" returns the result in this turn; "background" returns a running handle immediately.'),
-    role: z.enum(ALL_ROLES).optional().describe('Optional legacy role preset. Omit when supplying agent_spec.'),
+    role: z.enum(ALL_ROLES).optional().describe('Preset role; omit with agent_spec.'),
     task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
-    agent_spec: agentSpecSchema
-      .optional()
-      .describe('Dynamic goal/context/tools/constraints/model/budget; no named role required.'),
+    agent_spec: agentSpecSchema.optional().describe(AGENT_SPEC_DESCRIPTION),
     ...worktreeField,
     ...backgroundFields,
   })
@@ -171,18 +152,17 @@ export type RunSubagentToolCallbacks = {
   ) => void;
 };
 
-function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentToolCallbacks) {
+function createRunSubagentSchema(
+  { runSubagent, runSubagentAsync }: RunSubagentToolCallbacks,
+  agentSpecField: z.ZodTypeAny = runSubagentSchema.shape.agent_spec,
+) {
   if (runSubagentAsync) {
     return z
       .object({
-        execution: z
-          .enum(['foreground', 'background'])
-          .describe(
-            '"foreground" (explorer or librarian only) returns the result in this call; "background" returns a running handle immediately.',
-          ),
-        role: z.enum(BACKGROUND_ROLES).optional().describe('Optional legacy role preset.'),
+        execution: z.enum(['foreground', 'background']).describe('"foreground" (explorer, librarian) or "background".'),
+        role: z.enum(BACKGROUND_ROLES).optional().describe('Preset role.'),
         task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
-        agent_spec: runSubagentSchema.shape.agent_spec,
+        agent_spec: agentSpecField,
         ...worktreeField,
         ...backgroundFields,
       })
@@ -194,9 +174,9 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
     return z
       .object({
         execution: z.literal('foreground').describe('Only foreground execution is available in this session.'),
-        role: z.enum(FOREGROUND_ROLES).optional().describe('Optional legacy role preset.'),
+        role: z.enum(FOREGROUND_ROLES).optional().describe('Preset role.'),
         task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
-        agent_spec: runSubagentSchema.shape.agent_spec,
+        agent_spec: agentSpecField,
         ...worktreeField,
       })
       .strict()
@@ -349,9 +329,10 @@ export function createRunSubagentToolDefinition(
   // bypass schema normalization and take this foreground fallback.
   const legacyForegroundOnly = typeof callbacks === 'function';
   const resolvedCallbacks: RunSubagentToolCallbacks = legacyForegroundOnly ? { runSubagent: callbacks } : callbacks;
-  const parameters = createRunSubagentSchema(resolvedCallbacks);
-  // The presented schema is unchanged; the canonical one first rewrites recoverable mixed shapes.
-  const shapes = withRunSubagentShapes(parameters);
+  // The model is shown a compact agent spec; the canonical schema keeps the full one
+  // and first rewrites recoverable mixed shapes.
+  const parameters = createRunSubagentSchema(resolvedCallbacks, presentedAgentSpecField);
+  const shapes = withRunSubagentShapes(createRunSubagentSchema(resolvedCallbacks));
 
   return {
     name: 'run_subagent',

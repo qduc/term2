@@ -10,15 +10,13 @@ const foregroundShellParameters = shellParametersSchema
     sandbox: true,
   })
   .extend({
-    command: shellParametersSchema.shape.command.describe(
-      'Shell command. Batch related reads and filter output locally.',
-    ),
-    description: shellParametersSchema.shape.description.describe('Short user-visible description.'),
+    command: shellParametersSchema.shape.command.describe('Batch related reads; filter output locally.'),
+    description: shellParametersSchema.shape.description.describe('Short label shown to the user.'),
     timeout_ms: shellParametersSchema.shape.timeout_ms.describe(
-      'Finite deadline in milliseconds; size explicitly for long work. A timeout is not permission to repeat effects.',
+      'Finite deadline in ms, sized for long work; not permission to repeat effects.',
     ),
     max_output_length: shellParametersSchema.shape.max_output_length.describe(
-      'Output character limit. Overflow is saved to a file; inspect relevant ranges instead of rerunning.',
+      'Output cap; overflow is saved to a file, so inspect ranges instead of rerunning.',
     ),
   });
 
@@ -39,12 +37,9 @@ export function presentBareShell(
   return {
     ...tool,
     description:
-      'Run shell commands for reads, searches and local checks. Combine known dependent steps in one command; ' +
-      'batch independent reads and return only relevant evidence. Make file edits with the shell too. ' +
-      (options.background
-        ? 'Set background: true for long-running work; add monitor in the same call and wait for shell_output notifications instead of polling. '
-        : 'Foreground execution only. ') +
-      'Respect approvals; unsandboxed execution requires approval.',
+      'Run shell commands (reads, searches, checks, edits); batch steps, return only relevant output. ' +
+      (options.background ? 'Long work: background: true plus monitor, then await shell_output. ' : '') +
+      'Unsandboxed runs need approval.',
     parameters: options.background ? backgroundShellParameters : foregroundShellParameters,
     canonicalParameters: shellParametersSchema,
   };

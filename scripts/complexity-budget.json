@@ -78,8 +78,8 @@
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission. Two lines hand notices an earlier process left pending to the background owner (ConversationBackground.deliverReopened) before the turn's history snapshot is taken; the delivery has to precede the turn's admission, so it cannot live in the later notice preparation. Fifteen lines connect the approval arbiter (approval/approval-arbiter.ts): one shared reviewer for root and task approvals built where the generation, accepted history and live publisher meet, handed to each turn and to the task owner, and takeOverReview routed root-then-task exactly like answer. The reviewer's logic stays in the arbiter; only the wiring that closes over this driver's state is here. Eleven lines take an unattended turn's workspace snapshot before its first model request: the per-turn holder (approval/unattended-snapshot.ts) is built where the turn id, the arbiter and the app's snapshot port meet, the turn's prepareRequest awaits it, and the turn owner reads its report for the terminal notice. One line is the comment on the rollover-reminder gate: contextMilestones is handed to the turn only when modelRollover is not false, so the model is not told to call session_rollover where that tool is not offered. The gate sits here because this is where a turn's deps are read from generation.supplied each turn, and config-runtime.ts re-derives modelRollover on a settings rebind, so a check where the supplier is built would go stale; the line goes when the supplier owns that decision."
     },
     "src/app/agent.ts": {
-      "lines": 753,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Twelve lines since then: the edit tools' nearest-line hint read gate (createHintReadAccess, built beside the tools that take it) and the one web_search availability decision that the prompt wording and the tool list share. Lower the ceiling when the agent assembly is split."
+      "lines": 761,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Twenty lines since then: the edit tools' nearest-line hint read gate (createHintReadAccess, built beside the tools that take it), the one web_search availability decision that the prompt wording and the tool list share, and the matching search_skills decision (offered only when the skills catalog it renders lists some skills by name only, so the catalog wording and the tool list cannot disagree). Lower the ceiling when the agent assembly is split."
     },
     "src/app/application-runtime.ts": {
       "lines": 521,
@@ -230,11 +230,11 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails. Two lines keep Update and known-change batching guidance beside the existing tool description; extracting only these sentences would fragment one prompt without separating a responsibility. Six lines read the canonical `patch` string from the arguments object as well as from a raw envelope string, so an approval preview of the same call parses what execution will run; retire that increment when apply_patch stops accepting both argument shapes. Retire the reasoning increments when the complete patch description or presentation boundary is extracted. Two lines (import, one call) put the approval floor first in needsApproval, before the `always` shortcut; the floor must hold in every mode and only needsApproval sees the parsed operations at that point."
     },
     "src/tools/file/code-context.ts": {
-      "lines": 796,
+      "lines": 788,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/search-replace.ts": {
-      "lines": 633,
+      "lines": 629,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Up from 661: the optional read gate for the nearest-line hint, the skip and labelled-failure calls in the batch loop, and the flat-shape canonical schema. Result wording and shape recovery already live in search-replace-protocol.ts; what remains is wiring beside the batch state (file content, the single write). Lower the ceiling when the batch executor moves out of this file. Three lines (two imports, one call) put the approval floor first in needsApproval, before the `always` shortcut, as in apply-patch.ts and create-file.ts."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
@@ -254,7 +254,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/system/shell.ts": {
-      "lines": 1521,
+      "lines": 1498,
       "reason": "The shell executor owns the sandbox lease and foreground-to-background handoff. Its network approval registration and cleanup follow those same execution boundaries. Destination decision handling lives in sandbox-network-approval.ts. Lower the ceiling when the shell execution pipeline can move as a whole. Forty lines are the foreground-only presentation shown to sessions without a background job registry (presentForegroundShell, its narrowed parameter schema and the description variant). They stay here because they are derived from the shell schema and description in this file and must not drift from the canonical schema that validates and authorizes calls; they can move out with the description text when the model-facing shell presentation is split from the executor."
     },
     "src/delegation/subagents/tool-policy.ts": {
@@ -266,8 +266,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/delegation/run-code/run-code-runtime.ts": {
-      "lines": 1146,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ratcheted down after the unknown-tool hint helpers moved to run-code-unknown-tool-hints.ts."
+      "lines": 1155,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ratcheted down after the unknown-tool hint helpers moved to run-code-unknown-tool-hints.ts. Nine lines since then answer tools.describe('agent') with the agent capability reference inside the existing describe branch, so the run_code description can carry a pointer instead of the full agent API; they belong with that branch and move when describe handling does."
     },
     "src/session/background.ts": {
       "lines": 519,

@@ -60,18 +60,14 @@ function detectSummarizationMarkers(content: string): string | null {
 }
 
 const searchReplaceOperationSchema = z.object({
-  search_content: z.string().describe('The exact content to search for. <...> on its own line acts as a gap anchor.'),
-  replace_content: z.string().describe('The content to replace the matched search_content with.'),
-  match_all: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Replace every non-overlapping match. Defaults to false, which requires exactly one match.'),
+  search_content: z.string().describe('Exact text to find; a lone <...> line is a gap.'),
+  replace_content: z.string(),
+  match_all: z.boolean().optional().default(false).describe('Replace every match (default: exactly one required).'),
 });
 
 const searchReplaceParametersSchema = z.object({
-  path: z.string().describe('The absolute or relative path to the file'),
-  replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
+  path: z.string(),
+  replacements: z.array(searchReplaceOperationSchema).min(1),
 });
 
 /**
@@ -287,9 +283,9 @@ const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _t
 };
 
 const SEARCH_REPLACE_DESCRIPTION =
-  'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\n' +
-  'Gap matching: When rewriting large chunks of text, put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span—both anchors and everything between them—is replaced, so a misplaced anchor silently deletes a large region. Choose distinctive, unambiguous anchors: prefer a few lines of real, unique code. Never anchor on a single generic line like }, return, or a blank line. Use this to edit or delete a large block without reproducing it: Delete the block including anchors: omit them from replace_content. Delete only the middle: repeat the anchors in replace_content.\n' +
-  'Do NOT use this to create files from scratch; inside run_code, use tools.create_file(...). Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.';
+  'Replace text in a file. Exact matches are preferred; fallbacks tolerate whitespace, indentation, line-ending and escaping differences. Each search must match once unless match_all.\n' +
+  'Gap matching: put <...> on its own line between a head and tail anchor to replace a large block without retyping it. The whole span is replaced, so anchor on a few distinctive lines, never a lone } or blank line. Omit the anchors from replace_content to delete them too; repeat them to keep them.\n' +
+  'To create files, use create_file; inside run_code, use tools.create_file(...).';
 
 export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;
@@ -309,7 +305,7 @@ export function createSearchReplaceToolDefinition(deps: {
     name: 'search_replace',
     description: SEARCH_REPLACE_DESCRIPTION,
     scriptedReturnShape:
-      'string: one status line per operation, newline-joined — "Updated <path> (N match)" | "Created <path> (new file)" | "Error: \u2026"',
+      'one line per operation: "Updated <path> (N match)" | "Created <path> (new file)" | "Error: \u2026"',
     effect: 'mutating',
     canRequireApproval: true,
     scriptedReturnSchema: z.string(),

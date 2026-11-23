@@ -2489,7 +2489,7 @@ fs.createWriteStream = (filename, options) => {
           expect(system).toContain('report blocked');
           expect(system).not.toContain('goal_check');
           expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL multiline frontmatter');
-          expect(system).toContain('read the SKILL.md at its\nlocation with the shell');
+          expect(system).toContain('read its SKILL.md with the shell');
           expect(system).not.toContain('activate_skill');
           expect(system).toContain(`cwd (you're already here, don't \`cd\` to it): ${repo}`);
           expect(system).toContain('You are a coding assistant running inside Term2');

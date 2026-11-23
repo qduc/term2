@@ -58,7 +58,7 @@ const codeContextSearchParametersSchema = z
     query_type: z.enum(['related', 'symbol']).describe('Search mode: related files by path or declarations by symbol.'),
     path: z.string().optional().describe('Target file path. Required when query_type is related.'),
     symbol: z.string().optional().describe('Identifier to search for. Required when query_type is symbol.'),
-    max_results: relaxedNumber.int().positive().optional().describe('Maximum number of results.'),
+    max_results: relaxedNumber.int().positive().optional(),
   })
   .superRefine((value, context) => {
     if (value.query_type === 'related' && !value.path) {
@@ -82,19 +82,11 @@ export type ReadCodeOutlineToolParams = z.infer<typeof readCodeOutlineParameters
 export type CodeContextSearchToolParams = z.infer<typeof codeContextSearchParametersSchema>;
 
 const IMPORTER_EXTENSIONS = [...TS_EXTENSIONS, ...JS_EXTENSIONS];
-const READ_CODE_OUTLINE_DESCRIPTION =
-  'Compact outline of one file: imports, exports, declarations. No bodies. ' +
-  'Use this to orient yourself before reading a file in full. ' +
-  'Do NOT use this when you need the full file content; inside run_code, use tools.read_file(...). ' +
-  'Returns the compact outline.';
-const buildCodeContextSearchDescription = (globAvailable: boolean): string =>
-  'Find related files for a given path or declarations for a symbol name. ' +
-  'Use this to discover code that depends on or is related to a file, or to locate where a symbol is declared. ' +
-  'Note: symbol must be a valid identifier-safe name (letters, numbers, underscores, and dollar signs, and cannot start with a number). ' +
-  `Do NOT use this for plain text search across files (inside run_code, use tools.grep(...)) or for listing files by name (use ${
-    globAvailable ? 'tools.glob(...)' : 'shell'
-  }). ` +
-  'Returns up to max_results related files or symbol declarations with relation tokens.';
+const READ_CODE_OUTLINE_DESCRIPTION = 'Outline one file (imports, exports, declarations; no bodies) before reading it.';
+const buildCodeContextSearchDescription = (_globAvailable: boolean): string =>
+  'Find files related to a path, or where an identifier is declared. ' +
+  'Not for text search (inside run_code, use tools.grep(...)). ' +
+  'Returns up to max_results results with relation tokens.';
 
 const SKIP_DIRS = ['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.cache', 'out', 'vendor'];
 const MAX_TARGET_BYTES = 512 * 1024;

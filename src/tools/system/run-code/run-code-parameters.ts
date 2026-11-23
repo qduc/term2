@@ -40,8 +40,7 @@ const decodeValidatedInputKeys = (value: Record<string, JsonValue>): Record<stri
 };
 
 // The shared code-plus-inputs admission limit is stated once, in the tool description.
-const RUN_CODE_INPUTS_DESCRIPTION =
-  'JSON data exposed to the script as the global `inputs`. Use this for patch or file text.';
+const RUN_CODE_INPUTS_DESCRIPTION = 'JSON exposed as the global `inputs`; use it for patch or file text.';
 
 const runCodeInputsSchema = z
   .preprocess(encodeInputKeysForValidation, z.record(z.string(), z.json()))
@@ -59,24 +58,13 @@ export const runCodeParametersSchema = z.object({
   code: z
     .string()
     .min(1)
-    .describe(
-      'JavaScript (not TypeScript) run as the body of an async function, so top-level await works. ' +
-        'Return the value you want the model to receive.',
-    ),
+    .describe('JavaScript (not TypeScript), the body of an async function. Return the value the model should receive.'),
   inputs: runCodeInputsSchema.optional().describe(RUN_CODE_INPUTS_DESCRIPTION),
-  include_console: z
-    .boolean()
-    .optional()
-    .describe('Also include the console.log trace in a successful result. Defaults to false.'),
+  include_console: z.boolean().optional().describe('Include the console.log trace on success.'),
   // Non-positive is rejected because `setTimeout(fn, 0)` fires promptly; it
   // does not disable the timer. Values above 2**31-1 wrap to ~1 ms in Node.
-  timeout_ms: relaxedNumber
-    .int()
-    .positive()
-    .max(MAX_TIMEOUT_MS)
-    .optional()
-    .describe(`Wall-clock limit for the script. Defaults to ${DEFAULT_TIMEOUT_MS}.`),
-  description: z.string().describe('One short line describing what the script does, shown to the user.'),
+  timeout_ms: relaxedNumber.int().positive().max(MAX_TIMEOUT_MS).optional().describe(`Default ${DEFAULT_TIMEOUT_MS}.`),
+  description: z.string().describe('One short line shown to the user.'),
 });
 
 export type RunCodeParams = z.infer<typeof runCodeParametersSchema>;

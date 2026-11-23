@@ -52,32 +52,17 @@ const maxOutputChars = (): number => getTrimConfig().maxCharacters;
 // sibling reads, and oversized returns were clipped or re-read. Rewording is
 // fine; dropping one of those instructions is a regression.
 const RUN_CODE_DESCRIPTION =
-  'Run a JavaScript program. Return the value you want the model to receive. Most of your tools are callable in ' +
-  'the script as `tools.<tool_name>(params)` with exactly their documented parameters, validated against the real ' +
-  "schema before the tool runs. Each call returns a promise of the tool's normal result; a failed call, including " +
-  'an approval denial, rejects and can be caught. The catalogue below is complete: a name absent from it is not ' +
-  'available in the script, even if you can call that tool directly. Prefer one script over many tool calls for a ' +
-  'loop, a fan-out over many files, or multi-step work whose intermediate values you do not need to see. The ' +
-  'script is isolated, with no filesystem, network, timers, require, or eval; `tools.*` is the only way out. ' +
-  'Auto-approved tools run immediately; tools that need approval show the usual approval prompt and the script ' +
-  'resumes after the decision. `console.log` is a debugging trace, shown only when the script fails or times out, or with ' +
-  '`include_console: true`.\n\n' +
-  `Each script may make at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls; split large work into chunks and track ` +
-  'progress. Catch individual failures or use `Promise.allSettled` to keep partial results; for independent reads, ' +
-  'use `Promise.allSettled` and map rejections to `{error: r.reason.message}` so successful siblings survive. When the call budget is exhausted, ' +
-  'the error reports calls admitted and remaining: return the partial results and start another run_code call only ' +
-  'for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you ' +
-  'need: model-visible output is limited to the configured tool output limit (20,000 characters unless changed), and larger host results can fail before rendering. ' +
-  "If the run's result says `Full output saved to`, read that exact path with `read_file` instead of repeating " +
-  'completed calls; for any large artifact, take line ranges or only the fields you need instead of transferring ' +
-  'the whole value. In the ' +
-  'script, a `read_file` result may have `truncated: true` and a `fullOutputPath`: follow that path or narrow the ' +
-  'projection before returning it. Use `tools.describe(name)` for the full schema and description of a tool rather ' +
-  'than guessing parameters or returned fields. Pass patch or file text that contains JavaScript syntax such as ' +
-  'backticks or `${...}` through the `inputs` parameter and read it from the global `inputs` object; do not embed it ' +
-  'in code. Code and serialized inputs share the 65,536-byte admission limit. ' +
-  'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
-  'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`';
+  'Run a JavaScript program and return the value the model should receive. Call tools as `tools.<name>(params)`; ' +
+  'each returns a promise, and a failure or approval denial rejects. Only the tools listed below exist in the ' +
+  'script. Prefer one script for loops, fan-outs, or multi-step work. No filesystem, ' +
+  'network, timers, require, or eval. `console.log` shows only on failure or with `include_console: true`.\n\n' +
+  `Limit: ${RUN_CODE_LIMITS.maxCalls} tools.* calls; when exhausted, return partial results and run only ` +
+  'unattempted work next. Never repeat completed effects. Read independently with `Promise.allSettled`, mapping ' +
+  'rejections to `{error: r.reason.message}`. Return only the fields, line ranges or summaries you need, never raw dumps (cap: 20,000 characters); ' +
+  'follow `Full output saved to` paths. A `read_file` result with `truncated: true` holds only part of ' +
+  'the file: read the rest or its `fullOutputPath`. Use `tools.describe(name)` instead of guessing. Put text with ' +
+  'backticks or `${...}` in `inputs` and read global `inputs`; never inline it. Code + inputs ≤ ' +
+  '65,536 bytes.';
 
 export type RunCodeExecutionResult =
   | (string & { readonly [RUN_CODE_EXECUTION_RESULT]: RunCodeExecution })

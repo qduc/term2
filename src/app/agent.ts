@@ -68,6 +68,7 @@ import { buildPromptSpec } from '../session/prompts/prompt-constructor.js';
 import { ProfileResolutionError, resolveActiveProfile } from '../config/profiles/index.js';
 import { shouldPreferPatchEditingModel } from '../model/tool-selection-policy.js';
 import { SkillsService } from '../tools/skills/skills-service.js';
+import { createSearchSkillsToolDefinition } from '../tools/skills/search-skills.js';
 import { createProposeGoalToolDefinition } from '../tools/agent/propose-goal.js';
 import { createGoalCheckToolDefinition } from '../tools/agent/goal-check.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
@@ -394,7 +395,9 @@ export const getAgentDefinition = (
 
   let skillsInstructions = '';
   if (hasCapability('skills') && skillsCatalogEnabled && skillsService) {
-    const catalog = skillsService.getSkillCatalog(bareMode ? { loadVia: 'shell' } : {});
+    const catalog = skillsService.getSkillCatalog(
+      bareMode ? { loadVia: 'shell', searchTool: true } : { searchTool: true },
+    );
     if (catalog) {
       skillsInstructions = `\n\n${catalog}`;
     }
@@ -497,6 +500,11 @@ export const getAgentDefinition = (
   const beforeRollover = tools.map((tool) => tool.name);
   if (hasCapability('sessions') && requestSessionRollover)
     tools.push(createSessionRolloverToolDefinition(requestSessionRollover));
+
+  // Only when the catalog had to list some skills by name only; the catalog then points here.
+  if (skillsInstructions && skillsService && skillsService.nameOnlyCount > 0) {
+    tools.push(createSearchSkillsToolDefinition(skillsService));
+  }
 
   if (features.activateSkill && skillsService) {
     const activateSkill = createSelectedActivateSkillTool(skillsService);

@@ -331,3 +331,36 @@ Weaker earlier models (Sonnet 4.5, GPT-5-mini) failed the large-log probe on eve
 before and after: they read the log once in a script, ignored `truncated: true`, and
 reported 89 of 236 ERROR lines. The description now says a truncated scripted
 `read_file` holds only part of the file; current models pass that probe either way.
+
+## Half-length descriptions (2026-11-23, third pass)
+
+Every Term2-authored tool description except the memory tools (73 to 89 characters
+already) is now at or under half its length before these passes. All descriptions
+together are 47% of the original on the TUI root (14,548 to 6,964 characters) and 42 to
+44% on explorer and worker children; the TUI root prefix is 68% of the original
+(25,217 to 17,356), the rest being parameter schemas and the system prompt. To get
+there:
+
+- the catalogue shows a tool's first sentence instead of a 140-character clip, and the
+  `scriptedReturnShape` strings are compact;
+- the `run_code` worked example was dropped; each must-keep instruction above is still
+  stated, in one clause where it had a sentence;
+- "returns ..." clauses were dropped where the result explains itself (`read_file`,
+  `create_file`, `search_replace`), and so were secondary pointers (`glob` and
+  `code_context_search` to each other, `web_fetch` to `web_search`).
+
+Checked against the original build (2026-11-23, `bwrap` installed so the shell probe
+exercises the sandbox; edit probes name no tool, since GPT models are offered
+`apply_patch` instead of `search_replace` and `create_file`):
+
+- headless probes, ten scenarios, two runs per model: Sonnet 5.5 and GPT-6.2 Sol
+  passed the same cells before and after (one GPT `agent-run` failure on each build);
+- the direct-API `session_rollover` probe, all four models: 34/40 before, 36/40 after,
+  no unprompted rollover on either build, briefs as specific (all cite the commit).
+
+Not verified at this length: Haiku 5.5 and Gemini 4 Neon headless runs. The OpenRouter
+workspace's monthly budget ran out during the after-run (403 "Workspace monthly budget
+... exceeded"), so 40 of the 80 runs, 38 of them Haiku or Gemini, never reached a model.
+Both models passed the second pass (17% smaller) probes; rerun
+`h-before`/`h-after`-style probes for them before relying on this text with small or
+Gemini models.

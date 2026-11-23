@@ -190,7 +190,7 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
         settingKey={frame.settingKey}
         items={settingsValue.filteredEntries}
         selectedIndex={settingsValue.selectedIndex}
-        query={frame.binding.query}
+        query={settingsValue.isFreeFormString ? settingsValue.query : frame.binding.query}
         isNumericSettings={settingsValue.isNumericSettings}
         currentText={currentValue.ok ? formatSettingValueDetail(frame.settingKey, currentValue.value) : undefined}
         defaultText={defaultValue.ok ? formatSettingValueDetail(frame.settingKey, defaultValue.value) : undefined}

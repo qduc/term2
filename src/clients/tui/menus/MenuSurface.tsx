@@ -36,6 +36,19 @@ export type MenuSurfaceProps = {
   enabled: boolean;
 };
 
+/** Prompt text with the editor cursor drawn as an inverse cell, as the composer draws its own. */
+function PromptWithCursor({ text, cursor }: { text: string; cursor: number }) {
+  const theme = useTheme();
+  const at = Math.max(0, Math.min(text.length, cursor));
+  return (
+    <Text color={theme.text}>
+      {text.slice(0, at)}
+      <Text inverse>{text.charAt(at) || ' '}</Text>
+      {text.slice(at + 1)}
+    </Text>
+  );
+}
+
 /** The sole terminal input boundary while a controller menu is visible. */
 export function MenuSurface({ stack, controller, interactions, services, enabled }: MenuSurfaceProps) {
   const theme = useTheme();
@@ -60,7 +73,29 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
     valueFrame && isSecretSetting(valueFrame.settingKey)
       ? '•'.repeat(valueFrame.binding.query.length)
       : valueFrame?.binding.query;
-  const promptText = valueQuery ?? filterFrame?.binding.query ?? (menuPromptLabel ? input : undefined);
+  // The prompt shows the whole text from the field start, with the cursor drawn in it. binding.query stops
+  // at the cursor, so showing it alone hid everything typed after the cursor.
+  const promptStart = valueFrame
+    ? valueFrame.binding.replacement.start
+    : filterFrame
+    ? filterFrame.binding.queryStart
+    : 0;
+  const promptFull = valueFrame
+    ? valueQuery === undefined
+      ? undefined
+      : input.slice(promptStart)
+    : filterFrame
+    ? input.slice(promptStart)
+    : menuPromptLabel
+    ? input
+    : undefined;
+  const promptText =
+    promptFull === undefined ? undefined : (
+      <PromptWithCursor
+        text={valueFrame && isSecretSetting(valueFrame.settingKey) ? '•'.repeat(promptFull.length) : promptFull}
+        cursor={cursorOffset - promptStart}
+      />
+    );
 
   useEffect(() => {
     if (enabled) setCursorOverride(cursorOffset);
@@ -100,6 +135,12 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
         dispatch({ type: 'move', direction: 'end' });
       } else if (key.tab && !key.shift) {
         dispatch({ type: 'command', command: 'tab' });
+      } else if (key.ctrl && (_input === 'a' || _input === 'e')) {
+        dispatch({ type: 'move', direction: _input === 'a' ? 'home' : 'end' });
+      } else if ((key.leftArrow && (key.ctrl || key.meta)) || (key.meta && _input === 'b')) {
+        dispatch({ type: 'command', command: 'word-left' });
+      } else if ((key.rightArrow && (key.ctrl || key.meta)) || (key.meta && _input === 'f')) {
+        dispatch({ type: 'command', command: 'word-right' });
       } else if (key.ctrl && _input === 'r') {
         dispatch({ type: 'command', command: 'refresh' });
       } else if (key.ctrl && _input === 'd') {
@@ -151,7 +192,7 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
           <Text color={theme.accent} bold>
             {promptLabel}
           </Text>
-          <Text color={theme.text}>{promptText}</Text>
+          {promptText}
         </Box>
       )}
       <MenuStackHost

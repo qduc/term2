@@ -1,5 +1,21 @@
 import type { MenuController, MenuEvent } from './menu-types.js';
 
+/** Start of the word before `cursor`: skip whitespace, then the word. */
+function previousWordStart(text: string, cursor: number): number {
+  let at = cursor;
+  while (at > 0 && /\s/.test(text[at - 1]!)) at--;
+  while (at > 0 && !/\s/.test(text[at - 1]!)) at--;
+  return at;
+}
+
+/** End of the word after `cursor`: skip whitespace, then the word. */
+function nextWordEnd(text: string, cursor: number): number {
+  let at = cursor;
+  while (at < text.length && /\s/.test(text[at]!)) at++;
+  while (at < text.length && !/\s/.test(text[at]!)) at++;
+  return at;
+}
+
 /**
  * Apply the editor-shaped part of a menu event. The menu session chooses when
  * this is appropriate; this helper only centralizes the cursor/text mechanics.
@@ -43,6 +59,17 @@ export function applyMenuEditorEvent(
 
   if (options.horizontal !== false && event.command === 'left') {
     controller.applyEditorEdit({ type: 'move-cursor', cursor: editor.cursor - 1 });
+    return true;
+  }
+
+  // Word jumps always move the text cursor; `horizontal` only gates plain Left/Right, which tab-based menus use.
+  if (event.command === 'word-left') {
+    controller.applyEditorEdit({ type: 'move-cursor', cursor: previousWordStart(editor.text, editor.cursor) });
+    return true;
+  }
+
+  if (event.command === 'word-right') {
+    controller.applyEditorEdit({ type: 'move-cursor', cursor: nextWordEnd(editor.text, editor.cursor) });
     return true;
   }
 

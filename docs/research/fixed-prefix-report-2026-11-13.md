@@ -268,3 +268,33 @@ Not applied (proposals; each needs rewording or a product decision):
   truth", so neither is a pure duplicate.
 - `librarian.md`'s "Cite every claim" principle and its brief's "A source for every
   claim" overlap; the principle also covers maintenance reports.
+
+## Skills catalog (2026-11-23)
+
+The standard scenarios install no skills, so the catalog is absent from every number
+above. It is part of the fixed prefix whenever skills exist: every model-invocable skill
+in `.term2/skills`, `.agents/skills` and `.claude/skills` (project and home) is listed in
+the system prompt of the root and of every subagent, with no budget. Rendered with the
+real `SkillsService` from synthetic skills (descriptions 120 to 700 characters):
+
+| Skills | XML format (before) | Compact format (now) |
+| -----: | ------------------: | -------------------: |
+|     10 |               4,448 |                3,096 |
+|     30 |              14,489 |               10,159 |
+|    100 |              50,175 |               35,447 |
+|    300 |             157,674 |              113,251 |
+
+The XML format added about 155 characters of tags and absolute path per skill; the
+compact one lists each scope folder once and adds 6 to 9. Descriptions over 1,536
+characters are cut, and a catalog over 16,000 characters is logged as a warning. A
+direct-API trigger probe (30 skills, four tasks that should load one skill and one that
+should load none; Sonnet 5.5, Haiku 5.5, Gemini 4 Neon, two runs each) loaded the right
+SKILL.md 27/30 times with the XML catalog and 28/30 with the compact one, with no false
+loads; every miss was the PDF task's first response, on both formats.
+
+Still unbounded: 30 skills roughly double the TUI root prefix. Claude Code budgets its
+skill listing at about 1% of the context window and drops descriptions of the least
+used skills first; Codex budgets about 2% (8,000 characters when the window is unknown),
+shortens descriptions first and warns. A published test of Claude Code with 160 skills
+found the model located 0 of 3 skills whose descriptions had been dropped, so a budget
+here should send overflow to something searchable rather than to bare names.

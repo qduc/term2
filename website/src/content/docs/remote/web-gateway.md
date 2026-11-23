@@ -13,7 +13,9 @@ term2-web
 
 Open `http://127.0.0.1:3000`. The command starts both the browser app and its private gateway; you don't need a checkout, a separate build, or a pairing code. Press `Ctrl+C` to stop both. If port 3000 is already taken, run `PORT=3001 term2-web`.
 
-On your first visit, open **Local owner controls** in the sidebar, select a workspace folder, and start a new agent chat.
+On your first visit, select **Choose a folder**. Browse to the folder you want help with, confirm that term2 can read it, then select **Use this folder** and **Open chat**. Use **Chat history** to return to an earlier chat.
+
+The web app uses the same saved settings and provider credentials as the CLI. If you already set up a provider there, don't enter the key again. Start `term2-web` from the same shell environment if your CLI gets its credentials from environment variables. If a chat needs an API key that hasn't been configured, it will point you to **Settings**.
 
 This is a single-user interface bound to loopback, with read-only workspace grants under your home directory. Don't expose it through a proxy or port forward to other users. The signing key and Unix socket are temporary; gateway session state persists across launches.
 

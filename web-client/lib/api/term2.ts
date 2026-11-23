@@ -406,13 +406,14 @@ export function validateSettings(value: unknown): SettingsProjection {
     });
   }
   const safety = object(settings.safety);
-  only(safety, ['sandbox', 'approval', 'backgroundShell', 'workspaceAccess', 'network']);
+  only(safety, ['sandbox', 'approval', 'backgroundShell', 'workspaceAccess', 'network', 'showReview']);
   if (
     !['enabled', 'disabled', 'unavailable'].includes(String(safety.sandbox)) ||
     !['off', 'advisory', 'auto', 'unsafe-active', 'hidden'].includes(String(safety.approval)) ||
     safety.backgroundShell !== 'disabled-by-gateway' ||
     !['read', 'read_write'].includes(String(safety.workspaceAccess)) ||
-    !['denied', 'configured', 'confirmation-required'].includes(String(safety.network))
+    !['denied', 'configured', 'confirmation-required'].includes(String(safety.network)) ||
+    (safety.showReview !== undefined && typeof safety.showReview !== 'boolean')
   )
     throw new Term2ApiError(503, 'Invalid agent response');
   return {

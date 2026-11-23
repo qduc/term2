@@ -8,7 +8,13 @@ function valueText(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-export function Term2SettingsPanel() {
+export function Term2SettingsPanel({
+  onLoaded,
+  preferredProvider,
+}: {
+  onLoaded?: (settings: SettingsProjection) => void;
+  preferredProvider?: string;
+}) {
   const [projection, setProjection] = useState<SettingsProjection | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, string>>({});
@@ -47,7 +53,9 @@ export function Term2SettingsPanel() {
     setBusy(true);
     setError(null);
     try {
-      setProjection(await term2Client.readSettings());
+      const latest = await term2Client.readSettings();
+      setProjection(latest);
+      onLoaded?.(latest);
       setConflict(null);
       setConflictKey(null);
     } catch (reason) {
@@ -61,7 +69,7 @@ export function Term2SettingsPanel() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [onLoaded]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
@@ -146,7 +154,7 @@ export function Term2SettingsPanel() {
     >
       <div className="flex items-center justify-between">
         <h2 id="term2-settings-heading" className="font-semibold">
-          Local settings and providers
+          AI provider setup
         </h2>
         <button type="button" onClick={() => void reload()} disabled={busy} className="text-xs underline">
           Reload
@@ -201,169 +209,193 @@ export function Term2SettingsPanel() {
         </div>
       )}
 
+      <details className="mt-4 text-sm">
+        <summary className="cursor-pointer">Advanced app settings</summary>
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold">Safe defaults</h3>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Settings set by CLI flags or the session runtime are read-only in this panel.
+          </p>
+          <div className="mt-2 space-y-2">
+            {Object.entries(projection.settings.safeDefaults).map(([key, setting]) => {
+              const isReadOnly = !setting.persistable;
+              const tooltip = isReadOnly
+                ? `Read-only: set by ${setting.source} (${setting.scope} scope)`
+                : `Edit setting ${key}`;
+
+              return (
+                <div
+                  key={key}
+                  className="flex flex-wrap items-center gap-2 rounded border border-zinc-200 p-2 text-sm dark:border-zinc-700"
+                >
+                  <label className="min-w-40 flex-1" htmlFor={`term2-setting-${key}`} title={tooltip}>
+                    {key}{' '}
+                    <span className="ml-2 text-xs text-zinc-500">
+                      {setting.scope} · {setting.source}
+                    </span>
+                  </label>
+                  <input
+                    id={`term2-setting-${key}`}
+                    aria-label={`${key} (${setting.scope} · ${setting.source})`}
+                    title={tooltip}
+                    value={drafts[key] ?? valueText(setting.value)}
+                    onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                    disabled={isReadOnly || busy}
+                    className={`min-w-32 flex-1 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 ${
+                      isReadOnly
+                        ? 'bg-zinc-100 text-zinc-800 opacity-100 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-200'
+                        : 'bg-transparent'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy || isReadOnly}
+                    title={isReadOnly ? tooltip : `Save ${key}`}
+                    onClick={() => requestChange(key, drafts[key] ?? valueText(setting.value), setting.confirmRequired)}
+                    className="rounded bg-zinc-800 px-2 py-1 text-xs text-white disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                  {setting.confirmRequired && <span className="text-[10px] text-amber-700">confirmation required</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold">Providers</h3>
+          <ul className="mt-2 space-y-1 text-sm">
+            {projection.settings.providers.map((provider) => (
+              <li
+                key={provider.id}
+                className="flex items-center justify-between rounded border border-zinc-200 px-2 py-1 dark:border-zinc-700"
+              >
+                <span>
+                  {provider.label} <span className="text-xs text-zinc-500">({provider.id})</span>
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {provider.active ? 'active' : 'inactive'} ·{' '}
+                  {provider.credential.configured ? `configured (${provider.credential.source})` : 'not configured'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold">Safety</h3>
+          <dl className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+            <dt>Sandbox</dt>
+            <dd>{projection.settings.safety.sandbox}</dd>
+            <dt>Approval</dt>
+            <dd>{projection.settings.safety.approval}</dd>
+            <dt>Workspace access</dt>
+            <dd>{projection.settings.safety.workspaceAccess}</dd>
+            <dt>Network</dt>
+            <dd>{projection.settings.safety.network}</dd>
+            <dt>Background shell</dt>
+            <dd>{projection.settings.safety.backgroundShell}</dd>
+          </dl>
+        </div>
+      </details>
       <div className="mt-4">
-        <h3 className="text-sm font-semibold">Safe defaults</h3>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          Settings set by CLI flags or the session runtime are read-only in this panel.
+        <h3 className="text-sm font-semibold">API keys</h3>
+        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          If your AI service requires a key, get one from that service and paste it below. Only enter keys here, never
+          in a chat message.
         </p>
         <div className="mt-2 space-y-2">
-          {Object.entries(projection.settings.safeDefaults).map(([key, setting]) => {
-            const isReadOnly = !setting.persistable;
-            const tooltip = isReadOnly
-              ? `Read-only: set by ${setting.source} (${setting.scope} scope)`
-              : `Edit setting ${key}`;
-
-            return (
-              <div
-                key={key}
-                className="flex flex-wrap items-center gap-2 rounded border border-zinc-200 p-2 text-sm dark:border-zinc-700"
-              >
-                <label className="min-w-40 flex-1" htmlFor={`term2-setting-${key}`} title={tooltip}>
-                  {key}{' '}
-                  <span className="ml-2 text-xs text-zinc-500">
-                    {setting.scope} · {setting.source}
-                  </span>
-                </label>
-                <input
-                  id={`term2-setting-${key}`}
-                  aria-label={`${key} (${setting.scope} · ${setting.source})`}
-                  title={tooltip}
-                  value={drafts[key] ?? valueText(setting.value)}
-                  onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
-                  disabled={isReadOnly || busy}
-                  className={`min-w-32 flex-1 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 ${
-                    isReadOnly
-                      ? 'bg-zinc-100 text-zinc-800 opacity-100 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-200'
-                      : 'bg-transparent'
-                  }`}
-                />
-                <button
-                  type="button"
-                  disabled={busy || isReadOnly}
-                  title={isReadOnly ? tooltip : `Save ${key}`}
-                  onClick={() => requestChange(key, drafts[key] ?? valueText(setting.value), setting.confirmRequired)}
-                  className="rounded bg-zinc-800 px-2 py-1 text-xs text-white disabled:opacity-40"
-                >
-                  Save
-                </button>
-                {setting.confirmRequired && <span className="text-[10px] text-amber-700">confirmation required</span>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <h3 className="text-sm font-semibold">Providers</h3>
-        <ul className="mt-2 space-y-1 text-sm">
-          {projection.settings.providers.map((provider) => (
-            <li
-              key={provider.id}
-              className="flex items-center justify-between rounded border border-zinc-200 px-2 py-1 dark:border-zinc-700"
-            >
-              <span>
-                {provider.label} <span className="text-xs text-zinc-500">({provider.id})</span>
-              </span>
-              <span className="text-xs text-zinc-500">
-                {provider.active ? 'active' : 'inactive'} ·{' '}
-                {provider.credential.configured ? `configured (${provider.credential.source})` : 'not configured'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="mt-4">
-        <h3 className="text-sm font-semibold">Safety</h3>
-        <dl className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-          <dt>Sandbox</dt>
-          <dd>{projection.settings.safety.sandbox}</dd>
-          <dt>Approval</dt>
-          <dd>{projection.settings.safety.approval}</dd>
-          <dt>Workspace access</dt>
-          <dd>{projection.settings.safety.workspaceAccess}</dd>
-          <dt>Network</dt>
-          <dd>{projection.settings.safety.network}</dd>
-          <dt>Background shell</dt>
-          <dd>{projection.settings.safety.backgroundShell}</dd>
-        </dl>
-      </div>
-
-      <div className="mt-4">
-        <h3 className="text-sm font-semibold">Credentials</h3>
-        <div className="mt-2 space-y-2">
-          {Object.entries(projection.settings.credentials).map(([id, credential]) => (
-            <div key={id} className="rounded border border-zinc-200 p-2 dark:border-zinc-700">
-              <div className="flex items-center justify-between text-sm">
-                <span>{id}</span>
-                <span className="text-xs text-zinc-500">
-                  {credential.configured ? `configured (${credential.source})` : 'not configured'}
-                </span>
-              </div>
-              {/* A password input outside a <form> trips the browser's
+          {Object.entries(projection.settings.credentials)
+            .sort(([a], [b]) => Number(b === preferredProvider) - Number(a === preferredProvider))
+            .map(([id, credential]) => {
+              const label =
+                projection.settings.providers.find((provider) => provider.id === id)?.label ??
+                (id === 'openai' ? 'OpenAI' : id);
+              return (
+                <div key={id} className="rounded border border-zinc-200 p-2 dark:border-zinc-700">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>
+                      {label}
+                      {id === preferredProvider ? ' · used by this chat' : ''}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      {credential.configured ? `configured (${credential.source})` : 'not configured'}
+                    </span>
+                  </div>
+                  {/* A password input outside a <form> trips the browser's
                   "password field is not contained in a form" warning; wrap the
                   row so password managers/auditors stay quiet. Buttons stay
                   type="button" and submit is suppressed. */}
-              <form className="mt-2 flex gap-2" onSubmit={(event) => event.preventDefault()} noValidate>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  aria-label={`New value for ${id}`}
-                  value={credentialDrafts[id] ?? ''}
-                  onChange={(event) => setCredentialDrafts((current) => ({ ...current, [id]: event.target.value }))}
-                  disabled={!credential.writable || credential.source === 'environment'}
-                  placeholder={credential.source === 'environment' ? 'Provided by environment' : 'Enter a new value'}
-                  className="min-w-0 flex-1 rounded border border-zinc-300 bg-transparent px-2 py-1 text-xs dark:border-zinc-600"
-                />
-                <button
-                  type="button"
-                  disabled={!credential.writable || credential.source === 'environment' || !credentialDrafts[id]}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      const result = await term2Client.setCredential(id, credentialDrafts[id]);
-                      setMessage(
-                        `${id}: ${result.configured ? 'configured' : 'not configured'} (${result.source ?? 'stored'})`,
-                      );
-                      setCredentialDrafts((current) => ({ ...current, [id]: '' }));
-                      // Provider status is derived from the credentials projection;
-                      // refresh so the providers list stops showing stale state.
-                      await reload();
-                    } catch (reason) {
-                      setError(reason instanceof Error ? reason.message : 'Credential was not saved');
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  className="rounded bg-zinc-800 px-2 py-1 text-xs text-white disabled:opacity-40"
-                >
-                  Set
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    !credential.writable || credential.source === 'environment' || !credential.configured || busy
-                  }
-                  title={!credential.configured ? 'Credential is not configured' : `Delete stored credential for ${id}`}
-                  onClick={() => {
-                    openConfirm({
-                      key: `credential:${id}`,
-                      value: '',
-                      consequence: `Delete stored credential for "${id}"? You will need to enter a new API key or secret to use this provider.`,
-                    });
-                  }}
-                  className="rounded border px-2 py-1 text-xs disabled:opacity-40"
-                >
-                  Delete
-                </button>
-              </form>
-            </div>
-          ))}
+                  <form className="mt-2 flex gap-2" onSubmit={(event) => event.preventDefault()} noValidate>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      aria-label={`${label} API key`}
+                      value={credentialDrafts[id] ?? ''}
+                      onChange={(event) => setCredentialDrafts((current) => ({ ...current, [id]: event.target.value }))}
+                      disabled={!credential.writable || credential.source === 'environment'}
+                      placeholder={
+                        credential.source === 'environment' ? 'Already set outside this app' : 'Paste an API key'
+                      }
+                      className="min-w-0 flex-1 rounded border border-zinc-300 bg-transparent px-2 py-1 text-xs dark:border-zinc-600"
+                    />
+                    <button
+                      type="button"
+                      disabled={
+                        busy || !credential.writable || credential.source === 'environment' || !credentialDrafts[id]
+                      }
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          const result = await term2Client.setCredential(id, credentialDrafts[id]);
+                          setMessage(
+                            `${id}: ${result.configured ? 'configured' : 'not configured'} (${
+                              result.source ?? 'stored'
+                            })`,
+                          );
+                          setCredentialDrafts((current) => ({ ...current, [id]: '' }));
+                          // Provider status is derived from the credentials projection;
+                          // refresh so the providers list stops showing stale state.
+                          await reload();
+                        } catch (reason) {
+                          setError(reason instanceof Error ? reason.message : 'Credential was not saved');
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                      className="rounded bg-zinc-800 px-2 py-1 text-xs text-white disabled:opacity-40"
+                    >
+                      Save key
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        !credential.writable || credential.source === 'environment' || !credential.configured || busy
+                      }
+                      title={
+                        !credential.configured ? 'Credential is not configured' : `Delete stored credential for ${id}`
+                      }
+                      onClick={() => {
+                        openConfirm({
+                          key: `credential:${id}`,
+                          value: '',
+                          consequence: `Delete stored credential for "${id}"? You will need to enter a new API key or secret to use this provider.`,
+                        });
+                      }}
+                      className="rounded border px-2 py-1 text-xs disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
         </div>
       </div>
 
       <div className="mt-4">
-        <h3 className="text-sm font-semibold">OAuth accounts</h3>
+        <h3 className="text-sm font-semibold">Provider accounts</h3>
         {Object.entries(projection.settings.oauthAccounts).map(([provider, accounts]) => (
           <div key={provider} className="mt-2">
             <div className="text-xs font-medium text-zinc-500">{provider}</div>

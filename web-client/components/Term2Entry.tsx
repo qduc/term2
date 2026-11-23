@@ -33,7 +33,7 @@ export function exitAgentMode(
   return targetUrl;
 }
 
-export function Term2Entry() {
+export function Term2Entry({ homeFolder }: { homeFolder?: string }) {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const pathname = usePathname();
@@ -70,6 +70,6 @@ export function Term2Entry() {
     );
   // term2-only client: there is no legacy chat surface to fall back to.
   if (!requested)
-    return <Term2SessionShell initialSessionId={null} authUserId={user?.id ?? null} onExit={handleExit} />;
-  return <Term2SessionShell initialSessionId={sessionId} authUserId={user?.id ?? null} onExit={handleExit} />;
+    return <Term2SessionShell initialSessionId={null} authUserId={user?.id ?? null} homeFolder={homeFolder} />;
+  return <Term2SessionShell initialSessionId={sessionId} authUserId={user?.id ?? null} homeFolder={homeFolder} />;
 }

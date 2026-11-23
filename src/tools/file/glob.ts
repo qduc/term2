@@ -240,26 +240,21 @@ export const createFindFilesToolDefinition = (
       } else {
         const hasPathSegment = patternHasPathSegments(pattern);
         const matchArg = hasPathSegment ? '-path' : '-name';
-        let normalizedPattern = pattern;
-        if (hasPathSegment) {
-          // In find -path, a single * matches directories recursively.
-          // Translate glob **/ to * and /**/ to /
-          normalizedPattern = pattern
-            .replace(/\/\*\*\//g, '/')
-            .replace(/\*\*\//g, '*/')
-            .replace(/\/\*\*/g, '/*')
-            .replace(/\*+/g, '*');
-        }
-        const matchPattern = hasPathSegment ? path.join(absolutePath, normalizedPattern).replace(/\\/g, '/') : pattern;
-        const escapedMatchPattern = `'${matchPattern.replace(/'/g, "'\\''")}'`;
+        const matchPatterns = hasPathSegment
+          ? expandGlobStarStar(pattern).map((variant) =>
+              path.join(absolutePath, variant.replace(/\*+/g, '*')).replace(/\\/g, '/'),
+            )
+          : [pattern];
+        const matchTests = matchPatterns.map((p) => `${matchArg} '${p.replace(/'/g, "'\\''")}'`);
+        // Quoted parentheses are literal in every POSIX shell, so the OR group survives unescaped.
+        const matchExpr = matchTests.length === 1 ? matchTests[0] : `'(' ${matchTests.join(' -o ')} ')'`;
         command = [
           'find',
           escapedPath,
           ...(directChildrenOnly ? ['-maxdepth', '1'] : []),
           '-type',
           'f',
-          matchArg,
-          escapedMatchPattern,
+          matchExpr,
         ].join(' ');
       }
 
@@ -325,6 +320,19 @@ export const createFindFilesToolDefinition = (
 
 function patternHasPathSegments(pattern: string): boolean {
   return pattern.replace(/\\/g, '/').includes('/');
+}
+
+// Expand each globstar-slash (zero or more directories) into the find -path
+// variants that can match it. find's `*` already crosses `/`, so each occurrence
+// is either dropped (zero directories) or kept as `*/` (one or more directories,
+// the `*` absorbing the rest). n occurrences give at most 2^n deduplicated variants.
+function expandGlobStarStar(pattern: string): string[] {
+  const segments = pattern.split('**/');
+  let variants = [segments[0]];
+  for (const segment of segments.slice(1)) {
+    variants = variants.flatMap((prefix) => [prefix + segment, prefix + '*/' + segment]);
+  }
+  return [...new Set(variants)];
 }
 
 function toRelative(line: string, absolutePath: string): string {

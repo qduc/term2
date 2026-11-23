@@ -27,15 +27,15 @@
           "tools": [
             {
               "name": "read_file",
-              "schema": "1abd153e33995e7d"
+              "schema": "16fa2570da77a172"
             },
             {
               "name": "grep",
-              "schema": "01125290720a3994"
+              "schema": "30d8543e40cb4bf6"
             },
             {
               "name": "glob",
-              "schema": "0d1d12522935b1d6"
+              "schema": "88a3b1f2c9b86f7f"
             }
           ],
           "other": {

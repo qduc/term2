@@ -23,7 +23,7 @@ const MAX_SKILL_DESCRIPTION_CHARS = 1_536;
  * Claude Code's 1% of a 200k-token window. Past it, descriptions shorten to their first
  * sentence, then the lowest-priority skills move behind a search instruction.
  */
-export const SKILL_CATALOG_BUDGET_CHARS = 8_000;
+const SKILL_CATALOG_BUDGET_CHARS = 8_000;
 /** A shortened description keeps its first sentence, up to this many characters. */
 const SHORT_DESCRIPTION_CHARS = 160;
 

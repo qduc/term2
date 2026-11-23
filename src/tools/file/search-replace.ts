@@ -287,9 +287,9 @@ const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _t
 };
 
 const SEARCH_REPLACE_DESCRIPTION =
-  'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\n' +
-  'Gap matching: to edit or delete a large block without reproducing it, put <...> on its own line in search_content between a head anchor and a tail anchor. The whole span, anchors included, is replaced, so a misplaced anchor silently deletes a large region: anchor on a few distinctive lines of real code, never a single generic line like }, return, or a blank line. To delete the block with its anchors, omit them from replace_content; to delete only the middle, repeat them.\n' +
-  'Do NOT use this to create files from scratch; inside run_code, use tools.create_file(...). Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.';
+  'Replace text in a file. Exact matches are preferred; fallbacks tolerate line-ending, indentation, whitespace, escaping and minor multi-line differences. Each search must match once unless match_all is true.\n' +
+  'Gap matching: to replace or delete a large block without reproducing it, put <...> on its own line in search_content between a head and a tail anchor. The whole span, anchors included, is replaced, so a wrong anchor silently deletes code: anchor on a few distinctive lines, never a lone }, return, or blank line. Omit the anchors from replace_content to delete them with the block; repeat them to delete only the middle.\n' +
+  'Not for creating files; inside run_code, use tools.create_file(...). Returns one line per replacement: Updated <path> or Error: <reason>.';
 
 export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;

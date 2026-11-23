@@ -5,30 +5,28 @@
  */
 export function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
-    'Delegate a bounded task to the general agent runtime: use agent_spec for a custom agent, or role for a preset. ' +
+    'Delegate a bounded task to a subagent (agent_spec for a custom agent, role for a preset). It runs in its own context and returns only a summary. ' +
     (backgroundEnabled
-      ? 'execution "foreground" (explorer and librarian only) returns the result in this call: use it when your next step needs it. "background" returns a running handle and later a completion notification: use it for long or parallel independent work. '
-      : 'This session uses foreground execution and returns the structured result in this turn. ') +
-    'The subagent runs in its own context and returns only a summary.\n\n' +
+      ? '"foreground" (explorer and librarian only) returns the result in this call; "background" returns a handle now and notifies on completion, for long or parallel independent work.\n\n'
+      : 'This session runs it in the foreground and returns the structured result in this turn.\n\n') +
     '## When to delegate\n' +
-    'Do the work yourself by default. Investigating, implementing, testing and adjusting form one loop: a test result can change the diagnosis, so keep that loop in one agent. ' +
-    "Delegate a unit only when it separates cleanly: it can start without another unit's result, it is useful on its own, and you can judge it against the same criteria as any sibling run. " +
-    'Give parallel runs one shared starting point and the same requirements and assumptions, or their reports cannot be compared. ' +
+    'Default to doing the work yourself: investigating, implementing, testing and adjusting form one loop, since a test result can change the diagnosis. ' +
+    "Delegate only a unit that separates cleanly: it can start without another unit's result, is useful on its own, and can be judged against the same criteria as its siblings. " +
+    'Give parallel runs the same starting point, requirements and assumptions so their reports compare. ' +
     'Use a fresh reviewer when an independent judgment is worth the extra run.\n\n' +
-    "You keep ownership of the outcome. A subagent's report is a claim, not a result: check its important claims against the evidence, resolve disagreements between runs yourself, and finish the work. A reviewer's approval is a separate check, not a guarantee.\n\n" +
-    '## Task Requirements\n' +
-    'The subagent does not see your conversation or reasoning. Give the task one clear objective, one ownership boundary, and one concrete done condition, plus the scope, non-discoverable findings or decisions, constraints, acceptance criteria, and validation when applicable. ' +
-    'Do not repeat context it already gets: role instructions, tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or the skills catalog. ' +
-    "Explorer: request concrete evidence for a bounded question and choose breadth or depth, never both (map one surface shallowly or trace one seam thoroughly); do not ask it to diagnose, recommend a fix, choose an approach, or own the user's whole investigation, review, diagnosis, or plan. " +
-    'Worker: one cohesive implementation unit. Mentor: one decision or challenge question. ' +
-    'Reviewer: the artifact to review (diff range, files, plan), the original requirement as the criteria, and concrete scenarios to check; label any of your own reasoning separately rather than presenting it as the requirement. It gathers evidence only through explorers. ' +
-    'Librarian: one history question to answer from memory and prior sessions, or one memory-maintenance topic.\n\n' +
-    'For isolated worker edits, first create a git worktree under the workspace root ' +
-    '(`git worktree add .worktrees/<slug> -b <slug>`), then pass its directory basename or branch name as `worktree`; ' +
-    'this pins the child there without re-rooting this session, and generic writable agents may use it too.\n\n' +
+    "You own the outcome: a report is a claim, not a result. Check its important claims against the evidence, resolve disagreements between runs, and finish the work. A reviewer's approval is not a guarantee.\n\n" +
+    '## Task\n' +
+    'The subagent does not see your conversation. Give one objective, ownership boundary and done condition, plus scope, non-discoverable findings or decisions, constraints, acceptance criteria and validation as applicable. ' +
+    'Skip what it already gets: role instructions, tool guidance, worktree hygiene, environment, root `AGENTS.md`, skills.\n' +
+    "- Explorer: concrete evidence for a bounded question; breadth or depth, never both. Not diagnosis, a fix recommendation, an approach choice, or the user's whole deliverable.\n" +
+    '- Worker: one cohesive implementation unit.\n' +
+    '- Mentor: one decision or challenge question.\n' +
+    '- Reviewer: the artifact (diff range, files, plan), the original requirement as criteria, and concrete scenarios to check; label your own reasoning separately. It gathers evidence only through explorers.\n' +
+    '- Librarian: one history question (memory, prior sessions) or one memory-maintenance topic.\n\n' +
+    'For isolated worker edits, run `git worktree add .worktrees/<slug> -b <slug>` under the workspace root and pass its basename or branch as `worktree`; any writable agent may use it, and this session is not re-rooted.\n\n' +
     (backgroundEnabled
-      ? 'A background status of "running" means the launch succeeded: do not relaunch it, and do not call get_subagent_result before its completion notification arrives; end the turn and wait.'
-      : 'Independent foreground explorer and librarian calls in the same response may run in parallel; keep worker calls and dependent tasks serial. ' +
-        'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, tools used, and files changed.')
+      ? 'A "running" status means the launch succeeded: do not relaunch or call get_subagent_result before the completion notification; end the turn and wait.'
+      : 'Independent explorer and librarian calls in one response may run in parallel; keep worker and dependent calls serial. ' +
+        'The result has status (completed, failed, cancelled, or interrupted), final text, tools used, and files changed.')
   );
 }

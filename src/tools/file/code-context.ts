@@ -83,18 +83,13 @@ export type CodeContextSearchToolParams = z.infer<typeof codeContextSearchParame
 
 const IMPORTER_EXTENSIONS = [...TS_EXTENSIONS, ...JS_EXTENSIONS];
 const READ_CODE_OUTLINE_DESCRIPTION =
-  'Compact outline of one file: imports, exports, declarations. No bodies. ' +
-  'Use this to orient yourself before reading a file in full. ' +
-  'Do NOT use this when you need the full file content; inside run_code, use tools.read_file(...). ' +
-  'Returns the compact outline.';
+  'Compact outline of one file (imports, exports, declarations; no bodies), to orient before reading it in full.';
 const buildCodeContextSearchDescription = (globAvailable: boolean): string =>
-  'Find related files for a given path or declarations for a symbol name. ' +
-  'Use this to discover code that depends on or is related to a file, or to locate where a symbol is declared. ' +
-  'Note: symbol must be a valid identifier-safe name (letters, numbers, underscores, and dollar signs, and cannot start with a number). ' +
-  `Do NOT use this for plain text search across files (inside run_code, use tools.grep(...)) or for listing files by name (use ${
+  'Find files related to a path, or declarations of a symbol (an identifier: letters, digits, _ or $, not starting with a digit). ' +
+  `Not for plain text search (inside run_code, use tools.grep(...)) or listing files by name (use ${
     globAvailable ? 'tools.glob(...)' : 'shell'
   }). ` +
-  'Returns up to max_results related files or symbol declarations with relation tokens.';
+  'Returns up to max_results related files or declarations with relation tokens.';
 
 const SKIP_DIRS = ['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.cache', 'out', 'vendor'];
 const MAX_TARGET_BYTES = 512 * 1024;

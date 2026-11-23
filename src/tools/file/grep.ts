@@ -23,26 +23,15 @@ const execPromise = util.promisify(exec);
 
 const searchParametersSchema = z.object({
   pattern: z.string().describe('Search pattern using normal JSON string escaping.'),
-  path: z.string().describe('The directory or file to search in. Use "." for current directory.'),
-  fixed_strings: z
-    .boolean()
-    .optional()
-    .describe(
-      'Interpret pattern as a fixed string instead of a regular expression (equivalent to -F / --fixed-strings).',
-    ),
-  ignore_case: z.boolean().optional().describe('Search case-insensitively (equivalent to -i / --ignore-case).'),
-  include: z
-    .string()
-    .optional()
-    .describe("Search only files matching the glob pattern (equivalent to grep's --include or ripgrep's -g)."),
-  exclude: z
-    .string()
-    .optional()
-    .describe("Skip files matching the glob pattern (equivalent to grep's --exclude or ripgrep's -g '!GLOB')."),
+  path: z.string().describe('Directory or file to search; "." for the current directory.'),
+  fixed_strings: z.boolean().optional().describe('Treat pattern as a literal string, not a regex.'),
+  ignore_case: z.boolean().optional().describe('Case-insensitive search.'),
+  include: z.string().optional().describe('Search only files matching this glob.'),
+  exclude: z.string().optional().describe('Skip files matching this glob.'),
   no_ignore: z
     .boolean()
     .optional()
-    .describe('Set true to search files skipped by .gitignore/.ignore (e.g., node_modules, vendor, build output).'),
+    .describe('Also search files skipped by .gitignore/.ignore (node_modules, build output).'),
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;
@@ -168,12 +157,11 @@ async function checkRgAvailability(executionContext?: ExecutionContext): Promise
 const buildGrepDescription = (globAvailable: boolean, orchestratorMode: boolean): string => {
   const fileListTool = globAvailable ? 'glob' : 'shell';
   const base =
-    'Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
-    'Use this to find where a symbol, string, or pattern appears in files. ' +
-    `Do NOT use this to list files by name (inside run_code, use ${
+    'Search file contents for a pattern: regex by default, fixed_strings for a literal; use normal JSON escaping. ' +
+    `Not for listing files by name (inside run_code, use ${
       fileListTool === 'glob' ? 'tools.glob(...)' : 'shell'
-    }) or to explore relationships between files (inside run_code, use tools.code_context_search(...)). ` +
-    'Returns up to 50 matches as path:line:matched_text (more from inside run_code), or a note if results are truncated.';
+    }) or tracing relationships between files (inside run_code, use tools.code_context_search(...)). ` +
+    'Returns up to 50 path:line:text matches (more from inside run_code), noting truncation.';
   if (!orchestratorMode) {
     return base;
   }

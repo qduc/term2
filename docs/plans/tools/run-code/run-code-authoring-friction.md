@@ -285,28 +285,49 @@ one-liner for the tools it hides.
 
 ## Model-facing text compression, second pass (2026-11-23)
 
-A second pass cut about 1,900 characters from every TUI root request (about 480 tokens;
-`pnpm prefix:report tui-root` went from 25,209 to 23,274 characters). It touched the
-`run_code` description, the Agent capability section, the `run_subagent` description
-(`src/tools/agent/run-subagent-description.ts`), the `search_replace` gap-matching
-paragraph, and the `session_rollover` description, which now has one source in
-`src/tools/session-rollover/session-rollover-tool.ts` instead of a second copy in
-`src/session/rollover.ts`. Every instruction in the list above was kept. What went was
-duplicated guidance (two `Promise.allSettled` sentences, two "take only what you need"
-sentences, two background-handle warnings in `run_subagent`) and host plumbing the
-model cannot act on (`continue_run_id` authority, "the raw spec is never forwarded",
-the session approval owner, the notification lane).
+Two passes on 2026-11-23 cut every root request by about 17% (`pnpm prefix:report`:
+`tui-root` 25,217 to 20,721 characters, `headless-root` 21,825 to 18,132) and child
+requests by 10 to 18%. Every instruction in the list above was kept. What went:
 
-Checked with a real model before and after, through OpenRouter, Claude Sonnet 4.5 and
-GPT-5-mini, two runs each of seven headless probes (resilient fan-out read with a
-missing file, backtick text into `create_file`, counting in a large log, not delegating
-a trivial question, delegating a TODO search, deleting a 50-line function with
-`search_replace`, two parallel `agent.run` calls) plus a direct-API `session_rollover`
-probe (explicit request versus an ordinary next task, three runs each). Pass counts were
-equal or better in every probe and model; the trim changed none of the behaviours.
+- duplicated guidance: two `Promise.allSettled` sentences, two "take only what you need"
+  sentences, two background-handle warnings in `run_subagent`;
+- host plumbing the model cannot act on: `continue_run_id` authority, "the raw spec is
+  never forwarded", the session approval owner, the notification lane;
+- in the catalogue (`renderToolsHeader`), the schema-rendered return union when the
+  tool declares a `scriptedReturnShape`. The authored shape was printed beside it as
+  "(guidance: ...)" and said the same thing more precisely; it now replaces the union.
+  The read_file and glob shapes gained their plain-string error branch so nothing in
+  the union is lost;
+- wordy phrasing in read_file, create_file, grep, glob, code_context_search,
+  read_code_outline, web_fetch and the child `shell`, and in grep and glob parameters.
 
-One failure was present before and after, so it is a lead for later work, not a result
-of the trim: asked to count ERROR lines in a 4,000-line log through `run_code`, both
-models called `tools.read_file` once, ignored `truncated: true`, and reported 89 of 236
-lines. The sentence about following `fullOutputPath` is in the description but did not
-change that behaviour in any of the eight runs.
+`session_rollover` now has one source in
+`src/tools/session-rollover/session-rollover-tool.ts`, which `src/session/rollover.ts`
+imports. Pointers to `run_code` keep the exact clause forms
+`src/delegation/subagents/dead-tool-references.ts` deletes for children without it.
+
+Checked against the original build with real models through OpenRouter: Claude Sonnet
+5.5, Claude Haiku 5.5, GPT-6.2 Sol and Gemini 4 Neon, two runs each of ten headless
+probes (resilient fan-out read, backtick text through `inputs`, counting in a large log,
+not delegating a trivial question, delegating a TODO search, explorer symbol trace,
+deleting a 50-line function with `search_replace`, two parallel `agent.run` calls, a
+slow shell command, overwriting a file). Graded 69/76 before and 70/76 after; the
+change cost 7% less for the same runs. Excluded as probe artifacts: the
+`search_replace` and `create_file` probes on GPT, whose model-keyed tool set offers
+`apply_patch` instead. The shell probe fails for Haiku and GPT on both builds where the
+container lacks `bwrap`; they stop at the sandbox error rather than retry unsandboxed.
+
+A direct-API `session_rollover` probe (the recorded TUI root request plus a short
+history; an explicit rollover request versus an ordinary next task) caught one
+regression in an intermediate draft: "First save state the brief cannot hold ..." read
+as mandatory, and GPT-6.2 wrote a handoff file instead of rolling over (8/9 to 5/9).
+The original wording made it conditional ("state the successor must not lose"); the
+shipped text says "If the successor needs state the brief cannot hold, first save it
+..." and GPT and Haiku went to 9/9. No model rolled over unprompted on either build.
+Sonnet 5.5 often runs a read-only check (`git status`, `ls tests`) of a claim it had
+not verified before rolling over, on both builds.
+
+Weaker earlier models (Sonnet 4.5, GPT-5-mini) failed the large-log probe on every run
+before and after: they read the log once in a script, ignored `truncated: true`, and
+reported 89 of 236 ERROR lines. The description now says a truncated scripted
+`read_file` holds only part of the file; current models pass that probe either way.

@@ -22,20 +22,14 @@ import {
 import { saveOutputArtifact } from '../../shared/utils/shell/shell-output.js';
 
 const READ_FILE_DESCRIPTION =
-  'Read file content from the workspace (like cat command). Supports reading specific line ranges. ' +
-  'Image files are returned as image content for visual models. ' +
-  'Use this to inspect a known file or verify a specific claim about a location. ' +
-  'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
-  'Do NOT use this to search for text across files (inside run_code, use tools.grep(...) instead). ' +
-  'Returns the file path, total line count, and the requested lines. ' +
-  'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
+  'Read a file from the workspace, optionally a 1-indexed line range. Images are returned as image content. ' +
+  'Prefer the whole file (under 1,000 lines) or large windows over many small chunks. ' +
+  'Not for searching across files (inside run_code, use tools.grep(...)). ' +
+  'Returns the path, total line count and the lines; large results are truncated and the full payload saved to the "Full output saved to" path.';
 const READ_FILE_DESCRIPTION_OUTSIDE =
-  'Read file content from the filesystem (like cat command). Supports reading specific line ranges. ' +
-  'Image files are returned as image content for visual models. ' +
-  'Use this to inspect a known file or verify a specific claim about a location. ' +
-  'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
-  'Returns the file path, total line count, and the requested lines. ' +
-  'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
+  'Read a file from the filesystem, optionally a 1-indexed line range. Images are returned as image content. ' +
+  'Prefer the whole file (under 1,000 lines) or large windows over many small chunks. ' +
+  'Returns the path, total line count and the lines; large results are truncated and the full payload saved to the "Full output saved to" path.';
 const READ_FILE_DESCRIPTION_ORCHESTRATOR =
   'Inspect a known file directly, including to understand a small or clear area of the workspace. ' +
   'Image files are returned as image content for visual models. ' +
@@ -235,7 +229,7 @@ export const createReadFileToolDefinition = (
   return {
     name: 'read_file',
     scriptedReturnShape:
-      'the { path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } object for a text file; content parts [{ type: "text" | "image", ... }] for an image file',
+      'the { path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } object for a text file; content parts [{ type: "text" | "image", ... }] for an image file; a plain string for an error message',
     description: orchestratorMode
       ? READ_FILE_DESCRIPTION_ORCHESTRATOR
       : allowOutsideWorkspace

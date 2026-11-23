@@ -159,29 +159,25 @@ function renderDetailedEntry(tool: ToolRegistry[number], options: { omitDescript
       ? ` — ${oneLine(tool.description)}`
       : '';
   const scriptedReturn = scriptedReturnDescription(tool);
-  const returns = `\n    returns ${scriptedReturn.value}${
-    scriptedReturn.legacy ? ` (guidance: ${scriptedReturn.legacy})` : ''
-  }`;
+  // The authored shape is more precise than the schema union it describes, so it replaces it.
+  const returns = `\n    returns ${scriptedReturn.legacy ?? scriptedReturn.value}`;
   return `- ${renderCompactSignature(tool)}${description}${returns}`;
 }
 
 function renderCompactEntry(tool: ToolRegistry[number]): string {
-  // Mirror renderDetailedEntry: surface the declared return shape as guidance
-  // even when no scriptedReturnSchema makes the contract precise, so a script
+  // Mirror renderDetailedEntry: prefer the declared return shape, so a script
   // sees the actual result shape instead of a bare 'returns unknown'.
   const scriptedReturn = scriptedReturnDescription(tool);
-  const returns = ` — returns ${scriptedReturn.value}`;
-  const guidance = scriptedReturn.legacy ? ` (guidance: ${scriptedReturn.legacy})` : '';
-  return `- ${renderCompactSignature(tool)}${returns}${guidance}`;
+  return `- ${renderCompactSignature(tool)} — returns ${scriptedReturn.legacy ?? scriptedReturn.value}`;
 }
 
 /**
  * Renders the catalogue of `tools.*` members a script can call.
  *
  * Parameter signatures are approximate structural renderings. Script return
- * types, when present, are rendered from the owner schema; missing contracts
- * are explicitly shown as unknown rather than inferred from prose, with any
- * declared prose shape surfaced alongside as guidance.
+ * shapes come from the tool's declared `scriptedReturnShape` when it has one,
+ * else from the owner schema; with neither, they are shown as unknown rather
+ * than inferred from prose.
  */
 export function renderToolsHeader(
   registry: ToolRegistry,

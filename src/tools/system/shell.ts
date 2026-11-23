@@ -120,7 +120,7 @@ export const shellParametersSchema = z.object({
     .positive()
     .optional()
     .describe(
-      'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to, and cannot exceed, the configured tool output limit (20000 characters unless changed).',
+      'Output character limit; longer output is trimmed. Defaults to, and cannot exceed, the tool output limit (20,000 characters unless changed).',
     ),
   sandbox: shellSandboxModeSchema.describe(
     'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
@@ -666,18 +666,18 @@ const formatShellCommandMessage: FormatCommandMessage = (item, index, toolCallAr
 export const SHELL_DELEGATION_POINTER = '; use `run_subagent` instead';
 
 const getShellDescription = (searchViaShell: boolean, background = true) =>
-  'Execute a single shell command. ' +
-  'Long output is truncated and the full output is saved to a file; ' +
+  'Run one shell command. ' +
   (searchViaShell
-    ? 'Do NOT use this to write. Use the specialized tools for those tasks. '
-    : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
-  'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
-  `Do NOT use this for complex multi-step edits or broad codebase exploration${SHELL_DELEGATION_POINTER}. ` +
+    ? 'Not for writing files: use the specialized tools. '
+    : 'Not for reading, writing or searching files: use the specialized tools. ') +
+  'Avoid multi-line inline scripts (escaping breaks); write a temporary script and run it. ' +
+  `Not for complex multi-step edits or broad codebase exploration${SHELL_DELEGATION_POINTER}. ` +
+  'Long output is truncated and saved to a file. ' +
   (background
-    ? 'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling. ' +
-      'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s foreground and 30min background defaults are not ceilings, do not guarantee completion, and a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms. '
-    : 'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s default is not a ceiling and does not guarantee completion. ') +
-  'A timeout is a deadline, not a retry grant: when a command times out, diagnose the failure and do not blindly re-run a command whose earlier effects may already have landed.';
+    ? 'For notifications from a background job, set background: true with monitor in the same call and wait for shell_output instead of polling. ' +
+      'Give long-running work an explicit finite timeout_ms sized to it: the 120s foreground and 30min background defaults are not ceilings, and a watcher or full-suite run is killed at the background default otherwise. '
+    : 'Give long-running work an explicit finite timeout_ms sized to it: the 120s default is not a ceiling. ') +
+  'On a timeout, diagnose; do not blindly re-run a command whose effects may already have landed.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
   'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
   'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling. Known long-running work (watchers, full-suite validation) needs an explicit finite timeout_ms sized to the job: the background default is not a ceiling, and a timeout is a deadline to diagnose, not a license to re-run a command whose earlier effects may already have landed.';

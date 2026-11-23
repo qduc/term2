@@ -21,10 +21,7 @@ const execPromise = util.promisify(exec);
 
 const findFilesParametersSchema = z.object({
   pattern: z.string().describe('Glob or filename pattern to search for (e.g., "*.ts", "src/**/*.ts", "README.md").'),
-  path: z
-    .string()
-    .optional()
-    .describe('Directory to search in. Use "." for current directory. Defaults to current directory.'),
+  path: z.string().optional().describe('Directory to search. Defaults to the current directory.'),
   max_results: relaxedNumber
     .int()
     .positive()
@@ -33,9 +30,7 @@ const findFilesParametersSchema = z.object({
   no_ignore: z
     .boolean()
     .optional()
-    .describe(
-      'Set true to include files normally skipped by .gitignore/.ignore and hidden files (e.g., node_modules, .git, build output). Defaults to false. Only takes effect when fd is available.',
-    ),
+    .describe('Include files skipped by .gitignore/.ignore and hidden files (fd only). Defaults to false.'),
 });
 
 export type FindFilesToolParams = z.infer<typeof findFilesParametersSchema>;
@@ -115,18 +110,16 @@ const formatFindFilesCommandMessage: FormatCommandMessage = (item, index, toolCa
 };
 
 const GLOB_EMPTY_RESULT_DESCRIPTION =
-  'If no files are found, check the pattern and search path. By default, fd respects .gitignore/.ignore and skips hidden files; retry with no_ignore: true only when fd is available to include ignored or hidden files. no_ignore has no effect on the find fallback.';
+  'If nothing is found, check the pattern and path; ignored and hidden files are skipped unless no_ignore: true (fd only).';
 const GLOB_DESCRIPTION =
-  'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files. ' +
-  'Use this when you know the file name or extension. ' +
-  'Do NOT use this to search file contents (inside run_code, use tools.grep(...)) or to find related code from a symbol (use tools.code_context_search(...) inside run_code). ' +
-  'Returns up to max_results matching file paths, one per line, or a note if truncated. ' +
+  'Find files in the workspace by name or glob pattern. ' +
+  'Not for searching contents (inside run_code, use tools.grep(...)) or finding code related to a symbol (use tools.code_context_search(...) inside run_code). ' +
+  'Returns up to max_results paths, one per line, noting truncation. ' +
   GLOB_EMPTY_RESULT_DESCRIPTION;
 const GLOB_DESCRIPTION_OUTSIDE =
-  'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files. ' +
-  'Use this when you know the file name or extension. ' +
-  'Do NOT use this to search file contents (inside run_code, use tools.grep(...)). ' +
-  'Returns up to max_results matching file paths, one per line, or a note if truncated. ' +
+  'Find files on the filesystem by name or glob pattern. ' +
+  'Not for searching contents (inside run_code, use tools.grep(...)). ' +
+  'Returns up to max_results paths, one per line, noting truncation. ' +
   GLOB_EMPTY_RESULT_DESCRIPTION;
 
 export const createFindFilesToolDefinition = (
@@ -152,7 +145,8 @@ export const createFindFilesToolDefinition = (
   } = deps;
   return {
     name: 'glob',
-    scriptedReturnShape: '{ paths: string[], total: number, truncated: boolean }',
+    scriptedReturnShape:
+      '{ paths: string[], total: number, truncated: boolean }, or a plain string for a validation error',
     // Successful scripted calls return this object; validation errors retain
     // the legacy string result, so both are part of the exact script contract.
     scriptedReturnSchema: z.union([

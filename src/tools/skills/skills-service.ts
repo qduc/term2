@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import YAML from 'yaml';
 import type { ILoggingService } from '../../shared/service-interfaces.js';
 import { getProjectSkillScopes, getUserSkillScopes } from '../../shared/utils/skill-discovery-paths.js';
 
@@ -126,25 +127,28 @@ export class SkillsService {
 
   private loadAndParseSkill(skillMdPath: string, isProjectLevel: boolean): SkillInfo | null {
     const content = fs.readFileSync(skillMdPath, 'utf8');
-    const normalized = content.replace(/\r\n/g, '\n').trim();
+    const normalized = content
+      .replace(/^\uFEFF/, '')
+      .replace(/\r\n?/g, '\n')
+      .trimStart();
 
-    if (!normalized.startsWith('---')) {
+    if (!/^---[ \t]*(?:\n|$)/.test(normalized)) {
       this.logger.debug(`Skill at ${skillMdPath} is missing YAML frontmatter.`);
       return null;
     }
 
-    const secondDividerIndex = normalized.indexOf('\n---', 3);
-    if (secondDividerIndex === -1) {
+    const frontmatterMatch = normalized.match(/^---[ \t]*\n(?:([\s\S]*?)\n)?---[ \t]*(?:\n|$)/);
+    if (!frontmatterMatch) {
       this.logger.debug(`Skill at ${skillMdPath} has unclosed YAML frontmatter.`);
       return null;
     }
 
-    const frontmatterStr = normalized.substring(3, secondDividerIndex).trim();
-    const body = normalized.substring(secondDividerIndex + 4).trim();
+    const frontmatterStr = frontmatterMatch[1] ?? '';
+    const body = normalized.slice(frontmatterMatch[0].length).trim();
 
-    const metadata = this.parseFrontmatter(frontmatterStr);
-    const name = metadata.name?.trim();
-    const description = metadata.description?.trim();
+    const metadata = this.parseFrontmatter(frontmatterStr, skillMdPath);
+    const name = this.readScalarString(metadata.name);
+    const description = this.readScalarString(metadata.description);
 
     if (!description) {
       this.logger.error(`Skill at ${skillMdPath} is missing a description. Skipping.`);
@@ -170,8 +174,7 @@ export class SkillsService {
       this.logger.debug(`Skill name '${finalName}' at ${skillMdPath} exceeds 64 characters.`);
     }
 
-    const disableModelInvocation =
-      metadata['disable-model-invocation'] === 'true' || metadata['disable-model-invocation'] === 'true';
+    const disableModelInvocation = this.readScalarString(metadata['disable-model-invocation']) === 'true';
 
     return {
       name: finalName,
@@ -184,20 +187,76 @@ export class SkillsService {
     };
   }
 
-  private parseFrontmatter(frontmatterStr: string): Record<string, string> {
+  private readScalarString(value: unknown): string | undefined {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+    return undefined;
+  }
+
+  private parseFrontmatter(frontmatterStr: string, skillMdPath: string): Record<string, unknown> {
+    if (!frontmatterStr.trim()) {
+      return {};
+    }
+
+    try {
+      const parsed: unknown = YAML.parse(frontmatterStr);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return {};
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.debug(
+        `Failed to parse YAML frontmatter at ${skillMdPath} (${message}); falling back to line parser.`,
+      );
+      return this.parseFrontmatterFallback(frontmatterStr);
+    }
+  }
+
+  private parseFrontmatterFallback(frontmatterStr: string): Record<string, string> {
     const result: Record<string, string> = {};
     const lines = frontmatterStr.split('\n');
+    let currentKey: string | null = null;
+    let currentLines: string[] = [];
+
+    const flush = () => {
+      if (currentKey === null) return;
+      const joined = currentLines.join('\n').trim();
+      result[currentKey] = joined.replace(/^['"]|['"]$/g, '');
+      currentKey = null;
+      currentLines = [];
+    };
+
     for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const colonIndex = trimmed.indexOf(':');
+      if (!trimmed) {
+        if (currentKey !== null) currentLines.push('');
+        continue;
+      }
+      if (currentKey === null && trimmed.startsWith('#')) continue;
+
+      // Indented lines continue the previous key's value
+      if (/^[ \t]+/.test(line) && currentKey !== null) {
+        currentLines.push(trimmed);
+        continue;
+      }
+
+      if (trimmed.startsWith('#')) {
+        flush();
+        continue;
+      }
+
+      const colonIndex = line.indexOf(':');
       if (colonIndex === -1) continue;
-      const key = trimmed.slice(0, colonIndex).trim();
-      const value = trimmed.slice(colonIndex + 1).trim();
-      // Strip surrounding quotes if present
-      const cleanValue = value.replace(/^['"]|['"]$/g, '');
-      result[key] = cleanValue;
+
+      flush();
+      currentKey = line.slice(0, colonIndex).trim();
+      const value = line.slice(colonIndex + 1).trim();
+      if (value && !/^[>|][+-]?$/.test(value)) {
+        currentLines.push(value);
+      }
     }
+    flush();
     return result;
   }
 

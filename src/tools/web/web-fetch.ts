@@ -12,31 +12,24 @@ import { boundToolResultText, resolveResultMaxBytesForCall } from '../../shared/
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../shared/utils/shell/shell-output.js';
 
 /** Without a configured search provider `web_search` is not offered, so the description must not point at it. */
-const webFetchDescription = (_searchAvailable: boolean) =>
-  'Fetch a URL as Markdown (title, contents, text): for a specific page, not broad queries. ' +
+const webFetchDescription = (searchAvailable: boolean) =>
+  (searchAvailable
+    ? 'Fetch a URL as Markdown, for a page referenced by tools.web_search(...) inside run_code or by the user. '
+    : 'Fetch a URL as Markdown, for a specific page, not broad queries. ') +
   'Output beyond max_chars is saved to the "Full output saved to" path.';
 
 const DEFAULT_MAX_CHARS = 10000;
 const MAX_CHARS_LIMIT = 200000;
 
 const webFetchSchema = z.object({
-  url: z.string().describe('The URL of the web page to fetch.'),
-  max_chars: z
-    .number()
-    .min(200)
-    .max(MAX_CHARS_LIMIT)
-    .optional()
-    .default(DEFAULT_MAX_CHARS)
-    .describe('Maximum number of characters to return.'),
+  url: z.string(),
+  max_chars: z.number().min(200).max(MAX_CHARS_LIMIT).optional().default(DEFAULT_MAX_CHARS),
   heading: z
     .array(z.union([z.string(), z.number()]))
     .optional()
     .default([])
-    .describe('Optional: Array of headings (h1-h3) to retrieve content from.'),
-  continuation_token: z
-    .string()
-    .optional()
-    .describe('Optional: Token from previous response to fetch the next chunk of content.'),
+    .describe('Only content under these h1-h3 headings.'),
+  continuation_token: z.string().optional().describe('From a previous response, for the next chunk.'),
 });
 
 export type WebFetchParams = z.infer<typeof webFetchSchema>;

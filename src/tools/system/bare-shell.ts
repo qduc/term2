@@ -10,15 +10,13 @@ const foregroundShellParameters = shellParametersSchema
     sandbox: true,
   })
   .extend({
-    command: shellParametersSchema.shape.command.describe(
-      'Shell command. Batch related reads and filter output locally.',
-    ),
-    description: shellParametersSchema.shape.description.describe('Short user-visible description.'),
+    command: shellParametersSchema.shape.command.describe('Batch related reads; filter output locally.'),
+    description: shellParametersSchema.shape.description.describe('Short label shown to the user.'),
     timeout_ms: shellParametersSchema.shape.timeout_ms.describe(
-      'Finite deadline in milliseconds; size explicitly for long work. A timeout is not permission to repeat effects.',
+      'Finite deadline in ms, sized for long work; not permission to repeat effects.',
     ),
     max_output_length: shellParametersSchema.shape.max_output_length.describe(
-      'Output character limit. Overflow is saved to a file; inspect relevant ranges instead of rerunning.',
+      'Output cap; overflow is saved to a file, so inspect ranges instead of rerunning.',
     ),
   });
 

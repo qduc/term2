@@ -58,7 +58,7 @@ const codeContextSearchParametersSchema = z
     query_type: z.enum(['related', 'symbol']).describe('Search mode: related files by path or declarations by symbol.'),
     path: z.string().optional().describe('Target file path. Required when query_type is related.'),
     symbol: z.string().optional().describe('Identifier to search for. Required when query_type is symbol.'),
-    max_results: relaxedNumber.int().positive().optional().describe('Maximum number of results.'),
+    max_results: relaxedNumber.int().positive().optional(),
   })
   .superRefine((value, context) => {
     if (value.query_type === 'related' && !value.path) {

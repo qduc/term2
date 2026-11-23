@@ -22,10 +22,10 @@ const CREATE_FILE_DESCRIPTION =
   'Create a file (overwrite=true to replace one). To edit, use search_replace; inside run_code, use tools.search_replace(...).';
 
 const createFileParametersSchema = z.object({
-  path: z.string().describe('The absolute or relative path to the new file.'),
-  content: z.string().describe('The initial content for the new file.'),
-  overwrite: z.boolean().optional().default(false).describe('Whether to overwrite an existing file.'),
-  confirmOverwriteCode: z.string().optional().describe('Confirmation code from a previous failed attempt.'),
+  path: z.string(),
+  content: z.string(),
+  overwrite: z.boolean().optional().default(false),
+  confirmOverwriteCode: z.string().optional().describe('Code from a previous failed overwrite attempt.'),
 });
 
 export type CreateFileToolParams = z.infer<typeof createFileParametersSchema>;

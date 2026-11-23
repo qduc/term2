@@ -69,24 +69,19 @@ export const APPROVED_SHELL_ESCAPE = Symbol('approved shell escape');
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
 const monitorOptionsSchema = z.object({
-  pattern: z
-    .string()
-    .optional()
-    .describe('Regular expression matched against each complete output line; absent matches any line.'),
-  stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Which output stream to monitor. Defaults to both.'),
+  pattern: z.string().optional().describe('Regex per output line; omit to match all.'),
+  stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Default both.'),
   idle_ms: relaxedNumber
     .int()
     .nonnegative()
     .optional()
-    .describe(
-      'Quiet window in milliseconds that coalesces a burst of matches into one notification. Defaults to 1500.',
-    ),
+    .describe('Quiet ms that batch matches into one notification. Default 1500.'),
   notify_limit: relaxedNumber
     .int()
     .nonnegative()
     .optional()
-    .describe('Maximum number of notifications before the watch retires. 0 means unlimited; defaults to 0.'),
-  once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
+    .describe('Notifications before the watch retires; 0 (default) is unlimited.'),
+  once: z.boolean().optional().describe('Same as notify_limit 1.'),
 });
 
 const checkInOptionsSchema = z.object({
@@ -102,12 +97,8 @@ const checkInOptionsSchema = z.object({
 });
 
 export const shellParametersSchema = z.object({
-  command: z.string().min(1).describe('Single shell command to execute.'),
-  description: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Optional human-readable description to display for this shell call.'),
+  command: z.string().min(1).describe('One shell command.'),
+  description: z.string().min(1).optional().describe('Short label shown to the user.'),
   timeout_ms: relaxedNumber
     .int()
     .positive()
@@ -119,22 +110,12 @@ export const shellParametersSchema = z.object({
     .int()
     .positive()
     .optional()
-    .describe(
-      'Output character limit; longer output is trimmed. Defaults to, and cannot exceed, the tool output limit (20,000 characters unless changed).',
-    ),
-  sandbox: shellSandboxModeSchema.describe(
-    'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
-  ),
-  background: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Run locally in the background and return a job ID immediately. Defaults to false.'),
+    .describe('Output character cap; defaults to, and cannot exceed, the tool output limit.'),
+  sandbox: shellSandboxModeSchema.describe('unsandboxed requires user approval.'),
+  background: z.boolean().optional().default(false).describe('Return a job ID immediately. Default false.'),
   monitor: monitorOptionsSchema
     .optional()
-    .describe(
-      'When background is true, attach an output monitor in this same call. The job keeps running and matching output is delivered as shell_output notifications.',
-    ),
+    .describe('With background: true, deliver matching output as shell_output notifications.'),
   check_in: checkInOptionsSchema
     .optional()
     .describe('When background is true, configure or mute proactive check-ins for this job.'),
@@ -684,9 +665,7 @@ const foregroundShellParameters = shellParametersSchema
   .omit({ background: true, monitor: true, check_in: true })
   .extend({
     // The long-running timeout advice is stated once, in the foreground description it is paired with.
-    timeout_ms: shellParametersSchema.shape.timeout_ms.describe(
-      'Optional timeout in milliseconds for each command. Defaults to shell.timeout if not specified.',
-    ),
+    timeout_ms: shellParametersSchema.shape.timeout_ms.describe('Timeout in ms; default shell.timeout.'),
   });
 
 /**

@@ -22,16 +22,13 @@ import {
 const execPromise = util.promisify(exec);
 
 const searchParametersSchema = z.object({
-  pattern: z.string().describe('Search pattern using normal JSON string escaping.'),
+  pattern: z.string().describe('Uses normal JSON string escaping.'),
   path: z.string().describe('Directory or file to search; "." for the current directory.'),
   fixed_strings: z.boolean().optional().describe('Treat pattern as a literal string, not a regex.'),
   ignore_case: z.boolean().optional().describe('Case-insensitive search.'),
   include: z.string().optional().describe('Search only files matching this glob.'),
   exclude: z.string().optional().describe('Skip files matching this glob.'),
-  no_ignore: z
-    .boolean()
-    .optional()
-    .describe('Also search files skipped by .gitignore/.ignore (node_modules, build output).'),
+  no_ignore: z.boolean().optional().describe('Also search ignored files.'),
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;

@@ -60,18 +60,14 @@ function detectSummarizationMarkers(content: string): string | null {
 }
 
 const searchReplaceOperationSchema = z.object({
-  search_content: z.string().describe('The exact content to search for. <...> on its own line acts as a gap anchor.'),
-  replace_content: z.string().describe('The content to replace the matched search_content with.'),
-  match_all: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Replace every non-overlapping match. Defaults to false, which requires exactly one match.'),
+  search_content: z.string().describe('Exact text to find; a lone <...> line is a gap.'),
+  replace_content: z.string(),
+  match_all: z.boolean().optional().default(false).describe('Replace every match (default: exactly one required).'),
 });
 
 const searchReplaceParametersSchema = z.object({
-  path: z.string().describe('The absolute or relative path to the file'),
-  replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
+  path: z.string(),
+  replacements: z.array(searchReplaceOperationSchema).min(1),
 });
 
 /**

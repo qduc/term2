@@ -368,3 +368,35 @@ The draft had shortened "Return only the fields, line ranges, or summaries you n
 fields, line ranges or summaries you need, never raw dumps") brought that probe to 7/8 on
 both builds (Haiku and Gemini, four runs each) with Haiku back at 362 to 799 characters.
 The concrete list is load-bearing for small models; keep it.
+
+## Presented parameter schemas (2026-11-23, fourth pass)
+
+The parameter schemas the model sees were trimmed to about 70% of their original size
+(TUI root 8,878 to 6,223 characters), bringing the TUI root prefix to 59% of the
+original (25,217 to 14,961). Validation is unchanged:
+
+- `run_subagent` presents a compact `agent_spec` (`presentedAgentSpecField` in
+  `src/tools/agent/run-subagent.ts`) without `permissions.tools`, which only narrows
+  the `tools` list the model writes itself, and without `.readonly()`, which rendered as
+  `readOnly` annotations. `canonicalParameters` is built from the full schema, and every
+  consumer that validates, normalizes or authorizes a call reads it first; a check of
+  five inputs (valid, `permissions.tools`, unknown tool, unknown tool under
+  `permissions.tools`, unknown field) gave the same verdicts as the original build.
+- Parameter descriptions that restated the parameter name were removed; the rest keep
+  only defaults, limits and the gap-anchor and return-value reminders.
+
+The 50% pass had dropped web_fetch's pointer to web_search; the provider black-box test
+"web_search is offered to root and explorer only when a search provider is configured"
+caught it, and the conditional pointer is back in its original wording.
+
+Real-model probes against the original build, after the edit: Sonnet 5.5 and Haiku 5.5
+and Gemini 4 Neon passed the same cells (74/76 before, 69/72 after on the cells that
+ran) except Haiku `agent-run`, which failed 1/2 before and 2/2 after for one cause on
+both builds: its glob-only children miscount. That is a glob bug, not the schemas: with
+the `find` fallback (no `fd` installed), `**/*.md` misses top-level files (`README.md`)
+and `**/*.js` under `src` misses `src/a.js`, while `src/**/*.js` and `*.js` match
+correctly. The `session_rollover` probe gave 17/19 explicit and 12/12 unprompted against
+18/24 and 16/16. GPT-6.2 runs are BYOK through an OpenAI key that ran out of credits
+mid-run, so GPT has only partial coverage of this pass (13 of 20 headless runs).
+Running the provider black-box suite while probes ran rebuilt `dist/` under them and
+broke 25 runs, which were rerun; run it only when no built-CLI reader is active.

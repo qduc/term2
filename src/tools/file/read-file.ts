@@ -129,13 +129,9 @@ function detectImageMediaType(buffer: Buffer, filePath: string): string | undefi
 }
 
 const readFileParametersSchema = z.object({
-  path: z.string().describe('File path relative to workspace root'),
-  start_line: relaxedNumber
-    .int()
-    .positive()
-    .optional()
-    .describe('Starting line number (1-indexed). Optional; give a line range when you know the exact range to read.'),
-  end_line: relaxedNumber.int().positive().optional().describe('Ending line number (1-indexed, inclusive).'),
+  path: z.string().describe('Relative to the workspace root.'),
+  start_line: relaxedNumber.int().positive().optional().describe('1-indexed; give a range when you know it.'),
+  end_line: relaxedNumber.int().positive().optional().describe('Inclusive.'),
 });
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;

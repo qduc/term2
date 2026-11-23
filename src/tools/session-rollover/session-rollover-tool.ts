@@ -10,8 +10,7 @@ import {
 } from '../format-helpers.js';
 
 /** Shared with the session-owned direct tool in src/session/rollover.ts. */
-export const SESSION_ROLLOVER_BRIEF_DESCRIPTION =
-  'The handoff brief the successor starts from; under 8,000 characters.';
+export const SESSION_ROLLOVER_BRIEF_DESCRIPTION = 'Under 8,000 characters.';
 
 export const SESSION_ROLLOVER_DESCRIPTION =
   'Roll over only when a system reminder prompts it or the user asks. ' +

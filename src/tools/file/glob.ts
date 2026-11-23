@@ -20,17 +20,10 @@ import { globGlobPathHint, looksLikeGlob } from './glob-path-hint.js';
 const execPromise = util.promisify(exec);
 
 const findFilesParametersSchema = z.object({
-  pattern: z.string().describe('Glob or filename pattern to search for (e.g., "*.ts", "src/**/*.ts", "README.md").'),
-  path: z.string().optional().describe('Directory to search. Defaults to the current directory.'),
-  max_results: relaxedNumber
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum number of results to return. Defaults to 50.'),
-  no_ignore: z
-    .boolean()
-    .optional()
-    .describe('Include files skipped by .gitignore/.ignore and hidden files (fd only). Defaults to false.'),
+  pattern: z.string().describe('e.g. "*.ts", "src/**/*.ts".'),
+  path: z.string().optional().describe('Default: current directory.'),
+  max_results: relaxedNumber.int().positive().optional().describe('Default 50.'),
+  no_ignore: z.boolean().optional().describe('Include ignored and hidden files (fd only).'),
 });
 
 export type FindFilesToolParams = z.infer<typeof findFilesParametersSchema>;

@@ -54,14 +54,14 @@ const maxOutputChars = (): number => getTrimConfig().maxCharacters;
 const RUN_CODE_DESCRIPTION =
   'Run a JavaScript program and return the value the model should receive. Call tools as `tools.<name>(params)`; ' +
   'each returns a promise, and a failure or approval denial rejects. Only the tools listed below exist in the ' +
-  'script. Use one script instead of many tool calls for loops, fan-outs, or multi-step work. No filesystem, ' +
+  'script. Prefer one script for loops, fan-outs, or multi-step work. No filesystem, ' +
   'network, timers, require, or eval. `console.log` shows only on failure or with `include_console: true`.\n\n' +
   `Limit: ${RUN_CODE_LIMITS.maxCalls} tools.* calls; when exhausted, return partial results and run only ` +
   'unattempted work next. Never repeat completed effects. Read independently with `Promise.allSettled`, mapping ' +
-  'rejections to `{error: r.reason.message}`. Return only what you need (output cap: 20,000 characters); ' +
+  'rejections to `{error: r.reason.message}`. Return only the fields, line ranges or summaries you need, never raw dumps (cap: 20,000 characters); ' +
   'follow `Full output saved to` paths. A `read_file` result with `truncated: true` holds only part of ' +
   'the file: read the rest or its `fullOutputPath`. Use `tools.describe(name)` instead of guessing. Put text with ' +
-  'backticks or `${...}` in `inputs` and read the global `inputs`, never inline in code. Code plus inputs: at most ' +
+  'backticks or `${...}` in `inputs` and read global `inputs`; never inline it. Code + inputs ≤ ' +
   '65,536 bytes.';
 
 export type RunCodeExecutionResult =

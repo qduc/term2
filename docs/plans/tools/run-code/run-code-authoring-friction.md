@@ -358,9 +358,13 @@ exercises the sandbox; edit probes name no tool, since GPT models are offered
 - the direct-API `session_rollover` probe, all four models: 34/40 before, 36/40 after,
   no unprompted rollover on either build, briefs as specific (all cite the commit).
 
-Not verified at this length: Haiku 5.5 and Gemini 4 Neon headless runs. The OpenRouter
-workspace's monthly budget ran out during the after-run (403 "Workspace monthly budget
-... exceeded"), so 40 of the 80 runs, 38 of them Haiku or Gemini, never reached a model.
-Both models passed the second pass (17% smaller) probes; rerun
-`h-before`/`h-after`-style probes for them before relying on this text with small or
-Gemini models.
+Haiku 5.5 and Gemini 4 Neon were rerun after the workspace budget was raised (it had
+been exceeded mid-run; BYOK requests are excluded from the budget but still blocked once
+it trips). All four models together: 78/80 before, 76/80 after. Both lost passes were the
+large-log probe's output-size check: the answers were right, but Haiku returned a raw
+17,360-character grep dump and Gemini 7,268 characters, against 362 to 5,610 before.
+The draft had shortened "Return only the fields, line ranges, or summaries you need" to
+"Return only what you need", dropping the concrete list. Restoring it ("Return only the
+fields, line ranges or summaries you need, never raw dumps") brought that probe to 7/8 on
+both builds (Haiku and Gemini, four runs each) with Haiku back at 362 to 799 characters.
+The concrete list is load-bearing for small models; keep it.

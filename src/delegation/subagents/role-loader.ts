@@ -391,7 +391,7 @@ export function buildInstructions(
     : undefined;
   let skillsInstructions = '';
   if (skillsService && loadVia) {
-    const catalog = skillsService.getSkillCatalog({ loadVia });
+    const catalog = skillsService.getSkillCatalog({ loadVia, canSearchWithShell: offered.has('shell') });
     if (catalog) {
       skillsInstructions = `\n\n${catalog}`;
     }

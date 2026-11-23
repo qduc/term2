@@ -292,9 +292,34 @@ should load none; Sonnet 5.5, Haiku 5.5, Gemini 4 Neon, two runs each) loaded th
 SKILL.md 27/30 times with the XML catalog and 28/30 with the compact one, with no false
 loads; every miss was the PDF task's first response, on both formats.
 
-Still unbounded: 30 skills roughly double the TUI root prefix. Claude Code budgets its
-skill listing at about 1% of the context window and drops descriptions of the least
-used skills first; Codex budgets about 2% (8,000 characters when the window is unknown),
-shortens descriptions first and warns. A published test of Claude Code with 160 skills
-found the model located 0 of 3 skills whose descriptions had been dropped, so a budget
-here should send overflow to something searchable rather than to bare names.
+### Catalog budget (later on 2026-11-23)
+
+The catalog now has an 8,000-character budget (`SKILL_CATALOG_BUDGET_CHARS`, Codex's
+fallback and about Claude Code's 1% of a 200k window). Within it every skill is
+described; past it descriptions shorten to their first sentence; past that, skills are
+described in priority order (project before user) and every other skill is still listed
+by name, so no skill is ever hidden. When any skill is name-only the root is offered
+`search_skills` (direct, ranked by name, description and body), and the catalog points
+to it; a subagent with a shell is pointed at `grep` instead. 100 and 300 synthetic skills
+both render at about 7,900 characters; the catalog grows again, by about 25 characters a
+skill, only once the names alone exceed the budget.
+
+Measured with real headless runs (106 skills; 4 target skills over the budget, 2 project
+skills inside it, 1 control task; each target's SKILL.md holds facts the answer must use;
+Sonnet 5.5, Gemini 4 Neon, Haiku 5.5, two runs each):
+
+| Catalog                         | Listed targets | Over-budget targets | Control | Searched for an over-budget skill |
+| ------------------------------- | -------------: | ------------------: | ------: | --------------------------------: |
+| Everything described (no budget)|          12/12 |               22/24 |     6/6 |                              6/24 |
+| Over-budget hidden, grep line   |          12/12 |                9/24 |     6/6 |                              8/24 |
+| Over-budget by name, grep line  |          12/12 |               22/24 |     6/6 |                              2/24 |
+| Over-budget by name, search_skills (shipped) | 12/12 | 23/24 |     6/6 |                             11/24 |
+
+Hiding over-budget skills behind a search instruction lost most of them: models rarely
+search for a skill they cannot see. Keeping every name visible recovered almost all of
+the loss; `search_skills` was used far more than the grep line. The targets' names were
+descriptive (`zz-espresso-dialing`, `zz-lease-review`), which favours the name-only
+list; with cryptic names expect the search tool to matter more. A first draft of the
+probe told the model, inside a skill, to start its answer with a code word: Haiku read
+the skill and refused that instruction as suspicious, so skill-trigger probes must check
+for the skill's real content, not an injected marker.

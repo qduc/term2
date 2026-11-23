@@ -18,8 +18,14 @@ export interface SkillInfo {
 
 /** A longer description is cut, as Claude Code does, so one skill cannot crowd out the rest. */
 const MAX_SKILL_DESCRIPTION_CHARS = 1_536;
-/** A catalog above this is logged as a warning: about 2% of a 200k-token window, the share Codex budgets. */
-const LARGE_CATALOG_CHARS = 16_000;
+/**
+ * The catalog's share of every request that carries it: Codex's fallback budget, and about
+ * Claude Code's 1% of a 200k-token window. Past it, descriptions shorten to their first
+ * sentence, then the lowest-priority skills move behind a search instruction.
+ */
+export const SKILL_CATALOG_BUDGET_CHARS = 8_000;
+/** A shortened description keeps its first sentence, up to this many characters. */
+const SHORT_DESCRIPTION_CHARS = 160;
 
 const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
 
@@ -226,26 +232,42 @@ export class SkillsService {
   /**
    * Render the available skills catalog: each scope directory once, then one line per skill.
    * A skill's SKILL.md is `<scope>/<name>/SKILL.md` unless its entry names another path.
+   *
+   * Within `budgetChars` every skill is listed in full. Past it, descriptions shorten to their
+   * first sentence; past that, skills are listed in priority order (project before user) and
+   * the rest are counted behind a search instruction, because a bare name is not enough for a
+   * model to pick a skill.
    */
-  getSkillCatalog(options: { loadVia?: 'tool' | 'shell' | 'read_file' } = {}): string {
-    const modelSkills = this.getAvailableSkillsForModel();
-    if (modelSkills.length === 0) return '';
+  /** Skills the last rendered catalog listed by name only; `search_skills` is offered when non-zero. */
+  nameOnlyCount = 0;
 
-    const byScope = new Map<string, SkillInfo[]>();
-    for (const skill of modelSkills) {
-      const scope = skill.scopeRoot ?? path.dirname(path.dirname(skill.location));
-      byScope.set(scope, [...(byScope.get(scope) ?? []), skill]);
-    }
-    const entry = (scope: string, skill: SkillInfo): string => {
-      const relative = path.relative(scope, skill.location);
-      const conventional = relative === path.join(skill.name, 'SKILL.md');
-      const description =
-        skill.description.length > MAX_SKILL_DESCRIPTION_CHARS
-          ? `${skill.description.slice(0, MAX_SKILL_DESCRIPTION_CHARS - 1).trimEnd()}…`
-          : skill.description;
-      return `- ${skill.name}${conventional ? '' : ` (${relative})`}: ${description}`;
+  getSkillCatalog(
+    options: {
+      loadVia?: 'tool' | 'shell' | 'read_file';
+      /** The reader can run shell commands, so name-only skills can be searched with grep. */
+      canSearchWithShell?: boolean;
+      /** The reader is offered `search_skills`, which beats grep for finding a name-only skill. */
+      searchTool?: boolean;
+      budgetChars?: number;
+    } = {},
+  ): string {
+    const modelSkills = this.getAvailableSkillsForModel();
+    this.nameOnlyCount = 0;
+    if (modelSkills.length === 0) return '';
+    const budget = options.budgetChars ?? SKILL_CATALOG_BUDGET_CHARS;
+    const canSearch = options.canSearchWithShell ?? options.loadVia === 'shell';
+
+    const scopeOf = (skill: SkillInfo) => skill.scopeRoot ?? path.dirname(path.dirname(skill.location));
+    // Project skills describe this repository's work, so they keep their place first.
+    const ordered = [...modelSkills.filter((s) => s.isProjectLevel), ...modelSkills.filter((s) => !s.isProjectLevel)];
+    const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+    const shorten = (text: string) => cut(/^.*?[.!?](?=\s|$)/.exec(text)?.[0] ?? text, SHORT_DESCRIPTION_CHARS);
+    const label = (skill: SkillInfo): string => {
+      const relative = path.relative(scopeOf(skill), skill.location);
+      return relative === path.join(skill.name, 'SKILL.md') ? skill.name : `${skill.name} (${relative})`;
     };
-    const blocks = [...byScope].map(([scope, skills]) => [scope, ...skills.map((s) => entry(scope, s))].join('\n'));
+    const entry = (skill: SkillInfo, short: boolean): string =>
+      `- ${label(skill)}: ${short ? shorten(skill.description) : cut(skill.description, MAX_SKILL_DESCRIPTION_CHARS)}`;
 
     const loadInstruction =
       options.loadVia === 'shell'
@@ -253,21 +275,92 @@ export class SkillsService {
         : options.loadVia === 'read_file'
         ? 'When a task matches a skill, read its SKILL.md with read_file to load its full instructions.'
         : "When a task matches a skill, call the activate_skill tool with the skill's name to load its full instructions.";
-
-    const catalog = `The following skills provide specialized instructions for specific tasks.
+    const scopes = [...new Set(ordered.map(scopeOf))];
+    const nameOnlyBlock = (skills: SkillInfo[]): string => {
+      if (skills.length === 0) return '';
+      const byScope = new Map<string, string[]>();
+      for (const skill of skills) byScope.set(scopeOf(skill), [...(byScope.get(scopeOf(skill)) ?? []), label(skill)]);
+      const how = options.searchTool
+        ? 'Call search_skills with a keyword to see their descriptions before deciding no skill fits a task.'
+        : canSearch
+        ? `Search their descriptions by keyword before deciding no skill fits a task: grep -ril --include=SKILL.md "<keyword>" ${scopes
+            .map((s) => JSON.stringify(s))
+            .join(' ')}`
+        : '';
+      const lists = [...byScope].map(([scope, names]) => `${scope}: ${names.join(', ')}`).join('\n');
+      return `\n\nAlso installed, listed by name only (over the catalog budget). ${how}\n${lists}`;
+    };
+    const render = (described: { skill: SkillInfo; short: boolean }[], nameOnly: SkillInfo[]): string => {
+      const byScope = new Map<string, string[]>();
+      for (const { skill, short } of described)
+        byScope.set(scopeOf(skill), [...(byScope.get(scopeOf(skill)) ?? []), entry(skill, short)]);
+      const blocks = [...byScope].map(([scope, lines]) => [scope, ...lines].join('\n'));
+      return `The following skills provide specialized instructions for specific tasks.
 ${loadInstruction}
 Each skill's SKILL.md is at <folder>/<name>/SKILL.md, under the folder line above it, unless its entry shows another path.
 
 <available_skills>
-${blocks.join('\n\n')}
+${blocks.join('\n\n')}${nameOnlyBlock(nameOnly)}
 </available_skills>`;
+    };
+
+    let catalog = render(
+      ordered.map((skill) => ({ skill, short: false })),
+      [],
+    );
+    if (catalog.length > budget)
+      catalog = render(
+        ordered.map((skill) => ({ skill, short: true })),
+        [],
+      );
+    if (catalog.length > budget) {
+      // Describe the longest prefix of the priority order that fits; every other skill keeps its name.
+      // When even the names exceed the budget they are all still listed: no skill is ever hidden.
+      let fit = 0;
+      while (fit < ordered.length) {
+        const next = render(
+          ordered.slice(0, fit + 1).map((skill) => ({ skill, short: true })),
+          ordered.slice(fit + 1),
+        );
+        if (next.length > budget) break;
+        fit++;
+      }
+      this.nameOnlyCount = ordered.length - fit;
+      catalog = render(
+        ordered.slice(0, fit).map((skill) => ({ skill, short: true })),
+        ordered.slice(fit),
+      );
+    }
+
     const summary = `Skills catalog: ${modelSkills.length} skills, ${catalog.length} characters in every request that carries it.`;
-    if (catalog.length > LARGE_CATALOG_CHARS) {
-      this.logger.warn(`${summary} Consider disable-model-invocation: true on skills that need not be offered.`);
+    if (this.nameOnlyCount > 0) {
+      this.logger.warn(
+        `${summary} ${this.nameOnlyCount} skills are over the ${budget}-character budget and listed by name only.`,
+      );
     } else {
       this.logger.debug(summary);
     }
     return catalog;
+  }
+
+  /** Rank skills against a keyword query by name, description and body. */
+  searchSkills(query: string, limit = 8): SkillInfo[] {
+    const terms = query
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 1);
+    if (terms.length === 0) return [];
+    const score = (skill: SkillInfo) =>
+      terms.reduce((sum, term) => {
+        const hit = (text: string) => (text.toLowerCase().includes(term) ? 1 : 0);
+        return sum + 3 * hit(skill.name) + 2 * hit(skill.description) + hit(skill.body);
+      }, 0);
+    return this.getAvailableSkillsForModel()
+      .map((skill) => ({ skill, score: score(skill) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((entry) => entry.skill);
   }
 
   /**

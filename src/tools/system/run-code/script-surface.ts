@@ -34,8 +34,15 @@ const PROHIBITED_TOOL_NAMES: readonly ProhibitedToolName[] = [
 export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set(PROHIBITED_TOOL_NAMES);
 
 const DIRECT_FILE_TOOLS: ReadonlySet<string> = new Set(['read_file', 'create_file', 'search_replace', 'apply_patch']);
+/** Offered only when the skills catalog lists skills by name only; it must be visible to be used. */
+const DIRECT_DISCOVERY_TOOLS: ReadonlySet<string> = new Set(['search_skills']);
 
 /** File tools and shell retain the same wrapped execution on either surface. */
 export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name'>): boolean {
-  return tool.name === 'shell' || DIRECT_FILE_TOOLS.has(tool.name) || RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
+  return (
+    tool.name === 'shell' ||
+    DIRECT_FILE_TOOLS.has(tool.name) ||
+    DIRECT_DISCOVERY_TOOLS.has(tool.name) ||
+    RUN_CODE_PROHIBITED_TOOLS.has(tool.name)
+  );
 }

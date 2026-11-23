@@ -60,10 +60,19 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     return unsubscribe;
   }, [settingsService]);
 
+  // Free-form string: the typed-value row shows the whole draft from the field start, which is what Enter
+  // saves. binding.query stops at the cursor, so text typed after a Left arrow would vanish from the row.
+  const isFreeFormString = useMemo(() => {
+    if (!resolvedSettingKey) return false;
+    if (!isStringSetting(resolvedSettingKey)) return false;
+    return buildSettingValueSuggestions(resolvedSettingKey).length === 0;
+  }, [resolvedSettingKey]);
+
   const query = useMemo(() => {
     if (!isControllerOpen) return '';
+    if (isFreeFormString) return controller.getSnapshot().editor.text.slice(controllerFrame.binding.replacement.start);
     return controllerFrame.binding.query;
-  }, [isControllerOpen, controllerFrame]);
+  }, [isControllerOpen, controllerFrame, isFreeFormString, controller]);
 
   const allSuggestions = useMemo(() => {
     if (!resolvedSettingKey) return [];
@@ -148,15 +157,6 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
 
   const isNumericSettings = useMemo(() => {
     return resolvedSettingKey ? isNumberSetting(resolvedSettingKey) : false;
-  }, [resolvedSettingKey]);
-
-  // Free-form string: string setting with no predefined suggestions.
-  // These are settings like api keys, model names, hostnames, etc.
-  // Users should type a value freely; the empty state should not show an error.
-  const isFreeFormString = useMemo(() => {
-    if (!resolvedSettingKey) return false;
-    if (!isStringSetting(resolvedSettingKey)) return false;
-    return buildSettingValueSuggestions(resolvedSettingKey).length === 0;
   }, [resolvedSettingKey]);
 
   return {

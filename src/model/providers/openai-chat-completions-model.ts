@@ -18,6 +18,13 @@ function isTrivialWhitespace(text: string): boolean {
 }
 
 /** Where one endpoint departs from the plain chat-completions conventions. */
+
+/** The chat wire carries the tool kind once, on the wrapper; the function object needs no `type`. */
+const toChatTool = (tool: object) => {
+  const { type, ...fn } = tool as { type?: unknown };
+  return { type: type ?? 'function', function: fn };
+};
+
 export type OpenAIChatCompletionsDialect = {
   /** Explicit wire convention for endpoints that differ from the detected host. */
   readonly maxTokensField?: 'max_tokens' | 'max_completion_tokens';
@@ -108,7 +115,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         // chat-completions provider. Placed before `providerOptions` so a
         // provider whose server rejects it can override.
         stream_options: { include_usage: true },
-        ...(request.tools.length ? { tools: request.tools.map((tool) => ({ type: 'function', function: tool })) } : {}),
+        ...(request.tools.length ? { tools: request.tools.map(toChatTool) } : {}),
         ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
         ...(request.topP !== undefined ? { top_p: request.topP } : {}),
         ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),

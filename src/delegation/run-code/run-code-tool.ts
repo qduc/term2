@@ -48,6 +48,10 @@ export function bindRunCodeNestedApprovalOwner(tools: ToolRegistry, owner: Neste
 export function createRunCodeToolDefinition(options: CreateRunCodeToolOptions) {
   let nestedApprovalOwner = options.nestedApprovalOwner;
   let boundRegistry: ToolRegistry | undefined;
+  const agentReference = (): string =>
+    options.agentSpecBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentSpecBridge)
+      ? renderAgentCapabilitySection(options.agentSpecBridge)
+      : '';
   const definition = createDefinition({
     getToolRegistry: options.getToolRegistry,
     catalogOtherTools: options.catalogOtherTools,
@@ -70,10 +74,13 @@ export function createRunCodeToolDefinition(options: CreateRunCodeToolOptions) {
         nestedCompatibility: options.nestedCompatibility,
         ...(options.agentSpecAuthority ? { agentSpecAuthority: options.agentSpecAuthority } : {}),
         ...(options.agentSpecBridge ? { agentBridge: options.agentSpecBridge } : {}),
+        agentCapabilityReference: agentReference,
       }),
+    // The full agent API is fetched on demand; every request carries only this pointer.
     agentCapabilitySection: () =>
-      options.agentSpecBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentSpecBridge)
-        ? renderAgentCapabilitySection(options.agentSpecBridge)
+      agentReference()
+        ? '## Agent capability\nAn `agent` global (not in `tools.*`) launches child agents from the script ' +
+          "(agent.run, agent.start, agent.status, agent.result, agent.cancel). Call `tools.describe('agent')` for its API before first use."
         : '',
   });
   const bindable = definition as HostBindable;

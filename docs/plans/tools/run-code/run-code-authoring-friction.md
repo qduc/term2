@@ -400,3 +400,27 @@ correctly. The `session_rollover` probe gave 17/19 explicit and 12/12 unprompted
 mid-run, so GPT has only partial coverage of this pass (13 of 20 headless runs).
 Running the provider black-box suite while probes ran rebuilt `dist/` under them and
 broke 25 runs, which were rerun; run it only when no built-CLI reader is active.
+
+## Tiered experiment beyond 59% (2026-11-23)
+
+Four further cuts were built separately and measured against the original build with
+Sonnet 5.5, Haiku 5.5 and Gemini 4 Neon (GPT-6.2's BYOK key had no credits). Two were
+kept; the TUI root prefix is now 56% of the original (25,217 to 14,132 characters).
+
+- Kept. The catalogue no longer repeats the signatures of tools the request already
+  offers directly (`read_file`, `create_file`, `search_replace`): they render as
+  `tools.<name>(same parameters as the direct tool)` with their return shape. The chat
+  wire no longer repeats `"type": "function"` inside each function object. Headless
+  probes 59/60 before and after; provider black-box suite green.
+- Kept. The Agent capability section is a two-line pointer; `tools.describe('agent')`
+  returns the full API (`agentCapabilityReference` in `run-code-runtime.ts`). In 12
+  agent-run probes every model called `tools.describe('agent')` once before
+  `agent.run`, and 11 passed; the miss was Haiku's glob-only children miscounting (the
+  `find`-fallback `**/` bug above), as on the original build. Sonnet and Gemini sessions
+  that used `agent.run` sent fewer input tokens overall than before despite the lookup.
+- Rejected. Hiding rarely used options from the presented schemas (`agent_spec`
+  `permissions`/`budget`/`model`, `name`, `continue_run_id`, `check_in`, shell `monitor`
+  tuning) took a direct-API probe that asks for each option from 30/45 to 0/45: models
+  use these options when a request needs them, so hiding them removes the feature.
+- Not built. Offering `session_rollover` only after a rollover reminder would remove
+  the only way a user can ask for a rollover: there is no `/rollover` command.

@@ -152,18 +152,16 @@ export function renderCompactSignature(tool: {
 
 /**
  * The header bullet for a fully rendered tool: signature, one-line description
- * and declared return shape. `omitDescription` drops the one-line description
- * for a tool whose full description the model already has from its direct
- * definition in the same request.
+ * and declared return shape. A `direct` tool keeps only its return shape: its
+ * full definition is already in the same request.
  */
-function renderDetailedEntry(tool: ToolRegistry[number], options: { omitDescription?: boolean } = {}): string {
-  const description =
-    !options.omitDescription && typeof tool.description === 'string' && tool.description
-      ? ` — ${oneLine(tool.description)}`
-      : '';
+function renderDetailedEntry(tool: ToolRegistry[number], options: { direct?: boolean } = {}): string {
   const scriptedReturn = scriptedReturnDescription(tool);
   // The authored shape is more precise than the schema union it describes, so it replaces it.
   const returns = `\n    returns ${scriptedReturn.legacy ?? scriptedReturn.value}`;
+  // A directly offered tool's parameters and description are already in the same request.
+  if (options.direct) return `- tools.${tool.name}(same parameters as the direct tool)${returns}`;
+  const description = typeof tool.description === 'string' && tool.description ? ` — ${oneLine(tool.description)}` : '';
   return `- ${renderCompactSignature(tool)}${description}${returns}`;
 }
 
@@ -202,7 +200,7 @@ export function renderToolsHeader(
   const lines = [
     'In the script (shapes approximate):',
     ...(essential.length > 0
-      ? ['Main tools:', ...described.map(({ tool, direct }) => renderDetailedEntry(tool, { omitDescription: direct }))]
+      ? ['Main tools:', ...described.map(({ tool, direct }) => renderDetailedEntry(tool, { direct }))]
       : []),
     ...(other.length > 0 ? [...(essential.length > 0 ? [''] : []), ...otherLines] : []),
   ];

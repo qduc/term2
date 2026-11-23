@@ -522,6 +522,8 @@ export interface RunCodeRuntimeOptions {
   agentSpecAuthority?: AgentSpecAuthoritySnapshot;
   /** Host-owned resolved-launch bridge; the agent capability exists only when active. */
   agentBridge?: RunCodeAgentSpecBridge;
+  /** Full `agent` API text, returned by `tools.describe('agent')`; empty when the capability is absent. */
+  agentCapabilityReference?: () => string;
 }
 
 export interface RunCodeRuntimeInput {
@@ -710,6 +712,13 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         const started = Date.now();
         const name = typeof payload.member === 'string' ? payload.member : '';
         const tool = registry.find((candidate) => candidate.name === name);
+        if (name === TOOL_NAME_DESCRIBE && payload.params === 'agent' && !registry.some((t) => t.name === 'agent')) {
+          const reference = options.agentCapabilityReference?.() ?? '';
+          if (reference) {
+            record(name, 'describe', started);
+            return { kind: 'result', result: { ok: true, result: reference } as JsonValue };
+          }
+        }
         if (name === TOOL_NAME_DESCRIBE && typeof payload.params === 'string') {
           const described = registry.find((candidate) => candidate.name === payload.params);
           if (!described) {

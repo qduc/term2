@@ -282,3 +282,31 @@ tool that `isDirectlyCallable` reports as direct. When `run_code` is offered,
 satisfy that predicate, so the full description is already in the same request.
 If a profile ever offers `run_code` with a different direct surface, restore the
 one-liner for the tools it hides.
+
+## Model-facing text compression, second pass (2026-11-23)
+
+A second pass cut about 1,900 characters from every TUI root request (about 480 tokens;
+`pnpm prefix:report tui-root` went from 25,209 to 23,274 characters). It touched the
+`run_code` description, the Agent capability section, the `run_subagent` description
+(`src/tools/agent/run-subagent-description.ts`), the `search_replace` gap-matching
+paragraph, and the `session_rollover` description, which now has one source in
+`src/tools/session-rollover/session-rollover-tool.ts` instead of a second copy in
+`src/session/rollover.ts`. Every instruction in the list above was kept. What went was
+duplicated guidance (two `Promise.allSettled` sentences, two "take only what you need"
+sentences, two background-handle warnings in `run_subagent`) and host plumbing the
+model cannot act on (`continue_run_id` authority, "the raw spec is never forwarded",
+the session approval owner, the notification lane).
+
+Checked with a real model before and after, through OpenRouter, Claude Sonnet 4.5 and
+GPT-5-mini, two runs each of seven headless probes (resilient fan-out read with a
+missing file, backtick text into `create_file`, counting in a large log, not delegating
+a trivial question, delegating a TODO search, deleting a 50-line function with
+`search_replace`, two parallel `agent.run` calls) plus a direct-API `session_rollover`
+probe (explicit request versus an ordinary next task, three runs each). Pass counts were
+equal or better in every probe and model; the trim changed none of the behaviours.
+
+One failure was present before and after, so it is a lead for later work, not a result
+of the trim: asked to count ERROR lines in a 4,000-line log through `run_code`, both
+models called `tools.read_file` once, ignored `truncated: true`, and reported 89 of 236
+lines. The sentence about following `fullOutputPath` is in the description but did not
+change that behaviour in any of the eight runs.

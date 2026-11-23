@@ -9,16 +9,25 @@ import {
   normalizeToolArguments,
 } from '../format-helpers.js';
 
+/** Shared with the session-owned direct tool in src/session/rollover.ts. */
+export const SESSION_ROLLOVER_BRIEF_DESCRIPTION =
+  'The handoff brief the successor starts from; under 8,000 characters.';
+
+export const SESSION_ROLLOVER_DESCRIPTION =
+  'Request a session rollover only when a system reminder prompts you to or the user explicitly asks; never on your own initiative. ' +
+  'First save state the successor must not lose and the brief cannot hold (plans, findings, task state) to a durable workspace artifact (plan doc, notes file, or commit; not /tmp, which does not survive a reboot) and point to it from the brief. ' +
+  "The brief is the successor's only context; write it for a capable engineer with no memory of this session:\n" +
+  '- Goal, done condition, and user constraints or preferences that still apply.\n' +
+  '- Completed effects with durable pointers (paths, commits, docs), marked verified or assumed.\n' +
+  '- Knowledge costly to rediscover: diagnosis, root causes, key files and symbols, approaches ruled out and why.\n' +
+  '- The next open step, concrete enough to act on immediately, and unresolved decisions.\n' +
+  '- Live background work: handle, status, next action. Handles survive rollover and the successor can control them, so do not wait for them just to rotate; save their durable results rather than copying transient output.\n' +
+  '- If this session established a lasting user preference, project decision, or reusable lesson, update persistent memory; skip facts recoverable from the repository and do not save the handoff itself as memory.\n' +
+  'Keep the brief well below 8,000 characters: point to canonical artifacts instead of copying them, and omit narrative history.';
+
 const sessionRolloverParameters = z
   .object({
-    brief: z
-      .string()
-      .max(8_000)
-      .describe(
-        'Handoff for a successor with no memory of this session; keep well below 8,000 characters. ' +
-          'Cover the goal, standing user constraints, verified versus assumed state, diagnosis and approaches ruled out, and the next open step. ' +
-          'When a canonical artifact already holds the state, write a short delta and pointer instead of copying it.',
-      ),
+    brief: z.string().max(8_000).describe(SESSION_ROLLOVER_BRIEF_DESCRIPTION),
     reason: z.enum(['context_pressure', 'task_boundary']).optional(),
   })
   .strict();
@@ -28,17 +37,7 @@ export function createSessionRolloverToolDefinition(
 ): ToolDefinition<typeof sessionRolloverParameters, 'session_rollover'> {
   return {
     name: 'session_rollover',
-    description:
-      'Request a session rollover only when a system reminder prompts you to consider it or the user explicitly asks for one. Do not initiate rollover on your own. ' +
-      'Before calling, save state the successor must not lose and the brief cannot hold (plans, findings, task state) to a durable artifact in the workspace, such as a plan doc, notes file, or commit, and point to it from the brief. Do not use /tmp for this; it does not survive a reboot. ' +
-      'The brief is the only context the successor starts with, so write it for a capable engineer with no memory of this session:\n' +
-      '- Goal and done condition, plus user constraints and preferences that still apply.\n' +
-      '- Completed effects with durable pointers (paths, commits, docs), marking what is verified versus assumed.\n' +
-      '- Working knowledge that is costly to rediscover: diagnosis, root causes, key files and symbols, and approaches ruled out with why.\n' +
-      '- Next open step, concrete enough to act on immediately, and any unresolved decisions.\n' +
-      '- Live background work: handle, status, and next action. Handles are session-owned and survive the rotation, so the successor can inspect or control them; do not wait for them merely to rotate, and save durable results when ready rather than copying transient output.\n' +
-      '- If this session established a lasting user preference, accepted project decision, or reusable lesson learned, update persistent memory when appropriate; skip facts easily recovered from the repository, and do not save the handoff wholesale as memory.\n' +
-      'Keep the brief well below the 8,000-character limit: point to a canonical artifact instead of copying it, and omit narrative history the successor can read from the previous session on demand.',
+    description: SESSION_ROLLOVER_DESCRIPTION,
     parameters: sessionRolloverParameters,
     terminateAfterExecution: (result) =>
       typeof result === 'string' &&

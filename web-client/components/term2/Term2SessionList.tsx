@@ -140,14 +140,14 @@ export function Term2SessionList({
         <span className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
           <Plus aria-hidden className="h-3.5 w-3.5" strokeWidth={2.25} />
         </span>
-        New agent chat
+        Open chat for selected folder
       </button>
       {sessions.length > 4 && (
         <label className="mb-2 flex items-center gap-2 rounded-lg bg-black/[0.04] px-2.5 py-1.5 text-sm transition-colors focus-within:bg-white focus-within:ring-1 focus-within:ring-black/10 dark:bg-white/[0.05] dark:focus-within:bg-white/[0.07] dark:focus-within:ring-white/10">
           <Search aria-hidden className="h-3.5 w-3.5 text-zinc-400" />
           <input
             type="search"
-            aria-label="Search sessions"
+            aria-label="Search chats"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
@@ -156,11 +156,11 @@ export function Term2SessionList({
         </label>
       )}
       <h2 id="term2-session-heading" className="sr-only">
-        Agent sessions
+        Chat history
       </h2>
-      {sessions.length === 0 && <p className="px-2.5 py-1 text-sm text-zinc-500">No sessions yet.</p>}
+      {sessions.length === 0 && <p className="px-2.5 py-1 text-sm text-zinc-500">No chats yet.</p>}
       {sessions.length > 0 && grouped.length === 0 && (
-        <p className="px-2.5 py-1 text-sm text-zinc-500">No matching sessions.</p>
+        <p className="px-2.5 py-1 text-sm text-zinc-500">No matching chats.</p>
       )}
       <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 scrollbar-thin">
         {grouped.map(({ key, items }) => (

@@ -195,6 +195,7 @@ export interface SettingsProjection {
     oauthAccounts: Record<string, OAuthAccountSummary[]>;
     safety: {
       sandbox: 'enabled' | 'disabled' | 'unavailable';
+      showReview?: boolean;
       approval: 'off' | 'advisory' | 'auto' | 'unsafe-active' | 'hidden';
       backgroundShell: 'disabled-by-gateway';
       workspaceAccess: 'read' | 'read_write';

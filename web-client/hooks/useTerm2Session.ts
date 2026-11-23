@@ -12,8 +12,11 @@ import {
 } from '../lib/term2/event-adapter';
 import type {
   InteractionResolveRequest,
+  MessageSubmitOptions,
+  QueueManageAction,
   SessionProjection,
   SessionPage,
+  TaskControlAction,
   Term2CommandId,
   Term2CommandResult,
   Term2ConnectionStatus,
@@ -98,8 +101,13 @@ export interface UseTerm2SessionResult {
   loadNextSessions: () => Promise<void>;
   createSession: (workspaceId: string) => Promise<SessionProjection>;
   selectSession: (sessionId: string) => void;
-  submit: (text: string) => Promise<boolean>;
+  submit: (text: string, options?: MessageSubmitOptions) => Promise<boolean>;
+  submitError: string | null;
+  clearSubmitError: () => void;
   invokeCommand: (commandId: Term2CommandId) => Promise<void>;
+  manageQueue: (action: QueueManageAction) => Promise<boolean>;
+  controlTask: (action: TaskControlAction) => Promise<boolean>;
+  rewind: (targetId: string, expectedRevision?: string) => Promise<boolean>;
   commandPending: boolean;
   commandNotice: { tone: 'neutral' | 'error'; message: string } | null;
   abort: () => Promise<void>;
@@ -115,6 +123,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   const [workspaceCursor, setWorkspaceCursor] = useState<string | null>(null);
   const [sessionCursor, setSessionCursor] = useState<string | null>(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [submitErrorState, setSubmitErrorState] = useState<{ sessionId: string; message: string } | null>(null);
   const [commandState, setCommandState] = useState<{
     sessionId: string;
     tone: 'neutral' | 'error';
@@ -379,48 +388,67 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     window.dispatchEvent(new PopStateEvent('popstate'));
   }, []);
 
-  const submit = useCallback(async (text: string) => {
-    const id = sessionIdRef.current;
-    if (
-      !id ||
-      !text.trim() ||
-      viewRef.current.sessionId !== id ||
-      !canSubmitSessionMessage(viewRef.current.status) ||
-      viewRef.current.pendingInteraction?.state === 'pending' ||
-      admittingSessionIdsRef.current.has(id)
-    ) {
-      return false;
-    }
-    const generation = generationRef.current;
-    const sequenceAtSubmit = viewRef.current.lastAppliedSequence;
-    const clientRequestId = crypto.randomUUID();
-    admittingSessionIdsRef.current.add(id);
-    pendingTextRef.current.set(clientRequestId, text);
-    try {
-      await term2Client.submitMessage(id, text, clientRequestId);
-      if (generation !== generationRef.current || sessionIdRef.current !== id) {
-        pendingTextRef.current.delete(clientRequestId);
+  const clearSubmitError = useCallback(() => {
+    setSubmitErrorState(null);
+  }, []);
+
+  const submit = useCallback(
+    async (text: string, options?: MessageSubmitOptions) => {
+      const id = sessionIdRef.current;
+      const hasAttachments = Boolean(options?.attachments && options.attachments.length > 0);
+      if (
+        !id ||
+        (!text.trim() && !hasAttachments) ||
+        viewRef.current.sessionId !== id ||
+        !canSubmitSessionMessage(viewRef.current.status) ||
+        viewRef.current.pendingInteraction?.state === 'pending' ||
+        admittingSessionIdsRef.current.has(id)
+      ) {
         return false;
       }
-      patchView((current) =>
-        canSubmitSessionMessage(current.status) && current.lastAppliedSequence === sequenceAtSubmit
-          ? { ...current, status: 'running', error: null }
-          : current,
-      );
-      return true;
-    } catch (error) {
-      pendingTextRef.current.delete(clientRequestId);
-      if (generation !== generationRef.current || sessionIdRef.current !== id) return false;
-      patchView((current) => ({
-        ...current,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Message was not accepted',
-      }));
-      return false;
-    } finally {
-      admittingSessionIdsRef.current.delete(id);
-    }
-  }, [patchView]);
+      const generation = generationRef.current;
+      const sequenceAtSubmit = viewRef.current.lastAppliedSequence;
+      const clientRequestId = crypto.randomUUID();
+      admittingSessionIdsRef.current.add(id);
+      pendingTextRef.current.set(clientRequestId, text);
+      setSubmitErrorState((current) => (current?.sessionId === id ? null : current));
+      try {
+        await term2Client.submitMessage(id, text, clientRequestId, options);
+        if (generation !== generationRef.current || sessionIdRef.current !== id) {
+          pendingTextRef.current.delete(clientRequestId);
+          return false;
+        }
+        const firstLine = text.trim().split('\n')[0]?.trim().slice(0, 120);
+        if (firstLine) {
+          setSessions((current) =>
+            current.map((item) =>
+              item.id === id && !item.title
+                ? { ...item, title: firstLine, updatedAt: new Date().toISOString() }
+                : item,
+            ),
+          );
+        }
+        patchView((current) =>
+          canSubmitSessionMessage(current.status) && current.lastAppliedSequence === sequenceAtSubmit
+            ? { ...current, status: 'running', error: null }
+            : current,
+        );
+        return true;
+      } catch (error) {
+        pendingTextRef.current.delete(clientRequestId);
+        if (generation !== generationRef.current || sessionIdRef.current !== id) return false;
+        // Keep a healthy stream alive and the composer usable so the user can edit/retry immediately.
+        setSubmitErrorState({
+          sessionId: id,
+          message: error instanceof Error ? error.message : 'Message was not accepted. Please try again.',
+        });
+        return false;
+      } finally {
+        admittingSessionIdsRef.current.delete(id);
+      }
+    },
+    [patchView],
+  );
 
   // Command results never render a turn: an accepted retry arrives through the
   // session event stream, so only outcomes and failures need local state.
@@ -445,6 +473,74 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    // Tear down the prior stream before installing a new accepted cut. Never
+    // install a second snapshot over a concurrently replaying/live connection.
+    selectionControllerRef.current?.abort();
+    setConnectionAttempt((attempt) => attempt + 1);
+  }, []);
+
+  const manageQueue = useCallback(async (action: QueueManageAction) => {
+    const id = sessionIdRef.current;
+    if (!id) return false;
+    try {
+      await term2Client.manageQueue(id, action);
+      return true;
+    } catch (error) {
+      setCommandState({
+        sessionId: id,
+        tone: 'error',
+        message: error instanceof Error ? error.message : 'Queue action failed.',
+      });
+      return false;
+    }
+  }, []);
+
+  const controlTask = useCallback(async (action: TaskControlAction) => {
+    const id = sessionIdRef.current;
+    if (!id) return false;
+    try {
+      await term2Client.controlTask(id, action);
+      return true;
+    } catch (error) {
+      setCommandState({
+        sessionId: id,
+        tone: 'error',
+        message: error instanceof Error ? error.message : 'Task action failed.',
+      });
+      return false;
+    }
+  }, []);
+
+  const rewind = useCallback(
+    async (targetId: string, expectedRevision?: string) => {
+      const id = sessionIdRef.current;
+      if (!id) return false;
+      setCommandPendingSessionId(id);
+      setCommandState(null);
+      try {
+        await term2Client.rewindSession(id, {
+          targetId,
+          clientRequestId: crypto.randomUUID(),
+          ...(expectedRevision ? { expectedRevision } : {}),
+        });
+        setCommandState({ sessionId: id, tone: 'neutral', message: 'Conversation rewound.' });
+        await refresh();
+        return true;
+      } catch (error) {
+        setCommandState({
+          sessionId: id,
+          tone: 'error',
+          message: error instanceof Error ? error.message : 'Could not rewind conversation.',
+        });
+        return false;
+      } finally {
+        setCommandPendingSessionId((current) => (current === id ? null : current));
+      }
+    },
+    [refresh],
+  );
+
   const abort = useCallback(async () => {
     const id = sessionIdRef.current;
     const generation = generationRef.current;
@@ -464,13 +560,6 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       }));
     }
   }, [patchView]);
-
-  const refresh = useCallback(async () => {
-    // Tear down the prior stream before installing a new accepted cut. Never
-    // install a second snapshot over a concurrently replaying/live connection.
-    selectionControllerRef.current?.abort();
-    setConnectionAttempt(attempt => attempt + 1);
-  }, []);
 
   const resolveInteraction = useCallback(
     async (request: InteractionResolveRequest) => {
@@ -549,7 +638,12 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     createSession,
     selectSession,
     submit,
+    submitError: submitErrorState && submitErrorState.sessionId === sessionId ? submitErrorState.message : null,
+    clearSubmitError,
     invokeCommand,
+    manageQueue,
+    controlTask,
+    rewind,
     commandPending: commandPendingSessionId === sessionId,
     commandNotice:
       commandState && commandState.sessionId === sessionId

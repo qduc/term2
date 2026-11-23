@@ -80,45 +80,51 @@ who may use them and what they own.
 
 | Surface | Public contract / ownership |
 | --- | --- |
-| `components/term2/Term2SessionShell.tsx#Term2SessionShell` | UI entry with `initialSessionId:string|null`, optional `authUserId:string|null`, and optional packaged `homeFolder:string`. Owns selection, drafts, sidebar and session/settings presentation. Identity/selection transitions clear the previous draft. `authUserId` is a UI reset signal, not gateway authorization. The packaged page supplies its home folder as a starting point for browsing; folder validation, selection and access checks still go through the gateway. |
-| `hooks/useTerm2Session.ts#useTerm2Session` | Takes the selected `sessionId:string|null`; returns `UseTerm2SessionResult`. Owns the active hydrate/stream lifecycle, accepted checkpoint, reconnect state, pending message text and interaction/command feedback. Callers use returned actions rather than opening a second stream or mutating the view. Session generation/abort checks prevent stale work installing another selection's state. |
+| `components/term2/Term2SessionShell.tsx#Term2SessionShell` | UI entry with `initialSessionId:string|null`, optional `authUserId:string|null`, optional packaged `homeFolder:string`, and optional `allowWrite:boolean`. Owns selection, drafts, first-run onboarding checklist, sidebar, composer controls (model/effort/usage/skills/`@`-files/attachments/queue), rewind, tasks drawer, and session/settings presentation. Identity/selection transitions clear the previous draft. `authUserId` is a UI reset signal, not gateway authorization. The packaged page supplies its home folder as a starting point for browsing and whether the launcher was started with `--allow-write`; folder validation, selection and access checks still go through the gateway. |
+| `hooks/useTerm2Session.ts#useTerm2Session` | Takes the selected `sessionId:string|null`; returns `UseTerm2SessionResult`. Owns the active hydrate/stream lifecycle, accepted checkpoint, reconnect state, pending message text, session-scoped `submitError`, and interaction/command feedback. Callers use returned actions rather than opening a second stream or mutating the view. Session generation/abort checks prevent stale work installing another selection's state. |
 | `lib/api/term2.ts#term2Client` | Browser HTTP facade, typed parsers and domain errors. Calls local BFF paths, not provider endpoints or the Unix socket directly. Optional `AbortSignal` is propagated; facade requests disable generic automatic HTTP retries. Stream retry ownership belongs to the hook; original configure-command retry belongs to its caller. |
 | `components/term2/Term2SessionConfig.tsx#Term2SessionConfig` | Receives optional session/config/settings plus `onDiscovered`, `onCreateNewSession`, and reauthentication state. Session-keyed UI owns the mounted original configure request/retry handle. `onDiscovered` supplies current discovery only, not an original receipt. |
 | `lib/term2/types.ts#Term2SessionView` | Read model consumed by shell/evidence UI: root turns/status, nullable interaction, accepted checkpoint, separate hydration and native public state, actual branch views, accepted evidence and connection-local live observations. It is not provider history, a billing accumulator or a new persisted session format. |
 
 `UseTerm2SessionResult` exposes workspace/session arrays and pagination cursors,
 workspace selection, `refreshWorkspaces`, `refreshSessions`, `loadNextSessions`,
-`createSession`, `selectSession`, `submit`, `invokeCommand`, `abort`,
-`resolveInteraction`, and explicit `refresh`, plus view/command feedback.
+`createSession`, `selectSession`, `submit`, `invokeCommand`, `manageQueue`,
+`controlTask`, `rewind`, `abort`, `resolveInteraction`, `clearSubmitError`, and
+explicit `refresh`, plus view/command/submit feedback.
 Message submission is disabled until the selected session is connected, running or interrupted;
 a hydration or stream error must remain visible rather than being replaced by a
 late submission acknowledgement. Reload retries the session connection.
-A failed message POST also sets the session to error, even if its stream was
-healthy: the composer retains the draft text but is disabled. The error
-banner offers Reload to reconnect before retrying; a rejected-submit recovery
-journey has not yet been verified in a browser.
-`submit(text)` returns `Promise<boolean>`; other mutation/control actions expose
-completion through their promise and view/feedback. `createSession` retains its
-existing creation metadata result (`SessionProjection`); that result is **not**
-the new native hydration cut. Only `hydrateSession` supplies the negotiated cut.
+A failed message POST records a session-scoped `submitError` without flipping a
+healthy SSE stream into `'error'`: the composer retains the draft text and stays
+usable so the user can edit or retry immediately.
+`submit(text, options?)` accepts optional `delivery` (`auto`/`steer`/`follow_up`/`reject_if_busy`),
+`expectedSteerTurnId`, `skill`, and image `attachments`, and returns `Promise<boolean>`;
+other mutation/control actions expose completion through their promise and view/feedback.
+`createSession` retains its existing creation metadata result (`SessionProjection`);
+that result is **not** the new native hydration cut. Only `hydrateSession` supplies the negotiated cut.
 
 ### Facade and BFF boundaries
 
 The public facade groups are:
 
-- Workspace/session discovery and creation: `listWorkspaces`, `listSessions`,
-  `createSession`; candidate validation/browse/selection remain separate
-  capability-based workspace controls.
-- Conversation: `hydrateSession`, `openEvents`, `submitMessage`, `abort`,
-  `resolveInteraction` and `commands` (compact/retry-tool/retry-turn). Actual
-  session/turn/request identities are caller/server data, not browser-generated
-  recovery cursors. New message/command intents use real caller-owned keys.
+- Workspace/session discovery and creation: `listWorkspaces`, `listSessions`
+  (including optional server-projected `title` and `model`), `createSession`;
+  candidate validation/browse/selection remain separate capability-based workspace controls.
+- Conversation: `hydrateSession`, `openEvents`, `submitMessage` (with optional
+  delivery mode, skill, and bounded image attachments), `abort`,
+  `resolveInteraction`, `commands` (compact/retry-tool/retry-turn),
+  `listRewindTargets`, `rewindSession`, `manageQueue` (edit/retract/resume/discard),
+  `controlTask` (cancel/check_in/foreground/background/drain_notifications), and
+  `listSessionFiles` (for `@` path mentions). Actual session/turn/request identities
+  are caller/server data, not browser-generated recovery cursors. New message/command
+  intents use real caller-owned keys.
 - Session configuration: `readSessionConfig` (current discovery) and
   `updateSessionConfig` (stable original `SessionConfigUpdate` returning shared
   `AgentConfigureResultV2`). Receipt-bearing non-2xx is meaningful result data;
   unknown delivery is not permission to issue a replacement intent/key.
-- Settings/model/credential/OAuth controls: existing settings projections,
-  revision conflicts and dedicated mutation methods remain app-owned; M6's
+- Settings/provider/skill/model/credential/OAuth controls: existing settings projections,
+  revision conflicts, `listProviderPresets`, `writeProvider`, `deleteProvider`,
+  `listSkills`, and dedicated mutation methods remain app-owned; M6's
   event schema does not silently version or redefine their DTOs.
 
 `Term2ApiError` carries HTTP status/code/details; `SettingsConflictError` adds the
@@ -129,7 +135,8 @@ or replay gap cannot authorize a v1 fallback or invented successful receipt.
 
 Browser paths under `app/api/agent/` and `app/api/term2/` are Node.js BFF handlers.
 `lib/server/proxy.ts#rpc` maps them to the private gateway API; a browser GET may
-become a purpose-bound POST control RPC. Hydration, SSE and keyed configuration
+become a purpose-bound POST control RPC (with per-route timeout override where
+appropriate, such as OAuth login). Hydration, SSE and keyed configuration
 explicitly opt into `format=agent-wire-v2`. The BFF validates local input,
 resolves session/workspace binding, uses the configured local owner identity and
 purpose-bound gateway assertions, and forwards native bodies/receipt evidence

@@ -198,6 +198,10 @@ function isClaims(value: unknown): value is GatewayAssertionClaims {
     candidate.purpose === 'oauth_login' ||
     candidate.purpose === 'oauth_select' ||
     candidate.purpose === 'oauth_delete' ||
+    candidate.purpose === 'provider_presets' ||
+    candidate.purpose === 'provider_write' ||
+    candidate.purpose === 'provider_delete' ||
+    candidate.purpose === 'skills_list' ||
     candidate.purpose === 'session_list' ||
     candidate.purpose === 'model_list'
   ) {

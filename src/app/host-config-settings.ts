@@ -15,6 +15,7 @@ const SAFE_KEYS = [
   'agent.maxParallelToolCalls',
   'agent.contextCompaction.enabled',
   'agent.contextCompaction.threshold',
+  'agent.favoriteModels',
   'app.activeProfileId',
   'app.mentorMode',
   'app.liteMode',
@@ -30,7 +31,29 @@ const SAFE_KEYS = [
   'tools.maxOutputChars',
 ] as const;
 
-const PERSISTENT = new Set(['logging.logLevel']);
+const PERSISTENT = new Set<string>([
+  'agent.modelSelection',
+  'agent.reasoningEffort',
+  'agent.temperature',
+  'agent.maxTurns',
+  'agent.maxOutputTokens',
+  'agent.maxStreamOutputChars',
+  'agent.maxModelRequestDurationMs',
+  'agent.retryAttempts',
+  'agent.maxParallelToolCalls',
+  'agent.contextCompaction.enabled',
+  'agent.contextCompaction.threshold',
+  'agent.favoriteModels',
+  'app.liteMode',
+  'webSearch.provider',
+  'webSearch.firecrawl.baseUrl',
+  'webSearch.searxng.baseUrl',
+  'memory.enabled',
+  'logging.logLevel',
+  'shell.timeout',
+  'shell.maxOutputLines',
+  'tools.maxOutputChars',
+]);
 const SESSION_SCOPED = new Set([
   'agent.modelSelection',
   'agent.reasoningEffort',
@@ -62,6 +85,16 @@ export type CredentialDescription = { configured: boolean; required: boolean; so
 export type DirectCredentialBackend = { describe(providerId: string): CredentialDescription };
 export type DirectProviderBackend = {
   list(): readonly { id: string; label: string; isCustom: boolean; active: boolean; disabled: boolean }[];
+  presets?(): {
+    presets: readonly import('../host/server-contracts.js').ProviderPresetEntry[];
+    types: readonly string[];
+  };
+  write?(input: import('../host/server-contracts.js').ProviderWriteInput): {
+    ok: boolean;
+    error?: string;
+    fieldErrors?: Record<string, string>;
+  };
+  remove?(id: string): boolean;
 };
 export type OAuthAccount = { id: string; label: string; isSelected: boolean; isInUse: boolean };
 export type DirectOAuthBackend = {
@@ -113,16 +146,53 @@ export class DirectGlobalConfiguration {
         projection: current,
       });
     }
-    const normalized = changes.map((change) => {
+    const finalByKey = new Map<string, unknown>();
+    for (const change of changes) {
       if (!PERSISTENT.has(change.key) || !(SAFE_KEYS as readonly string[]).includes(change.key)) {
         throw new DirectHostConfigError('settings_not_allowed', 'config');
       }
       if (!isSafeValue(change.value)) throw new DirectHostConfigError('validation_error', 'config');
-      return { key: change.key, value: change.value };
-    });
-    const result = this.settings.setPersistentTransaction(normalized);
-    if (result?.status !== 'saved') throw new DirectHostConfigError('not_persisted', 'config');
+      const actualKey =
+        change.key === 'agent.contextCompaction.threshold' ? 'agent.contextCompaction.compactThreshold' : change.key;
+      finalByKey.set(actualKey, change.value);
+    }
+    const toPersist: { key: string; value: unknown }[] = [];
+    const toReset: string[] = [];
+    for (const [actualKey, value] of finalByKey) {
+      if (value === null) toReset.push(actualKey);
+      else toPersist.push({ key: actualKey, value });
+    }
+    try {
+      if (toPersist.length > 0) {
+        const result = this.settings.setPersistentTransaction(toPersist);
+        if (result?.status !== 'saved') throw new DirectHostConfigError('not_persisted', 'config');
+      }
+      for (const key of toReset) {
+        const result = this.settings.reset(key);
+        if (result?.status !== 'saved') throw new DirectHostConfigError('not_persisted', 'config');
+      }
+    } catch (error) {
+      if (error instanceof DirectHostConfigError) throw error;
+      if (error instanceof Error && error.name === 'ZodError') {
+        throw new DirectHostConfigError('validation_error', 'config');
+      }
+      throw error;
+    }
     return this.#projection();
+  }
+
+  listProviderPresets() {
+    return this.providers.presets ? this.providers.presets() : { presets: [], types: [] };
+  }
+
+  async writeProvider(input: import('../host/server-contracts.js').ProviderWriteInput) {
+    if (!this.providers.write) throw new DirectHostConfigError('settings_unavailable', 'config');
+    return this.providers.write(input);
+  }
+
+  async deleteProvider(id: string) {
+    if (!this.providers.remove) throw new DirectHostConfigError('settings_unavailable', 'config');
+    return { ok: this.providers.remove(id) };
   }
 
   async setCredential(id: string, value: string): Promise<{ status: 'saved'; configured: boolean; source: string }> {
@@ -328,13 +398,26 @@ export class DirectGlobalConfiguration {
 }
 
 function isSafeValue(value: unknown): boolean {
-  return (
+  if (
     value === null ||
     typeof value === 'string' ||
     typeof value === 'number' ||
     typeof value === 'boolean' ||
     (Array.isArray(value) && value.every((item) => typeof item === 'string'))
-  );
+  ) {
+    return true;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    return (
+      Object.keys(record).length === 2 &&
+      typeof record.model === 'string' &&
+      record.model.trim().length > 0 &&
+      typeof record.provider === 'string' &&
+      record.provider.trim().length > 0
+    );
+  }
+  return false;
 }
 
 function safeValue(value: unknown): SettingsProjection['settings']['safeDefaults'][string]['value'] {

@@ -46,6 +46,9 @@ export async function projectServerSession(
   };
 }
 export function sessionListItem(snapshot: WireSnapshot, metadata: SessionMetadata) {
+  const firstUser = snapshot.messages.find((message) => message.role === 'user' && message.text.trim().length > 0);
+  const firstLine = firstUser ? firstUser.text.trim().split('\n')[0]!.trim() : '';
+  const title = firstLine ? projectionText(firstLine, 120) : undefined;
   return {
     id: snapshot.sessionId,
     workspaceId: metadata.workspaceId,
@@ -53,6 +56,8 @@ export function sessionListItem(snapshot: WireSnapshot, metadata: SessionMetadat
     createdAt: metadata.createdAt,
     updatedAt: metadata.updatedAt,
     latestSequence: snapshot.seq,
+    ...(title ? { title } : {}),
+    ...(snapshot.model ? { model: { provider: snapshot.model.provider, model: snapshot.model.model } } : {}),
   };
 }
 function transcriptMessages(snapshot: WireSnapshot): Message[] {

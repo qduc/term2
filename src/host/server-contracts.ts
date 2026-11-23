@@ -16,6 +16,10 @@ export const ASSERTION_PURPOSES = [
   'oauth_login',
   'oauth_select',
   'oauth_delete',
+  'provider_presets',
+  'provider_write',
+  'provider_delete',
+  'skills_list',
   'session_update',
   'session_list',
   'model_list',
@@ -26,6 +30,11 @@ export const ASSERTION_PURPOSES = [
   'interaction_resolve',
   'abort',
   'events_connect',
+  'session_rewind_targets',
+  'session_rewind',
+  'session_queue',
+  'session_task_control',
+  'session_files',
 ] as const;
 export type AssertionPurpose = (typeof ASSERTION_PURPOSES)[number];
 export type GatewayAssertionClaims = {
@@ -109,7 +118,34 @@ export type ModelCatalogEntry = {
   default_reasoning_level?: string;
   contextWindow?: number;
 };
-export type SafeSettingValue = string | number | boolean | readonly string[] | null;
+export type SafeSettingValue =
+  | string
+  | number
+  | boolean
+  | readonly string[]
+  | { model: string; provider: string }
+  | null;
+export type ProviderPresetEntry = {
+  id: string;
+  name: string;
+  category: string;
+  docsUrl: string;
+  builtinProviderId?: string;
+  type?: string;
+  baseUrl?: string;
+};
+export type ProviderWriteInput =
+  | { action: 'toggle'; id: string; disabled: boolean }
+  | {
+      action: 'save';
+      originalId?: string | null;
+      name: string;
+      type: string;
+      baseUrl?: string;
+      apiKey?: string;
+    };
+export type SkillSummary = { name: string; description: string; isProjectLevel: boolean };
+export type WorkspaceFileEntry = { path: string; type: 'file' | 'directory' };
 export type SettingsProjection = {
   schemaVersion: 1;
   revision: string;
@@ -118,7 +154,7 @@ export type SettingsProjection = {
     safeDefaults: Record<
       string,
       {
-        value?: SafeSettingValue | { model: string; provider: string };
+        value?: SafeSettingValue;
         source: string;
         scope: 'global' | 'session';
         confirmRequired: boolean;
@@ -167,6 +203,13 @@ export interface ServerConfiguration {
     accountId: string,
   ): Promise<{ ok: boolean; isSelected: boolean; isInUse: boolean }>;
   oauthDelete?(provider: 'codex' | 'grok', accountId: string): Promise<{ ok: boolean }>;
+  listProviderPresets?():
+    | { presets: readonly ProviderPresetEntry[]; types: readonly string[] }
+    | Promise<{ presets: readonly ProviderPresetEntry[]; types: readonly string[] }>;
+  writeProvider?(
+    input: ProviderWriteInput,
+  ): Promise<{ ok: boolean; error?: string; fieldErrors?: Record<string, string> }>;
+  deleteProvider?(id: string): Promise<{ ok: boolean }>;
 }
 export type SessionMetadata = {
   workspaceId: string;
@@ -189,6 +232,16 @@ export type SessionConfiguration = {
 export interface ServerSessionPresentation {
   metadata(principal: Principal, snapshot: WireSnapshot): SessionMetadata | Promise<SessionMetadata>;
   configuration?(principal: Principal, snapshot: WireSnapshot): SessionConfiguration | Promise<SessionConfiguration>;
+  listFiles?(
+    principal: Principal,
+    snapshot: WireSnapshot,
+  ): Promise<{ entries: readonly WorkspaceFileEntry[]; truncated: boolean }>;
+  prepareSkillText?(
+    principal: Principal,
+    snapshot: WireSnapshot,
+    skillName: string,
+    text: string,
+  ): Promise<string | null> | string | null;
   /** Authorize the supplied logical snapshot cut and prepare the whole requested patch.
    * No effects, generated invocation key, current-revision substitution or partial application. */
   prepareConfiguration?(
@@ -211,6 +264,7 @@ export type ServerHostDependencies = {
   host: DirectHost;
   workspaces?: ServerWorkspaces;
   models?(): readonly ModelCatalogEntry[] | Promise<readonly ModelCatalogEntry[]>;
+  skills?(): readonly SkillSummary[] | Promise<readonly SkillSummary[]>;
   configuration?: ServerConfiguration;
   presentation?: ServerSessionPresentation;
   localOwnerUserId?: string;

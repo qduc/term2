@@ -86,7 +86,7 @@ const sortDirEntries = (entries: Dirent[]): Dirent[] =>
     return a.name.localeCompare(b.name);
   });
 
-const loadDirectoryEntries = async (
+export const scanDirectoryEntries = async (
   cwd: string,
   options: WorkspaceEntryScanOptions = {},
 ): Promise<WorkspaceEntryScanResult> => {
@@ -164,7 +164,7 @@ const loadDirectoryEntries = async (
 };
 
 const loadWorkspaceEntries = async (): Promise<PathEntry[]> => {
-  const result = await loadDirectoryEntries(workspaceRoot());
+  const result = await scanDirectoryEntries(workspaceRoot());
   lastLoadTruncated = result.truncated;
   lastLoadTruncatedByTotalLimit = result.truncatedByTotalLimit;
 

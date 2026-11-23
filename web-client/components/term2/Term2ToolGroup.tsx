@@ -9,18 +9,71 @@ import { Term2CommandCard } from './Term2CommandCard';
  * still running so progress is visible, then folds to a single line unless the
  * reader has opened or closed it themselves.
  */
-export function Term2ToolGroup({ commands }: { commands: Term2Command[] }) {
+function summarizeCompletedTools(commands: Term2Command[]): string {
+  const counts = new Map<string, number>();
+  for (const cmd of commands) {
+    counts.set(cmd.toolName, (counts.get(cmd.toolName) ?? 0) + 1);
+  }
+  const parts: string[] = [];
+  for (const [name, count] of counts) {
+    switch (name) {
+      case 'read_file':
+      case 'view_file':
+        parts.push(`Read ${count} ${count === 1 ? 'file' : 'files'}`);
+        break;
+      case 'grep':
+      case 'code_context_search':
+        parts.push(`Searched ${count} ${count === 1 ? 'time' : 'times'}`);
+        break;
+      case 'glob':
+      case 'find_files':
+        parts.push(`Listed files${count > 1 ? ` ×${count}` : ''}`);
+        break;
+      case 'shell':
+        parts.push(`Ran ${count} ${count === 1 ? 'command' : 'commands'}`);
+        break;
+      case 'search_replace':
+      case 'apply_patch':
+        parts.push(`Edited ${count} ${count === 1 ? 'file' : 'files'}`);
+        break;
+      case 'create_file':
+        parts.push(`Created ${count} ${count === 1 ? 'file' : 'files'}`);
+        break;
+      case 'web_search':
+        parts.push(`Searched the web${count > 1 ? ` ×${count}` : ''}`);
+        break;
+      case 'web_fetch':
+        parts.push(`Fetched ${count} ${count === 1 ? 'page' : 'pages'}`);
+        break;
+      default:
+        parts.push(`Used ${name}${count > 1 ? ` ×${count}` : ''}`);
+        break;
+    }
+  }
+  if (parts.length === 0) return `${commands.length} tool ${commands.length === 1 ? 'action' : 'actions'}`;
+  if (parts.length <= 3) return parts.join(', ');
+  return `${parts.slice(0, 2).join(', ')} and ${parts.length - 2} more`;
+}
+
+export function Term2ToolGroup({
+  commands,
+  defaultExpanded = false,
+}: {
+  commands: Term2Command[];
+  defaultExpanded?: boolean;
+}) {
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   if (commands.length === 0) return null;
   const running = commands.filter((c) => c.status === 'running').length;
   const pending = commands.filter((c) => c.status === 'pending').length;
   const failed = commands.filter((c) => c.status === 'failed').length;
-  const open = userOpen ?? (running > 0 || pending > 0);
+  const open = userOpen ?? (defaultExpanded || running > 0 || pending > 0);
   const summary =
     running > 0
-      ? `${running} running tool entries · ${pending} pending start`
-      : pending > 0 ? `${pending} accepted tool calls pending start`
-      : `${commands.length} tool/result ${commands.length === 1 ? 'entry' : 'entries'}`;
+      ? `Running ${running} ${running === 1 ? 'action' : 'actions'}${pending > 0 ? ` · ${pending} waiting` : ''}`
+      : pending > 0
+        ? `${pending} ${pending === 1 ? 'action' : 'actions'} waiting to start`
+        : summarizeCompletedTools(commands);
   return (
     <section aria-label="Tool calls" className="text-sm">
       <button

@@ -7,8 +7,10 @@
  */
 import { appendFile } from 'node:fs/promises';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { getProfileLabel } from '../config/profiles/labels.js';
+import { injectSkillIntoTurn } from '../shared/types/user-turn.js';
 import { defaultServeStateDir } from '../host/gateway/serve-args.js';
 import { createDirectServerHost, createServerAuthentication } from '../host/server.js';
 import { SqliteReplayLedger } from '../host/server-auth.js';
@@ -18,6 +20,7 @@ import type { WireSnapshot } from '../protocol/wire.js';
 import { DirectProtocolError } from '../protocol/errors.js';
 import { createDirectApplication, type DirectApplication } from './application.js';
 import { prepareDirectSessionConfigurationCommand } from './config-settings.js';
+import { scanDirectoryEntries } from './file-service.js';
 import type { DirectAuthorityFactory } from './application-workspaces.js';
 import {
   bindDirectSessionAccess,
@@ -170,6 +173,23 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         defaultsRevision,
       };
     },
+    async listFiles(principal, snapshot) {
+      const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
+      const { workspace } = grants.resolveWorkspace(principal, grant);
+      const scanned = await scanDirectoryEntries(workspace.root, { maxDepth: 12, maxTotalEntries: 2_000 });
+      return { entries: scanned.entries, truncated: scanned.truncated };
+    },
+    prepareSkillText(principal, snapshot, skillName, text) {
+      const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
+      const { workspace } = grants.resolveWorkspace(principal, grant);
+      const available = app.skills(workspace.root);
+      const skill = available.find((candidate) => candidate.name.toLowerCase() === skillName.toLowerCase());
+      if (!skill) return null;
+      return injectSkillIntoTurn({
+        text,
+        skill: { name: skill.name, description: skill.description, body: skill.body },
+      }).text;
+    },
     prepareConfiguration(principal, snapshot, body) {
       owned(principal, snapshot.sessionId, snapshot.seq);
       return prepareDirectSessionConfigurationCommand(body);
@@ -218,11 +238,8 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     approvalAlwaysAsks: true,
     async authorizeModel(next, previous) {
-      if (next.provider !== previous.provider) {
-        throw new Error('Provider is bound to this session; create a new session to change it.');
-      }
       // A same-selection refresh/rollover does not depend on a fresh catalog.
-      if (next.model === previous.model) return;
+      if (next.provider === previous.provider && next.model === previous.model) return;
       await configuration.assertModel(next.provider, next.model);
     },
     authority: serverAuthority(grants, directory, args.localOwnerUserId),
@@ -233,6 +250,10 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       host: app.host,
       workspaces: grants,
       models: () => configuration.listModels(),
+      skills: () =>
+        app
+          .skills(args.workspaceRoots[0] ?? homedir())
+          .map((skill) => ({ name: skill.name, description: skill.description, isProjectLevel: skill.isProjectLevel })),
       configuration,
       presentation: presentation({ app, directory, grants, configuration, allowWrite: args.allowWrite }),
       localOwnerUserId: args.localOwnerUserId,

@@ -28,6 +28,10 @@ const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['oauth_login', 'POST', '/oauth/codex/login'],
   ['oauth_select', 'POST', '/oauth/codex/select'],
   ['oauth_delete', 'DELETE', '/oauth/codex/accounts/test'],
+  ['provider_presets', 'GET', '/providers/presets'],
+  ['provider_write', 'POST', '/providers'],
+  ['provider_delete', 'DELETE', '/providers/test'],
+  ['skills_list', 'GET', '/skills'],
   ['session_update', 'POST', '/sessions/SESSION/config'],
   ['session_list', 'GET', '/sessions'],
   ['model_list', 'GET', '/models'],
@@ -38,6 +42,11 @@ const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['interaction_resolve', 'POST', '/sessions/SESSION/interactions/turn-1:approval:1'],
   ['abort', 'POST', '/sessions/SESSION/abort'],
   ['events_connect', 'GET', '/sessions/SESSION/events?format=direct'],
+  ['session_rewind_targets', 'GET', '/sessions/SESSION/rewind-targets'],
+  ['session_rewind', 'POST', '/sessions/SESSION/rewind'],
+  ['session_queue', 'POST', '/sessions/SESSION/queue'],
+  ['session_task_control', 'POST', '/sessions/SESSION/tasks'],
+  ['session_files', 'GET', '/sessions/SESSION/files'],
 ];
 
 // The launcher is exercised as a real child process: pair with a pre-shared
@@ -398,7 +407,7 @@ describe('term2 serve (child process)', () => {
           sign('other-owner', purpose, { sessionId }),
         );
         expect(otherOwner.status, `${purpose}: ${otherOwner.raw}`).toBe(404);
-      } else if (/^(settings|credential|oauth)_/.test(purpose)) {
+      } else if (/^(settings|credential|oauth|provider|skills)_/.test(purpose)) {
         const otherOwner = await socketRequest(socketPath, method, route, {}, sign('other-owner', purpose));
         expect(otherOwner.status, purpose).toBe(403);
         expect(jsonBody(otherOwner).error.code).toBe('settings_forbidden');

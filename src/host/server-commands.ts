@@ -84,6 +84,11 @@ export function projectServerNativeCommand(result: WireCommandResult): ServerRes
     body: safeNativeCommandResult(result),
   };
 }
+export function projectServerRewind(result: WireCommandResult): ServerResult {
+  if (!('receipt' in result)) return result.ok ? unavailable('durable command receipt') : commandFailure(result);
+  if (!result.ok) return projectNegativeReceipt(result.receipt);
+  return { status: result.kind === 'command_pending' ? 202 : 200, body: safeNativeCommandResult(result) };
+}
 /** Retain structural receipt evidence while applying the established safe diagnostic redaction. */
 export function safeNativeCommandResult(result: WireCommandResult): WireCommandResult {
   if (!('receipt' in result))

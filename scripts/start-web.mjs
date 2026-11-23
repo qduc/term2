@@ -10,9 +10,49 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 const project = fileURLToPath(new URL('./web-client/', import.meta.url));
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log('Usage: term2-web\nStart the local term2 gateway and web interface (PORT defaults to 3000).');
+const argv = process.argv.slice(2);
+if (argv.includes('--help') || argv.includes('-h')) {
+  console.log(
+    [
+      'Usage: term2-web [options]',
+      'Start the local term2 gateway and web interface (PORT defaults to 3000).',
+      '',
+      'Options:',
+      '  --allow-write              Allow selecting folders with read-and-write access',
+      '  --workspace-root <dir>     Allow selecting folders inside <dir> (repeatable; defaults to home)',
+      '  --port <port>              Port for the local web interface (overrides PORT env var)',
+      '  -h, --help                 Show this help message',
+    ].join('\n'),
+  );
   process.exit(0);
+}
+let allowWrite = false;
+let portOverride;
+const workspaceRoots = [];
+for (let index = 0; index < argv.length; index += 1) {
+  const token = argv[index];
+  if (token === '--allow-write') {
+    allowWrite = true;
+  } else if (token === '--workspace-root') {
+    const value = argv[index + 1];
+    if (!value || value.startsWith('--')) {
+      console.error('term2-web: --workspace-root requires a directory path');
+      process.exit(1);
+    }
+    workspaceRoots.push(path.resolve(value));
+    index += 1;
+  } else if (token === '--port') {
+    const value = argv[index + 1];
+    if (!value || !/^\d+$/.test(value)) {
+      console.error('term2-web: --port requires a numeric port');
+      process.exit(1);
+    }
+    portOverride = value;
+    index += 1;
+  } else {
+    console.error(`term2-web: unknown option "${token}" (use --help for usage)`);
+    process.exit(1);
+  }
 }
 if (!existsSync(path.join(project, '.next', 'BUILD_ID'))) {
   console.error('The term2 web build is missing. Reinstall the npm package, or pack it after running pnpm build.');
@@ -62,23 +102,23 @@ try {
   writeFileSync(key, privateKey, { mode: 0o600 });
   writeFileSync(publicKeyPath, publicKey);
 
-  const gateway = start(
-    [
-      cli,
-      'serve',
-      '--socket',
-      socket,
-      '--local-owner',
-      owner,
-      '--issuer',
-      issuer,
-      '--audience',
-      audience,
-      '--bff-key',
-      `${keyId}=${publicKeyPath}`,
-    ],
-    { stdio: ['ignore', 'inherit', 'pipe'] },
-  );
+  const serveArgs = [
+    cli,
+    'serve',
+    '--socket',
+    socket,
+    '--local-owner',
+    owner,
+    '--issuer',
+    issuer,
+    '--audience',
+    audience,
+    '--bff-key',
+    `${keyId}=${publicKeyPath}`,
+    ...(allowWrite ? ['--allow-write'] : []),
+    ...workspaceRoots.flatMap((root) => ['--workspace-root', root]),
+  ];
+  const gateway = start(serveArgs, { stdio: ['ignore', 'inherit', 'pipe'] });
   const ready = new Promise((resolve) => {
     createInterface({ input: gateway.stderr }).on('line', (line) => {
       if (line.startsWith('GATEWAY_READY ')) resolve(true);
@@ -91,9 +131,11 @@ try {
       stdio: ['ignore', 'inherit', 'inherit'],
       env: {
         ...process.env,
+        ...(portOverride !== undefined ? { PORT: portOverride } : {}),
         NODE_ENV: 'production',
         NEXT_TELEMETRY_DISABLED: '1',
         TERM2_PACKAGED_WEB: 'true',
+        TERM2_WEB_ALLOW_WRITE: allowWrite ? 'true' : 'false',
         TERM2_WEB_CLIENT_ALLOWED_HOSTS: '',
         TERM2_GATEWAY_SOCKET_PATH: socket,
         TERM2_GATEWAY_BFF_PRIVATE_KEY_PATH: key,

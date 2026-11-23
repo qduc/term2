@@ -60,21 +60,22 @@ function getSessionTitle(
   workspaceLabel?: string,
   workspaceDisplayName?: string,
 ): string {
-  if (firstMessage && firstMessage.trim().length > 0) {
-    const firstLine = firstMessage.trim().split('\n')[0];
-    return firstLine.length > 40 ? `${firstLine.slice(0, 40)}…` : firstLine;
+  const bestMessage = firstMessage?.trim() || session.title?.trim();
+  if (bestMessage && bestMessage.length > 0) {
+    const firstLine = bestMessage.split('\n')[0];
+    return firstLine.length > 44 ? `${firstLine.slice(0, 44)}…` : firstLine;
   }
   if (workspaceDisplayName && workspaceDisplayName.trim().length > 0) {
-    return `${workspaceDisplayName.trim()} session`;
+    return `${workspaceDisplayName.trim()} chat`;
   }
   if (workspaceLabel && workspaceLabel.trim().length > 0) {
     const label = workspaceLabel.trim();
     if (!label.startsWith('ws_')) {
       const base = label.includes('/') ? label.split('/').filter(Boolean).pop() : label;
-      return base ? `${base} session` : 'Agent session';
+      return base ? `${base} chat` : 'New chat';
     }
   }
-  return 'Agent session';
+  return 'New chat';
 }
 
 export function Term2SessionList({
@@ -137,12 +138,12 @@ export function Term2SessionList({
         disabled={!workspaceId}
         onClick={onCreate}
       >
-        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-teal-600 text-white dark:bg-teal-500 dark:text-zinc-950">
           <Plus aria-hidden className="h-3.5 w-3.5" strokeWidth={2.25} />
         </span>
-        Open chat for selected folder
+        New chat
       </button>
-      {sessions.length > 4 && (
+      {sessions.length > 1 && (
         <label className="mb-2 flex items-center gap-2 rounded-lg bg-black/[0.04] px-2.5 py-1.5 text-sm transition-colors focus-within:bg-white focus-within:ring-1 focus-within:ring-black/10 dark:bg-white/[0.05] dark:focus-within:bg-white/[0.07] dark:focus-within:ring-white/10">
           <Search aria-hidden className="h-3.5 w-3.5 text-zinc-400" />
           <input
@@ -150,7 +151,7 @@ export function Term2SessionList({
             aria-label="Search chats"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search"
+            placeholder="Search chats…"
             className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-400 [&::-webkit-search-cancel-button]:hidden"
           />
         </label>

@@ -1,3 +1,16 @@
+## [2.0.1] - 2026-11-23
+
+### Improvements
+
+- Reduce the fixed model-request prefix by shortening tool descriptions and presented schemas, and keep large skill catalogs within a fixed budget while preserving skill discovery.
+- Keep successful unattended workspace-snapshot reports out of the interactive TUI while continuing to show snapshot failures and refusal notices.
+- Show the cursor and complete draft in menu text fields, with `Ctrl+A` / `Ctrl+E` and word-jump shortcuts for faster editing.
+
+### Bug Fixes
+
+- Load skills whose YAML frontmatter uses multiline values.
+- Make the `glob` tool's `find` fallback include files at the pattern root for globstar patterns such as `**/*.md` when `fd` is unavailable.
+
 ## [2.0.0] - 2026-11-22
 
 ### Breaking Changes

@@ -2374,7 +2374,7 @@ fs.createWriteStream = (filename, options) => {
         fs.mkdirSync(path.join(repo, '.agents/skills/bare-probe'), { recursive: true });
         fs.writeFileSync(
           path.join(repo, '.agents/skills/bare-probe/SKILL.md'),
-          '---\nname: bare-probe\ndescription: BARE_SKILL_CATALOG_SENTINEL\n---\nProbe body.\n',
+          '---\nname: bare-probe\ndescription: >\n  BARE_SKILL_CATALOG_SENTINEL\n  multiline frontmatter\n---\nProbe body.\n',
         );
         const mock = await startModelMock(['mock-alpha'], (n) =>
           n === 1
@@ -2488,7 +2488,7 @@ fs.createWriteStream = (filename, options) => {
           expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
           expect(system).toContain('report blocked');
           expect(system).not.toContain('goal_check');
-          expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL');
+          expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL multiline frontmatter');
           expect(system).toContain('read its SKILL.md with the shell');
           expect(system).not.toContain('activate_skill');
           expect(system).toContain(`cwd (you're already here, don't \`cd\` to it): ${repo}`);

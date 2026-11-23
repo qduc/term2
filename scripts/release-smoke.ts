@@ -21,7 +21,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, get as httpGet, type IncomingMessage, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,7 +57,10 @@ if (!tgz || !existsSync(tgz)) fail('--tgz <path to the packed term2 tarball> is 
 try {
   const cli = install(resolve(tgz!));
   if (has('--record')) await record(cli);
-  else await replayAll(cli);
+  else {
+    await smokeWeb(join(dirname(cli), 'term2-web'));
+    await replayAll(cli);
+  }
 } finally {
   if (!has('--keep')) rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   else console.error(`[release-smoke] kept ${root}`);
@@ -218,6 +221,57 @@ function install(tarball: string): string {
 
 function cliVersion(cli: string): string {
   return spawnSync(cli, ['--version'], { encoding: 'utf8', env: isolatedEnv() }).stdout.trim();
+}
+
+async function smokeWeb(bin: string): Promise<void> {
+  const env = { ...isolatedEnv(), PORT: '0' };
+  mkdirSync(env.HOME!, { recursive: true });
+  const child = spawn(bin, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = '';
+  const closed = new Promise<number | null>((resolve) => child.once('close', resolve));
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const origin = await new Promise<string>((resolve, reject) => {
+      deadline = setTimeout(() => reject(new Error('term2-web did not become ready')), 20_000);
+      child.once('error', reject);
+      void closed.then((code) => reject(new Error(`term2-web exited with code ${code}`)));
+      child.stderr.on('data', (chunk) => (output += chunk));
+      child.stdout.on('data', (chunk) => {
+        output += chunk;
+        const url = output.match(/Local:\s+(http:\/\/127\.0\.0\.1:\d+)/)?.[1];
+        if (url && /Ready in/.test(output)) resolve(url);
+      });
+    });
+    const options = { signal: AbortSignal.timeout(10_000) };
+    const page = await fetch(origin, options);
+    const html = await page.text();
+    const js = html.match(/src="(\/_next\/static\/[^" ]+\.js)"/)?.[1];
+    if (!page.ok || !html.includes('<title>term2 web</title>') || !js) throw new Error('Web page is incomplete');
+    const asset = await fetch(new URL(js, origin), options);
+    if (!asset.ok || !(await asset.text()).length) throw new Error('Browser bundle is missing');
+    const workspaces = await fetch(`${origin}/api/agent/workspaces`, options);
+    const result = await workspaces.text();
+    if (!workspaces.ok || !Array.isArray(JSON.parse(result).workspaces)) {
+      throw new Error(`Signed gateway workspace request failed (${workspaces.status}): ${result}`);
+    }
+    // Use raw HTTP: fetch can replace the supplied Host header with the URL host.
+    const foreignHostStatus = await new Promise<number | undefined>((resolve, reject) => {
+      httpGet(`${origin}/api/agent/workspaces`, { ...options, headers: { host: 'example.invalid' } }, (response) => {
+        response.resume();
+        resolve(response.statusCode);
+      }).once('error', reject);
+    });
+    if (foreignHostStatus !== 403) throw new Error(`Non-local Host was not refused (${foreignHostStatus})`);
+    console.log('[release-smoke] packaged term2-web served HTML, JavaScript and a signed gateway request');
+  } catch (error) {
+    throw new Error(`Packaged web smoke failed: ${error}\n${output}`, { cause: error });
+  } finally {
+    clearTimeout(deadline);
+    child.kill('SIGTERM');
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 10_000);
+    await closed;
+    clearTimeout(timeout);
+  }
 }
 
 function isolatedEnv(): NodeJS.ProcessEnv {

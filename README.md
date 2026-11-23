@@ -97,7 +97,7 @@ See [approvals](https://qduc.github.io/term2/safety/approvals/) and [sandbox bou
 Supported:
 
 - The interactive TUI and headless runs, including `--resume` and JSON output.
-- The web/server host (`term2 serve`) with the separately built [`web-client/`](web-client/) from the same source revision. See [gateway setup](https://qduc.github.io/term2/remote/web-gateway/) for pairing, BFF keys and remote-access limits.
+- The local web interface (`term2-web`) and private gateway (`term2 serve`). See [web setup](https://qduc.github.io/term2/remote/web-gateway/) for connection and access limits.
 - The ACP subset described below: stable ACP v1 for editors such as JetBrains Air and Zed, and experimental ACP v2, an upstream draft verified only against the SDK 1.4.0 reference client.
 - The Discord bridge for opted-in interactive sessions, subject to the tested scope and limits in its guide.
 
@@ -140,7 +140,7 @@ pnpm --dir website build
 pnpm --dir website preview
 ```
 
-The separate private Next.js [`web-client/`](web-client/) app connects to the `term2 serve` gateway. It is not included in the npm CLI package; frontend updates require updating and rebuilding that app separately. Gateway backend fixes ship with the CLI. See [gateway setup](https://qduc.github.io/term2/remote/web-gateway/).
+Run `term2-web` after installing the npm package, then open `http://127.0.0.1:3000`. It starts the bundled web app and its private gateway together, without pairing. Press `Ctrl+C` to stop both. Access is local and workspace grants are read-only by default. See [web setup](https://qduc.github.io/term2/remote/web-gateway/) for details.
 
 ## License
 

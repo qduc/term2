@@ -270,13 +270,16 @@ importers:
         version: 5.3.2
       ink:
         specifier: ^7.0.1
-        version: 7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.0)
+        version: 7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.5)
       ink-prompt:
         specifier: ^0.4.3
-        version: 0.4.3(patch_hash=9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044)(ink@7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.0))(react@19.2.0)
+        version: 0.4.3(patch_hash=9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044)(ink@7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.5))(react@19.2.5)
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
+      jsonwebtoken:
+        specifier: ^9.0.3
+        version: 9.0.3
       koffi:
         specifier: 2.14.1
         version: 2.14.1
@@ -286,12 +289,18 @@ importers:
       meow:
         specifier: ^11.0.0
         version: 11.0.0
+      next:
+        specifier: 16.2.4
+        version: 16.2.4(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       openai:
         specifier: ^6.9.1
         version: 6.37.0(ws@8.21.0)(zod@4.1.13)
       react:
-        specifier: ^19.0.0
-        version: 19.2.0
+        specifier: 19.2.5
+        version: 19.2.5
+      react-dom:
+        specifier: 19.2.5
+        version: 19.2.5(react@19.2.5)
       ssh2:
         specifier: ^1.17.0
         version: 1.17.0
@@ -3449,10 +3458,6 @@ packages:
     peerDependencies:
       react: ^19.2.0
 
-  react@19.2.0:
-    resolution: {integrity: sha512-tmbWg6W31tQLeB5cdIBOicJDJRR2KzXsV7uSK9iNfLWQ5bIZfxuPEHp7M8wiHyHnn0DD1i7w3Zmin0FtkrwoCQ==}
-    engines: {node: '>=0.10.0'}
-
   react@19.2.5:
     resolution: {integrity: sha512-llUJLzz1zTUBrskt2pwZgLq59AemifIftw4aB7JxOqf1HY2FDaGDxgwpAPVzHU1kdWabH7FauP4i1oEeer2WCA==}
     engines: {node: '>=0.10.0'}
@@ -6219,16 +6224,16 @@ snapshots:
 
   ini@1.3.8: {}
 
-  ink-prompt@0.4.3(patch_hash=9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044)(ink@7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.0))(react@19.2.0):
+  ink-prompt@0.4.3(patch_hash=9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044)(ink@7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.5))(react@19.2.5):
     dependencies:
-      ink: 7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.0)
-      react: 19.2.0
+      ink: 7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.5)
+      react: 19.2.5
 
   ink-testing-library@4.0.0(@types/react@19.2.7):
     optionalDependencies:
       '@types/react': 19.2.7
 
-  ink@7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.0):
+  ink@7.0.1(patch_hash=6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc)(@types/react@19.2.7)(react@19.2.5):
     dependencies:
       '@alcalzone/ansi-tokenize': 0.3.0
       ansi-escapes: 7.3.0
@@ -6243,8 +6248,8 @@ snapshots:
       indent-string: 5.0.0
       is-in-ci: 2.0.0
       patch-console: 2.0.0
-      react: 19.2.0
-      react-reconciler: 0.33.0(react@19.2.0)
+      react: 19.2.5
+      react-reconciler: 0.33.0(react@19.2.5)
       scheduler: 0.27.0
       signal-exit: 3.0.7
       slice-ansi: 9.0.0
@@ -7431,12 +7436,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  react-reconciler@0.33.0(react@19.2.0):
+  react-reconciler@0.33.0(react@19.2.5):
     dependencies:
-      react: 19.2.0
+      react: 19.2.5
       scheduler: 0.27.0
-
-  react@19.2.0: {}
 
   react@19.2.5: {}
 

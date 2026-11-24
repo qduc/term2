@@ -985,8 +985,28 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       }
       break;
     }
+    case 'task_progress': {
+      // Like the TUI reducer: keep the task's latest step and time current, so the running
+      // tasks panel can say what it is doing. Output text itself stays in the evidence list.
+      const taskId = typeof payload.taskId === 'string' ? payload.taskId : undefined;
+      const at = typeof payload.at === 'number' && Number.isFinite(payload.at) ? payload.at : undefined;
+      const tasks = previous.nativeState?.tasks;
+      if (taskId && at !== undefined && tasks?.some((item) => item.id === taskId)) {
+        const observation =
+          payload.observation && typeof payload.observation === 'object' && !Array.isArray(payload.observation)
+            ? payload.observation
+            : undefined;
+        view.nativeState = {
+          ...previous.nativeState,
+          tasks: tasks.map((item) =>
+            item.id === taskId ? { ...item, lastActivityAt: at, ...(observation ? { lastObservation: observation } : {}) } : item,
+          ),
+        };
+      }
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      break;
+    }
     case 'queue_changed':
-    case 'task_progress':
     case 'automatic_memory_notice':
     case 'command_started':
     case 'command_finished':

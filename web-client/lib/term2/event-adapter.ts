@@ -544,15 +544,6 @@ export function presentTerm2SessionView(view: Term2SessionView): Term2SessionVie
     : view.turns;
   return {
     ...view,
-    ...(payload
-      ? {
-          status: 'error' as const,
-          error:
-            typeof payload.reason === 'string'
-              ? payload.reason
-              : 'Live runtime failure; refresh for current accepted state.',
-        }
-      : {}),
     ...(hasOverlay ? { turns } : {}),
     ...(view.branches
       ? {
@@ -1073,8 +1064,9 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
           upsertTurnTextItem(item, `${item.turnId}:final`, finalText);
         }
       }
-      view.status = 'error';
-      view.error = item.error;
+      // The failure stays on the turn. The session can take the next prompt.
+      view.status = 'connected';
+      view.error = null;
       break;
     }
     case 'turn_aborted': {

@@ -802,7 +802,11 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       if (view.pendingInteraction && view.pendingInteraction.interaction.interactionId !== interactionId)
         throw new Term2ProtocolError('Resolved interaction is not current');
       replaceInteraction(view, null);
-      view.status = 'running';
+      // Like the TUI reducer: a resolution resumes a running root turn; a background task's
+      // approval resolved while the chat is idle leaves it idle.
+      view.status = view.turns.some((turn) => turn.status === 'streaming' || turn.status === 'pending')
+        ? 'running'
+        : 'connected';
       break;
     }
     case 'interaction_recovered': {

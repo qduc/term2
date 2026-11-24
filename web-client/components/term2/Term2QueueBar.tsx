@@ -3,36 +3,7 @@
 import { useState } from 'react';
 import { PauseCircle, Pencil, Play, Trash2, X } from 'lucide-react';
 import type { QueueManageAction, Term2SessionView } from '../../lib/term2/types';
-
-interface QueueEntry {
-  messageId: string;
-  text: string;
-  delivery: string;
-}
-
-function readQueueEntries(view: Term2SessionView): QueueEntry[] {
-  const fromChanges = [...(view.nativeChanges ?? [])]
-    .reverse()
-    .find((c) => c.type === 'queue_changed');
-  const rawList =
-    fromChanges && Array.isArray(fromChanges.payload.entries)
-      ? fromChanges.payload.entries
-      : Array.isArray(view.hydration?.snapshot.queue)
-        ? (view.hydration?.snapshot.queue as unknown[])
-        : [];
-  const entries: QueueEntry[] = [];
-  for (const item of rawList) {
-    if (!item || typeof item !== 'object') continue;
-    const record = item as Record<string, unknown>;
-    if (typeof record.messageId !== 'string') continue;
-    entries.push({
-      messageId: record.messageId,
-      text: typeof record.text === 'string' ? record.text : '',
-      delivery: typeof record.delivery === 'string' ? record.delivery : 'follow_up',
-    });
-  }
-  return entries;
-}
+import { readQueueEntries } from '../../lib/term2/queue';
 
 export function Term2QueueBar({
   view,

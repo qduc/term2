@@ -1092,7 +1092,13 @@ export const term2Client = {
     return postJson(
       `/agent/sessions/${encodeURIComponent(id(sessionId))}/tasks`,
       body,
-      (value): { ok: boolean } => ({ ok: object(value).ok === true }),
+      (value): { ok: boolean; drain?: string } => {
+        const input = object(value);
+        // drain_notifications answers with the Session's typed outcome: started, duplicate, empty or busy.
+        const result = input.result && typeof input.result === 'object' ? (input.result as Record<string, unknown>) : {};
+        const drain = result.result && typeof result.result === 'object' ? (result.result as Record<string, unknown>).kind : undefined;
+        return { ok: input.ok === true, ...(typeof drain === 'string' ? { drain } : {}) };
+      },
       signal,
     );
   },

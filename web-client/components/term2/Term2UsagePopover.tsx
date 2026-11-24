@@ -30,10 +30,11 @@ function formatReset(resetAt: number): string {
 }
 
 /**
- * The session's subscription allowance. The wire carries no quota change, so it is read after each
- * finished turn (the provider reports it with each response) and when the model changes.
+ * The session's subscription allowance. The wire carries no quota change, so it is reread whenever
+ * `refresh` changes: the provider reports it with every model response, including each step of a
+ * tool loop, not only when the turn ends.
  */
-function useSessionQuota(sessionId: string, finishedTurns: number, model: string | undefined): SessionQuota | null {
+function useSessionQuota(sessionId: string, refresh: string): SessionQuota | null {
   const [quota, setQuota] = useState<{ sessionId: string; value: SessionQuota } | null>(null);
   useEffect(() => {
     if (!sessionId) return;
@@ -43,7 +44,7 @@ function useSessionQuota(sessionId: string, finishedTurns: number, model: string
       .then((value) => setQuota({ sessionId, value }))
       .catch(() => undefined);
     return () => controller.abort();
-  }, [sessionId, finishedTurns, model]);
+  }, [sessionId, refresh]);
   return quota?.sessionId === sessionId ? quota.value : null;
 }
 
@@ -108,8 +109,14 @@ export function Term2UsagePopover({
   const hasCost = Boolean(receiptSummary && receiptSummary.pricedRequests > 0);
   const knownUsd = hasCost && receiptSummary ? receiptSummary.knownUsdMicros / 1_000_000 : null;
 
-  const finishedTurns = allTurns.filter((turn) => turn.status !== 'streaming' && turn.status !== 'pending').length;
-  const quota = useSessionQuota(view.sessionId, finishedTurns, config ? `${config.providerId}/${config.modelId}` : undefined);
+  // One step per model response seen: a finished turn, or a tool call a response asked for.
+  const responses = allTurns.reduce(
+    (count, turn) => count + turn.commands.length + (turn.status !== 'streaming' && turn.status !== 'pending' ? 1 : 0),
+    0,
+  );
+  const model = config ? `${config.providerId}/${config.modelId}` : '';
+  // Opening the popover rereads too, so what it shows is never older than the click.
+  const quota = useSessionQuota(view.sessionId, `${responses}:${model}:${open ? 'open' : ''}`);
   const windows = liveWindows(quota);
   const subscription = quota?.subscription === true;
   // The pill names the tightest window: the one closest to running out.

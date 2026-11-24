@@ -174,7 +174,7 @@ export class DirectGlobalConfiguration {
     if (current.revision !== expectedRevision) {
       throw new DirectHostConfigError('settings_conflict', 'config', {
         currentRevision: current.revision,
-        projection: current,
+        projection: await this.#withSandboxNotice(current),
       });
     }
     const finalByKey = new Map<string, unknown>();

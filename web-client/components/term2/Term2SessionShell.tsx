@@ -33,6 +33,9 @@ import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2SessionList } from './Term2SessionList';
 import { Term2StatusBanner } from './Term2StatusBanner';
 import { ChatHeader } from '../ChatHeader';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Term2FolderSelector, type SelectedTerm2Workspace } from './Term2FolderSelector';
 import { Term2SetupDialog } from './Term2SetupDialog';
 import { Term2SettingsPanel } from './Term2SettingsPanel';
@@ -66,6 +69,8 @@ import type {
 } from '../../lib/term2/types';
 
 const PROMPT_HISTORY_KEY = 'term2.web.promptHistory';
+/** Radix Select reserves the empty string, so the "no folder" option uses a sentinel. */
+const NO_WORKSPACE = '__none__';
 const DISPLAY_MODE_KEY = 'term2.web.displayMode';
 const NOTIFICATIONS_KEY = 'term2.web.notifications';
 const DIAGNOSTICS_KEY = 'term2.web.diagnostics';
@@ -206,7 +211,7 @@ export function Term2SessionShell({
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const savedDraftRef = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const skillsRef = useRef<HTMLDivElement>(null);
+  const skillPickedRef = useRef(false);
 
   const [workspaceMetadata, setWorkspaceMetadata] = useState<
     Record<string, { displayName: string; fullPath: string; access?: string }>
@@ -434,22 +439,6 @@ export function Term2SessionShell({
       return next;
     });
   };
-
-  useEffect(() => {
-    if (!skillsOpen) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!skillsRef.current?.contains(event.target as Node)) setSkillsOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSkillsOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [skillsOpen]);
 
   const effectiveAllowWrite = allowWrite || settings?.settings.safety.workspaceAccess === 'read_write';
 
@@ -983,64 +972,54 @@ export function Term2SessionShell({
           >
             <Wordmark />
           </button>
-          <button
+          <Button
             type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-black/[0.05] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.07] dark:hover:text-zinc-100"
+            variant="ghost"
+            size="icon"
             aria-label="Close chat history"
             onClick={() => setSidebarOpen(false)}
           >
-            <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
+            <PanelLeft strokeWidth={1.75} />
+          </Button>
         </div>
         <div className="px-3 pb-3 pt-1">
           <label className="sr-only" htmlFor="agent-workspace">
             Saved folders
           </label>
-          <div className="relative">
-            <Folder
-              aria-hidden
-              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
-              strokeWidth={1.75}
-            />
-            <select
-              id="agent-workspace"
-              value={session.selectedWorkspaceId ?? ''}
-              onChange={(event) => chooseWorkspace(event.target.value)}
-              disabled={loadingWorkspaces || (session.workspaces.length === 0 && !session.selectedWorkspaceId)}
-              className="w-full cursor-pointer appearance-none rounded-lg border border-black/[0.08] bg-white py-2 pl-8 pr-8 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] outline-none transition-colors hover:border-black/[0.14] focus-visible:ring-2 focus-visible:ring-teal-500/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-zinc-900 dark:hover:border-white/[0.14]"
-            >
-              <option value="">Choose a folder…</option>
+          <Select
+            value={session.selectedWorkspaceId ?? NO_WORKSPACE}
+            onValueChange={(value) => chooseWorkspace(value === NO_WORKSPACE ? '' : value)}
+            disabled={loadingWorkspaces || (session.workspaces.length === 0 && !session.selectedWorkspaceId)}
+          >
+            <SelectTrigger id="agent-workspace" className="w-full">
+              <Folder aria-hidden strokeWidth={1.75} className="text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectItem value={NO_WORKSPACE}>Choose a folder…</SelectItem>
               {session.workspaces.map((workspace) => {
                 const info = getWorkspaceInfo(workspace.workspaceId);
                 return (
-                  <option key={workspace.workspaceId} value={workspace.workspaceId} title={info.fullPath}>
+                  <SelectItem key={workspace.workspaceId} value={workspace.workspaceId} title={info.fullPath}>
                     {info.displayName} · {info.access === 'read_write' ? 'R/W' : 'Read'}
-                  </option>
+                  </SelectItem>
                 );
               })}
               {session.selectedWorkspaceId &&
                 !session.workspaces.some((workspace) => workspace.workspaceId === session.selectedWorkspaceId) && (
-                  <option value={session.selectedWorkspaceId} title={selectedWorkspaceInfo.fullPath}>
+                  <SelectItem value={session.selectedWorkspaceId} title={selectedWorkspaceInfo.fullPath}>
                     {selectedWorkspaceInfo.displayName} ·{' '}
                     {selectedWorkspaceInfo.access === 'read_write' ? 'R/W' : 'Read'}
-                  </option>
+                  </SelectItem>
                 )}
-            </select>
-            <ChevronsUpDown
-              aria-hidden
-              className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
-            />
-          </div>
+            </SelectContent>
+          </Select>
           {loadingWorkspaces && <p className="mt-1.5 px-1 text-xs text-zinc-500">Loading folders…</p>}
           {localControlEnabled && (
-            <button
-              type="button"
-              className="mt-2 inline-flex items-center gap-1 rounded px-1 py-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
-              onClick={() => setDialog('folder')}
-            >
-              <Plus className="h-3.5 w-3.5" />
+            <Button type="button" variant="ghost" size="xs" className="mt-2" onClick={() => setDialog('folder')}>
+              <Plus />
               Add a folder
-            </button>
+            </Button>
           )}
         </div>
         <div className="flex min-h-0 flex-1 flex-col px-2 pb-3">
@@ -1140,17 +1119,14 @@ export function Term2SessionShell({
                               </p>
                             </div>
                           </div>
-                          <button
+                          <Button
                             type="button"
+                            size="sm"
+                            variant={hasAnyConfiguredProvider ? 'outline' : 'default'}
                             onClick={() => setDialog('settings')}
-                            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                              hasAnyConfiguredProvider
-                                ? 'border border-black/[0.1] text-zinc-700 hover:bg-black/[0.04] dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/[0.06]'
-                                : 'bg-teal-600 text-white hover:bg-teal-700'
-                            }`}
                           >
                             {hasAnyConfiguredProvider ? 'Manage' : 'Connect'}
-                          </button>
+                          </Button>
                         </div>
                       )}
 
@@ -1180,17 +1156,14 @@ export function Term2SessionShell({
                             </div>
                           </div>
                           {localControlEnabled && (
-                            <button
+                            <Button
                               type="button"
+                              size="sm"
+                              variant={!session.selectedWorkspaceId && hasAnyConfiguredProvider ? 'default' : 'outline'}
                               onClick={() => setDialog('folder')}
-                              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                                !session.selectedWorkspaceId && hasAnyConfiguredProvider
-                                  ? 'bg-teal-600 text-white hover:bg-teal-700'
-                                  : 'border border-black/[0.1] text-zinc-700 hover:bg-black/[0.04] dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/[0.06]'
-                              }`}
                             >
                               {session.selectedWorkspaceId ? 'Change' : 'Browse'}
-                            </button>
+                            </Button>
                           )}
                         </div>
 
@@ -1199,19 +1172,22 @@ export function Term2SessionShell({
                             <label className="sr-only" htmlFor="landing-workspace">
                               Saved folders
                             </label>
-                            <select
-                              id="landing-workspace"
-                              value={session.selectedWorkspaceId ?? ''}
-                              onChange={(event) => chooseWorkspace(event.target.value)}
-                              className="w-full rounded-lg border border-black/[0.1] bg-white px-2.5 py-1.5 text-xs text-zinc-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200"
+                            <Select
+                              value={session.selectedWorkspaceId ?? NO_WORKSPACE}
+                              onValueChange={(value) => chooseWorkspace(value === NO_WORKSPACE ? '' : value)}
                             >
-                              <option value="">Choose a saved folder…</option>
-                              {session.workspaces.map((workspace) => (
-                                <option value={workspace.workspaceId} key={workspace.workspaceId}>
-                                  {workspace.label} ({workspace.access === 'read_write' ? 'read & write' : 'read only'})
-                                </option>
-                              ))}
-                            </select>
+                              <SelectTrigger id="landing-workspace" size="sm" className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent position="popper">
+                                <SelectItem value={NO_WORKSPACE}>Choose a saved folder…</SelectItem>
+                                {session.workspaces.map((workspace) => (
+                                  <SelectItem value={workspace.workspaceId} key={workspace.workspaceId}>
+                                    {workspace.label} ({workspace.access === 'read_write' ? 'read & write' : 'read only'})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         )}
                       </div>
@@ -1223,15 +1199,16 @@ export function Term2SessionShell({
                       </p>
                     ) : (
                       session.selectedWorkspaceId && (
-                        <button
+                        <Button
                           type="button"
+                          size="lg"
                           disabled={startingChat}
                           onClick={() => void createNewChat()}
-                          className="mt-6 inline-flex items-center gap-2 rounded-full bg-teal-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="mt-6"
                         >
-                          <Plus aria-hidden className="h-4 w-4" />
+                          <Plus aria-hidden />
                           {startingChat ? 'Starting chat…' : 'Start a new chat'}
-                        </button>
+                        </Button>
                       )
                     )}
                     {!loadingWorkspaces && !localControlEnabled && session.workspaces.length === 0 && !loadError && (
@@ -1257,7 +1234,7 @@ export function Term2SessionShell({
                             : JSON.stringify(activeGoal)}
                       </p>
                       {activeVerification && (
-                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                           Verification: {String(activeVerification.status ?? 'recorded')}
                         </p>
                       )}
@@ -1268,13 +1245,13 @@ export function Term2SessionShell({
                 {sessionId && needsProviderSetup && !willAutoAlign && !configBusy && (
                   <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-100">
                     <h2 className="font-semibold">Connect {providerLabel} to get replies</h2>
-                    <p className="mt-1 text-[13px]">
+                    <p className="mt-1 text-sm">
                       This chat is using {providerLabel}. Paste an API key in Settings, or switch to another configured
                       model using the model picker below.
                     </p>
                     <div className="mt-2.5 flex flex-wrap gap-2">
                       {fallbackConfiguredModel && (
-                        <button
+                        <Button
                           type="button"
                           onClick={() =>
                             void handleUpdateSessionConfig({
@@ -1284,18 +1261,18 @@ export function Term2SessionShell({
                               },
                             })
                           }
-                          className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
+                          size="sm"
                         >
                           Switch to {fallbackConfiguredModel.name ?? fallbackConfiguredModel.id}
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
                         type="button"
                         onClick={() => setDialog('settings')}
-                        className="rounded-lg bg-amber-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-900"
+                        variant="outline" size="sm"
                       >
                         Open provider settings
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -1311,15 +1288,15 @@ export function Term2SessionShell({
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {STARTER_PROMPTS.map((prompt) => (
-                        <button
+                        <Button
                           key={prompt}
                           type="button"
                           disabled={composerDisabled}
                           onClick={() => void submitMessage('auto', prompt)}
-                          className="rounded-full border border-black/[0.1] bg-white px-3 py-1.5 text-xs text-zinc-700 transition-colors hover:border-teal-500/60 hover:text-teal-800 disabled:opacity-40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-teal-400/50 dark:hover:text-teal-200"
+                          variant="outline" size="sm" className="rounded-full"
                         >
                           {prompt}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </div>
@@ -1333,11 +1310,11 @@ export function Term2SessionShell({
                           <p className="whitespace-pre-wrap break-words text-[15px] leading-6">{turn.userText}</p>
                         </div>
                         <div className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-                          <button
+                          <Button
                             type="button"
                             aria-label="Copy message"
                             title="Copy message"
-                            className="rounded-md p-1.5 text-zinc-400 hover:bg-black/[0.05] hover:text-zinc-700 dark:hover:bg-white/[0.07] dark:hover:text-zinc-200"
+                            variant="ghost" size="icon-xs" className="text-muted-foreground"
                             onClick={() => copyTurn(`${turn.turnId}:user`, turn.userText ?? '')}
                           >
                             {copiedTurn === `${turn.turnId}:user` ? (
@@ -1345,20 +1322,20 @@ export function Term2SessionShell({
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
                             )}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
                             aria-label="Rewind and edit from here"
                             title="Rewind & edit from this message"
                             disabled={commandDisabled}
-                            className="rounded-md p-1.5 text-zinc-400 hover:bg-black/[0.05] hover:text-zinc-700 disabled:opacity-30 dark:hover:bg-white/[0.07] dark:hover:text-zinc-200"
+                            variant="ghost" size="icon-xs" className="text-muted-foreground"
                             onClick={() => {
                               setRewindInitialTurnId(turn.turnId);
                               setDialog('rewind');
                             }}
                           >
                             <History className="h-3.5 w-3.5" />
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -1388,14 +1365,14 @@ export function Term2SessionShell({
                                 : `Turn ${turn.status}`}
                           </span>
                           {(turn.status === 'failed' || turn.status === 'aborted') && !turn.error && !commandDisabled && (
-                            <button
+                            <Button
                               type="button"
                               onClick={() => void session.invokeCommand('retry-turn')}
-                              className="inline-flex items-center gap-1 rounded-full border border-black/[0.1] px-2.5 py-0.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06]"
+                              variant="outline" size="xs" className="rounded-full"
                             >
                               <RotateCcw className="h-3 w-3" />
                               Retry turn
-                            </button>
+                            </Button>
                           )}
                         </div>
                       )}
@@ -1411,33 +1388,33 @@ export function Term2SessionShell({
                           </p>
                           <div className="flex shrink-0 items-center gap-2">
                             {!commandDisabled && (
-                              <button
+                              <Button
                                 type="button"
                                 onClick={() => void session.invokeCommand('retry-turn')}
-                                className="rounded-lg bg-red-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-800"
+                                variant="destructive" size="xs"
                               >
                                 Retry
-                              </button>
+                              </Button>
                             )}
                             {localControlEnabled && (
-                              <button
+                              <Button
                                 type="button"
                                 onClick={() => setDialog('settings')}
-                                className="rounded-lg border border-red-300 px-2.5 py-1 text-xs font-medium text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/60"
+                                variant="outline" size="xs"
                               >
                                 Settings
-                              </button>
+                              </Button>
                             )}
                           </div>
                         </div>
                       )}
                       {turn.text && turn.status !== 'streaming' && (
                         <div className="-ml-1.5 flex items-center gap-1 text-zinc-400 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-                          <button
+                          <Button
                             type="button"
                             aria-label="Copy reply"
                             title="Copy reply"
-                            className="rounded-md p-1.5 hover:bg-black/[0.05] hover:text-zinc-700 dark:hover:bg-white/[0.07] dark:hover:text-zinc-200"
+                            variant="ghost" size="icon-xs" className="text-muted-foreground"
                             onClick={() => copyTurn(turn.turnId, turn.text)}
                           >
                             {copiedTurn === turn.turnId ? (
@@ -1445,7 +1422,7 @@ export function Term2SessionShell({
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
                             )}
-                          </button>
+                          </Button>
                           {turn.usage?.totalTokens ? (
                             <span className="text-xs tabular-nums">
                               {turn.usage.totalTokens.toLocaleString()} tokens
@@ -1525,14 +1502,14 @@ export function Term2SessionShell({
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 overflow-visible bg-gradient-to-t from-white from-65% to-transparent px-3 pb-3 pt-10 dark:from-zinc-900 sm:px-6 sm:pb-4">
                 {!pinned && (
                   <div className="mb-2 flex justify-center">
-                    <button
+                    <Button
                       type="button"
                       aria-label="Jump to latest"
-                      className="t2-enter pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-white/95 text-zinc-600 shadow-md backdrop-blur transition-colors hover:text-zinc-900 dark:border-white/10 dark:bg-zinc-800/95 dark:text-zinc-300 dark:hover:text-white"
+                      variant="outline" size="icon" className="t2-enter pointer-events-auto rounded-full shadow-md"
                       onClick={scrollToLatest}
                     >
                       <ArrowDown className="h-4 w-4" />
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -1569,7 +1546,7 @@ export function Term2SessionShell({
                   }}
                   onDragLeave={() => setDraggingFile(false)}
                   onDrop={handleDrop}
-                  className={`pointer-events-auto relative mx-auto max-w-[46rem] overflow-visible rounded-[26px] border bg-white shadow-[0_2px_6px_rgba(0,0,0,0.03),0_12px_32px_-12px_rgba(0,0,0,0.12)] transition-[border-color,box-shadow] focus-within:border-black/[0.16] focus-within:shadow-[0_2px_6px_rgba(0,0,0,0.04),0_16px_40px_-12px_rgba(0,0,0,0.18)] dark:bg-zinc-800/80 dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] dark:focus-within:border-white/[0.18] ${
+                  className={`pointer-events-auto relative mx-auto max-w-[46rem] overflow-visible rounded-3xl border bg-white shadow-[0_2px_6px_rgba(0,0,0,0.03),0_12px_32px_-12px_rgba(0,0,0,0.12)] transition-[border-color,box-shadow] focus-within:border-black/[0.16] focus-within:shadow-[0_2px_6px_rgba(0,0,0,0.04),0_16px_40px_-12px_rgba(0,0,0,0.18)] dark:bg-zinc-800/80 dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] dark:focus-within:border-white/[0.18] ${
                     draggingFile
                       ? 'border-teal-500 ring-2 ring-teal-500/20'
                       : 'border-black/[0.08] dark:border-white/[0.09]'
@@ -1618,7 +1595,7 @@ export function Term2SessionShell({
                             alt={img.name}
                             className="h-9 w-9 rounded-lg object-cover"
                           />
-                          <span className="max-w-[7rem] truncate text-[11px] text-zinc-600 dark:text-zinc-300">
+                          <span className="max-w-[7rem] truncate text-xs text-zinc-600 dark:text-zinc-300">
                             {img.name}
                           </span>
                           <button
@@ -1737,7 +1714,7 @@ export function Term2SessionShell({
                       }
                     }}
                     disabled={composerDisabled}
-                    className="block max-h-60 min-h-[52px] w-full resize-none bg-transparent px-5 pb-1 pt-4 text-[15px] leading-6 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed dark:placeholder:text-zinc-500"
+                    className="block max-h-60 min-h-[52px] w-full resize-none bg-transparent px-5 pb-1 pt-4 text-base leading-6 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed dark:placeholder:text-zinc-500"
                     placeholder={
                       interactionPending
                         ? 'Respond to the approval prompt above to continue…'
@@ -1764,18 +1741,22 @@ export function Term2SessionShell({
                       notice={session.commandNotice}
                       onCommand={(commandId) => void session.invokeCommand(commandId)}
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="icon"
                       disabled={composerDisabled}
                       title="Attach image (or paste / drag-and-drop)"
                       aria-label="Attach image"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-zinc-500 transition-colors hover:bg-black/[0.04] hover:text-zinc-900 disabled:opacity-40 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100"
+                      className="rounded-full"
                     >
-                      <ImagePlus className="h-4 w-4" strokeWidth={1.75} />
-                    </button>
-                    <button
+                      <ImagePlus strokeWidth={1.75} />
+                    </Button>
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="icon"
                       disabled={composerDisabled}
                       title="Mention a file (@)"
                       aria-label="Mention a file"
@@ -1786,39 +1767,56 @@ export function Term2SessionShell({
                         ensureSessionFiles();
                         composerRef.current?.focus();
                       }}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-zinc-500 transition-colors hover:bg-black/[0.04] hover:text-zinc-900 disabled:opacity-40 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100"
+                      className="rounded-full"
                     >
-                      <AtSign className="h-4 w-4" strokeWidth={1.75} />
-                    </button>
-                    <div ref={skillsRef} className="relative">
-                      <button
-                        type="button"
-                        disabled={composerDisabled}
-                        title="Use a skill"
-                        aria-label="Use a skill"
-                        aria-expanded={skillsOpen}
-                        onClick={openSkillsMenu}
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.08] transition-colors hover:bg-black/[0.04] hover:text-zinc-900 disabled:opacity-40 dark:border-white/10 dark:hover:bg-white/[0.06] dark:hover:text-zinc-100 ${
-                          armedSkill
-                            ? 'border-teal-500/50 bg-teal-500/10 text-teal-700 dark:text-teal-300'
-                            : 'text-zinc-500 dark:text-zinc-400'
-                        }`}
+                      <AtSign strokeWidth={1.75} />
+                    </Button>
+                    <Popover
+                      open={skillsOpen}
+                      onOpenChange={(open) => {
+                        if (open) openSkillsMenu();
+                        else setSkillsOpen(false);
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant={armedSkill ? 'secondary' : 'outline'}
+                          size="icon"
+                          disabled={composerDisabled}
+                          title="Use a skill"
+                          aria-label="Use a skill"
+                          className="rounded-full"
+                        >
+                          <Wand2 strokeWidth={1.75} />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        aria-label="Choose a skill"
+                        className="max-h-72 w-[min(22rem,calc(100vw-2rem))] gap-0 overflow-y-auto p-1 scrollbar-thin"
+                        onCloseAutoFocus={(event) => {
+                          // Picking a skill hands focus to the composer rather than back to the trigger.
+                          if (!skillPickedRef.current) return;
+                          skillPickedRef.current = false;
+                          event.preventDefault();
+                          composerRef.current?.focus();
+                        }}
                       >
-                        <Wand2 className="h-4 w-4" strokeWidth={1.75} />
-                      </button>
-                      {skillsOpen && (
                         <Term2SkillsPopover
                           skills={skills}
                           loading={loadingSkills}
                           selectedSkill={armedSkill}
                           onSelect={(skill) => {
                             setArmedSkill(skill ? skill.name : null);
+                            skillPickedRef.current = true;
                             setSkillsOpen(false);
                             composerRef.current?.focus();
                           }}
                         />
-                      )}
-                    </div>
+                      </PopoverContent>
+                    </Popover>
 
                     {sessionConfig && (
                       <>
@@ -1857,51 +1855,56 @@ export function Term2SessionShell({
 
                       {canAbort && hasStreamingTurn && (input.trim() || attachments.length > 0) && (
                         <>
-                          <button
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="xs"
                             onClick={() => void submitMessage('follow_up')}
                             title="Queue message for after this turn (Alt+Enter)"
-                            className="rounded-full border border-black/[0.1] px-2.5 py-1 text-[11.5px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-white/15 dark:text-zinc-200 dark:hover:bg-white/[0.08]"
+                            className="rounded-full"
                           >
                             Queue
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            size="xs"
                             onClick={() => void submitMessage('steer')}
                             title="Steer the active turn immediately (Enter)"
-                            className="rounded-full bg-teal-600 px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-teal-700"
+                            className="rounded-full"
                           >
                             Steer
-                          </button>
+                          </Button>
                         </>
                       )}
 
                       {canAbort && hasStreamingTurn ? (
-                        <button
+                        <Button
                           type="button"
+                          size="icon"
                           aria-label="Stop agent turn"
                           title="Stop"
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                          className="rounded-full"
                           onClick={() => void session.abort()}
                         >
-                          <Square className="h-3 w-3 fill-current" />
-                        </button>
+                          <Square className="size-3 fill-current" />
+                        </Button>
                       ) : (
-                        <button
+                        <Button
                           type="button"
+                          size="icon"
                           aria-label="Send message"
                           title="Send (Enter) · new line (Shift+Enter)"
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-white shadow-sm transition-all hover:bg-teal-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none dark:bg-teal-500 dark:text-zinc-950 dark:hover:bg-teal-400 dark:disabled:bg-white/10 dark:disabled:text-zinc-500"
+                          className="rounded-full"
                           disabled={composerDisabled || (!input.trim() && attachments.length === 0)}
                           onClick={() => void submitMessage()}
                         >
-                          <ArrowUp className="h-4 w-4" strokeWidth={2.25} />
-                        </button>
+                          <ArrowUp strokeWidth={2.25} />
+                        </Button>
                       )}
                     </div>
                   </div>
                 </div>
-                <p className="mt-2 hidden text-center text-[11px] text-zinc-400 sm:block dark:text-zinc-500">
+                <p className="mt-2 hidden text-center text-xs text-zinc-400 sm:block dark:text-zinc-500">
                   Enter to send · Shift+Enter for new line · @ mention files · ⌘K actions
                 </p>
               </div>

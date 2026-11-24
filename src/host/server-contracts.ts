@@ -37,6 +37,7 @@ export const ASSERTION_PURPOSES = [
   'session_queue',
   'session_task_control',
   'session_files',
+  'session_quota',
 ] as const;
 export type AssertionPurpose = (typeof ASSERTION_PURPOSES)[number];
 export type GatewayAssertionClaims = {

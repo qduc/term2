@@ -49,6 +49,7 @@ const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['session_queue', 'POST', '/sessions/SESSION/queue'],
   ['session_task_control', 'POST', '/sessions/SESSION/tasks'],
   ['session_files', 'GET', '/sessions/SESSION/files'],
+  ['session_quota', 'GET', '/sessions/SESSION/quota'],
 ];
 
 // The launcher is exercised as a real child process: pair with a pre-shared

@@ -115,8 +115,10 @@ The public facade groups are:
   delivery mode, skill, and bounded image attachments), `abort`,
   `resolveInteraction`, `commands` (compact/retry-tool/retry-turn),
   `listRewindTargets`, `rewindSession`, `manageQueue` (edit/retract/resume/discard),
-  `controlTask` (cancel/check_in/foreground/background/drain_notifications), and
-  `listSessionFiles` (for `@` path mentions). Actual session/turn/request identities
+  `controlTask` (cancel/check_in/foreground/background/drain_notifications),
+  `listSessionFiles` (for `@` path mentions), and `readSessionQuota` (the subscription
+  flag and the provider's last-reported plan windows; the wire carries no quota change, so
+  the usage popover rereads it after each finished turn). Actual session/turn/request identities
   are caller/server data, not browser-generated recovery cursors. New message/command
   intents use real caller-owned keys.
 - Session configuration: `readSessionConfig` (current discovery) and

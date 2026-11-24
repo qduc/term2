@@ -28,6 +28,7 @@ export const rpc = {
   queue: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/queue`,
   tasks: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/tasks`,
   files: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/files`,
+  quota: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/quota`,
   interactions: (sessionId: string, interactionId: string) =>
     `/private/agent/v1/sessions/${sessionId}/interactions/${interactionId}`,
   sessionConfig: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/config`,

@@ -1,5 +1,6 @@
 /** Session HTTP operations use only the attached direct connection and typed protocol commands. */
 import type { WireAdmission, WireCommand } from '../protocol/wire.js';
+import { subscriptionQuotaView } from '../protocol/state.js';
 import type { ServerHostDependencies, ServerResult, ServerSessionRequest } from './server-contracts.js';
 import type { PrivateRoute } from './server-routes.js';
 import { commandFailure, publicError, unavailable } from './server-errors.js';
@@ -308,6 +309,8 @@ export async function handleSessionRoute(
       if (!dependencies.presentation?.listFiles) return unavailable('workspace file listing');
       return { status: 200, body: await dependencies.presentation.listFiles(principal, connection.snapshot) };
     }
+    case 'session_quota':
+      return { status: 200, body: subscriptionQuotaView(connection.snapshot) };
     default:
       return publicError(403, 'gateway_unavailable', 'gateway operation is unavailable');
   }

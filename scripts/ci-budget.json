@@ -1,0 +1,4 @@
+{
+  "maxSeconds": 120,
+  "reason": "Keep every CI lane's code execution time under 2 minutes; raising this ceiling requires owner approval (ci-budget-change PR label) and a concrete justification."
+}

@@ -120,8 +120,11 @@ terminated SSE frames dispatch; EOF does not complete a truncated batch.
 
 Reconnect requests the last fully applied accepted seq. Native capture supplies
 the tail `(fromSeq,toSeq]`, synchronized transient state and then live updates,
-in that order; no current snapshot is prepended to the tail. Disconnect and
-backpressure release only the subscriber attachment, not the Session. A refused
+in that order; no current snapshot is prepended to the tail. A full socket
+buffer makes the stream wait for drain rather than disconnect; a subscriber whose
+frame writes stay backpressured for 10 s in total (stopped, or reading slower
+than the Session emits) is detached. Disconnect and that detach release only the
+subscriber attachment, not the Session. A refused
 replay remains explicit; the browser stops on `replay_unavailable`/410 and offers
 an explicit new hydration cut, without a live-only fallback.
 

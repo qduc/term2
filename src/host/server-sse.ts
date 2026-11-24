@@ -8,8 +8,13 @@ import type { AgentWireV2Envelope } from './server-wire-v2.js';
 import type { ServerResult } from './server-contracts.js';
 
 const SERVER_EVENT_HEARTBEAT_INTERVAL_MS = 15_000;
-// Preserve the gateway's existing replay-drain and live-buffer containment policy. These limits
-// detach only the network subscriber: durable Session work and future attachments remain intact.
+// Containment for a subscriber that stops reading. These limits detach only the network
+// subscriber: durable Session work and future attachments remain intact. A full socket buffer
+// (write() returning false) is ordinary backpressure during a burst, not evidence of a dead
+// reader, so every frame write waits for drain. A subscriber whose frame writes have stayed
+// backpressured for DRAIN_TIMEOUT_MS in total is detached: that covers a reader that stopped and
+// one that keeps reading but slower than the Session emits, and bounds the queued backlog to
+// roughly DRAIN_TIMEOUT_MS of output. A write that is accepted below the buffer limit resets it.
 const DRAIN_TIMEOUT_MS = 10_000;
 const MAX_BUFFERED_EVENTS = 256;
 type StreamFrame = { readonly id: number | null; readonly event?: 'accepted' | 'live'; readonly data: unknown };
@@ -111,9 +116,8 @@ function eventStream(connection: DirectConnection | DirectReplayConnection, enco
           const idLine = (resumable || encoding.acceptedIds) && frame.id !== null ? `id: ${frame.id}\n` : '';
           return response.write(`${eventLine}${idLine}data: ${JSON.stringify(frame.data)}\n\n`);
         };
-        const writeDraining = async (event: WireEvent) => {
-          if (write(event) || closed) return;
-          await new Promise<void>((resolve) => {
+        const waitForDrain = (timeoutMs = DRAIN_TIMEOUT_MS) =>
+          new Promise<void>((resolve) => {
             const done = () => {
               clearTimeout(timer);
               response.off('drain', done);
@@ -123,30 +127,30 @@ function eventStream(connection: DirectConnection | DirectReplayConnection, enco
             const timer = setTimeout(() => {
               disconnect();
               done();
-            }, DRAIN_TIMEOUT_MS);
+            }, Math.max(0, timeoutMs));
             response.once('drain', done);
             response.once('close', done);
             if (response.destroyed) done();
           });
+        // When frame writes first stopped fitting the buffer; null once a write fits again.
+        let backpressuredSince: number | null = null;
+        const writeDraining = async (event: WireEvent) => {
+          if (write(event)) {
+            backpressuredSince = null;
+            return;
+          }
+          if (closed) return;
+          backpressuredSince ??= Date.now();
+          await waitForDrain(DRAIN_TIMEOUT_MS - (Date.now() - backpressuredSince));
         };
         // Consume during snapshot drain so this transport's backlog is bounded. This is only a
         // transient subscriber queue; it is never persisted or used as a reconnect authority.
         const pump = (async () => {
           for await (const event of connection.events) {
             if (closed) break;
-            if (replay) {
-              // The tail is (fromSeq,toSeq] only; never prepend a current snapshot.
-              if (event.seq !== null && event.seq <= replay.toSeq) await writeDraining(event);
-              else if (!write(event)) {
-                disconnect();
-                break;
-              }
-            } else if (live) {
-              if (!write(event)) {
-                disconnect();
-                break;
-              }
-            } else if (buffered.length < MAX_BUFFERED_EVENTS) buffered.push(event);
+            // A replay tail is (fromSeq,toSeq] only; never prepend a current snapshot.
+            if (replay || live) await writeDraining(event);
+            else if (buffered.length < MAX_BUFFERED_EVENTS) buffered.push(event);
             else {
               disconnect();
               break;
@@ -169,7 +173,7 @@ function eventStream(connection: DirectConnection | DirectReplayConnection, enco
           // No await at the empty-buffer/live-cut boundary.
           live = true;
           heartbeat = setInterval(() => {
-            if (!closed && !response.write(`: heartbeat ${new Date().toISOString()}\n\n`)) disconnect();
+            if (!closed && !response.write(`: heartbeat ${new Date().toISOString()}\n\n`)) void waitForDrain();
           }, SERVER_EVENT_HEARTBEAT_INTERVAL_MS);
           heartbeat.unref?.();
           await Promise.race([pump, whenClosed]);

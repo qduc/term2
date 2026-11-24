@@ -5,6 +5,7 @@ import { Check, ChevronDown, Loader2, RefreshCw, Search, Star, TriangleAlert } f
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { ModelSummary, SessionConfigRecord, SessionConfigUpdate, SettingsProjection } from '../../lib/term2/types';
 
@@ -37,6 +38,70 @@ function formatContextWindow(tokens?: number): string | null {
   if (!tokens || tokens <= 0) return null;
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(tokens % 1_000_000 === 0 ? 0 : 1)}M`;
   return `${Math.round(tokens / 1_000)}k`;
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(tokens % 1_000_000 === 0 ? 0 : 1)}M tokens`;
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K tokens`;
+  return `${tokens} tokens`;
+}
+
+function formatPrice(value: number | undefined): string | null {
+  if (value === undefined) return null;
+  if (value === 0) return 'Free';
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: value < 0.1 ? 4 : 2 })}`;
+}
+
+/** What term2 knows about a model: limits and prices from its catalog. Shown on hover or focus. */
+function ModelDetails({ model, providerLabel }: { model: ModelSummary; providerLabel: string }) {
+  const rows: Array<[string, string]> = [];
+  if (model.contextWindow) rows.push(['Context', formatTokens(model.contextWindow)]);
+  if (model.maxOutputTokens) rows.push(['Max output', formatTokens(model.maxOutputTokens)]);
+  const pricing = model.pricing;
+  const input = formatPrice(pricing?.inputPerMTok);
+  const output = formatPrice(pricing?.outputPerMTok);
+  if (input) rows.push(['Input', `${input} / 1M tokens`]);
+  if (output) rows.push(['Output', `${output} / 1M tokens`]);
+  const cacheRead = formatPrice(pricing?.cacheReadPerMTok);
+  const cacheWrite = formatPrice(pricing?.cacheWritePerMTok);
+  if (cacheRead) rows.push(['Cache read', `${cacheRead} / 1M tokens`]);
+  if (cacheWrite) rows.push(['Cache write', `${cacheWrite} / 1M tokens`]);
+  if (model.default_reasoning_level) rows.push(['Default reasoning', model.default_reasoning_level]);
+  return (
+    <div className="space-y-1.5">
+      <div>
+        <div className="break-all font-mono font-medium">{model.id}</div>
+        <div className="opacity-70">
+          {model.name && model.name !== model.id ? `${model.name} · ` : ''}
+          {providerLabel}
+        </div>
+      </div>
+      {rows.length > 0 ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+          {rows.map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="opacity-70">{label}</dt>
+              <dd className="tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="opacity-70">No limits or prices known for this model.</p>
+      )}
+      {pricing?.tiers?.map((tier) => (
+        <p key={tier.inputTokensAbove} className="opacity-70">
+          Above {formatTokens(tier.inputTokensAbove).replace(' tokens', '')} input:{' '}
+          {[
+            formatPrice(tier.inputPerMTok) && `${formatPrice(tier.inputPerMTok)} in`,
+            formatPrice(tier.outputPerMTok) && `${formatPrice(tier.outputPerMTok)} out`,
+          ]
+            .filter(Boolean)
+            .join(', ')}{' '}
+          per 1M
+        </p>
+      ))}
+    </div>
+  );
 }
 
 export function Term2ModelPicker({
@@ -116,9 +181,7 @@ export function Term2ModelPicker({
   const showEffortInChip = effortValue !== 'default';
 
   const trimmedQuery = query.trim();
-  const exactInList = models.some(
-    (m) => m.id === trimmedQuery || `${m.provider}/${m.id}` === trimmedQuery,
-  );
+  const exactInList = models.some((m) => m.id === trimmedQuery || `${m.provider}/${m.id}` === trimmedQuery);
 
   const pickCustom = () => {
     if (!trimmedQuery) return;
@@ -168,7 +231,10 @@ export function Term2ModelPicker({
           className="flex max-h-[26rem] w-[min(23rem,calc(100vw-2rem))] flex-col gap-0 overflow-hidden p-0"
         >
           {warning && (
-            <p role="status" className="border-b bg-amber-500/10 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+            <p
+              role="status"
+              className="border-b bg-amber-500/10 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-300"
+            >
               {warning}
             </p>
           )}
@@ -273,31 +339,41 @@ export function Term2ModelPicker({
                     const ctx = formatContextWindow(model.contextWindow);
                     return (
                       <li key={favKey} className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onSelectModel(model.provider, model.id);
-                            setOpen(false);
-                            setQuery('');
-                          }}
-                          className={cn(
-                            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs outline-none transition-colors hover:bg-accent focus-visible:bg-accent',
-                            isCurrent && 'bg-accent font-medium text-accent-foreground',
-                          )}
-                        >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-mono">{model.id}</span>
-                            {model.name && model.name !== model.id && (
-                              <span className="block truncate text-xs text-muted-foreground">{model.name}</span>
-                            )}
-                          </span>
-                          {ctx && (
-                            <Badge variant="secondary" className="shrink-0 font-mono">
-                              {ctx}
-                            </Badge>
-                          )}
-                          {isCurrent && <Check className="h-3.5 w-3.5 shrink-0" />}
-                        </button>
+                        <Tooltip delayDuration={350}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSelectModel(model.provider, model.id);
+                                setOpen(false);
+                                setQuery('');
+                              }}
+                              className={cn(
+                                'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs outline-none transition-colors hover:bg-accent focus-visible:bg-accent',
+                                isCurrent && 'bg-accent font-medium text-accent-foreground',
+                              )}
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-mono">{model.id}</span>
+                                {model.name && model.name !== model.id && (
+                                  <span className="block truncate text-xs text-muted-foreground">{model.name}</span>
+                                )}
+                              </span>
+                              {ctx && (
+                                <Badge variant="secondary" className="shrink-0 font-mono">
+                                  {ctx}
+                                </Badge>
+                              )}
+                              {isCurrent && <Check className="h-3.5 w-3.5 shrink-0" />}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" align="start" sideOffset={10} className="w-64 text-xs">
+                            <ModelDetails
+                              model={model}
+                              providerLabel={providerLabels.get(model.provider) ?? model.provider}
+                            />
+                          </TooltipContent>
+                        </Tooltip>
                         {onToggleFavorite && (
                           <Button
                             type="button"
@@ -348,9 +424,7 @@ export function Term2ModelPicker({
                 const step = event.key === 'ArrowRight' ? 1 : -1;
                 const next = REASONING_LEVELS[(index + step + REASONING_LEVELS.length) % REASONING_LEVELS.length]!;
                 onSelectEffort(next.value);
-                event.currentTarget
-                  .querySelector<HTMLButtonElement>(`[data-effort="${next.value}"]`)
-                  ?.focus();
+                event.currentTarget.querySelector<HTMLButtonElement>(`[data-effort="${next.value}"]`)?.focus();
               }}
             >
               {REASONING_LEVELS.map((level) => {

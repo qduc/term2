@@ -228,6 +228,16 @@ export interface ModelSummary {
   name?: string;
   default_reasoning_level?: string;
   contextWindow?: number;
+  /** Largest single response, from term2's model catalog. */
+  maxOutputTokens?: number;
+  /** USD per million tokens; tiers apply once input exceeds `inputTokensAbove`. */
+  pricing?: ModelPrices & { tiers?: Array<ModelPrices & { inputTokensAbove: number }> };
+}
+export interface ModelPrices {
+  inputPerMTok?: number;
+  outputPerMTok?: number;
+  cacheReadPerMTok?: number;
+  cacheWritePerMTok?: number;
 }
 export interface SettingsProjection {
   schemaVersion: number;

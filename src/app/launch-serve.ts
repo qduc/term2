@@ -110,7 +110,7 @@ function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, ow
         if (identity && identity.target !== 'local') {
           throw new DirectProtocolError('forbidden', 'This server does not run SSH sessions.');
         }
-        return access.resolveStoredRoot(root);
+        return access.resolveStoredRoot(root, identity);
       },
       // A read grant is a real grant here, enforced by the tools. Stored roots with no grant already threw.
       canRun: () => true,
@@ -171,7 +171,7 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         mode: getProfileLabel(current.profileId),
         approvalMode: current.approvalMode,
         toolPolicy: directServeToolPosture(
-          workspace.access === 'read_write' && allowWrite,
+          workspace.access === 'read_write' && current.workspaceAccess === 'read_write' && allowWrite,
           current.approvalMode !== 'off',
         ),
         configRevision: current.commandRevision,

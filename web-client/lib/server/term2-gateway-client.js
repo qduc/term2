@@ -205,10 +205,10 @@ function workspaceConflictDetails(details) {
 function workspaceConflictMessage({ existingAccess, grantStorage }) {
   const change =
     grantStorage === 'persisted'
-      ? 'To change it, use Change access on this saved folder. Chats started with the current access stop, and open again only if you switch back.'
+      ? 'To change it, use Change access on this saved folder. Existing chats keep working, never with more access than they started with.'
       : grantStorage === 'static'
         ? 'This is a startup-supplied grant, not an editable persisted grant. Ask the operator to review the startup configuration; deleting persisted records cannot change it.'
-        : 'To change it, use Change access on this saved folder; the change lasts until the host restarts. Chats started with the current access stop, and open again only if you switch back.';
+        : 'To change it, use Change access on this saved folder; the change lasts until the host restarts. Existing chats keep working, never with more access than they started with.';
   return `This root is already granted with ${existingAccess} access. Select that access to reuse it. ${change} See docs/contracts/14-agent-wire-v2-server.md, “Same-root access conflict”.`;
 }
 

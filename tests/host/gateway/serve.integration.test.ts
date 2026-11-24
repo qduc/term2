@@ -573,7 +573,7 @@ describe('term2 serve (child process)', () => {
     );
   }, 180_000);
 
-  it('changes and removes a saved folder grant, closing its live sessions and refusing sessions started under other access', async () => {
+  it('changes and removes a saved folder grant; stored sessions reopen no wider than they started or than the grant', async () => {
     const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'serve-grant-edit-')));
     const stateDir = path.join(tempHome, 'gateway-state');
     const workspace = path.join(tempHome, 'workspace');
@@ -787,30 +787,42 @@ describe('term2 serve (child process)', () => {
       }),
     );
 
-    // A session keeps the access it started with, so this one no longer opens under the
-    // read grant. A new session in the folder runs read-only: no write tools reach the model.
+    // One completed turn on a session; returns the tool names its provider request carried.
+    const runTurn = async (id: string, text: string) => {
+      const events = openEventStream(socketPath, id);
+      disposables.push(events.close);
+      await events.waitFor((event) => event.type === 'configuration', 45_000);
+      const turn = await ok(
+        'POST',
+        `/sessions/${id}/messages`,
+        { text, clientRequestId: `grant-edit-${text}` },
+        'message_submit',
+        { sessionId: id },
+      );
+      await events.waitFor((event) => event.type === 'turn_ended' && event.turnId === turn.turnId, 45_000);
+      events.close();
+      return requests.at(-1)!.tools;
+    };
+    const allowsWrite = async (id: string) =>
+      (await ok('POST', `/sessions/${id}/config?format=direct`, {}, 'session_update', { sessionId: id })).toolPolicy
+        .allowWrite as boolean;
+    const readWriteTools = requests[0]!.tools;
+
+    // A stored session runs with the narrower of its starting access and the current grant.
+    // After narrowing, the read & write session still lists and reopens, read-only: no
+    // write tools reach the model.
     const forbidden = { status: 403, body: { error: { code: 'workspace_forbidden' } } };
-    expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
-    const readCreated = await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId });
-    const readSessionId = readCreated.session.id as string;
-    const readStream = openEventStream(socketPath, readSessionId);
-    disposables.push(readStream.close);
-    await readStream.waitFor((event) => event.type === 'configuration', 45_000);
-    const second = await ok(
-      'POST',
-      `/sessions/${readSessionId}/messages`,
-      { text: 'second', clientRequestId: 'grant-edit-2' },
-      'message_submit',
-      { sessionId: readSessionId },
-    );
-    await readStream.waitFor((event) => event.type === 'turn_ended' && event.turnId === second.turnId, 45_000);
-    readStream.close();
-    const writeTools = requests[0]!.tools.filter((name) => !requests[1]!.tools.includes(name));
+    expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions.map((item: any) => item.id)).toEqual([
+      sessionId,
+    ]);
+    const readOnlyTools = await runTurn(sessionId, 'second');
+    const writeTools = readWriteTools.filter((name) => !readOnlyTools.includes(name));
     expect(writeTools.length, JSON.stringify(requests.map((request) => request.tools))).toBeGreaterThan(0);
-    expect(requests[1]!.tools.every((name) => requests[0]!.tools.includes(name))).toBe(true);
+    expect(readOnlyTools.every((name) => readWriteTools.includes(name))).toBe(true);
+    expect(await allowsWrite(sessionId)).toBe(false);
 
     // Widening is allowed because this server was started with --allow-write. It closes the
-    // live read session; the first session opens again and the read one no longer does.
+    // live session, which reopens still read-only; a new session gets write tools.
     const widened = await ok(
       'PUT',
       `/workspaces/${workspaceId}/access`,
@@ -823,17 +835,38 @@ describe('term2 serve (child process)', () => {
       grantVersion: narrowed.grantVersion + 1,
       closedSessions: 1,
     });
-    expect((await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).status).toBe(200);
+    // The first session started read & write, so it is read & write again.
+    expect(await runTurn(sessionId, 'third')).toEqual(readWriteTools);
+    expect(await allowsWrite(sessionId)).toBe(true);
+    // A session started under the read grant stays read-only after widening.
     expect(
-      await call('POST', `/sessions/${readSessionId}`, {}, 'session_read', { sessionId: readSessionId }),
-    ).toMatchObject(forbidden);
+      await ok('PUT', `/workspaces/${workspaceId}/access`, { access: 'read' }, 'workspace_access_update', {
+        workspaceId,
+      }),
+    ).toMatchObject({ workspace: { access: 'read' }, closedSessions: 1 });
+    const readSessionId = (await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId })).session
+      .id as string;
+    expect(await runTurn(readSessionId, 'fourth')).toEqual(readOnlyTools);
+    expect(
+      await ok('PUT', `/workspaces/${workspaceId}/access`, { access: 'read_write' }, 'workspace_access_update', {
+        workspaceId,
+      }),
+    ).toMatchObject({ workspace: { access: 'read_write' }, closedSessions: 1 });
+    expect(await runTurn(readSessionId, 'fifth')).toEqual(readOnlyTools);
+    expect(await allowsWrite(readSessionId)).toBe(false);
+    const newSessionId = (await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId })).session
+      .id as string;
+    expect(await runTurn(newSessionId, 'sixth')).toEqual(readWriteTools);
+    expect(await allowsWrite(newSessionId)).toBe(true);
+    expect(
+      (await ok('GET', '/sessions', undefined, 'session_list')).sessions.map((item: any) => item.id).sort(),
+    ).toEqual([sessionId, readSessionId, newSessionId].sort());
 
     // Removal: the grant leaves the list and the file, and its sessions no longer open.
-    expect(await ok('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId })).toEqual({
-      workspaceId,
-      removed: true,
-      closedSessions: 1,
-    });
+    // The two sessions that just ran are live; listing may have opened the first one too.
+    const removed = await ok('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId });
+    expect(removed).toMatchObject({ workspaceId, removed: true });
+    expect(removed.closedSessions).toBeGreaterThanOrEqual(2);
     expect(storedGrants()).toEqual([]);
     expect((await ok('GET', '/workspaces', undefined, 'workspace_list')).workspaces).toEqual([]);
     expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions).toEqual([]);
@@ -842,7 +875,7 @@ describe('term2 serve (child process)', () => {
       await call(
         'POST',
         `/sessions/${sessionId}/messages`,
-        { text: 'third', clientRequestId: 'grant-edit-3' },
+        { text: 'after removal', clientRequestId: 'grant-edit-removed' },
         'message_submit',
         { sessionId },
       ),
@@ -874,7 +907,7 @@ describe('term2 serve (child process)', () => {
     expect(reselected.workspaceId).not.toBe(workspaceId);
     expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions).toEqual([]);
     expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(6);
 
     child.removeAllListeners();
     child.kill('SIGTERM');

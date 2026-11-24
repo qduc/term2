@@ -423,7 +423,10 @@ refused, and widening makes the checks a `read_write` selection makes. They do
 not touch sessions. `serverWorkspaceAdministration` is the surface `launchServe`
 hands the server: it runs an edit, then calls
 `DirectHost.closeWorkspaceSessions(root)` so live sessions in that root stop and
-any reopen goes back through the grant checks. A session reopens only with the
-access in its `session_started` `workspaceIdentity`; `bindDirectSessionAccess`
-refuses a mismatch as `workspace_grant_mismatch` before the store does. The
+any reopen goes back through the grant checks. A stored session reopens with
+the narrower of the access in its `session_started` `workspaceIdentity` and the
+current grant (`bindDirectSessionAccess.resolveStoredRoot`); the session store
+refuses a resolved workspace wider than that identity, and the runtime builds
+its tools from the resolved one. `sessionConfiguration().workspaceAccess`
+reports it. The
 wire behavior is in contract 13, "Saved folder edits".

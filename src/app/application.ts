@@ -74,6 +74,8 @@ export type DirectSessionConfiguration = {
   readonly reasoningEffort: DirectConfigurationIntent['reasoningEffort'];
   readonly profileId: string;
   readonly approvalMode: DirectApprovalMode;
+  /** The access the live session's tools run with; can be narrower than the current grant. */
+  readonly workspaceAccess: Workspace['access'];
 };
 
 export type DirectApplication = {
@@ -303,6 +305,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
           reasoningEffort: record.configurationSettings.get('agent.reasoningEffort'),
           profileId: record.profileId,
           approvalMode: record.configurationSettings.get('shell.autoApproveMode'),
+          workspaceAccess: capture.state.workspace.access,
         };
       } finally {
         capture.unsubscribe();

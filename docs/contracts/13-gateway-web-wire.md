@@ -549,10 +549,12 @@ file cannot be written the grant stays as it was and the route answers
 After committing the grant, the server closes every live session in that root
 (`DirectHost.closeWorkspaceSessions`), cancelling running turns and ending
 their event streams, including replay subscribers; `closedSessions` counts
-them. A session keeps the access recorded in its `session_started`
-`workspaceIdentity`, so after an access change it no longer opens (`403
-workspace_forbidden`) and drops from `session_list` until the access is set
-back. After removal its sessions never open again, even if the root is
+them. A stored session reopens (and lists) with the narrower of the access
+recorded in its `session_started` `workspaceIdentity` and the current grant:
+narrowing makes older read & write sessions read-only, and widening leaves
+sessions that started read-only read-only. That effective access is what the
+reopened runtime's tools, sandbox and approvals use, and what the session's
+`toolPolicy.allowWrite` reports. New sessions get the current grant. After removal its sessions never open again, even if the root is
 selected again: the new grant has a new `workspaceId`. Logs stay on disk.
 The web folder picker offers both actions from each saved folder's menu
 (`Term2SavedFolderMenu`).

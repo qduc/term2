@@ -104,10 +104,10 @@ export function mapServerError(error: unknown): ServerResult {
       ) {
         const change =
           grantStorage === 'persisted'
-            ? 'To change it, use Change access on this saved folder. Chats started with the current access stop, and open again only if you switch back.'
+            ? 'To change it, use Change access on this saved folder. Existing chats keep working, never with more access than they started with.'
             : grantStorage === 'static'
             ? 'This is a startup-supplied grant, not an editable persisted grant. Ask the operator to review the startup configuration; deleting persisted records cannot change it.'
-            : 'To change it, use Change access on this saved folder; the change lasts until the host restarts. Chats started with the current access stop, and open again only if you switch back.';
+            : 'To change it, use Change access on this saved folder; the change lasts until the host restarts. Existing chats keep working, never with more access than they started with.';
         return publicError(
           403,
           'workspace_forbidden',

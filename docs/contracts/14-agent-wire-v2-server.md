@@ -69,10 +69,11 @@ status codes and live-session behavior. Stopping the server to hand-edit
 `direct-workspace-grants.json` is no longer needed.
 
 Existing direct sessions record the grant's workspace ID in their
-`session_started` binding and its access in `workspaceIdentity`
-(`bindDirectSessionAccess` in `host-config-access.ts` checks both). An access
-change therefore stops older sessions until the access is set back, and a
-removal stops them for good: re-granting the same root issues a new ID that
+`session_started` binding and its access in `workspaceIdentity`. After an
+access change, an older session reopens with the narrower of that access and
+the current grant (`bindDirectSessionAccess.resolveStoredRoot` in
+`host-config-access.ts`; the session store refuses anything wider than the
+recorded access). A removal stops them for good: re-granting the same root issues a new ID that
 does not reauthorize them. Their logs remain on disk.
 
 Startup-supplied `staticGrants` are not in the grant file and both routes refuse

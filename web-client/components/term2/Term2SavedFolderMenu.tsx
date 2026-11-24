@@ -16,9 +16,9 @@ const ACCESS_OPTIONS = [
 
 /**
  * Per-folder actions for a saved folder: change its access or remove it. The gateway
- * closes the folder's live chats either way. A chat keeps the access it started with,
- * so after a change, chats started with the other access open again only if the
- * access is switched back; after removal they do not open at all.
+ * closes the folder's live chats either way. After a change a chat reopens with the
+ * narrower of the access it started with and the folder's new access, so it never
+ * gains access; after removal its chats do not open at all.
  */
 export function Term2SavedFolderMenu({
   workspace,
@@ -151,7 +151,7 @@ export function Term2SavedFolderMenu({
                 );
               })}
               <p className="px-2 pb-1.5 pt-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-                Changing access stops this folder&apos;s open chats. They open again only if you switch back.
+                Open chats in this folder restart. Existing chats never get more access than they started with.
               </p>
               <div className="my-1 border-t border-black/[0.07] dark:border-white/[0.07]" />
               <button

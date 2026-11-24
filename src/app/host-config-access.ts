@@ -26,7 +26,6 @@ export type DirectBoundSessionStore<TCreated, TOpened> = {
 type StartFact = {
   readonly type?: string;
   readonly workspace?: string;
-  readonly workspaceIdentity?: { readonly access?: string };
   readonly model?: { readonly provider?: string; readonly model?: string };
   readonly binding?: { readonly client?: string; readonly id?: string };
   readonly reasoning?: string;
@@ -61,7 +60,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       | { kind: 'read' | 'write'; sessionId: string },
   ): Promise<void>;
   resolveWorkspace(principal: Principal, grant: WorkspaceGrant): Workspace;
-  resolveStoredRoot(root: string): Workspace;
+  resolveStoredRoot(root: string, identity?: Workspace): Workspace;
 } {
   const directory = path.resolve(options.directory);
   const sessions: DirectBoundSessionStore<TCreated, TOpened> = {
@@ -109,10 +108,6 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       const grant = options.authority.resolveGrant(principal, started.binding.id);
       const resolved = options.authority.resolveWorkspace(principal, grant);
       if (path.resolve(resolved.workspace.root) !== path.resolve(started.root)) throw forbidden();
-      // The store reopens a session only with the access it started with. After a grant's
-      // access changes, refuse here as a grant mismatch rather than fail in the store.
-      if (started.access !== undefined && started.access !== resolved.workspace.access)
-        throw new DirectHostConfigError('workspace_grant_mismatch', 'authority');
       // A read grant still chats, as in the legacy gateway: its tools, not its commands, are read-only.
     },
     resolveWorkspace(principal, grant) {
@@ -124,10 +119,18 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       });
       return resolved.workspace;
     },
-    resolveStoredRoot(root) {
+    /**
+     * A stored session runs with the narrower of the access it started with
+     * (`identity`) and the current grant: a narrowed grant narrows it, a widened
+     * grant does not widen it. Without an identity (older logs) the grant applies.
+     */
+    resolveStoredRoot(root, identity) {
       const frame = creation.getStore();
-      if (frame && path.resolve(frame.workspace.root) === path.resolve(root)) return frame.workspace;
-      return options.authority.resolveStoredRoot(root);
+      const current =
+        frame && path.resolve(frame.workspace.root) === path.resolve(root)
+          ? frame.workspace
+          : options.authority.resolveStoredRoot(root);
+      return identity?.access === 'read' ? { ...current, access: 'read' } : current;
     },
   };
 }
@@ -143,8 +146,6 @@ function sessionStart(
 ): {
   binding?: Binding;
   root: string;
-  /** Access recorded in `workspaceIdentity`; absent on older logs. */
-  access?: string;
   at: string;
   seq: number;
   reasoning?: string;
@@ -169,7 +170,6 @@ function sessionStart(
   return {
     ...(binding ? { binding } : {}),
     root: fact.workspace,
-    ...(typeof fact.workspaceIdentity?.access === 'string' ? { access: fact.workspaceIdentity.access } : {}),
     at: line.at,
     seq: line.seq as number,
     ...(typeof fact.reasoning === 'string' ? { reasoning: fact.reasoning } : {}),

@@ -46,7 +46,11 @@ export type DirectConversationRuntime = {
 export type DirectSessionStoreOptions = {
   /** Required, separate conversations-next directory. No default to old storage. */
   readonly directory: string;
-  /** Obtain a CURRENT grant. Stored identity is a comparison hint, never authority. */
+  /**
+   * Obtain a CURRENT grant. Stored identity is a comparison hint, never authority.
+   * The result may be narrower than the stored identity (read for a read_write
+   * session), never wider; the session then runs with the result.
+   */
   readonly resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>;
   /** App-owned retired-profile fallback for restore validation only. Never changes stored facts.
    * Omitted means exact identity/version/digest restoration, as before. */
@@ -139,7 +143,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   const resolveWorkspace = async (root: string, identity?: Workspace): Promise<Workspace> => {
     const workspace = await options.resolveWorkspace(root, identity);
     if (identity) {
-      if (identity.root !== root || !sameWorkspace(workspace, identity))
+      if (identity.root !== root || !withinIdentity(workspace, identity))
         throw new Error('current workspace grant does not match the stored/requested identity');
     } else if (workspace.target !== 'local' || path.resolve(workspace.root) !== path.resolve(root)) {
       // Path-only direct records cannot identify an SSH endpoint or retain remote access.
@@ -449,6 +453,14 @@ function validateExpectedBinding(stored: DirectBinding | undefined, expected: Di
 
 function requireDirectId(id: string): void {
   if (!DIRECT_ID.test(id)) throw new Error('expected an exact direct conv_<uuid> Session ID');
+}
+
+/** Same root and target, and access equal to or narrower than the identity's. */
+function withinIdentity(workspace: Workspace, identity: Workspace): boolean {
+  return (
+    sameWorkspace({ ...workspace, access: identity.access }, identity) &&
+    (workspace.access === identity.access || workspace.access === 'read')
+  );
 }
 
 function sameWorkspace(left: Workspace, right: Workspace): boolean {

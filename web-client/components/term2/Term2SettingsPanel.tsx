@@ -166,8 +166,8 @@ export function Term2SettingsPanel({
   onProvidersChanged?: () => void;
   preferredProvider?: string;
   models?: ModelSummary[];
-  displayMode?: 'concise' | 'detailed';
-  onDisplayModeChange?: (mode: 'concise' | 'detailed') => void;
+  displayMode?: 'concise' | 'standard';
+  onDisplayModeChange?: (mode: 'concise' | 'standard') => void;
   notificationsEnabled?: boolean;
   onNotificationsChange?: (enabled: boolean) => void;
   showDiagnostics?: boolean;
@@ -1090,10 +1090,11 @@ export function Term2SettingsPanel({
             <div className="rounded-xl border border-black/[0.07] p-3 dark:border-white/[0.08]">
               <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Tool activity display</h3>
               <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                Concise folds finished tool runs into one summary line; Detailed keeps tool rows expanded.
+                Concise folds each run of tool calls into one line and hides finished reasoning. Standard shows one
+                row per tool call. Click any row to see its full input and output.
               </p>
               <div className="mt-2.5 flex gap-2">
-                {(['concise', 'detailed'] as const).map((mode) => (
+                {(['standard', 'concise'] as const).map((mode) => (
                   <Button
                     key={mode}
                     type="button"

@@ -107,12 +107,12 @@ function ToolIcon({ command }: { command: Term2Command }) {
 }
 
 export function Term2CommandCard({ command }: { command: Term2Command }) {
-  const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  // The failure reason lives in this card. Opening only the group still hides it.
-  const open = userOpen ?? command.status === 'failed';
+  // Closed until the reader opens it; a failure's reason is already on the row.
+  const [open, setOpen] = useState(false);
   const { verb, target } = describeCommand(command);
   const meta = summarizeCommandMeta(command);
   const cleanError = extractCleanToolError(command.error);
+  const errorLine = cleanError?.replace(/^Error:\s*/i, '').split('\n').find((line) => line.trim())?.trim();
 
   return (
     <article aria-label={`Tool ${command.toolName} ${command.status}`} className="text-sm">
@@ -120,14 +120,25 @@ export function Term2CommandCard({ command }: { command: Term2Command }) {
         type="button"
         aria-expanded={open}
         className="group/row flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-black/[0.035] dark:hover:bg-white/[0.04]"
-        onClick={() => setUserOpen(!open)}
+        onClick={() => setOpen(!open)}
       >
         <span className="flex h-4 w-4 shrink-0 items-center justify-center">
           <ToolIcon command={command} />
         </span>
         <span className="shrink-0 font-medium text-zinc-700 dark:text-zinc-300">{verb}</span>
         {target && (
-          <span className="min-w-0 truncate font-mono text-[12.5px] text-zinc-500 dark:text-zinc-400">{target}</span>
+          <span
+            className={`min-w-0 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400 ${
+              command.status === 'failed' && errorLine ? 'max-w-[40%] shrink-0' : ''
+            }`}
+          >
+            {target}
+          </span>
+        )}
+        {command.status === 'failed' && errorLine && !open && (
+          <span className="min-w-0 truncate text-xs text-red-600/90 dark:text-red-400/90" title={errorLine}>
+            {errorLine}
+          </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {meta && command.status === 'completed' && (
@@ -135,8 +146,8 @@ export function Term2CommandCard({ command }: { command: Term2Command }) {
               {meta}
             </span>
           )}
-          {command.status === 'failed' && (
-            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[11px] font-medium text-red-600 dark:text-red-400">
+          {command.status === 'failed' && !errorLine && (
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
               failed
             </span>
           )}

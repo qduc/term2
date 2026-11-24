@@ -12,11 +12,13 @@
  * ignored. Theme handling is unchanged; the chrome itself is a slim
  * breadcrumb bar (workspace / session title) with ghost icon buttons.
  */
-import { Sun, Moon, Settings, PanelLeft, PanelRight, Plus, CircleHelp, Folder } from 'lucide-react';
+import { Sun, Moon, Settings, PanelLeft, PanelRight, Plus, CircleHelp, Folder, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface ChatHeaderProps {
   isStreaming: boolean;
+  /** "N running" pill for tasks in progress; opens the running tasks panel. Hidden when count is 0. */
+  runningTasks?: { count: number; needsYou: number; open: boolean; onClick: () => void };
   onNewChat?: () => void;
   /** Label for the new-chat button. */
   newChatLabel?: string;
@@ -63,6 +65,7 @@ export function ChatHeader({
   exitLabel = 'Chat',
   showSettingsButton = true,
   showThemeToggle = true,
+  runningTasks,
 }: ChatHeaderProps) {
   const { theme, setTheme, resolvedTheme } = useTheme();
 
@@ -123,6 +126,22 @@ export function ChatHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
+        {runningTasks && runningTasks.count > 0 && (
+          <button
+            type="button"
+            onClick={runningTasks.onClick}
+            aria-pressed={runningTasks.open}
+            title={runningTasks.open ? 'Hide running tasks' : 'Show running tasks'}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+              runningTasks.needsYou > 0
+                ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200'
+                : 'border-black/[0.08] text-zinc-700 hover:bg-black/[0.04] dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06]'
+            }`}
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+            {runningTasks.needsYou > 0 ? `${runningTasks.needsYou} needs you` : `${runningTasks.count} running`}
+          </button>
+        )}
         {onNewChat && (
           <button
             onClick={onNewChat}

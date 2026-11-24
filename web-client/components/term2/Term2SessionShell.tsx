@@ -49,7 +49,7 @@ import { Term2UsagePopover } from './Term2UsagePopover';
 import { Term2QueueBar } from './Term2QueueBar';
 import { Term2RewindDialog } from './Term2RewindDialog';
 import { Term2RetryReply, Term2UserMessage, type ResendFromTurn } from './Term2MessageActions';
-import { Term2TasksDrawer } from './Term2TasksDrawer';
+import { Term2RunningTasksPanel, useRunningTasks } from './Term2RunningTasksPanel';
 import {
   Term2PathPopover,
   Term2QuickPalette,
@@ -207,6 +207,9 @@ export function Term2SessionShell({
   const [dialog, setDialog] = useState<'folder' | 'help' | 'rewind' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ turnId: string; message: string } | null>(null);
+  // The running tasks panel: which chat it is open for, and chats where the user closed it.
+  const [tasksPanelFor, setTasksPanelFor] = useState<string | null>(null);
+  const [tasksPanelDismissed, setTasksPanelDismissed] = useState<Record<string, true>>({});
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [startingChat, setStartingChat] = useState(false);
   // "New chat" opens a draft: a folder and a composer, but no gateway session
@@ -1277,6 +1280,21 @@ export function Term2SessionShell({
     return null;
   };
 
+  const runningTasks = useRunningTasks(session.view);
+  const tasksPanelVisible = Boolean(sessionId) && tasksPanelFor === sessionId && runningTasks.shown.length > 0;
+  const closeTasksPanel = () => {
+    if (sessionId) setTasksPanelDismissed((current) => ({ ...current, [sessionId]: true }));
+    setTasksPanelFor(null);
+  };
+  // Open on its own when a task starts, unless the user closed it in this chat. Not on small
+  // screens, where it would cover the chat; the header pill opens it there.
+  const hasRunning = runningTasks.runningCount > 0;
+  useEffect(() => {
+    if (!sessionId || !hasRunning || tasksPanelDismissed[sessionId]) return;
+    if (window.innerWidth < 768) return;
+    setTasksPanelFor(sessionId);
+  }, [sessionId, hasRunning, tasksPanelDismissed]);
+
   const handleRewind = async (target: RewindTargetSummary, restoreText: boolean) => {
     const ok = await session.rewind(target.targetId);
     if (ok && restoreText && target.text) {
@@ -1405,6 +1423,22 @@ export function Term2SessionShell({
             alwaysShowLeftSidebarButton
             leftSidebarToggleLabel="Open chat history"
             showRightSidebarButton={false}
+            runningTasks={
+              sessionId
+                ? {
+                    count: runningTasks.runningCount,
+                    needsYou: runningTasks.needsYouCount,
+                    open: tasksPanelVisible,
+                    onClick: () => {
+                      if (tasksPanelVisible) closeTasksPanel();
+                      else {
+                        setTasksPanelDismissed(({ [sessionId]: _removed, ...rest }) => rest);
+                        setTasksPanelFor(sessionId);
+                      }
+                    },
+                  }
+                : undefined
+            }
           />
           <section
             aria-label={sessionId ? 'Conversation' : 'Chat setup'}
@@ -1790,6 +1824,7 @@ export function Term2SessionShell({
                 )}
 
                 {session.view.pendingInteraction?.state === 'pending' && (
+                  <div id="term2-pending-interaction" className="scroll-mt-4">
                   <Term2InteractionPanel
                     key={`${session.view.pendingInteraction.interaction.interactionId}:${
                       session.view.pendingInteraction.interaction.revision
@@ -1800,6 +1835,7 @@ export function Term2SessionShell({
                     onResolve={session.resolveInteraction}
                     disabled={aborting}
                   />
+                  </div>
                 )}
                 {session.view.pendingInteraction?.state === 'recovered' && (
                   <Term2InteractionPanel
@@ -1810,7 +1846,6 @@ export function Term2SessionShell({
                   />
                 )}
 
-                {sessionId && <Term2TasksDrawer view={session.view} onControlTask={session.controlTask} />}
 
                 {showDiagnostics && sessionId && (session.view.turns.length > 0 || Boolean(session.view.error)) && (
                   <details className="pt-2 text-xs text-zinc-400 dark:text-zinc-500">
@@ -2222,6 +2257,30 @@ export function Term2SessionShell({
         </div>
       </div>
 
+      {tasksPanelVisible && !settingsOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close running tasks"
+            className="fixed inset-0 z-[60] bg-black/30 md:hidden"
+            onClick={closeTasksPanel}
+          />
+          <aside
+            aria-label="Running tasks"
+            className="fixed inset-y-0 right-0 z-[70] w-[19rem] max-w-[85vw] bg-[#f7f7f8] shadow-2xl dark:bg-zinc-950 md:relative md:z-auto md:shadow-none"
+          >
+            <Term2RunningTasksPanel
+              view={session.view}
+              shown={runningTasks.shown}
+              onControlTask={session.controlTask}
+              onClose={closeTasksPanel}
+              onGoToQuestion={() =>
+                document.getElementById('term2-pending-interaction')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+            />
+          </aside>
+        </>
+      )}
       {dialog === 'folder' && (
         <Term2SetupDialog title="Choose a folder" wide onClose={() => setDialog(null)}>
           <Term2FolderSelector

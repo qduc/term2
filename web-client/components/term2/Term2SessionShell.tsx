@@ -506,11 +506,7 @@ export function Term2SessionShell({
     setLoadError(null);
     try {
       const projection = await session.createSession(draftWorkspaceId);
-      // A fallback model shown in the draft must be applied, since the saved default is unavailable.
-      const toApply = {
-        ...draftConfig,
-        ...(!draftConfig.modelSelection && draftModel?.fallbackFrom ? { modelSelection: draftModel.selection } : {}),
-      };
+      const toApply = draftConfig;
       if (Object.keys(toApply).length > 0) {
         const latest = await term2Client.readSessionConfig(projection.id);
         await term2Client.updateSessionConfig(projection.id, {
@@ -812,32 +808,23 @@ export function Term2SessionShell({
     setStagedConfig((current) => (current && current.sessionId === sessionId ? current : null));
   }, [sessionId]);
 
-  // A draft's model, effort and approval picks start from the saved defaults and are
-  // applied to the session when the first message creates it.
-  // The blank-chat default model, or the first available model when that default is gone.
+  // The blank-chat default model. It is never swapped for another model behind the
+  // user's back: when it isn't available, the draft keeps it and says so.
   const draftModel = useMemo((): {
     selection: { provider: string; model: string };
-    fallbackFrom?: string;
+    unavailable?: boolean;
   } | null => {
     if (!isDraft || !settings) return null;
-    if (draftConfig.modelSelection) return { selection: draftConfig.modelSelection };
-    const saved = settings.settings.safeDefaults['agent.modelSelection']?.value as
-      | { provider: string; model: string }
-      | undefined;
-    const usable = (provider: string) =>
-      !settings.settings.providers.find((item) => item.id === provider)?.disabled;
-    const savedAvailable =
-      saved?.provider &&
-      saved.model &&
-      usable(saved.provider) &&
-      (models.length === 0 || models.some((m) => m.provider === saved.provider && m.id === saved.model));
-    if (savedAvailable && saved) return { selection: saved };
-    const first = models.find((m) => usable(m.provider));
-    if (!first) return saved?.provider && saved.model ? { selection: saved } : null;
-    return {
-      selection: { provider: first.provider, model: first.id },
-      fallbackFrom: saved?.model || undefined,
-    };
+    const selection =
+      draftConfig.modelSelection ??
+      (settings.settings.safeDefaults['agent.modelSelection']?.value as
+        | { provider: string; model: string }
+        | undefined);
+    if (!selection?.provider || !selection.model) return null;
+    const providerOff = Boolean(settings.settings.providers.find((item) => item.id === selection.provider)?.disabled);
+    const notListed =
+      models.length > 0 && !models.some((m) => m.provider === selection.provider && m.id === selection.model);
+    return { selection, unavailable: providerOff || notListed };
   }, [isDraft, settings, draftConfig.modelSelection, models]);
 
   // A draft's model, effort and approval picks start from the saved defaults and are
@@ -876,10 +863,12 @@ export function Term2SessionShell({
     [sessionConfig, stagedForChat],
   );
   const pickerNote = isDraft
-    ? draftModel?.fallbackFrom
-      ? `${draftModel.fallbackFrom} isn't available, so this chat uses ${draftModel.selection.model}. A model you pick here becomes the default for new chats.`
-      : 'A model you pick here becomes the default for new chats.'
+    ? 'A model you pick here becomes the default for new chats.'
     : 'Changes apply when you send your next message.';
+  const pickerWarning =
+    isDraft && draftModel?.unavailable
+      ? `${draftModel.selection.model} isn't available right now (its provider is off or didn't list it). Pick another model, or send anyway to try it.`
+      : undefined;
   const pickerConfig = isDraft ? draftPickerConfig : sessionPickerConfig;
   const pickerDisabled = isDraft ? startingChat : commandDisabled;
   const providerId = sessionConfig?.providerId ?? '';
@@ -2089,6 +2078,7 @@ export function Term2SessionShell({
                           onOpenSettings={() => setDialog('settings')}
                           pending={Boolean(stagedForChat)}
                           note={pickerNote}
+                          warning={pickerWarning}
                         />
                         <Term2ApprovalPicker
                           mode={pickerConfig.approvalMode ?? 'off'}

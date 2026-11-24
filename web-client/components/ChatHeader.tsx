@@ -126,7 +126,8 @@ export function ChatHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {runningTasks && runningTasks.count > 0 && (
+        {/* Stays while the panel is open, so the control that opened it is there to close it. */}
+        {runningTasks && (runningTasks.count > 0 || runningTasks.open) && (
           <button
             type="button"
             onClick={runningTasks.onClick}
@@ -138,8 +139,12 @@ export function ChatHeader({
                 : 'border-black/[0.08] text-zinc-700 hover:bg-black/[0.04] dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06]'
             }`}
           >
-            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-            {runningTasks.needsYou > 0 ? `${runningTasks.needsYou} needs you` : `${runningTasks.count} running`}
+            {runningTasks.count > 0 && <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />}
+            {runningTasks.needsYou > 0
+              ? `${runningTasks.needsYou} needs you`
+              : runningTasks.count > 0
+                ? `${runningTasks.count} running`
+                : 'Nothing running'}
           </button>
         )}
         {onNewChat && (

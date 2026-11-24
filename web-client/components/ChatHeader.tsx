@@ -41,6 +41,7 @@ interface ChatHeaderProps {
   onExit?: () => void;
   exitLabel?: string;
   showSettingsButton?: boolean;
+  showThemeToggle?: boolean;
 }
 
 export function ChatHeader({
@@ -61,6 +62,7 @@ export function ChatHeader({
   onExit,
   exitLabel = 'Chat',
   showSettingsButton = true,
+  showThemeToggle = true,
 }: ChatHeaderProps) {
   const { theme, setTheme, resolvedTheme } = useTheme();
 
@@ -152,6 +154,7 @@ export function ChatHeader({
             <Settings className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </button>
         )}
+        {showThemeToggle && (
         <button
           onClick={toggleTheme}
           className={iconButton}
@@ -165,6 +168,7 @@ export function ChatHeader({
             <Moon className="h-[18px] w-[18px]" strokeWidth={1.75} />
           )}
         </button>
+        )}
 
         {showRightSidebarButton && onToggleRightSidebar && (
           <button

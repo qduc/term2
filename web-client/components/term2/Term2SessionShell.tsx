@@ -13,11 +13,14 @@ import {
   Copy,
   Folder,
   History,
+  Moon,
   PanelLeft,
   Plus,
   RotateCcw,
   Settings,
+  SquarePen,
   Square,
+  Sun,
   Target,
   Wand2,
   X,
@@ -31,6 +34,7 @@ import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2SessionList } from './Term2SessionList';
 import { Term2StatusBanner } from './Term2StatusBanner';
 import { ChatHeader } from '../ChatHeader';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -181,6 +185,7 @@ export function Term2SessionShell({
   const [draggingFile, setDraggingFile] = useState(false);
   const [armedSkill, setArmedSkill] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
   const [dialog, setDialog] = useState<'folder' | 'settings' | 'help' | 'rewind' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
   const [startingChat, setStartingChat] = useState(false);
@@ -970,70 +975,90 @@ export function Term2SessionShell({
           >
             <Wordmark />
           </button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Close chat history"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <PanelLeft strokeWidth={1.75} />
-          </Button>
-        </div>
-        <div className="px-3 pb-3 pt-1">
-          <label className="sr-only" htmlFor="agent-workspace">
-            Saved folders
-          </label>
-          <Select
-            value={session.selectedWorkspaceId ?? NO_WORKSPACE}
-            onValueChange={(value) => chooseWorkspace(value === NO_WORKSPACE ? '' : value)}
-            disabled={loadingWorkspaces || (session.workspaces.length === 0 && !session.selectedWorkspaceId)}
-          >
-            <SelectTrigger id="agent-workspace" className="w-full">
-              <Folder aria-hidden strokeWidth={1.75} className="text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value={NO_WORKSPACE}>Choose a folder…</SelectItem>
-              {session.workspaces.map((workspace) => {
-                const info = getWorkspaceInfo(workspace.workspaceId);
-                return (
-                  <SelectItem key={workspace.workspaceId} value={workspace.workspaceId} title={info.fullPath}>
-                    {info.displayName} · {info.access === 'read_write' ? 'R/W' : 'Read'}
-                  </SelectItem>
-                );
-              })}
-              {session.selectedWorkspaceId &&
-                !session.workspaces.some((workspace) => workspace.workspaceId === session.selectedWorkspaceId) && (
-                  <SelectItem value={session.selectedWorkspaceId} title={selectedWorkspaceInfo.fullPath}>
-                    {selectedWorkspaceInfo.displayName} ·{' '}
-                    {selectedWorkspaceInfo.access === 'read_write' ? 'R/W' : 'Read'}
-                  </SelectItem>
-                )}
-            </SelectContent>
-          </Select>
-          {loadingWorkspaces && <p className="mt-1.5 px-1 text-xs text-zinc-500">Loading folders…</p>}
-          {localControlEnabled && (
-            <Button type="button" variant="ghost" size="xs" className="mt-2" onClick={() => setDialog('folder')}>
-              <Plus />
-              Add a folder
+          <div className="flex items-center gap-0.5">
+            {session.selectedWorkspaceId && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`New chat in ${selectedWorkspaceInfo.displayName || 'this folder'}`}
+                title={`New chat in ${selectedWorkspaceInfo.displayName || 'this folder'}`}
+                disabled={startingChat}
+                onClick={() => void createNewChat()}
+                className="text-muted-foreground"
+              >
+                <SquarePen strokeWidth={1.75} />
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Close chat history"
+              onClick={() => setSidebarOpen(false)}
+              className="text-muted-foreground"
+            >
+              <PanelLeft strokeWidth={1.75} />
             </Button>
-          )}
+          </div>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col px-2 pb-3">
-          {loadingSessions && <p className="mb-2 px-2.5 text-xs text-zinc-500">Loading chats…</p>}
+        <div className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-1">
+          {(loadingSessions || loadingWorkspaces) && (
+            <p className="mb-2 px-2.5 text-xs text-muted-foreground">Loading chats…</p>
+          )}
           <Term2SessionList
             sessions={session.sessions}
             selected={sessionId}
-            workspaceId={session.selectedWorkspaceId}
+            selectedWorkspaceId={session.selectedWorkspaceId}
             workspaces={session.workspaces}
             workspaceMetadata={workspaceMetadata}
             firstMessages={firstMessages}
             onSelect={selectSession}
-            onCreate={() => void createNewChat()}
+            onCreate={(workspaceId) => {
+              session.setSelectedWorkspaceId(workspaceId);
+              void createNewChat(workspaceId);
+            }}
+            onAddFolder={localControlEnabled ? () => setDialog('folder') : undefined}
             nextCursor={session.sessionCursor}
             onNextPage={() => void loadNextSessions()}
           />
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5 border-t border-black/[0.06] px-2 py-1.5 dark:border-white/[0.06]">
+          {localControlEnabled && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Open settings"
+              title="Settings"
+              onClick={() => setDialog('settings')}
+              className="text-muted-foreground"
+            >
+              <Settings strokeWidth={1.75} />
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Help and shortcuts"
+            title="Help and shortcuts"
+            onClick={() => setDialog('help')}
+            className="text-muted-foreground"
+          >
+            <CircleHelp strokeWidth={1.75} />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`}
+            title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`}
+            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            className="text-muted-foreground"
+          >
+            {resolvedTheme === 'dark' ? <Sun strokeWidth={1.75} /> : <Moon strokeWidth={1.75} />}
+          </Button>
         </div>
       </aside>
 
@@ -1048,11 +1073,12 @@ export function Term2SessionShell({
             subtitle={selectedWorkspaceInfo.displayName || undefined}
             subtitleTooltip={selectedWorkspaceInfo.fullPath || undefined}
             onOpenFolder={localControlEnabled ? () => setDialog('folder') : undefined}
-            onNewChat={session.selectedWorkspaceId ? () => void createNewChat() : undefined}
+            onNewChat={!sidebarOpen && session.selectedWorkspaceId ? () => void createNewChat() : undefined}
             newChatLabel="New chat"
-            onOpenHelp={() => setDialog('help')}
+            onOpenHelp={!sidebarOpen ? () => setDialog('help') : undefined}
             onOpenSettings={() => setDialog('settings')}
-            showSettingsButton={localControlEnabled}
+            showSettingsButton={localControlEnabled && !sidebarOpen}
+            showThemeToggle={!sidebarOpen}
             onToggleLeftSidebar={() => setSidebarOpen((open) => !open)}
             showLeftSidebarButton={!sidebarOpen}
             alwaysShowLeftSidebarButton

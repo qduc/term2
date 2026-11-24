@@ -1,3 +1,25 @@
+## [Unreleased]
+
+### Features
+
+- Run the bundled local web interface and private gateway together with `term2-web`.
+- Configure providers, models, permissions, tools and context from the web interface. Pick models and reasoning effort per chat, edit messages and retry replies, and inspect running tasks in a sidebar.
+- Manage saved folders and their access levels from the web interface, and choose a folder when starting a chat.
+
+### Improvements
+
+- Stage model and reasoning-effort changes in an existing web chat until the next message; new chats use the configured defaults.
+- Show model details and subscription plan limits in the web UI, label tool rows by their description, and offer standard and concise tool displays.
+- For read-access sessions, run shell commands in the sandbox even if sandboxing is disabled in settings; withhold the shell tool if the sandbox is unavailable.
+- Enable the cwd-bound `unsandboxed-once` approval grant for direct foreground shell escapes in writable local web sessions while keeping ordinary sandboxed shell approval and refusing unsupported escape requests instead of silently downgrading them.
+
+### Bug Fixes
+
+- Require Docker host-control approval even when `shell.autoApproveMode` is set to `always`.
+- Fix web chat creation, folder selection, error recovery, approval prompts, running-tasks panel toggling, and the ordering, streaming drain, and formatting of conversation and subagent events.
+- Wake the agent when a background task finishes while a web chat is idle, and restore idle status after resolving a background task's approval.
+- Count dated and `latest` model aliases as the same model when displaying prices.
+
 ## [2.0.1] - 2026-11-23
 
 ### Improvements

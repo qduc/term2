@@ -11,6 +11,7 @@ import {
   type FakeProviderProtocol,
 } from './fake-provider-http-server.js';
 import { getProbeScenario } from './probe-scenarios.js';
+import { resolveProviderRecorderBundle } from './recorder-bundle.js';
 
 // The recorder's LIVE path (`--yes --probe`) had no coverage and drifted from the settings schema until
 // `pnpm provider:record --provider openrouter` crashed before sending a request. This runs it as a child
@@ -18,6 +19,7 @@ import { getProbeScenario } from './probe-scenarios.js';
 // process, so the child must be spawned asynchronously: a synchronous spawn would deadlock the server.
 
 const recorderPath = fileURLToPath(new URL('../provider-record.ts', import.meta.url));
+const recorderBundle = resolveProviderRecorderBundle();
 const repoRoot = resolve(dirname(recorderPath), '..');
 const probe = getProbeScenario('tool-continuation-v1');
 const KEY = 'sk-test-recorder-credential-0123456789';
@@ -74,7 +76,7 @@ function runRecorder(args: string[], env: Record<string, string> = {}): Promise<
   for (const name of inheritedCredentialVars) delete childEnv[name];
   Object.assign(childEnv, env);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn('pnpm', ['exec', 'tsx', recorderPath, ...args], { cwd: repoRoot, env: childEnv });
+    const child = spawn(process.execPath, [recorderBundle, ...args], { cwd: repoRoot, env: childEnv });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));

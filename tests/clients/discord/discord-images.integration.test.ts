@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -127,10 +127,24 @@ it('rejects non-CDN, wrong-channel/id, credential, port and redirect-like paths 
 
 it('ends a stalled response body within the shared 30-second download deadline', async () => {
   const f = await fixture(png, true);
-  const started = Date.now();
-  expect(await stageDiscordImages([f.image(), f.image('502')], f.options)).toEqual({ paths: [], omitted: 2 });
-  expect(Date.now() - started).toBeGreaterThanOrEqual(29000);
-  expect(Date.now() - started).toBeLessThan(34000);
-  expect(f.calls).toHaveLength(1);
-  expect(fs.readdirSync(f.stateDir)).toEqual([]);
-}, 35000);
+  // Scale the real AbortSignal.timeout boundary instead of waiting 30 real seconds in CI,
+  // while asserting that stageDiscordImages requests the exact 30,000 ms deadline.
+  const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+  const requestedMs: number[] = [];
+  const spy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    requestedMs.push(ms);
+    return realTimeout(Math.max(1, Math.round(ms / 100)));
+  });
+  try {
+    const started = Date.now();
+    expect(await stageDiscordImages([f.image(), f.image('502')], f.options)).toEqual({ paths: [], omitted: 2 });
+    const elapsed = Date.now() - started;
+    expect(requestedMs).toEqual([30_000]);
+    expect(elapsed).toBeGreaterThanOrEqual(250);
+    expect(elapsed).toBeLessThan(3_000);
+    expect(f.calls).toHaveLength(1);
+    expect(fs.readdirSync(f.stateDir)).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
+});

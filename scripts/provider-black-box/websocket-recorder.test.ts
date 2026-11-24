@@ -24,6 +24,7 @@ import {
   type SensitiveLiteral,
 } from './recording-secret-scan.js';
 import { replayWebSocketProbeRecording } from './websocket-probe-replay.js';
+import { resolveProviderRecorderBundle } from './recorder-bundle.js';
 
 // The WebSocket capture adapter and the credentialed (Codex / OpenAI-over-WebSocket) recording path of
 // `scripts/provider-record.ts`, run as child processes against loopback servers with fake credentials: the
@@ -31,6 +32,7 @@ import { replayWebSocketProbeRecording } from './websocket-probe-replay.js';
 // a leak, and the replay of a recording through the registry model. No real credential or network.
 
 const recorderPath = fileURLToPath(new URL('../provider-record.ts', import.meta.url));
+const recorderBundle = resolveProviderRecorderBundle();
 const secretScanPath = fileURLToPath(new URL('./recording-secret-scan.ts', import.meta.url));
 const repoRoot = resolve(dirname(recorderPath), '..');
 const probe = getProbeScenario('tool-continuation-v2');
@@ -48,7 +50,7 @@ const credentialVars = [
 ];
 
 function runRecorder(args: string[], env: Record<string, string> = {}): Promise<RecorderResult> {
-  return runChild('pnpm', ['exec', 'tsx', recorderPath, ...args], env);
+  return runChild(process.execPath, [recorderBundle, ...args], env);
 }
 
 function runChild(

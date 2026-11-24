@@ -258,8 +258,26 @@ jobs:
       # What users install is the tarball, not the checkout: pack the build this job just tested,
       # install it outside the repository, launch the web UI and replay a recorded provider turn.
       # publish.yml runs the same two commands before it publishes.
+      - name: Restore Next.js build cache for packed web UI
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        uses: actions/cache@v6
+        with:
+          path: web-client/.next/cache
+          key: test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'web-client/**') }}
+          restore-keys: |
+            test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-
+      - name: Restore npm cache for packed tarball smoke install
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: test-npm-smoke-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: test-npm-smoke-cache-v1-${{ runner.os }}-${{ runner.arch }}-
       - name: Smoke-test the packed tarball
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          npm_config_prefer_offline: 'true'
         run: |
           pnpm pack --pack-destination "$RUNNER_TEMP/term2-pack"
           pnpm release:smoke --tgz "$RUNNER_TEMP"/term2-pack/*.tgz

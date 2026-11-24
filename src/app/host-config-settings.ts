@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { SettingsProjection, ShellSandboxNotice } from '../host/server-contracts.js';
+import type { ModelCatalogEntry, SettingsProjection, ShellSandboxNotice } from '../host/server-contracts.js';
+import { catalogDetails } from '../model/providers/model-catalog/catalog-details.js';
 import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { DirectHostConfigError } from './host-config-error.js';
 import { CREDENTIAL_SETTINGS } from './credential-settings.js';
@@ -279,14 +280,12 @@ export class DirectGlobalConfiguration {
     return { ok: this.oauth.remove(provider, accountId) === true };
   }
 
-  async listModels(): Promise<
-    { provider: string; id: string; name?: string; default_reasoning_level?: string; contextWindow?: number }[]
-  > {
+  async listModels(): Promise<ModelCatalogEntry[]> {
     const ids = await this.models.providerIds();
     if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || id.length === 0)) {
       throw new DirectHostConfigError('model_catalog_unavailable', 'config');
     }
-    const models = [];
+    const models: ModelCatalogEntry[] = [];
     const seen = new Set<string>();
     for (const provider of ids) {
       if (seen.has(provider)) continue;
@@ -306,6 +305,7 @@ export class DirectGlobalConfiguration {
             ...(typeof model.contextWindow === 'number' && Number.isFinite(model.contextWindow)
               ? { contextWindow: model.contextWindow }
               : {}),
+            ...catalogDetails(provider, model.id),
           });
         }
       } catch {

@@ -123,12 +123,23 @@ export interface ServerWorkspaces {
 }
 export type WorkspaceRemoval = { workspaceId: string; removed: true; closedSessions: number };
 export type WorkspaceAccessChange = { workspace: WorkspaceAlias; grantVersion: number; closedSessions: number };
+/** USD per million tokens, from term2's vendored model catalog. Absent prices are unknown, not free. */
+export type ModelPrices = {
+  inputPerMTok?: number;
+  outputPerMTok?: number;
+  cacheReadPerMTok?: number;
+  cacheWritePerMTok?: number;
+};
 export type ModelCatalogEntry = {
   provider: string;
   id: string;
   name?: string;
   default_reasoning_level?: string;
   contextWindow?: number;
+  /** Largest output the model produces in one response, when the catalog knows it. */
+  maxOutputTokens?: number;
+  /** Base prices, plus higher tiers that apply once a request's input exceeds `inputTokensAbove`. */
+  pricing?: ModelPrices & { tiers?: (ModelPrices & { inputTokensAbove: number })[] };
 };
 export type SafeSettingValue =
   | string

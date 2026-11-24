@@ -19,6 +19,7 @@ import {
   type SettingsProjection,
   type SettingsWriteResult,
   type ShellSandboxNotice,
+  type ModelPrices,
   type ModelSummary,
   type MessageSubmitOptions,
   type ProviderPresetEntry,
@@ -279,12 +280,10 @@ function validateModels(value: unknown): { models: ModelSummary[] } {
   return {
     models: input.models.map((model) => {
       const item = object(model);
-      only(item, ['provider', 'id', 'name', 'default_reasoning_level', 'contextWindow']);
-      if (
-        item.contextWindow !== undefined &&
-        (!Number.isSafeInteger(item.contextWindow) || (item.contextWindow as number) < 0)
-      )
-        throw new Term2ApiError(503, 'Invalid agent response');
+      only(item, ['provider', 'id', 'name', 'default_reasoning_level', 'contextWindow', 'maxOutputTokens', 'pricing']);
+      for (const key of ['contextWindow', 'maxOutputTokens'] as const)
+        if (item[key] !== undefined && (!Number.isSafeInteger(item[key]) || (item[key] as number) < 0))
+          throw new Term2ApiError(503, 'Invalid agent response');
       return {
         provider: text(item.provider, 256),
         id: text(item.id, 512),
@@ -293,9 +292,37 @@ function validateModels(value: unknown): { models: ModelSummary[] } {
           ? {}
           : { default_reasoning_level: text(item.default_reasoning_level, 128) }),
         ...(item.contextWindow === undefined ? {} : { contextWindow: item.contextWindow as number }),
+        ...(item.maxOutputTokens === undefined ? {} : { maxOutputTokens: item.maxOutputTokens as number }),
+        ...(item.pricing === undefined ? {} : { pricing: validatePricing(item.pricing) }),
       };
     }),
   };
+}
+const PRICE_KEYS = ['inputPerMTok', 'outputPerMTok', 'cacheReadPerMTok', 'cacheWritePerMTok'] as const;
+function validatePrices(input: Record<string, unknown>): ModelPrices {
+  const prices: ModelPrices = {};
+  for (const key of PRICE_KEYS) {
+    const value = input[key];
+    if (value === undefined) continue;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+      throw new Term2ApiError(503, 'Invalid agent response');
+    prices[key] = value;
+  }
+  return prices;
+}
+function validatePricing(value: unknown): NonNullable<ModelSummary['pricing']> {
+  const input = object(value);
+  only(input, [...PRICE_KEYS, 'tiers']);
+  if (input.tiers !== undefined && (!Array.isArray(input.tiers) || input.tiers.length > 8))
+    throw new Term2ApiError(503, 'Invalid agent response');
+  const tiers = (input.tiers as unknown[] | undefined)?.map((tier) => {
+    const item = object(tier);
+    only(item, [...PRICE_KEYS, 'inputTokensAbove']);
+    if (!Number.isSafeInteger(item.inputTokensAbove) || (item.inputTokensAbove as number) <= 0)
+      throw new Term2ApiError(503, 'Invalid agent response');
+    return { inputTokensAbove: item.inputTokensAbove as number, ...validatePrices(item) };
+  });
+  return { ...validatePrices(input), ...(tiers && tiers.length > 0 ? { tiers } : {}) };
 }
 function safeValue(value: unknown): boolean {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;

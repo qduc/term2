@@ -152,6 +152,30 @@ function lookupModelAnyProvider(catalog: ModelCatalogData, modelId: string): Cat
   return findModelMatches(catalog, modelId)[0]?.info;
 }
 
+/** An entry for exactly this model id (ignoring a leading `vendor/`), never a prefix or alias match. */
+function exactInModels(models: Record<string, CatalogModelInfo>, wanted: string): CatalogModelInfo | undefined {
+  if (models[wanted]) return models[wanted];
+  const wantedBare = stripVendor(wanted);
+  for (const [catalogId, info] of Object.entries(models)) if (stripVendor(catalogId) === wantedBare) return info;
+  return undefined;
+}
+
+/**
+ * Metadata only when the catalog lists this exact model, preferring the given provider. Unlike
+ * getCatalogModel it never resolves `gpt-x-pro` to `gpt-x`, so it is safe for showing a model's prices.
+ */
+export function getExactCatalogModel(providerId: string, modelId: string): CatalogModelInfo | undefined {
+  const wanted = normalizeId(modelId);
+  const preferred = (MODEL_CATALOG as ModelCatalogData)[normalizeId(providerId)];
+  const own = preferred ? exactInModels(preferred, wanted) : undefined;
+  if (own) return own;
+  for (const models of Object.values(MODEL_CATALOG)) {
+    const hit = exactInModels(models, wanted);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 /**
  * Look up vendored metadata for a model. The provider id is only a preference:
  * it picks which entry wins when several providers list the same model, and a

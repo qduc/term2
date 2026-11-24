@@ -27,7 +27,6 @@ import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Se
 import { shellSandboxMachineFact } from '../../lib/term2/shell-sandbox-notice';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
 import { Term2TurnTimeline, type Term2DisplayMode } from './Term2TurnTimeline';
-import { describeCommand } from './Term2CommandCard';
 import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2SessionList } from './Term2SessionList';
 import { Term2StatusBanner } from './Term2StatusBanner';
@@ -1004,13 +1003,9 @@ export function Term2SessionShell({
       ? lastTurn.transientStatus
       : lastTurn && (lastTurn.status === 'streaming' || lastTurn.status === 'pending')
         ? (() => {
-            const active = [...lastTurn.commands]
-              .reverse()
-              .find((c) => c.status === 'running' || c.status === 'pending');
-            if (active) {
-              const { verb, target } = describeCommand(active);
-              return `${verb}${target ? ` ${target}` : ''}…`;
-            }
+            // A running or waiting tool already says so on its own row, with its spinner;
+            // repeating it here showed the same words twice.
+            if (lastTurn.commands.some((c) => c.status === 'running' || c.status === 'pending')) return null;
             const lastItem = lastTurn.items?.[lastTurn.items.length - 1];
             if (lastItem?.kind === 'reasoning' && lastItem.streaming) return 'Thinking…';
             if (lastItem?.kind === 'text' && lastItem.text) return null;

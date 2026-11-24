@@ -61,6 +61,36 @@ function approvalTitle(interaction: PendingInteraction): string {
   return `Allow ${toolName.replace(/_/g, ' ')}?`;
 }
 
+type Advisory = NonNullable<PendingInteraction['descriptor']['llmAdvisory']>;
+
+const SAFETY_BLOCK = 'Blocked by safety heuristics';
+
+/**
+ * The session's approval review, shown as the TUI's approval prompt shows it: the reviewer's verdict,
+ * its model and risk, and its reasoning. A system safety block arrives as reasoning text only.
+ */
+function AdvisoryNote({ advisory }: { advisory: Advisory }) {
+  const blocked = advisory.reasoning.startsWith(SAFETY_BLOCK);
+  const tone = blocked
+    ? 'border-red-500/25 bg-red-50/70 text-red-950 dark:bg-red-950/25 dark:text-red-100'
+    : advisory.approved
+      ? 'border-teal-500/25 bg-teal-50/60 text-teal-950 dark:bg-teal-950/25 dark:text-teal-100'
+      : 'border-amber-500/30 bg-amber-50/70 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100';
+  const title = blocked ? 'Safety check blocked this' : advisory.approved ? 'AI reviewer: looks safe' : 'AI reviewer: be careful';
+  const meta = [blocked ? 'automated check' : advisory.model, advisory.riskLevel && `${advisory.riskLevel} risk`]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <div aria-label="Approval review" className={`rounded-xl border px-3.5 py-2.5 text-[13px] leading-5 ${tone}`}>
+      <p className="flex flex-wrap items-baseline gap-x-2">
+        <span className="font-medium">{title}</span>
+        {meta && <span className="text-xs opacity-70">{meta}</span>}
+      </p>
+      <p className="mt-1 whitespace-pre-wrap break-words opacity-90">{advisory.reasoning}</p>
+    </div>
+  );
+}
+
 export function Term2InteractionPanel({
   interaction,
   recovered,
@@ -201,6 +231,7 @@ export function Term2InteractionPanel({
             )}
           </dl>
         )}
+        {interaction.descriptor.llmAdvisory && <AdvisoryNote advisory={interaction.descriptor.llmAdvisory} />}
         {interaction.descriptor.argumentsText &&
           (display?.command ? (
             <details className="group/args">

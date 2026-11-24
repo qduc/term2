@@ -33,6 +33,12 @@ export function useRunningTasks(view: Term2SessionView) {
   const settledAt = useRef(new Map<string, number>());
   const [now, setNow] = useState(() => Date.now());
   const tasks = (view.nativeState?.tasks ?? []) as readonly Fields[];
+  // A foreground shell command that reaches the network waits on the chat's network prompt; its
+  // task status stays running, so mark it here as waiting on you.
+  const pending = view.pendingInteraction?.state === 'pending' ? view.pendingInteraction : undefined;
+  const networkPrompt = Boolean(
+    pending && !pending.subagent && pending.interaction.descriptor.toolName === 'sandbox_network_access',
+  );
 
   const shown: RunningTask[] = [];
   for (const task of tasks) {
@@ -45,7 +51,13 @@ export function useRunningTasks(view: Term2SessionView) {
       if (!settledAt.current.has(id)) settledAt.current.set(id, num(task.completedAt) ?? now);
       if (now - settledAt.current.get(id)! >= GRACE_MS) continue;
     }
-    shown.push({ id, task, live, needsYou: status === 'awaiting_interaction' });
+    const blockedOnNetwork = live && networkPrompt && task.kind === 'shell' && task.mode !== 'background';
+    shown.push({
+      id,
+      task: blockedOnNetwork ? { ...task, status: 'awaiting_interaction' } : task,
+      live,
+      needsYou: status === 'awaiting_interaction' || blockedOnNetwork,
+    });
   }
 
   const anyShown = shown.length > 0;

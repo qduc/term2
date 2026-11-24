@@ -1811,19 +1811,12 @@ export function Term2SessionShell({
                   </article>
                 ))}
 
-                {liveStatus && (
+                {/* While a prompt is pending the card below is the status; a second line would repeat it. */}
+                {liveStatus && !interactionPending && (
                   <p role="status" className="flex items-center gap-2.5 text-sm">
                     <span aria-hidden className="relative flex h-2 w-2">
-                      <span
-                        className={`absolute inset-0 animate-ping rounded-full ${
-                          interactionPending ? 'bg-amber-400/70' : 'bg-teal-400/70'
-                        }`}
-                      />
-                      <span
-                        className={`relative h-2 w-2 rounded-full ${
-                          interactionPending ? 'bg-amber-500' : 'bg-teal-500'
-                        }`}
-                      />
+                      <span className="absolute inset-0 animate-ping rounded-full bg-teal-400/70" />
+                      <span className="relative h-2 w-2 rounded-full bg-teal-500" />
                     </span>
                     <span className="t2-shimmer truncate">{liveStatus}</span>
                   </p>

@@ -44,7 +44,11 @@ references point to tag `unit-suite-baseline`.
 through PRs. Do not merge locally into `main` or push directly to it. Non-draft
 PRs from this repository get GitHub auto-merge (`.github/workflows/auto-merge.yml`)
 and squash-merge once required checks pass, so open a PR only when it is ready
-to land; open it as a draft, or disable auto-merge on it, to hold it for review.
+to land. The user's standing preference: open PRs non-draft and let auto-merge
+land them; don't hold work as a draft for review unless the user asks for that.
+The agent that opens a PR owns it until it merges: watch its CI checks and
+auto-merge state, and fix failures the PR introduced (pushing to the same
+branch) until the checks pass or a failure is shown to be pre-existing on `main`.
 Do not merge a PR by hand or bypass checks unless explicitly asked. Commit
 completed work without waiting for the user to ask.
 Preserve the shared checkout and other agents’ work.

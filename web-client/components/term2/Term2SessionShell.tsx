@@ -1159,6 +1159,8 @@ export function Term2SessionShell({
               void createNewChat(workspaceId);
             }}
             onAddFolder={localControlEnabled ? () => setDialog('folder') : undefined}
+            onSavedFolderChanged={localControlEnabled ? (change) => void onSavedFolderChanged(change) : undefined}
+            allowWrite={effectiveAllowWrite}
             nextCursor={session.sessionCursor}
             onNextPage={() => void loadNextSessions()}
           />

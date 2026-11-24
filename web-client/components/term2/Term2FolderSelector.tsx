@@ -382,6 +382,7 @@ export function Term2FolderSelector({
                 {onSavedFolderChanged && (
                   <Term2SavedFolderMenu
                     workspace={workspace}
+                    displayName={shortName}
                     allowWrite={allowWrite}
                     onChanged={onSavedFolderChanged}
                   />

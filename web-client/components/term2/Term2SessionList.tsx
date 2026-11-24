@@ -127,6 +127,21 @@ export function Term2SessionList({
   );
   const titleCounts = new Map<string, number>();
   for (const entry of entries) titleCounts.set(entry.title, (titleCounts.get(entry.title) ?? 0) + 1);
+  const apartFor = (session: SessionListItem, title: string) => {
+    const sharedTitle = (titleCounts.get(title) ?? 0) > 1;
+    const folder =
+      workspaceMetadata?.[session.workspaceId]?.displayName || workspaceMap.get(session.workspaceId) || '';
+    const when = shortTime(session.updatedAt, sharedTitle);
+    const apart = sharedTitle ? [folder, when].filter(Boolean).join(' · ') : when;
+    return { sharedTitle, when, apart };
+  };
+  const apartCounts = new Map<string, number>();
+  for (const entry of entries) {
+    const { sharedTitle, apart } = apartFor(entry.session, entry.title);
+    if (!sharedTitle) continue;
+    const key = `${entry.title}\0${apart}`;
+    apartCounts.set(key, (apartCounts.get(key) ?? 0) + 1);
+  }
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const groups = new Map<string, typeof entries>();
@@ -178,19 +193,15 @@ export function Term2SessionList({
             <ul className="space-y-px">
               {items.map(({ session, title }) => {
                 const active = selected === session.id;
-                const sharedTitle = (titleCounts.get(title) ?? 0) > 1;
-                const folder =
-                  workspaceMetadata?.[session.workspaceId]?.displayName ||
-                  workspaceMap.get(session.workspaceId) ||
-                  '';
-                const when = shortTime(session.updatedAt, sharedTitle);
-                const apart = sharedTitle ? [folder, when].filter(Boolean).join(' · ') : when;
+                const { sharedTitle, when, apart } = apartFor(session, title);
+                const tied = sharedTitle && (apartCounts.get(`${title}\0${apart}`) ?? 0) > 1;
+                const mark = tied ? `${apart} · ${session.id.slice(-4)}` : apart;
                 return (
                   <li key={session.id}>
                     <button
                       type="button"
                       aria-current={active ? 'page' : undefined}
-                      aria-label={sharedTitle ? `${title}, ${apart}` : `${title} ${session.id}`}
+                      aria-label={sharedTitle ? `${title}, ${mark}` : `${title} ${session.id}`}
                       title={`${title} · ${session.status.replace('_', ' ')} · ${relativeTime(session.updatedAt)}`}
                       className={`group/item flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
                         active
@@ -201,15 +212,15 @@ export function Term2SessionList({
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{title}</span>
-                        {sharedTitle && apart && (
+                        {sharedTitle && mark && (
                           <span className="block truncate text-[11px] font-normal text-zinc-400 dark:text-zinc-500">
-                            {apart}
+                            {mark}
                           </span>
                         )}
                       </span>
                       <StatusDot status={session.status} />
                       <span className="shrink-0 text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                        {when}
+                        {tied ? session.id.slice(-4) : when}
                       </span>
                     </button>
                   </li>

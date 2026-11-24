@@ -62,6 +62,14 @@ import type {
 
 const READ_ONLY_REQUIRES_SANDBOX_ERROR =
   'Error: shell is unavailable in a read-only session unless it runs inside the sandbox. Enable sandbox.enabled, or use a read_write workspace. Command not executed.';
+/**
+ * A read session whose sandbox cannot run. The session withholds shell when it
+ * knows this at start (app/tool-surface.ts); this is the backstop for a sandbox
+ * that stops working later. The model cannot change settings, so the message
+ * names only what it can do.
+ */
+const READ_SESSION_SHELL_UNAVAILABLE_ERROR =
+  'Error: shell is unavailable for the rest of this session: the folder is read-only and the shell sandbox cannot run. Command not executed. Do not retry shell; use the read, search, and list tools instead.';
 
 /** Native approval evidence attached to one direct invocation, never model input. */
 export const APPROVED_SHELL_ESCAPE = Symbol('approved shell escape');
@@ -720,6 +728,12 @@ export function createShellToolDefinition(deps: {
   gatewayMode?: boolean;
   /** Explicit gateway posture; read-only sessions cannot write workspace files via shell. */
   readOnly?: boolean;
+  /**
+   * A read session: every command runs inside the sandbox whatever `sandbox.enabled`
+   * says, and a sandbox that cannot run refuses with a session-wide error. Plan-mode
+   * children are `readOnly` without this, so `sandbox.enabled` still governs them.
+   */
+  readSession?: boolean;
   /** Whether this session may honor an approved unsandboxed request. */
   allowUnsandboxed?: boolean;
 }): ShellToolDefinition {
@@ -743,8 +757,10 @@ export function createShellToolDefinition(deps: {
     sandboxChildRegistry,
     gatewayMode = false,
     readOnly = false,
+    readSession = false,
     allowUnsandboxed = true,
   } = deps;
+  const readOnlyFilesystem = readOnly || readSession;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
   // Create command logger function with dependencies
@@ -760,8 +776,9 @@ export function createShellToolDefinition(deps: {
     ? SHELL_DESCRIPTION_ORCHESTRATOR
     : getShellDescription(resolvedSearchViaShell);
   // Read per call: the sandbox can be toggled while a session is running, and a
-  // stale value would let needsApproval and execute disagree about Docker.
-  const isSandboxEnabled = () => settingsService.get('sandbox.enabled') !== false;
+  // stale value would let needsApproval and execute disagree about Docker. A read
+  // session's only confinement is the sandbox, so the setting does not apply to it.
+  const isSandboxEnabled = () => readSession || settingsService.get('sandbox.enabled') !== false;
 
   return {
     name: 'shell',
@@ -783,8 +800,10 @@ export function createShellToolDefinition(deps: {
         const cwd = executionContext?.getCwd() || process.cwd();
         const sessionId = getConversationSessionId(context);
         const sandboxEnabled = isSandboxEnabled();
+        // A Docker socket would let a read session write through the daemon, so it never gets one.
         const dockerHostControlRequested =
           sandboxEnabled &&
+          !readSession &&
           (sessionAccess?.requiresDockerApproval(params.command) ??
             nestedCompatibility?.docker.requiresApproval(sessionId, params.command) ??
             false);
@@ -874,6 +893,7 @@ export function createShellToolDefinition(deps: {
       }
       const dockerHostControlRequested =
         sandboxEnabled &&
+        !readSession &&
         (sessionAccess?.requiresDockerApproval(command) ??
           nestedCompatibility?.docker.requiresApproval(sessionId, command) ??
           false);
@@ -1050,14 +1070,14 @@ export function createShellToolDefinition(deps: {
           if (sandboxAvailability.type === 'available') {
             try {
               const projectAllowRead = getProjectAllowReadStore(cwd).load();
-              if (!readOnly) cacheDirectory = prepareSandboxProjectCache(cwd);
+              if (!readOnlyFilesystem) cacheDirectory = prepareSandboxProjectCache(cwd);
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
                 tmpDir: SANDBOX_TEMP_DIR,
-                allowWrite: !readOnly,
+                allowWrite: !readOnlyFilesystem,
                 readPolicy: settingsService.get('sandbox.readPolicy'),
                 allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
-                allowLocalBinding: !readOnly && isProjectListenerAllowed(cwd),
+                allowLocalBinding: !readOnlyFilesystem && isProjectListenerAllowed(cwd),
                 cacheDirectory,
                 dockerSocketPath: dockerHostControl?.socketPath,
                 allowReadExtra: [
@@ -1088,9 +1108,12 @@ export function createShellToolDefinition(deps: {
             } catch (error) {
               loggingService.warn(
                 'Shell sandbox initialization failed; refusing unsandboxed fallback',
-                withExecutionCorrelation({ error: error instanceof Error ? error.message : String(error) }),
+                withExecutionCorrelation({
+                  error: error instanceof Error ? error.message : String(error),
+                  readSession,
+                }),
               );
-              return sandboxFailure();
+              return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : sandboxFailure();
             }
           } else {
             loggingService.warn(
@@ -1098,23 +1121,29 @@ export function createShellToolDefinition(deps: {
               withExecutionCorrelation({
                 availability: sandboxAvailability.type,
                 reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
+                readSession,
               }),
             );
-            return sandboxFailure(sandboxAvailability);
+            return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : sandboxFailure(sandboxAvailability);
           }
         }
 
         // A read-only session may only run commands the sandbox has wrapped with
-        // a read-only filesystem. Without the sandbox (sandbox.enabled=false, an
-        // approved unsandboxed run, or an SSH session) nothing stops a command
-        // from writing the workspace, and a command-level check cannot make a
-        // general shell read-only, so refuse to run.
-        if (readOnly && !sandboxed) {
+        // a read-only filesystem. Without the sandbox (sandbox.enabled=false in a
+        // plan-mode child, an approved unsandboxed run, or an SSH session) nothing
+        // stops a command from writing the workspace, and a command-level check
+        // cannot make a general shell read-only, so refuse to run.
+        if (readOnlyFilesystem && !sandboxed) {
           loggingService.security(
             'Shell refused: read-only session cannot run outside the sandbox',
-            withExecutionCorrelation({ command: optimizedCommand.substring(0, 100), sandboxEnabled, sandbox }),
+            withExecutionCorrelation({
+              command: optimizedCommand.substring(0, 100),
+              sandboxEnabled,
+              sandbox,
+              readSession,
+            }),
           );
-          return READ_ONLY_REQUIRES_SANDBOX_ERROR;
+          return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : READ_ONLY_REQUIRES_SANDBOX_ERROR;
         }
 
         const executePreparedCommand = async (

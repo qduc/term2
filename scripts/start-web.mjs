@@ -21,7 +21,7 @@ if (argv.includes('--help') || argv.includes('-h')) {
       'Start the local term2 gateway and web interface (PORT defaults to 3000).',
       '',
       'Options:',
-      '  --allow-write              Allow selecting folders with read-and-write access',
+      '  --read-only                Only allow read-only folder access (read-and-write is allowed by default)',
       '  --workspace-root <dir>     Allow selecting folders inside <dir> (repeatable; defaults to home)',
       '  --port <port>              Port for the local web interface (overrides PORT env var)',
       '  -h, --help                 Show this help message',
@@ -29,13 +29,15 @@ if (argv.includes('--help') || argv.includes('-h')) {
   );
   process.exit(0);
 }
-let allowWrite = false;
+let allowWrite = true;
 let portOverride;
 const workspaceRoots = [];
 for (let index = 0; index < argv.length; index += 1) {
   const token = argv[index];
-  if (token === '--allow-write') {
-    allowWrite = true;
+  if (token === '--read-only') {
+    allowWrite = false;
+  } else if (token === '--allow-write') {
+    // The default since read-and-write became opt-out; still accepted for existing scripts.
   } else if (token === '--workspace-root') {
     const value = argv[index + 1];
     if (!value || value.startsWith('--')) {

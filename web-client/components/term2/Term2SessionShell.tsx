@@ -89,10 +89,6 @@ function Wordmark() {
     <span className="inline-flex items-baseline font-mono font-semibold tracking-tight">
       <span className="mr-[0.35em] text-zinc-400 dark:text-zinc-500">~</span>
       term2
-      <span
-        aria-hidden
-        className="t2-caret ml-[0.12em] inline-block h-[0.95em] w-[0.5em] translate-y-[0.12em] bg-teal-500"
-      />
     </span>
   );
 }

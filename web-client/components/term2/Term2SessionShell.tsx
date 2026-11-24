@@ -28,7 +28,7 @@ import {
 import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Session';
 import { shellSandboxMachineFact } from '../../lib/term2/shell-sandbox-notice';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
-import { Term2TurnTimeline } from './Term2TurnTimeline';
+import { Term2TurnTimeline, type Term2DisplayMode } from './Term2TurnTimeline';
 import { describeCommand } from './Term2CommandCard';
 import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2SessionList } from './Term2SessionList';
@@ -223,7 +223,7 @@ export function Term2SessionShell({
   const [cursorPos, setCursorPos] = useState(0);
   const [popoverIndex, setPopoverIndex] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [displayMode, setDisplayMode] = useState<'concise' | 'detailed'>('concise');
+  const [displayMode, setDisplayMode] = useState<Term2DisplayMode>('concise');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
@@ -245,13 +245,15 @@ export function Term2SessionShell({
   useEffect(() => {
     if (window.innerWidth >= 768) setSidebarOpen(true);
     const savedDisplay = readLocalString(DISPLAY_MODE_KEY);
-    if (savedDisplay === 'detailed' || savedDisplay === 'concise') setDisplayMode(savedDisplay);
+    // 'detailed' is the earlier name for standard.
+    if (savedDisplay === 'standard' || savedDisplay === 'detailed') setDisplayMode('standard');
+    else if (savedDisplay === 'concise') setDisplayMode('concise');
     if (readLocalString(NOTIFICATIONS_KEY) === 'true') setNotificationsEnabled(true);
     if (readLocalString(DIAGNOSTICS_KEY) === 'true') setShowDiagnostics(true);
     setPromptHistory(readPromptHistory());
   }, []);
 
-  const updateDisplayMode = (mode: 'concise' | 'detailed') => {
+  const updateDisplayMode = (mode: Term2DisplayMode) => {
     setDisplayMode(mode);
     try {
       window.localStorage.setItem(DISPLAY_MODE_KEY, mode);

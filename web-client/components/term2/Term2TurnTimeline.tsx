@@ -5,16 +5,51 @@ import type { Term2Command, Term2TurnItem, Term2TurnView } from '../../lib/term2
 import { Term2Markdown } from './Term2Markdown';
 import { Term2ToolGroup } from './Term2ToolGroup';
 
+/**
+ * How tool activity reads, matching the TUI's `ui.displayMode`: `standard` shows one
+ * row per tool call; `concise` folds each run of tool calls into one summary line and
+ * hides finished reasoning. Neither opens a call's output by itself.
+ */
+export type Term2DisplayMode = 'concise' | 'standard';
+
 type RenderSegment =
   | { kind: 'reasoning'; id: string; text: string; streaming?: boolean }
   | { kind: 'text'; id: string; text: string }
   | { kind: 'tools'; key: string; commands: Term2Command[] };
 
 /**
- * Keep thinking, text, and each tool call in chronological order. A tool call
- * is its own row, including when one reply starts several at once.
+ * In concise mode, fold each run of consecutive tool calls into one segment. Finished
+ * reasoning is hidden there, so it doesn't split a run; text still ends one.
  */
-function buildSegments(turn: Term2TurnView): RenderSegment[] {
+function foldToolRuns(segments: RenderSegment[]): RenderSegment[] {
+  const folded: RenderSegment[] = [];
+  let run: Extract<RenderSegment, { kind: 'tools' }> | null = null;
+  for (const segment of segments) {
+    if (segment.kind === 'reasoning' && !segment.streaming) continue;
+    if (segment.kind === 'tools') {
+      if (run) run.commands.push(...segment.commands);
+      else {
+        run = { kind: 'tools', key: segment.key, commands: [...segment.commands] };
+        folded.push(run);
+      }
+      continue;
+    }
+    run = null;
+    folded.push(segment);
+  }
+  return folded;
+}
+
+/**
+ * Keep thinking, text, and each tool call in chronological order. A tool call
+ * is its own segment, including when one reply starts several at once.
+ */
+function buildSegments(turn: Term2TurnView, displayMode: Term2DisplayMode): RenderSegment[] {
+  const segments = buildChronologicalSegments(turn);
+  return displayMode === 'concise' ? foldToolRuns(segments) : segments;
+}
+
+function buildChronologicalSegments(turn: Term2TurnView): RenderSegment[] {
   const commandById = new Map(turn.commands.map((cmd) => [cmd.callId, cmd]));
   const usedTools = new Set<string>();
 
@@ -66,9 +101,9 @@ export function Term2TurnTimeline({
   displayMode,
 }: {
   turn: Term2TurnView;
-  displayMode: 'concise' | 'detailed';
+  displayMode: Term2DisplayMode;
 }) {
-  const segments = buildSegments(turn);
+  const segments = buildSegments(turn, displayMode);
   if (segments.length === 0) return null;
 
   return (
@@ -80,7 +115,7 @@ export function Term2TurnTimeline({
             <details
               key={`reason:${segment.id}:${index}`}
               className="group/reason text-sm"
-              open={displayMode === 'detailed' || isStreamingNow || undefined}
+              open={isStreamingNow || undefined}
             >
               <summary className="-ml-2 inline-flex cursor-pointer list-none select-none items-center gap-2 rounded-lg px-2 py-1 text-zinc-500 transition-colors hover:bg-black/[0.035] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.04] dark:hover:text-zinc-100 [&::-webkit-details-marker]:hidden">
                 <Brain aria-hidden className="h-4 w-4 shrink-0" strokeWidth={1.75} />
@@ -104,11 +139,7 @@ export function Term2TurnTimeline({
 
         if (segment.kind === 'tools') {
           return (
-            <Term2ToolGroup
-              key={segment.key}
-              commands={segment.commands}
-              defaultExpanded={displayMode === 'detailed'}
-            />
+            <Term2ToolGroup key={segment.key} commands={segment.commands} displayMode={displayMode} />
           );
         }
 

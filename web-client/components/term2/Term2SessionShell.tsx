@@ -2065,7 +2065,7 @@ export function Term2SessionShell({
         </Term2SetupDialog>
       )}
       {dialog === 'settings' && (
-        <Term2SetupDialog title="Settings" wide onClose={() => setDialog(null)}>
+        <Term2SetupDialog title="Settings" wide fixedHeight onClose={() => setDialog(null)}>
           <Term2SettingsPanel
             onLoaded={setSettings}
             onProvidersChanged={() => void reloadModels()}

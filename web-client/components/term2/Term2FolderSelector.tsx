@@ -593,13 +593,6 @@ export function Term2FolderSelector({
                 <p className="font-medium">
                   {error ?? cleanUserFacingMessage(failedValidation?.reason ?? 'This folder cannot be opened.')}
                 </p>
-                {failedValidation?.checks.some((check) => check.name === 'contained' && check.status === 'error') && (
-                  <p className="text-xs text-red-700/80 dark:text-red-300/80">
-                    {homeFolder
-                      ? `Choose a folder inside ${homeFolder}.`
-                      : 'Choose a folder inside the allowed workspace roots.'}
-                  </p>
-                )}
               </div>
               {(lastValidRoot || homeFolder) && (
                 <Button

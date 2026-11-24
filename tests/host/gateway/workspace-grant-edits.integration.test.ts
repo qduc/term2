@@ -144,7 +144,6 @@ it('refuses edits to startup grants and widening without write permission, and k
     directory,
     new DirectWorkspaceAuthority({
       allowWrite: true,
-      allowedRoots: [allowed],
       stateDirectory: state,
       staticGrants: [
         { workspaceId: 'ws_static', ownerUserId: 'owner', label: 'static', root: staticRoot, access: 'read' },
@@ -180,7 +179,7 @@ it('refuses edits to startup grants and widening without write permission, and k
   // A server started without write permission restores the same grant file and refuses widening.
   const readOnly = await startGateway(
     directory,
-    new DirectWorkspaceAuthority({ allowWrite: false, allowedRoots: [allowed], stateDirectory: state }),
+    new DirectWorkspaceAuthority({ allowWrite: false, stateDirectory: state }),
   );
   expect(await readOnly.setAccess(id, 'read_write')).toMatchObject({
     status: 403,

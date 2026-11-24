@@ -250,8 +250,7 @@ describe('term2 serve (child process)', () => {
   it('pairs, admits a dynamic workspace, creates a persisted session, completes a turn, and exits cleanly on SIGTERM', async () => {
     const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'serve-home-')));
     const stateDir = path.join(tempHome, 'gateway-state');
-    // The launcher's default dynamic-workspace allowlist is the operator's
-    // home, so the candidate workspace must live under the child's HOME.
+    // Keep the workspace inside the temp HOME so cleanup removes everything.
     const workspaceRoot = path.join(tempHome, 'workspace');
     fs.mkdirSync(workspaceRoot, { recursive: true });
     const workspace = realpathSync(workspaceRoot);

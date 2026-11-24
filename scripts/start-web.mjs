@@ -22,7 +22,6 @@ if (argv.includes('--help') || argv.includes('-h')) {
       '',
       'Options:',
       '  --read-only                Only allow read-only folder access (read-and-write is allowed by default)',
-      '  --workspace-root <dir>     Allow selecting folders inside <dir> (repeatable; defaults to home)',
       '  --port <port>              Port for the local web interface (overrides PORT env var)',
       '  -h, --help                 Show this help message',
     ].join('\n'),
@@ -31,21 +30,12 @@ if (argv.includes('--help') || argv.includes('-h')) {
 }
 let allowWrite = true;
 let portOverride;
-const workspaceRoots = [];
 for (let index = 0; index < argv.length; index += 1) {
   const token = argv[index];
   if (token === '--read-only') {
     allowWrite = false;
   } else if (token === '--allow-write') {
     // The default since read-and-write became opt-out; still accepted for existing scripts.
-  } else if (token === '--workspace-root') {
-    const value = argv[index + 1];
-    if (!value || value.startsWith('--')) {
-      console.error('term2-web: --workspace-root requires a directory path');
-      process.exit(1);
-    }
-    workspaceRoots.push(path.resolve(value));
-    index += 1;
   } else if (token === '--port') {
     const value = argv[index + 1];
     if (!value || !/^\d+$/.test(value)) {
@@ -125,7 +115,6 @@ try {
     '--bff-key',
     `${keyId}=${publicKeyPath}`,
     ...(allowWrite ? ['--allow-write'] : []),
-    ...workspaceRoots.flatMap((root) => ['--workspace-root', root]),
   ];
   const gateway = start(serveArgs, { stdio: ['ignore', 'inherit', 'pipe'] });
   const ready = new Promise((resolve) => {

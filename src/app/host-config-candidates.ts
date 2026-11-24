@@ -6,7 +6,7 @@ import { contained, isOpaqueId, opaqueId } from './host-config-workspace-grants.
 import type { WorkspaceAccess } from './host-config-workspace-grants.js';
 
 export type WorkspaceCheck = {
-  name: 'absolute' | 'exists' | 'directory' | 'readable' | 'canonical' | 'contained';
+  name: 'absolute' | 'exists' | 'directory' | 'readable' | 'canonical';
   status: 'ok' | 'error';
 };
 export type CandidateValidation =
@@ -42,13 +42,15 @@ type Token = { candidateId: string; ownerUserId: string; canonicalPath: string; 
 
 /** Ephemeral candidate discovery. Grants are a separate authority and are not created here. */
 export class DirectCandidateRegistry {
-  readonly #roots: readonly string[];
   readonly #now: () => number;
   readonly #candidates = new Map<string, Candidate>();
   readonly #tokens = new Map<string, Token>();
 
-  constructor(allowedRoots: readonly string[], now: () => number = Date.now) {
-    this.#roots = allowedRoots;
+  /**
+   * Any folder the local user can read may be selected. There is no allowed-roots boundary:
+   * the agent already acts with that user's permissions, so one would only restrict the picker.
+   */
+  constructor(now: () => number = Date.now) {
     this.#now = now;
   }
 
@@ -92,11 +94,6 @@ export class DirectCandidateRegistry {
       checks.push({ name: 'readable', status: 'error' });
       return fail('workspace_not_readable', 'The local user cannot read this folder.');
     }
-    if (!this.#roots.some((root) => contained(root, canonical))) {
-      checks.push({ name: 'contained', status: 'error' });
-      return fail('workspace_path_escape', 'The selected folder is outside the allowed workspace roots.');
-    }
-    checks.push({ name: 'contained', status: 'ok' });
     this.#prune();
     const owned = [...this.#candidates.values()].filter((candidate) => candidate.ownerUserId === ownerUserId).length;
     if (this.#candidates.size >= MAX_CANDIDATES || owned >= MAX_PER_OWNER || this.#size() >= MAX_REGISTRY) {
@@ -168,7 +165,7 @@ export class DirectCandidateRegistry {
     } catch {
       throw new DirectHostConfigError('workspace_root_unavailable', 'candidate');
     }
-    if (canonical !== candidate.canonicalRoot || !this.#roots.some((root) => contained(root, canonical))) {
+    if (canonical !== candidate.canonicalRoot) {
       throw new DirectHostConfigError('workspace_path_escape', 'candidate');
     }
     return canonical;

@@ -69,7 +69,7 @@ export type ServerRequest = {
 };
 export type WorkspaceAlias = { workspaceId: string; label: string; access: 'read' | 'read_write' };
 export type WorkspaceCheck = {
-  name: 'absolute' | 'exists' | 'directory' | 'readable' | 'canonical' | 'contained';
+  name: 'absolute' | 'exists' | 'directory' | 'readable' | 'canonical';
   status: 'ok' | 'error' | 'pending';
 };
 export type CandidateValidation =

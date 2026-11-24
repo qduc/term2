@@ -584,8 +584,9 @@ export function Term2SessionShell({
         access: folder.access,
       },
     }));
-    setSelectedWorkspaceId(folder.workspaceId);
     setDialog(null);
+    // Switch to the folder just chosen: a new chat there, not the chat that was open.
+    void createNewChat(folder.workspaceId);
     void refreshWorkspaces().catch(() => setLoadError('Could not refresh saved folders.'));
   };
 
@@ -2229,8 +2230,8 @@ export function Term2SessionShell({
             savedWorkspaces={session.workspaces}
             selectedWorkspaceId={session.selectedWorkspaceId}
             onSelectExisting={(workspaceId) => {
-              chooseWorkspace(workspaceId);
               setDialog(null);
+              void createNewChat(workspaceId);
             }}
             onSelected={onFolderSelected}
             onSavedFolderChanged={(change) => void onSavedFolderChanged(change)}

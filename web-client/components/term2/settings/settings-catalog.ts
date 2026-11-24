@@ -54,6 +54,7 @@ export interface SettingItem {
     | 'duration-limit'
     | 'info'
     | 'model-pool'
+    | 'model-tier'
     | 'favorites'
     | 'nicknames'
     | 'revoke-list';

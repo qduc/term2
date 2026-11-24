@@ -212,48 +212,33 @@ export const TOOL_ITEMS: SettingItem[] = [
   },
 ];
 
-const tier = (key: string, label: string, description: string, effortKey?: string): SettingItem[] => [
-  {
-    id: `agent.${key}Model`,
-    section: 'models',
-    group: 'Helper models',
-    source: 'server',
-    kind: 'model-pool',
-    label: `${label} models`,
-    keywords: ['tier', 'helper', 'subagent', key],
-    description,
-    max: 8,
-    placeholder: 'Uses the chat’s model.',
-  },
-  ...(effortKey
-    ? [
-        {
-          id: effortKey,
-          section: 'models' as const,
-          group: 'Helper models',
-          source: 'server' as const,
-          kind: 'select' as const,
-          label: `${label} reasoning effort`,
-          keywords: ['tier', 'effort', 'thinking', key],
-          description: 'Leave unset to use the chat’s effort.',
-          placeholder: 'Same as the chat',
-          options: EFFORT_OPTIONS,
-        },
-      ]
-    : []),
-];
+/** One row per helper tier: its models below, its reasoning effort (when it has one) on the right. */
+const tier = (key: string, label: string, description: string, effortKey?: string): SettingItem => ({
+  id: `agent.${key}Model`,
+  section: 'models',
+  group: 'Helper models',
+  source: 'server',
+  kind: 'model-tier',
+  label,
+  keywords: ['tier', 'helper', 'subagent', 'effort', 'thinking', key],
+  description,
+  keys: [`agent.${key}Model`, ...(effortKey ? [effortKey] : [])],
+  max: 8,
+  placeholder: 'Uses the chat’s model.',
+  options: effortKey ? EFFORT_OPTIONS : undefined,
+});
 
 /** Models. */
 export const MODEL_ITEMS: SettingItem[] = [
-  ...tier(
+  tier(
     'smart',
     'Smart',
-    'For the hardest side tasks. Subagents take turns through the list; other uses take the first.',
+    'The hardest side tasks. Subagents take turns through the list.',
     'agent.smartReasoningEffort',
   ),
-  ...tier('balanced', 'Balanced', 'For everyday side tasks.', 'agent.balancedReasoningEffort'),
-  ...tier('cheap', 'Cheap', 'For simple, high-volume side tasks.', 'agent.cheapReasoningEffort'),
-  ...tier('chore', 'Chore', 'For small background jobs, like reviewing commands in auto-approve mode.'),
+  tier('balanced', 'Balanced', 'Everyday side tasks.', 'agent.balancedReasoningEffort'),
+  tier('cheap', 'Cheap', 'Simple, high-volume side tasks.', 'agent.cheapReasoningEffort'),
+  tier('chore', 'Chore', 'Small background jobs, like reviewing commands in auto-approve mode.'),
   {
     id: 'agent.mentorPool',
     section: 'models',

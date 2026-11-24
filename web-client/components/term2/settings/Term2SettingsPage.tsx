@@ -43,7 +43,7 @@ type DisplayMode = 'concise' | 'standard';
 type Change = { key: string; value: unknown };
 
 /** Kinds edited as a list under the description instead of a control on the right. */
-const LIST_KINDS = new Set<SettingItem['kind']>(['model-pool', 'favorites', 'nicknames', 'revoke-list']);
+const LIST_KINDS = new Set<SettingItem['kind']>(['model-pool', 'model-tier', 'favorites', 'nicknames', 'revoke-list']);
 
 const SECTION_DESCRIPTIONS: Record<SettingsSectionId, string> = {
   providers: 'The AI services term2 can use. Keys stay on this machine and are never sent in chat.',
@@ -550,7 +550,7 @@ export function Term2SettingsPage({
     const value = stored(item.id);
     const disabled = Boolean(lockedReason(item)) || rowStatus[item.id]?.state === 'saving';
     const save = (next: unknown) => requestServer(item, [{ key: item.id, value: next }]);
-    if (item.kind === 'model-pool')
+    if (item.kind === 'model-pool' || item.kind === 'model-tier')
       return (
         <ModelPoolControl
           value={value}
@@ -570,6 +570,38 @@ export function Term2SettingsPage({
     if (item.kind === 'nicknames')
       return <NicknamesControl value={value} models={models} providerLabel={providerLabel} disabled={disabled} onChange={save} />;
     return <RevokeListControl value={value} disabled={disabled} onChange={save} />;
+  };
+
+  /** A helper tier's reasoning effort, beside its models; unset uses the chat's effort. */
+  const tierEffortControl = (item: SettingItem) => {
+    const effortKey = itemKeys(item)[1];
+    if (!effortKey) return <></>;
+    const value = stored(effortKey);
+    const disabled = Boolean(lockedReason(item)) || rowStatus[item.id]?.state === 'saving';
+    return (
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        Effort
+        <Select
+          value={typeof value === 'string' ? value : ''}
+          disabled={disabled}
+          onValueChange={(next) => requestServer(item, [{ key: effortKey, value: next }])}
+        >
+          <SelectTrigger size="sm" className="w-36" aria-label={`${item.label} reasoning effort`}>
+            <SelectValue placeholder="Same as chat" />
+          </SelectTrigger>
+          <SelectContent>
+            {typeof value === 'string' && value && !item.options?.some((option) => option.value === value) && (
+              <SelectItem value={value}>{value === 'default' ? 'Model default' : value}</SelectItem>
+            )}
+            {(item.options ?? []).map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </label>
+    );
   };
 
   const safetySummary = (breadcrumb?: string) => {
@@ -620,10 +652,12 @@ export function Term2SettingsPage({
           ? compactionControl(item)
           : item.kind === 'duration-limit'
             ? durationLimitControl(item)
-            : LIST_KINDS.has(item.kind)
-              ? // The list editor sits under the description; nothing on the right.
-                <></>
-              : undefined;
+            : item.kind === 'model-tier'
+              ? tierEffortControl(item)
+              : LIST_KINDS.has(item.kind)
+                ? // The list editor sits under the description; nothing on the right.
+                  <></>
+                : undefined;
     return (
       <SettingRow
         key={item.id}

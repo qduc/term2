@@ -67,6 +67,7 @@ import type {
 const PROMPT_HISTORY_KEY = 'term2.web.promptHistory';
 const DISPLAY_MODE_KEY = 'term2.web.displayMode';
 const NOTIFICATIONS_KEY = 'term2.web.notifications';
+const DIAGNOSTICS_KEY = 'term2.web.diagnostics';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
@@ -203,6 +204,7 @@ export function Term2SessionShell({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<'concise' | 'detailed'>('concise');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const savedDraftRef = useRef<string>('');
@@ -224,6 +226,7 @@ export function Term2SessionShell({
     const savedDisplay = readLocalString(DISPLAY_MODE_KEY);
     if (savedDisplay === 'detailed' || savedDisplay === 'concise') setDisplayMode(savedDisplay);
     if (readLocalString(NOTIFICATIONS_KEY) === 'true') setNotificationsEnabled(true);
+    if (readLocalString(DIAGNOSTICS_KEY) === 'true') setShowDiagnostics(true);
     setPromptHistory(readPromptHistory());
   }, []);
 
@@ -231,6 +234,15 @@ export function Term2SessionShell({
     setDisplayMode(mode);
     try {
       window.localStorage.setItem(DISPLAY_MODE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const updateDiagnostics = (enabled: boolean) => {
+    setShowDiagnostics(enabled);
+    try {
+      window.localStorage.setItem(DIAGNOSTICS_KEY, String(enabled));
     } catch {
       /* ignore */
     }
@@ -1488,7 +1500,7 @@ export function Term2SessionShell({
 
                 {sessionId && <Term2TasksDrawer view={session.view} onControlTask={session.controlTask} />}
 
-                {sessionId && (session.view.turns.length > 0 || Boolean(session.view.error)) && (
+                {showDiagnostics && sessionId && (session.view.turns.length > 0 || Boolean(session.view.error)) && (
                   <details className="pt-2 text-xs text-zinc-400 dark:text-zinc-500">
                     <summary className="cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300">
                       Diagnostics &amp; raw session state
@@ -1926,6 +1938,8 @@ export function Term2SessionShell({
             onDisplayModeChange={updateDisplayMode}
             notificationsEnabled={notificationsEnabled}
             onNotificationsChange={updateNotifications}
+            showDiagnostics={showDiagnostics}
+            onShowDiagnosticsChange={updateDiagnostics}
           />
         </Term2SetupDialog>
       )}

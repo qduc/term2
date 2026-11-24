@@ -464,6 +464,8 @@ export type WireCancelTarget = { readonly kind: 'foreground' } | { readonly kind
 /** A turn rewind can return to, with what rewinding there discards (the picker's cost line). */
 export type WireRewindTarget = {
   readonly id: string;
+  /** The user message this rewind returns to; equals that turn's `turnId` on the web wire. */
+  readonly messageId: string;
   readonly label: string;
   readonly discardedTurns: number;
   readonly discardedReplies: number;

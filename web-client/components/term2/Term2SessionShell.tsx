@@ -48,6 +48,7 @@ import { Term2ApprovalPicker } from './Term2ApprovalPicker';
 import { Term2UsagePopover } from './Term2UsagePopover';
 import { Term2QueueBar } from './Term2QueueBar';
 import { Term2RewindDialog } from './Term2RewindDialog';
+import { Term2RetryReply, Term2UserMessage, type ResendFromTurn } from './Term2MessageActions';
 import { Term2TasksDrawer } from './Term2TasksDrawer';
 import {
   Term2PathPopover,
@@ -205,6 +206,8 @@ export function Term2SessionShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dialog, setDialog] = useState<'folder' | 'help' | 'rewind' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<{ turnId: string; message: string } | null>(null);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [startingChat, setStartingChat] = useState(false);
   // "New chat" opens a draft: a folder and a composer, but no gateway session
   // until the first message is sent, so clicking around leaves no empty chats.
@@ -791,7 +794,12 @@ export function Term2SessionShell({
   );
   const hasStreamingTurn = Boolean(activeStreamingTurn);
 
-  const submitMessage = async (delivery?: 'auto' | 'steer' | 'follow_up', overrideText?: string) => {
+  const submitMessage = async (
+    delivery?: 'auto' | 'steer' | 'follow_up',
+    overrideText?: string,
+    // Edit and Retry resend one message's text without the composer's attachments or skill.
+    options?: { textOnly?: boolean },
+  ) => {
     const text = (overrideText ?? input).trim();
     if (!text && attachments.length === 0) return;
     if (isDraft) {
@@ -809,8 +817,8 @@ export function Term2SessionShell({
     const accepted = await session.submit(text, {
       delivery: effectiveDelivery,
       ...(effectiveDelivery === 'steer' && activeStreamingTurn ? { expectedSteerTurnId: activeStreamingTurn.turnId } : {}),
-      ...(armedSkill ? { skill: armedSkill } : {}),
-      ...(attachments.length > 0
+      ...(armedSkill && !options?.textOnly ? { skill: armedSkill } : {}),
+      ...(attachments.length > 0 && !options?.textOnly
         ? {
             attachments: attachments.map(({ type, mediaType, data }) => ({ type, mediaType, data })),
           }
@@ -836,6 +844,7 @@ export function Term2SessionShell({
         }
       }
     }
+    return accepted;
   };
 
   const sessionConfig = discoveredConfig?.sessionId === sessionId ? discoveredConfig : null;
@@ -1237,6 +1246,36 @@ export function Term2SessionShell({
       ? 'New chat'
       : 'Welcome';
 
+  // Edit and Retry: rewind to just before the turn's message, then send `text` as a new turn.
+  const resendFromTurn: ResendFromTurn = async (turnId, text) => {
+    if (!sessionId) return 'This chat is not open.';
+    setRetryError(null);
+    let targets: RewindTargetSummary[];
+    let messageId = session.view.turns.find((item) => item.turnId === turnId)?.userMessageId;
+    try {
+      ({ targets } = await term2Client.listRewindTargets(sessionId));
+      // Rewind targets name the user message; a turn sent from this page only knows its turn
+      // id, so look the message up in the saved history.
+      if (!messageId) {
+        const { snapshot } = await term2Client.hydrateSession(sessionId);
+        const message = snapshot.messages.find((item) => item.role === 'user' && item.turnId === turnId);
+        messageId = typeof message?.id === 'string' ? message.id : undefined;
+      }
+    } catch (error) {
+      return error instanceof Error ? error.message : 'Could not load this chat’s history.';
+    }
+    const target = messageId ? targets.find((item) => item.messageId === messageId) : undefined;
+    if (!target) return 'This message can no longer be edited or retried. It may have been compacted away.';
+    if ((target.imageCount ?? 0) > 0) return 'Messages with images can’t be edited or retried yet.';
+    if (!(await session.rewind(target.targetId, undefined, { forResend: true }))) return 'Could not rewind the chat.';
+    if (await submitMessage('auto', text, { textOnly: true })) return null;
+    // The chat is already rewound and this turn is gone, so say so at the message box,
+    // where the text is kept.
+    setInput(text);
+    if (!session.submitError) setResendNotice('The chat was rewound, but the message wasn’t sent. Send it again from here.');
+    return null;
+  };
+
   const handleRewind = async (target: RewindTargetSummary, restoreText: boolean) => {
     const ok = await session.rewind(target.targetId);
     if (ok && restoreText && target.text) {
@@ -1608,42 +1647,18 @@ export function Term2SessionShell({
                   </div>
                 )}
 
-                {session.view.turns.map((turn) => (
+                {session.view.turns.map((turn, turnIndex) => (
                   <article key={turn.turnId} className="t2-enter group space-y-5">
                     {turn.userText !== undefined && (
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="max-w-[85%] rounded-3xl bg-zinc-100 px-4 py-2.5 dark:bg-white/[0.07]">
-                          <p className="whitespace-pre-wrap break-words text-[15px] leading-6">{turn.userText}</p>
-                        </div>
-                        <div className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-                          <Button
-                            type="button"
-                            aria-label="Copy message"
-                            title="Copy message"
-                            variant="ghost" size="icon-xs" className="text-muted-foreground"
-                            onClick={() => copyTurn(`${turn.turnId}:user`, turn.userText ?? '')}
-                          >
-                            {copiedTurn === `${turn.turnId}:user` ? (
-                              <Check className="h-3.5 w-3.5" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                          <Button
-                            type="button"
-                            aria-label="Rewind and edit from here"
-                            title="Rewind & edit from this message"
-                            disabled={commandDisabled}
-                            variant="ghost" size="icon-xs" className="text-muted-foreground"
-                            onClick={() => {
-                              setRewindInitialTurnId(turn.turnId);
-                              setDialog('rewind');
-                            }}
-                          >
-                            <History className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
+                      <Term2UserMessage
+                        turnId={turn.turnId}
+                        text={turn.userText}
+                        copied={copiedTurn === `${turn.turnId}:user`}
+                        onCopy={() => copyTurn(`${turn.turnId}:user`, turn.userText ?? '')}
+                        disabled={commandDisabled}
+                        laterTurns={session.view.turns.length - 1 - turnIndex}
+                        onResend={resendFromTurn}
+                      />
                     )}
                     <div className="min-w-0 space-y-4">
                       <Term2TurnTimeline turn={turn} displayMode={displayMode} />
@@ -1729,12 +1744,27 @@ export function Term2SessionShell({
                               <Copy className="h-3.5 w-3.5" />
                             )}
                           </Button>
+                          {turn.userText ? (
+                            <Term2RetryReply
+                              turnId={turn.turnId}
+                              userText={turn.userText}
+                              disabled={commandDisabled}
+                              laterTurns={session.view.turns.length - 1 - turnIndex}
+                              onResend={resendFromTurn}
+                              onError={(message) => setRetryError({ turnId: turn.turnId, message })}
+                            />
+                          ) : null}
                           {turn.usage?.totalTokens ? (
                             <span className="text-xs tabular-nums">
                               {turn.usage.totalTokens.toLocaleString()} tokens
                             </span>
                           ) : null}
                         </div>
+                      )}
+                      {retryError?.turnId === turn.turnId && (
+                        <p role="alert" className="text-xs text-destructive">
+                          {retryError.message}
+                        </p>
                       )}
                     </div>
                   </article>
@@ -1821,14 +1851,14 @@ export function Term2SessionShell({
 
                 <Term2QueueBar view={session.view} onManageQueue={session.manageQueue} />
 
-                {(session.submitError || configError || attachmentError) && (
+                {(session.submitError || configError || attachmentError || resendNotice) && (
                   <div
                     role="alert"
                     className="pointer-events-auto mx-auto mb-2 flex max-w-[46rem] items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/60 dark:text-red-300"
                   >
                     <span className="flex items-center gap-1.5">
                       <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                      {session.submitError ?? configError ?? attachmentError}
+                      {session.submitError ?? configError ?? attachmentError ?? resendNotice}
                     </span>
                     <button
                       type="button"
@@ -1929,6 +1959,7 @@ export function Term2SessionShell({
                       setPopoverIndex(0);
                       setHistoryIndex(null);
                       if (session.submitError) session.clearSubmitError();
+                      setResendNotice(null);
                     }}
                     onClick={(event) => setCursorPos(event.currentTarget.selectionStart ?? input.length)}
                     onKeyUp={(event) => setCursorPos(event.currentTarget.selectionStart ?? input.length)}

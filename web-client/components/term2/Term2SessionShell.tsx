@@ -63,6 +63,7 @@ import type {
   ImageAttachmentPayload,
   ModelSummary,
   RewindTargetSummary,
+  SessionApprovalMode,
   SessionConfigRecord,
   SessionConfigUpdate,
   SettingsProjection,
@@ -189,6 +190,20 @@ export function Term2SessionShell({
   const [dialog, setDialog] = useState<'folder' | 'settings' | 'help' | 'rewind' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
   const [startingChat, setStartingChat] = useState(false);
+  // "New chat" opens a draft: a folder and a composer, but no gateway session
+  // until the first message is sent, so clicking around leaves no empty chats.
+  const [draftWorkspaceId, setDraftWorkspaceId] = useState<string | null>(null);
+  const [draftConfig, setDraftConfig] = useState<
+    Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'approvalMode'>
+  >({});
+  const [pendingFirstSend, setPendingFirstSend] = useState<{
+    sessionId: string;
+    delivery?: 'auto' | 'steer' | 'follow_up';
+    overrideText?: string;
+  } | null>(null);
+  const isDraft = !sessionId && draftWorkspaceId !== null;
+  const pendingFirstSendIdRef = useRef<string | null>(null);
+  pendingFirstSendIdRef.current = pendingFirstSend?.sessionId ?? null;
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -265,6 +280,8 @@ export function Term2SessionShell({
   useEffect(() => {
     if (draftSessionIdRef.current === sessionId) return;
     draftSessionIdRef.current = sessionId;
+    // A draft that just became this session keeps its composer text, images and skill for the first send.
+    if (sessionId && pendingFirstSendIdRef.current === sessionId) return;
     setInput('');
     setAttachments([]);
     setAttachmentError(null);
@@ -447,31 +464,64 @@ export function Term2SessionShell({
 
   const chooseWorkspace = (workspaceId: string) => session.setSelectedWorkspaceId(workspaceId || null);
 
+  const leaveSession = useCallback(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('agentSession')) return;
+    url.searchParams.delete('agentSession');
+    window.history.pushState({}, '', url.toString());
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, []);
+
+  /** Opens an empty draft chat in a folder; the gateway session is created on first send. */
   const createNewChat = useCallback(
     async (workspaceOverride?: string) => {
       const targetWorkspace = workspaceOverride ?? session.selectedWorkspaceId;
       if (!targetWorkspace || startingChat) return;
-      setStartingChat(true);
       setLoadError(null);
-      try {
-        const projection = await session.createSession(targetWorkspace);
-        session.selectSession(projection.id);
-        if (window.innerWidth < 768) setSidebarOpen(false);
-      } catch (error) {
-        if (error instanceof Term2ApiError && error.status === 409) {
-          await session.refreshSessions().catch(() => undefined);
-        }
-        setLoadError(
-          error instanceof Error && error.message
-            ? error.message
-            : 'Could not start a new chat. Try again or choose a different folder.',
-        );
-      } finally {
-        setStartingChat(false);
-      }
+      session.setSelectedWorkspaceId(targetWorkspace);
+      setDraftWorkspaceId(targetWorkspace);
+      setDraftConfig({});
+      setInput('');
+      leaveSession();
+      if (window.innerWidth < 768) setSidebarOpen(false);
+      window.setTimeout(() => composerRef.current?.focus(), 50);
     },
-    [session, startingChat],
+    [leaveSession, session, startingChat],
   );
+
+  /** Creates the gateway session for a draft, applies draft picks, then hands the first send to it. */
+  const startDraftChat = async (delivery?: 'auto' | 'steer' | 'follow_up', overrideText?: string) => {
+    if (!draftWorkspaceId || startingChat) return;
+    setStartingChat(true);
+    setLoadError(null);
+    try {
+      const projection = await session.createSession(draftWorkspaceId);
+      if (Object.keys(draftConfig).length > 0) {
+        const latest = await term2Client.readSessionConfig(projection.id);
+        await term2Client.updateSessionConfig(projection.id, {
+          clientRequestId: crypto.randomUUID(),
+          expectedRevision: latest.configRevision,
+          admission: 'idle',
+          ...draftConfig,
+        });
+      }
+      setPendingFirstSend({ sessionId: projection.id, delivery, overrideText });
+      setDraftWorkspaceId(null);
+      setDraftConfig({});
+      session.selectSession(projection.id);
+    } catch (error) {
+      if (error instanceof Term2ApiError && error.status === 409) {
+        await session.refreshSessions().catch(() => undefined);
+      }
+      setLoadError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not start a new chat. Try again or choose a different folder.',
+      );
+    } finally {
+      setStartingChat(false);
+    }
+  };
 
   const onFolderSelected = (folder: SelectedTerm2Workspace) => {
     setWorkspaceMetadata((current) => ({
@@ -498,6 +548,10 @@ export function Term2SessionShell({
   const handleUpdateSessionConfig = async (
     selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>,
   ) => {
+    if (isDraft) {
+      setDraftConfig((current) => ({ ...current, ...selection }));
+      return;
+    }
     if (!sessionId || !discoveredConfig || configBusy) return;
     setConfigBusy(true);
     setConfigError(null);
@@ -588,8 +642,9 @@ export function Term2SessionShell({
 
   const interactionPending = session.view.status === 'awaiting_interaction';
   const aborting = session.view.status === 'aborting';
-  const composerDisabled =
-    !sessionId ||
+  const composerDisabled = isDraft
+    ? startingChat
+    : !sessionId ||
     session.view.sessionId !== sessionId ||
     !canSubmitSessionMessage(session.view.status) ||
     interactionPending ||
@@ -609,6 +664,10 @@ export function Term2SessionShell({
   const submitMessage = async (delivery?: 'auto' | 'steer' | 'follow_up', overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text && attachments.length === 0) return;
+    if (isDraft) {
+      await startDraftChat(delivery, overrideText);
+      return;
+    }
     const effectiveDelivery = delivery ?? (hasStreamingTurn ? 'steer' : 'auto');
     const accepted = await session.submit(text, {
       delivery: effectiveDelivery,
@@ -643,6 +702,38 @@ export function Term2SessionShell({
   };
 
   const sessionConfig = discoveredConfig?.sessionId === sessionId ? discoveredConfig : null;
+
+  // Opening any real chat ends the draft.
+  useEffect(() => {
+    if (sessionId) setDraftWorkspaceId(null);
+  }, [sessionId]);
+
+  // A draft's model, effort and approval picks start from the saved defaults and are
+  // applied to the session when the first message creates it.
+  const draftPickerConfig = useMemo((): SessionConfigRecord | null => {
+    if (!isDraft || !settings) return null;
+    const defaults = settings.settings.safeDefaults;
+    const savedModel = defaults['agent.modelSelection']?.value as { provider: string; model: string } | undefined;
+    const model = draftConfig.modelSelection ?? savedModel;
+    if (!model?.provider || !model.model) return null;
+    const savedEffort = defaults['agent.reasoningEffort']?.value;
+    const savedApproval = defaults['shell.autoApproveMode']?.value;
+    return {
+      configRevision: 'draft',
+      defaultsRevision: settings.defaultsRevision,
+      providerId: model.provider,
+      modelId: model.model,
+      reasoningEffort: draftConfig.reasoningEffort ?? (typeof savedEffort === 'string' ? savedEffort : 'default'),
+      mode: 'standard',
+      approvalMode:
+        draftConfig.approvalMode ??
+        (['off', 'auto', 'unattended', 'always'].includes(String(savedApproval))
+          ? (savedApproval as SessionApprovalMode)
+          : 'off'),
+    };
+  }, [isDraft, settings, draftConfig]);
+  const pickerConfig = isDraft ? draftPickerConfig : sessionConfig;
+  const pickerDisabled = isDraft ? startingChat : commandDisabled;
   const providerId = sessionConfig?.providerId ?? '';
   const chatProvider = settings?.settings.providers.find((provider) => provider.id === providerId);
   const providerLabel = chatProvider?.label ?? (providerId === 'openai' ? 'OpenAI' : providerId);
@@ -704,6 +795,19 @@ export function Term2SessionShell({
       .catch(() => undefined)
       .finally(() => setConfigBusy(false));
   }, [willAutoAlign, sessionId, sessionConfig, fallbackConfiguredModel, configBusy]);
+
+  // Send a draft's first message once its new session is loaded and any automatic
+  // provider alignment has finished.
+  useEffect(() => {
+    if (!pendingFirstSend || sessionId !== pendingFirstSend.sessionId) return;
+    if (!sessionConfig || willAutoAlign || configBusy) return;
+    if (session.view.sessionId !== sessionId || !canSubmitSessionMessage(session.view.status)) return;
+    const pending = pendingFirstSend;
+    setPendingFirstSend(null);
+    void submitMessage(pending.delivery, pending.overrideText);
+    // submitMessage reads the current composer state; it is intentionally not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFirstSend, sessionId, sessionConfig, willAutoAlign, configBusy, session.view.sessionId, session.view.status]);
 
   const lastTurn = session.view.turns[session.view.turns.length - 1];
   const liveStatus = interactionPending
@@ -941,7 +1045,9 @@ export function Term2SessionShell({
         if (!first) return 'New chat';
         return first.length > 80 ? `${first.slice(0, 80)}…` : first;
       })()
-    : 'Welcome';
+    : isDraft
+      ? 'New chat'
+      : 'Welcome';
 
   const handleRewind = async (target: RewindTargetSummary, restoreText: boolean) => {
     const ok = await session.rewind(target.targetId);
@@ -965,6 +1071,7 @@ export function Term2SessionShell({
           <button
             type="button"
             onClick={() => {
+              setDraftWorkspaceId(null);
               const url = new URL(window.location.href);
               url.searchParams.delete('agentSession');
               window.history.pushState({}, '', url.toString());
@@ -1104,10 +1211,10 @@ export function Term2SessionShell({
             <div
               ref={scrollRef}
               onScroll={onScroll}
-              className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin sm:px-6 ${sessionId ? 'pb-60' : 'pb-12'}`}
+              className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin sm:px-6 ${sessionId || isDraft ? 'pb-60' : 'pb-12'}`}
             >
               <div className="mx-auto w-full max-w-[46rem] space-y-6">
-                {!sessionId && (
+                {!sessionId && !isDraft && (
                   <div className="t2-enter mx-auto flex max-w-lg flex-col items-center pt-[7vh] text-center">
                     <span aria-hidden className="text-[2rem] leading-none">
                       <Wordmark />
@@ -1301,7 +1408,8 @@ export function Term2SessionShell({
                   </div>
                 )}
 
-                {sessionId && session.view.turns.length === 0 && (!needsProviderSetup || willAutoAlign || configBusy) && (
+                {((sessionId && session.view.turns.length === 0 && (!needsProviderSetup || willAutoAlign || configBusy)) ||
+                  isDraft) && (
                   <div className="rounded-2xl border border-black/[0.06] bg-zinc-50/70 p-5 dark:border-white/[0.07] dark:bg-white/[0.02]">
                     <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                       What would you like help with in {selectedWorkspaceInfo.displayName || 'this folder'}?
@@ -1522,7 +1630,7 @@ export function Term2SessionShell({
               </div>
             </div>
 
-            {sessionId && (
+            {(sessionId || isDraft) && (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 overflow-visible bg-gradient-to-t from-white from-65% to-transparent px-3 pb-3 pt-10 dark:from-zinc-900 sm:px-6 sm:pb-4">
                 {!pinned && (
                   <div className="mb-2 flex justify-center">
@@ -1813,14 +1921,14 @@ export function Term2SessionShell({
                       </PopoverContent>
                     </Popover>
 
-                    {sessionConfig && (
+                    {pickerConfig && (
                       <>
                         <Term2ModelPicker
-                          config={sessionConfig}
+                          config={pickerConfig}
                           models={models}
                           loadingModels={loadingModels}
                           settings={settings}
-                          disabled={commandDisabled}
+                          disabled={pickerDisabled}
                           busy={configBusy}
                           onSelectModel={(provider, model) =>
                             void handleUpdateSessionConfig({ modelSelection: { provider, model } })
@@ -1831,8 +1939,8 @@ export function Term2SessionShell({
                           onOpenSettings={() => setDialog('settings')}
                         />
                         <Term2ApprovalPicker
-                          mode={sessionConfig.approvalMode ?? 'off'}
-                          disabled={commandDisabled}
+                          mode={pickerConfig.approvalMode ?? 'off'}
+                          disabled={pickerDisabled}
                           busy={configBusy}
                           onSelect={(approvalMode) => void handleUpdateSessionConfig({ approvalMode })}
                         />

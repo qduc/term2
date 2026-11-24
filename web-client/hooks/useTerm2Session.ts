@@ -644,7 +644,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     manageQueue,
     controlTask,
     rewind,
-    commandPending: commandPendingSessionId === sessionId,
+    commandPending: sessionId !== null && commandPendingSessionId === sessionId,
     commandNotice:
       commandState && commandState.sessionId === sessionId
         ? { tone: commandState.tone, message: commandState.message }

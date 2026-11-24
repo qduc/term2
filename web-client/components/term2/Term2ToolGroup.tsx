@@ -67,7 +67,8 @@ export function Term2ToolGroup({
   const running = commands.filter((c) => c.status === 'running').length;
   const pending = commands.filter((c) => c.status === 'pending').length;
   const failed = commands.filter((c) => c.status === 'failed').length;
-  const open = userOpen ?? (defaultExpanded || running > 0 || pending > 0);
+  // A failed run stays open: the summary only says that it failed, and the reason is on the card.
+  const open = userOpen ?? (defaultExpanded || running > 0 || pending > 0 || failed > 0);
   const summary =
     running > 0
       ? `Running ${running} ${running === 1 ? 'action' : 'actions'}${pending > 0 ? ` · ${pending} waiting` : ''}`

@@ -51,6 +51,8 @@ export function Term2ModelPicker({
   onToggleFavorite,
   onRefreshModels,
   onOpenSettings,
+  pending = false,
+  note,
 }: {
   config: SessionConfigRecord;
   models: ModelSummary[];
@@ -63,6 +65,10 @@ export function Term2ModelPicker({
   onToggleFavorite?: (favoriteKey: string) => void;
   onRefreshModels: () => void;
   onOpenSettings: () => void;
+  /** The shown model or effort is staged and not yet applied to the chat. */
+  pending?: boolean;
+  /** One line shown at the top of the panel, e.g. how picks apply here. */
+  note?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -133,10 +139,15 @@ export function Term2ModelPicker({
             size="xs"
             disabled={disabled || busy}
             aria-label="Choose model and reasoning effort"
-            title={`Model: ${config.providerId}/${config.modelId} · Reasoning effort: ${effortLabel}`}
-            className="max-w-[18rem] rounded-full"
+            title={`Model: ${config.providerId}/${config.modelId} · Reasoning effort: ${effortLabel}${
+              pending ? ' · applies when you send your next message' : ''
+            }`}
+            className={cn('max-w-[18rem] rounded-full', pending && 'border-dashed')}
           >
             {busy ? <Loader2 aria-hidden className="animate-spin" /> : null}
+            {pending && !busy && (
+              <span aria-label="Pending change" className="size-1.5 shrink-0 rounded-full bg-amber-500" />
+            )}
             <span className="truncate font-mono">{config.modelId}</span>
             {showEffortInChip && <span className="shrink-0 text-muted-foreground">· {effortLabel}</span>}
             <ChevronDown aria-hidden className="text-muted-foreground" />
@@ -148,6 +159,7 @@ export function Term2ModelPicker({
           aria-label="Select model"
           className="flex max-h-[26rem] w-[min(23rem,calc(100vw-2rem))] flex-col gap-0 overflow-hidden p-0"
         >
+          {note && <p className="border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">{note}</p>}
           <div className="flex items-center gap-2 border-b px-3 py-2">
             <Search aria-hidden className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <input

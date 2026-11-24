@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { term2Client, Term2ApiError } from '../lib/api/term2';
 import { viewFromHydration, type SessionHydration } from '../lib/term2/hydration';
 import { consumeSseResponse } from '../lib/term2/sse';
+import { readyForBackgroundDrain, undeliveredBackgroundNoticeIds } from '../lib/term2/queue';
 import {
   applyTerm2Event,
   clearTerm2LiveEvidence,
@@ -28,6 +29,7 @@ import { Term2ProtocolError } from '../lib/term2/types';
 const MAX_RECONNECT_DELAY = 10_000;
 const MAX_PROTOCOL_RELOADS = 2;
 const BACKOFF_BASE = 500;
+const BACKGROUND_DRAIN_RETRY_MS = 2_000;
 
 // Messages need a live session stream to observe their accepted outcome.
 export function canSubmitSessionMessage(status: Term2ConnectionStatus): boolean {
@@ -499,6 +501,41 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       return false;
     }
   }, []);
+
+  // A background task that finishes while the chat is idle only records a notice; the Session
+  // admits the silent turn that tells the agent once an attached client asks it to drain (the TUI
+  // does the same). Ask once per accepted boundary; the Session dedupes concurrent asks from other
+  // tabs. A busy answer is normally reconsidered at the next boundary, but the Session can also be
+  // busy while a finished turn's completion is held, which ends without a new event, so a busy or
+  // failed ask gets exactly one delayed re-ask for the same boundary.
+  const drainAttemptRef = useRef<string | null>(null);
+  const drainRetriedRef = useRef<string | null>(null);
+  const [drainRetry, setDrainRetry] = useState<string | null>(null);
+  useEffect(() => {
+    const id = sessionIdRef.current;
+    if (!id || view.sessionId !== id || !readyForBackgroundDrain(view)) return;
+    const pending = undeliveredBackgroundNoticeIds(view);
+    if (!pending.length) return;
+    const boundary = `${id}:${view.lastAppliedSequence}:${pending.join(',')}`;
+    const attempt = drainRetry === boundary ? `${boundary}:retry` : boundary;
+    if (drainAttemptRef.current === attempt || (attempt === boundary && drainAttemptRef.current === `${boundary}:retry`))
+      return;
+    drainAttemptRef.current = attempt;
+    const retry = () => {
+      if (drainRetriedRef.current === boundary) return;
+      drainRetriedRef.current = boundary;
+      setTimeout(() => setDrainRetry(boundary), BACKGROUND_DRAIN_RETRY_MS);
+    };
+    term2Client
+      .controlTask(id, { action: 'drain_notifications', clientRequestId: `drain_${crypto.randomUUID()}` })
+      .then((result) => {
+        if (result.drain === 'busy') retry();
+      })
+      .catch((error: unknown) => {
+        console.warn('Background notice drain failed', error);
+        retry();
+      });
+  }, [view, drainRetry]);
 
   const controlTask = useCallback(async (action: TaskControlAction) => {
     const id = sessionIdRef.current;

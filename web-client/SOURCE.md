@@ -118,7 +118,12 @@ The public facade groups are:
   `controlTask` (cancel/check_in/foreground/background/drain_notifications),
   `listSessionFiles` (for `@` path mentions), and `readSessionQuota` (the subscription
   flag and the provider's last-reported plan windows; the wire carries no quota change, so
-  the usage popover rereads it after each finished turn). Actual session/turn/request identities
+  the usage popover rereads it after each finished turn). `useTerm2Session` sends
+  `drain_notifications` itself when an idle chat (no running root turn, root approval,
+  or queued or paused message) holds undelivered background notices, once per
+  accepted boundary plus one delayed re-ask after a busy or failed answer: the Session
+  never wakes the agent for a task that finishes while idle unless an attached client
+  asks, as the TUI does. Actual session/turn/request identities
   are caller/server data, not browser-generated recovery cursors. New message/command
   intents use real caller-owned keys.
 - Session configuration: `readSessionConfig` (current discovery) and

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Check, ChevronDown, Loader2, RefreshCw, Search, Star } from 'lucide-react';
+import { Check, ChevronDown, Loader2, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -51,6 +51,9 @@ export function Term2ModelPicker({
   onToggleFavorite,
   onRefreshModels,
   onOpenSettings,
+  pending = false,
+  note,
+  warning,
 }: {
   config: SessionConfigRecord;
   models: ModelSummary[];
@@ -63,6 +66,12 @@ export function Term2ModelPicker({
   onToggleFavorite?: (favoriteKey: string) => void;
   onRefreshModels: () => void;
   onOpenSettings: () => void;
+  /** The shown model or effort is staged and not yet applied to the chat. */
+  pending?: boolean;
+  /** One line shown at the top of the panel, e.g. how picks apply here. */
+  note?: string;
+  /** Shown on the chip and in the panel when the selected model may not work. */
+  warning?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -133,10 +142,20 @@ export function Term2ModelPicker({
             size="xs"
             disabled={disabled || busy}
             aria-label="Choose model and reasoning effort"
-            title={`Model: ${config.providerId}/${config.modelId} · Reasoning effort: ${effortLabel}`}
-            className="max-w-[18rem] rounded-full"
+            title={`Model: ${config.providerId}/${config.modelId} · Reasoning effort: ${effortLabel}${
+              pending ? ' · applies when you send your next message' : ''
+            }${warning ? ` · ${warning}` : ''}`}
+            className={cn(
+              'max-w-[18rem] rounded-full',
+              pending && 'border-dashed',
+              warning && 'border-amber-500/60 text-amber-800 dark:text-amber-300',
+            )}
           >
+            {warning && !busy && <TriangleAlert aria-label="Model may be unavailable" className="text-amber-500" />}
             {busy ? <Loader2 aria-hidden className="animate-spin" /> : null}
+            {pending && !busy && (
+              <span aria-label="Pending change" className="size-1.5 shrink-0 rounded-full bg-amber-500" />
+            )}
             <span className="truncate font-mono">{config.modelId}</span>
             {showEffortInChip && <span className="shrink-0 text-muted-foreground">· {effortLabel}</span>}
             <ChevronDown aria-hidden className="text-muted-foreground" />
@@ -148,6 +167,12 @@ export function Term2ModelPicker({
           aria-label="Select model"
           className="flex max-h-[26rem] w-[min(23rem,calc(100vw-2rem))] flex-col gap-0 overflow-hidden p-0"
         >
+          {warning && (
+            <p role="status" className="border-b bg-amber-500/10 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+              {warning}
+            </p>
+          )}
+          {note && <p className="border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">{note}</p>}
           <div className="flex items-center gap-2 border-b px-3 py-2">
             <Search aria-hidden className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <input

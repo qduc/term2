@@ -203,6 +203,13 @@ export function Term2SessionShell({
     overrideText?: string;
   } | null>(null);
   const isDraft = !sessionId && draftWorkspaceId !== null;
+  // Model and effort picked in an existing chat wait here until the next message is sent;
+  // leaving the chat discards them, so browsing never changes a conversation's model.
+  const [stagedConfig, setStagedConfig] = useState<{
+    sessionId: string;
+    modelSelection?: { provider: string; model: string };
+    reasoningEffort?: SessionConfigUpdate['reasoningEffort'];
+  } | null>(null);
   const pendingFirstSendIdRef = useRef<string | null>(null);
   pendingFirstSendIdRef.current = pendingFirstSend?.sessionId ?? null;
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
@@ -499,13 +506,14 @@ export function Term2SessionShell({
     setLoadError(null);
     try {
       const projection = await session.createSession(draftWorkspaceId);
-      if (Object.keys(draftConfig).length > 0) {
+      const toApply = draftConfig;
+      if (Object.keys(toApply).length > 0) {
         const latest = await term2Client.readSessionConfig(projection.id);
         await term2Client.updateSessionConfig(projection.id, {
           clientRequestId: crypto.randomUUID(),
           expectedRevision: latest.configRevision,
           admission: 'idle',
-          ...draftConfig,
+          ...toApply,
         });
       }
       setPendingFirstSend({ sessionId: projection.id, delivery, overrideText });
@@ -580,14 +588,11 @@ export function Term2SessionShell({
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
-  const handleUpdateSessionConfig = async (
+  /** Applies a change to the open chat now. Returns whether it took effect. */
+  const applySessionConfig = async (
     selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>,
-  ) => {
-    if (isDraft) {
-      setDraftConfig((current) => ({ ...current, ...selection }));
-      return;
-    }
-    if (!sessionId || !discoveredConfig || configBusy) return;
+  ): Promise<boolean> => {
+    if (!sessionId || !discoveredConfig || configBusy) return false;
     setConfigBusy(true);
     setConfigError(null);
     try {
@@ -602,14 +607,66 @@ export function Term2SessionShell({
       if (response.result.ok && response.result.kind === 'command_finished') {
         const refreshed = await term2Client.readSessionConfig(sessionId);
         setDiscoveredConfig(refreshed);
-      } else if (!response.result.ok) {
-        setConfigError(response.result.message || 'Could not update session configuration.');
+        return true;
       }
+      if (!response.result.ok) {
+        setConfigError(response.result.message || 'Could not update session configuration.');
+        return false;
+      }
+      return true;
     } catch (reason) {
       setConfigError(reason instanceof Error ? reason.message : 'Could not update session configuration.');
+      return false;
     } finally {
       setConfigBusy(false);
     }
+  };
+
+  /** A model or effort picked in a blank chat becomes the default for blank chats. */
+  const saveBlankChatDefault = async (
+    selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort'>,
+  ) => {
+    const changes: Array<{ key: string; value: unknown }> = [];
+    if (selection.modelSelection) changes.push({ key: 'agent.modelSelection', value: selection.modelSelection });
+    if (selection.reasoningEffort) changes.push({ key: 'agent.reasoningEffort', value: selection.reasoningEffort });
+    if (changes.length === 0 || !settings) return;
+    try {
+      const res = await term2Client.writeSettings({ expectedRevision: settings.revision, changes });
+      setSettings(res.projection);
+    } catch {
+      setLoadError('Could not save this as the default for new chats. It still applies to this chat.');
+    }
+  };
+
+  const handleUpdateSessionConfig = async (
+    selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>,
+  ) => {
+    if (isDraft) {
+      setDraftConfig((current) => ({ ...current, ...selection }));
+      void saveBlankChatDefault(selection);
+      return;
+    }
+    if (!sessionId) return;
+    const { modelSelection, reasoningEffort, ...immediate } = selection;
+    if (modelSelection || reasoningEffort) {
+      setStagedConfig((current) => {
+        const next: NonNullable<typeof current> =
+          current?.sessionId === sessionId ? { ...current } : { sessionId };
+        if (modelSelection) {
+          const unchanged =
+            sessionConfig?.providerId === modelSelection.provider && sessionConfig?.modelId === modelSelection.model;
+          if (unchanged) delete next.modelSelection;
+          else next.modelSelection = modelSelection;
+        }
+        if (reasoningEffort) {
+          if ((sessionConfig?.reasoningEffort || 'default') === reasoningEffort) delete next.reasoningEffort;
+          else next.reasoningEffort = reasoningEffort;
+        }
+        return next.modelSelection || next.reasoningEffort ? next : null;
+      });
+    }
+    // Approval and mode are safety and behaviour controls: they apply now.
+    if (Object.keys(immediate).length > 0) await applySessionConfig(immediate);
   };
 
   const handleToggleFavorite = async (favoriteKey: string) => {
@@ -703,6 +760,13 @@ export function Term2SessionShell({
       await startDraftChat(delivery, overrideText);
       return;
     }
+    // A staged model or effort applies to the next turn this message starts; a steer or
+    // queued message during a running turn leaves it staged.
+    if (!hasStreamingTurn && stagedConfig && stagedConfig.sessionId === sessionId) {
+      const { sessionId: _staged, ...changes } = stagedConfig;
+      if (!(await applySessionConfig(changes))) return;
+      setStagedConfig(null);
+    }
     const effectiveDelivery = delivery ?? (hasStreamingTurn ? 'steer' : 'auto');
     const accepted = await session.submit(text, {
       delivery: effectiveDelivery,
@@ -741,23 +805,40 @@ export function Term2SessionShell({
   // Opening any real chat ends the draft.
   useEffect(() => {
     if (sessionId) setDraftWorkspaceId(null);
+    setStagedConfig((current) => (current && current.sessionId === sessionId ? current : null));
   }, [sessionId]);
+
+  // The blank-chat default model. It is never swapped for another model behind the
+  // user's back: when it isn't available, the draft keeps it and says so.
+  const draftModel = useMemo((): {
+    selection: { provider: string; model: string };
+    unavailable?: boolean;
+  } | null => {
+    if (!isDraft || !settings) return null;
+    const selection =
+      draftConfig.modelSelection ??
+      (settings.settings.safeDefaults['agent.modelSelection']?.value as
+        | { provider: string; model: string }
+        | undefined);
+    if (!selection?.provider || !selection.model) return null;
+    const providerOff = Boolean(settings.settings.providers.find((item) => item.id === selection.provider)?.disabled);
+    const notListed =
+      models.length > 0 && !models.some((m) => m.provider === selection.provider && m.id === selection.model);
+    return { selection, unavailable: providerOff || notListed };
+  }, [isDraft, settings, draftConfig.modelSelection, models]);
 
   // A draft's model, effort and approval picks start from the saved defaults and are
   // applied to the session when the first message creates it.
   const draftPickerConfig = useMemo((): SessionConfigRecord | null => {
-    if (!isDraft || !settings) return null;
+    if (!isDraft || !settings || !draftModel) return null;
     const defaults = settings.settings.safeDefaults;
-    const savedModel = defaults['agent.modelSelection']?.value as { provider: string; model: string } | undefined;
-    const model = draftConfig.modelSelection ?? savedModel;
-    if (!model?.provider || !model.model) return null;
     const savedEffort = defaults['agent.reasoningEffort']?.value;
     const savedApproval = defaults['shell.autoApproveMode']?.value;
     return {
       configRevision: 'draft',
       defaultsRevision: settings.defaultsRevision,
-      providerId: model.provider,
-      modelId: model.model,
+      providerId: draftModel.selection.provider,
+      modelId: draftModel.selection.model,
       reasoningEffort: draftConfig.reasoningEffort ?? (typeof savedEffort === 'string' ? savedEffort : 'default'),
       mode: 'standard',
       approvalMode:
@@ -766,8 +847,29 @@ export function Term2SessionShell({
           ? (savedApproval as SessionApprovalMode)
           : 'off'),
     };
-  }, [isDraft, settings, draftConfig]);
-  const pickerConfig = isDraft ? draftPickerConfig : sessionConfig;
+  }, [isDraft, settings, draftConfig, draftModel]);
+  const stagedForChat = !isDraft && stagedConfig?.sessionId === sessionId ? stagedConfig : null;
+  const sessionPickerConfig = useMemo(
+    (): SessionConfigRecord | null =>
+      sessionConfig && stagedForChat
+        ? {
+            ...sessionConfig,
+            ...(stagedForChat.modelSelection
+              ? { providerId: stagedForChat.modelSelection.provider, modelId: stagedForChat.modelSelection.model }
+              : {}),
+            ...(stagedForChat.reasoningEffort ? { reasoningEffort: stagedForChat.reasoningEffort } : {}),
+          }
+        : sessionConfig,
+    [sessionConfig, stagedForChat],
+  );
+  const pickerNote = isDraft
+    ? 'A model you pick here becomes the default for new chats.'
+    : 'Changes apply when you send your next message.';
+  const pickerWarning =
+    isDraft && draftModel?.unavailable
+      ? `${draftModel.selection.model} isn't available right now (its provider is off or didn't list it). Pick another model, or send anyway to try it.`
+      : undefined;
+  const pickerConfig = isDraft ? draftPickerConfig : sessionPickerConfig;
   const pickerDisabled = isDraft ? startingChat : commandDisabled;
   const providerId = sessionConfig?.providerId ?? '';
   const chatProvider = settings?.settings.providers.find((provider) => provider.id === providerId);
@@ -1974,6 +2076,9 @@ export function Term2SessionShell({
                           onToggleFavorite={settings ? (key) => void handleToggleFavorite(key) : undefined}
                           onRefreshModels={() => void reloadModels()}
                           onOpenSettings={() => setDialog('settings')}
+                          pending={Boolean(stagedForChat)}
+                          note={pickerNote}
+                          warning={pickerWarning}
                         />
                         <Term2ApprovalPicker
                           mode={pickerConfig.approvalMode ?? 'off'}

@@ -465,13 +465,14 @@ export function Term2SettingsPage({
   const safetySummary = (breadcrumb?: string) => {
     if (!projection) return null;
     const safety = projection.settings.safety;
-    const sandboxLine = projection.shellSandboxNotice
-      ? 'The sandbox isn’t available on this machine, so shell commands can’t be confined.'
-      : safety.sandbox === 'enabled'
-        ? 'Shell commands run in the sandbox.'
-        : safety.sandbox === 'unavailable'
-          ? 'The sandbox isn’t available on this machine, so shell commands can’t be confined.'
-          : 'Shell commands run unconfined: the sandbox is turned off.';
+    // Read-only folders always run shell in the sandbox, or get no shell when it can't run (contract 13);
+    // `sandbox.enabled` governs only read & write folders.
+    const sandboxLine =
+      projection.shellSandboxNotice || safety.sandbox === 'unavailable'
+        ? 'The sandbox isn’t available on this machine, so read-only folders get no shell commands.'
+        : safety.sandbox === 'enabled'
+          ? 'Shell commands run in the sandbox.'
+          : 'In read & write folders, shell commands run unconfined because the sandbox is turned off. Read-only folders still use the sandbox.';
     const networkLine =
       safety.network === 'denied'
         ? 'Sandboxed commands can’t reach the network.'

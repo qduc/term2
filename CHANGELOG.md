@@ -10,6 +10,7 @@
 
 - Stage model and reasoning-effort changes in an existing web chat until the next message; new chats use the configured defaults.
 - Show model details and subscription plan limits in the web UI, label tool rows by their description, and offer standard and concise tool displays.
+- Start the installed CLI's session index worker without loading the TypeScript runtime loader (#411).
 - For read-access sessions, run shell commands in the sandbox even if sandboxing is disabled in settings; withhold the shell tool if the sandbox is unavailable.
 - Enable the cwd-bound `unsandboxed-once` approval grant for direct foreground shell escapes in writable local web sessions while keeping ordinary sandboxed shell approval and refusing unsupported escape requests instead of silently downgrading them.
 

@@ -539,17 +539,17 @@ export function Term2SessionShell({
   };
 
   /** After a saved folder's access changes or it is removed, its open chat may no longer open: leave it. */
-  const onSavedFolderChanged = (change: SavedFolderChange) => {
+  const onSavedFolderChanged = async (change: SavedFolderChange) => {
     const workspaceId = change.kind === 'removed' ? change.workspaceId : change.workspace.workspaceId;
     if (change.kind === 'access') {
       setWorkspaceMetadata((current) =>
-        current[workspaceId] ? { ...current, [workspaceId]: { ...current[workspaceId], access: change.workspace.access } } : current,
+        current[workspaceId]
+          ? { ...current, [workspaceId]: { ...current[workspaceId], access: change.workspace.access } }
+          : current,
       );
-    } else if (session.selectedWorkspaceId === workspaceId) {
-      setSelectedWorkspaceId(null);
     }
     const openChatWorkspace = sessionId
-      ? session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? session.selectedWorkspaceId
+      ? (session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? session.selectedWorkspaceId)
       : null;
     if (openChatWorkspace === workspaceId) {
       const params = new URLSearchParams(window.location.search);
@@ -557,8 +557,14 @@ export function Term2SessionShell({
       window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
-    void refreshWorkspaces().catch(() => setLoadError('Could not refresh saved folders.'));
     void refreshSessions().catch(() => undefined);
+    try {
+      await refreshWorkspaces();
+    } catch {
+      setLoadError('Could not refresh saved folders.');
+    }
+    // Clear only after the list no longer has the folder, or the auto-select would pick it again.
+    if (change.kind === 'removed' && session.selectedWorkspaceId === workspaceId) setSelectedWorkspaceId(null);
   };
 
   const selectSession = (id: string) => {
@@ -2049,7 +2055,7 @@ export function Term2SessionShell({
               setDialog(null);
             }}
             onSelected={onFolderSelected}
-            onSavedFolderChanged={onSavedFolderChanged}
+            onSavedFolderChanged={(change) => void onSavedFolderChanged(change)}
           />
         </Term2SetupDialog>
       )}

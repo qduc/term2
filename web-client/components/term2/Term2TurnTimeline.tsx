@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { Brain, ChevronRight } from 'lucide-react';
 import type { Term2Command, Term2TurnItem, Term2TurnView } from '../../lib/term2/types';
 import { Term2Markdown } from './Term2Markdown';
@@ -96,7 +97,7 @@ function buildChronologicalSegments(turn: Term2TurnView): RenderSegment[] {
   return fallback;
 }
 
-export function Term2TurnTimeline({
+export const Term2TurnTimeline = memo(function Term2TurnTimeline({
   turn,
   displayMode,
 }: {
@@ -147,6 +148,6 @@ export function Term2TurnTimeline({
       })}
     </>
   );
-}
+});
 
 export type { Term2TurnItem };

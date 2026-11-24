@@ -71,12 +71,16 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
   };
 }
 
-/** A lifecycle change keeps a task's live tool tracking; a (re)start begins it afresh. */
+/** A lifecycle change keeps a task's live tool tracking and streamed output; a (re)start begins
+ * them afresh. Lifecycle events do not carry the streamed output (see `lifecycleTask`), so it is
+ * kept here from the task_progress chunks this reducer already applied.
+ */
 export function withToolTracking(state: WireSnapshot, change: string, next: WireTask): WireTask {
   const previous = change === 'task_started' ? undefined : state.tasks.find((task) => task.id === next.id);
-  const { lastTool, lastToolName, toolCounts } = previous ?? {};
+  const { lastTool, lastToolName, toolCounts, progress } = previous ?? {};
   return {
     ...next,
+    ...(progress !== undefined && next.progress === undefined ? { progress } : {}),
     ...(lastTool ? { lastTool } : {}),
     ...(lastToolName ? { lastToolName } : {}),
     ...(toolCounts ? { toolCounts } : {}),

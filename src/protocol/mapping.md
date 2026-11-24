@@ -100,7 +100,10 @@ protocol maps that source-backed contract. Combined execution remains unverified
   `change: task_started|task_backgrounded|task_stop_requested|task_finished` and
   numeric `at` copied from descriptor.startedAt or the corresponding fact.at.
   Envelope occurredAt remains the original accepted FactLine timestamp, not a
-  generated task time. Task progress -> transient task_progress. Task kind, ID,
+  generated task time. Task progress -> transient task_progress only: a
+  task_changed task omits the reducer's accumulated `progress` (each reducer keeps
+  it across lifecycle changes), so a status change never resends the task's whole
+  streamed output. Task kind, ID,
   parent turn/execution, origin, source call ID, mode and actual timestamps survive.
   Cancelling is not completed; child turn_ended is not task_finished.
   Known shell output / nested assistant text is public; arbitrary result objects

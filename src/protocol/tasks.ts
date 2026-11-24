@@ -120,6 +120,17 @@ export function taskFactEvents(fact: DirectBackgroundFact, state: WireSnapshot, 
     ? []
     : [taskFactEvent(fact, state, seq)];
 }
+/**
+ * The task as a lifecycle event publishes it. `progress` is a live read model: the reducer
+ * appends every streamed task_progress chunk to it, so it holds the task's whole raw output.
+ * Spreading it into each lifecycle event resent that output with every status change (hundreds
+ * of KB per event for a subagent reading large files). Subscribers already received it as
+ * task_progress chunks, and reducers keep it across lifecycle changes (`withToolTracking`).
+ */
+function lifecycleTask(task: WireTask): WireTask {
+  const { progress: _progress, ...rest } = task;
+  return rest;
+}
 /** One accepted task fact maps to one cursor-addressable event, never a root answer. */
 function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, seq: number): WireEvent {
   const base = { sessionId: state.sessionId, seq };
@@ -175,7 +186,7 @@ function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, seq: num
   }
   if (fact.type === 'task_question_opened' || fact.type === 'task_question_closed') {
     const next: WireTask = {
-      ...task,
+      ...lifecycleTask(task),
       lastActivityAt: fact.at,
       pendingQuestion: fact.type === 'task_question_opened' ? fact.question : undefined,
       status:
@@ -196,16 +207,16 @@ function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, seq: num
   let next: WireTask;
   switch (fact.type) {
     case 'task_backgrounded':
-      next = { ...task, mode: 'background' };
+      next = { ...lifecycleTask(task), mode: 'background' };
       break;
     case 'task_stop_requested':
-      next = { ...task, status: 'cancelling' };
+      next = { ...lifecycleTask(task), status: 'cancelling' };
       break;
     case 'task_finished': {
       const result = publicTaskResult(fact.result);
       // Streamed progress is not a settled result, including an empty retry.
       next = {
-        ...task,
+        ...lifecycleTask(task),
         status: result.kind,
         completedAt: fact.at,
         result,

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 /* Syntax highlighting themes - Conditionally applied based on theme */
 /* Light theme (default) */
 @import "highlight.js/styles/atom-one-light.css";
@@ -79,58 +80,59 @@
   text-decoration: underline;
 }
 
-/* Define CSS custom properties for theme colors */
+/* shadcn/ui theme tokens (default "neutral" base colour). Components in
+   components/ui read these; .dark is toggled on <html> by ThemeContext. */
 :root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --popover: #ffffff;
-  --popover-foreground: #18181b;
-  --primary: #18181b; /* zinc-950 */
-  --primary-foreground: #fafafa; /* zinc-50 */
-  --secondary: #f4f4f5; /* zinc-100 */
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5; /* zinc-100 */
-  --muted-foreground: #71717a; /* zinc-500 */
-  --accent: #f4f4f5; /* zinc-100 */
-  --accent-foreground: #18181b;
-  --destructive: #ef4444;
-  --destructive-foreground: #fafafa;
-  --border: #e4e4e7; /* zinc-200 */
-  --input: #e4e4e7; /* zinc-200 */
-  --ring: #18181b;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
   --scrollbar-thumb: #d4d4d8; /* zinc-300 */
   --scrollbar-thumb-hover: #a1a1aa; /* zinc-400 */
 }
 
-/* Dark mode colors - applied when .dark class is present */
-:root:where(.dark) {
-  --background: #09090b; /* zinc-950: app chrome behind the raised panel */
-  --foreground: #ededed;
-  --card: #18181b;
-  --card-foreground: #e4e4e7;
-  --popover: #18181b;
-  --popover-foreground: #e4e4e7;
-  --primary: #e4e4e7;
-  --primary-foreground: #18181b;
-  --secondary: #27272a; /* zinc-800 */
-  --secondary-foreground: #fafafa;
-  --muted: #27272a; /* zinc-800 */
-  --muted-foreground: #a1a1aa; /* zinc-400 */
-  --accent: #27272a; /* zinc-800 */
-  --accent-foreground: #fafafa;
-  --destructive: #ef4444;
-  --destructive-foreground: #fafafa;
-  --border: #27272a; /* zinc-800 */
-  --input: #27272a; /* zinc-800 */
-  --ring: #d4d4d8; /* zinc-300 */
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
   --scrollbar-thumb: #52525b; /* zinc-600 */
   --scrollbar-thumb-hover: #71717a; /* zinc-500 */
 }
 
-/* Tailwind v4 theme configuration */
-@theme {
+/* Dark variant follows the .dark class ThemeContext sets on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -146,18 +148,25 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-scrollbar-thumb: var(--scrollbar-thumb);
   --color-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Monaco, monospace;
 }
 
-/* Custom dark variant for v4 */
-@variant dark (&:where(.dark, .dark *));
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+}
 
 body {
   background: var(--background);

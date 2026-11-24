@@ -214,6 +214,10 @@ export const getAgentDefinition = (
     postExecuteDeniedRead?: boolean;
     sessionAccess?: SessionAccessState;
     readOnly?: boolean;
+    /** The session's workspace access is read: shell runs only inside the sandbox (tools/system/shell.ts). */
+    readSession?: boolean;
+    /** A read session whose sandbox cannot run: shell is not offered, and the prompt says so. */
+    shellWithheld?: boolean;
     allowUnsandboxed?: boolean;
     /** Root-session-only capability. Nested/subagent factories do not receive it. */
     backgroundShellRegistry?: BackgroundShellRegistryPort<BackgroundShellExecutionResult>;
@@ -266,6 +270,8 @@ export const getAgentDefinition = (
     postExecuteDeniedRead = false,
     sessionAccess,
     readOnly = false,
+    readSession = false,
+    shellWithheld = false,
     backgroundShellRegistry,
     backgroundShellOutput,
     shellChildRegistry,
@@ -287,12 +293,14 @@ export const getAgentDefinition = (
   // Search exposure is uniform across models: only an explicit `on` withholds
   // the dedicated search tools and routes search through the shell. `auto` is
   // the schema default and behaves exactly like `off`.
-  const searchViaShell = settingsService.get('app.searchViaShell') === 'on';
+  // A withheld shell cannot carry search, so the dedicated search tools stay.
+  const searchViaShell = settingsService.get('app.searchViaShell') === 'on' && !shellWithheld;
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const usesPatchEditingSurface = shouldPreferPatchEditingModel(resolvedModel);
-  const sandboxEnabled = settingsService.get('sandbox.enabled');
+  // A read session's shell always runs sandboxed (tools/system/shell.ts).
+  const sandboxEnabled = readSession || settingsService.get('sandbox.enabled');
   // Async delegation is an all-or-nothing parent capability: launch, status
   // preflight, result retrieval, and the two non-blocking control tools share
   // one registry path.
@@ -374,6 +382,8 @@ export const getAgentDefinition = (
     sandboxEnabled,
     executionContext,
     runCodeEnabled: hasCapability('shell'),
+    shellWithheld: hasCapability('shell') && shellWithheld,
+    workspaceWritable: !readOnly,
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
     fileReadEnabled: filesystemReadEnabled,
   });
@@ -396,7 +406,7 @@ export const getAgentDefinition = (
   let skillsInstructions = '';
   if (hasCapability('skills') && skillsCatalogEnabled && skillsService) {
     const catalog = skillsService.getSkillCatalog(
-      bareMode ? { loadVia: 'shell', searchTool: true } : { searchTool: true },
+      bareMode ? { loadVia: shellWithheld ? 'read_file' : 'shell', searchTool: true } : { searchTool: true },
     );
     if (catalog) {
       skillsInstructions = `\n\n${catalog}`;
@@ -404,8 +414,9 @@ export const getAgentDefinition = (
   }
 
   const rootBackgroundShellRegistry =
-    backgroundTasksEnabled && allowBackgroundShell ? backgroundShellRegistry : undefined;
-  const rootBackgroundShellOutput = backgroundTasksEnabled && allowBackgroundShell ? backgroundShellOutput : undefined;
+    backgroundTasksEnabled && allowBackgroundShell && !shellWithheld ? backgroundShellRegistry : undefined;
+  const rootBackgroundShellOutput =
+    backgroundTasksEnabled && allowBackgroundShell && !shellWithheld ? backgroundShellOutput : undefined;
   const shellTool = createShellToolDefinition({
     settingsService,
     loggingService,
@@ -421,6 +432,7 @@ export const getAgentDefinition = (
     registerSandboxNetworkPauseController: scopedSandbox?.registerPauseController,
     sandboxChildRegistry: scopedSandbox?.childRegistry,
     readOnly,
+    readSession,
     allowUnsandboxed: deps.allowUnsandboxed,
   });
   const features: FeatureSelection = {
@@ -429,7 +441,7 @@ export const getAgentDefinition = (
     activateSkill: hasCapability('skills') && !bareMode && Boolean(skillsService),
   };
   const tools: RegistryToolDefinition[] = [];
-  if (hasCapability('shell'))
+  if (hasCapability('shell') && !shellWithheld)
     tools.push(
       bareMode ? presentBareShell(shellTool, { background: Boolean(rootBackgroundShellRegistry) }) : shellTool,
     );

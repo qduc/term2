@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   ArrowUp,
@@ -348,7 +349,7 @@ export function Term2FolderSelector({
 
       {savedWorkspaces.length > 0 && onSelectExisting && (
         <div className="space-y-1.5">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+          <div className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
             Saved folders
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -369,7 +370,7 @@ export function Term2FolderSelector({
                 >
                   <Folder className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
                   <span className="max-w-[12rem] truncate">{shortName}</span>
-                  <span className="rounded bg-black/[0.05] px-1 py-0.5 text-[10px] font-normal text-zinc-500 dark:bg-white/[0.07] dark:text-zinc-400">
+                  <span className="rounded bg-black/[0.05] px-1 py-0.5 text-xs font-normal text-zinc-500 dark:bg-white/[0.07] dark:text-zinc-400">
                     {workspace.access === 'read_write' ? 'R/W' : 'Read'}
                   </span>
                   {active && <Check className="h-3 w-3 shrink-0 text-teal-600 dark:text-teal-400" />}
@@ -385,7 +386,7 @@ export function Term2FolderSelector({
         {/* Path / breadcrumb navigation header */}
         <div className="flex items-center gap-1 border-b border-black/[0.07] bg-zinc-50/80 px-2 py-1.5 dark:border-white/[0.07] dark:bg-white/[0.02]">
           {homeFolder && (
-            <button
+            <Button
               type="button"
               disabled={busy || isAtHome}
               title={`Home folder (${homeFolder})`}
@@ -397,21 +398,21 @@ export function Term2FolderSelector({
                   void openRoot(homeFolder);
                 }
               }}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-black/[0.05] hover:text-zinc-900 disabled:opacity-35 dark:text-zinc-400 dark:hover:bg-white/[0.07] dark:hover:text-zinc-100"
+              variant="ghost" size="icon-sm"
             >
               <Home className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="button"
             disabled={busy || !canGoUp}
             title="Go to parent folder (Backspace)"
             aria-label="Go to parent folder"
             onClick={navigateUp}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-black/[0.05] hover:text-zinc-900 disabled:opacity-35 dark:text-zinc-400 dark:hover:bg-white/[0.07] dark:hover:text-zinc-100"
+            variant="ghost" size="icon-sm"
           >
             <ArrowUp className="h-3.5 w-3.5" />
-          </button>
+          </Button>
 
           {editingPath ? (
             <form
@@ -427,6 +428,7 @@ export function Term2FolderSelector({
               <input
                 ref={pathInputRef}
                 id="term2-folder-path"
+                data-escape-cancels-edit
                 value={pathDraft}
                 disabled={busy}
                 onChange={(event) => setPathDraft(event.target.value)}
@@ -440,25 +442,25 @@ export function Term2FolderSelector({
                 placeholder="/absolute/path/to/folder"
                 className="min-w-0 flex-1 rounded-md border border-teal-500/50 bg-white px-2 py-1 font-mono text-xs text-zinc-900 outline-none ring-2 ring-teal-500/15 dark:bg-zinc-900 dark:text-zinc-100"
               />
-              <button
+              <Button
                 type="submit"
                 disabled={busy || !pathDraft.trim()}
-                className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+                size="sm"
               >
                 Go
-              </button>
+              </Button>
               {currentPath && (
-                <button
+                <Button
                   type="button"
                   aria-label="Cancel path edit"
                   onClick={() => {
                     setPathDraft(currentPath);
                     setEditingPath(false);
                   }}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-black/[0.05] hover:text-zinc-700 dark:hover:bg-white/[0.07]"
+                  variant="ghost" size="icon-sm"
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               )}
             </form>
           ) : (
@@ -506,7 +508,7 @@ export function Term2FolderSelector({
                   );
                 })}
               </nav>
-              <button
+              <Button
                 type="button"
                 title="Type a folder path directly"
                 aria-label="Edit folder path"
@@ -514,10 +516,10 @@ export function Term2FolderSelector({
                   setPathDraft(currentPath);
                   setEditingPath(true);
                 }}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-black/[0.05] hover:text-zinc-800 dark:hover:bg-white/[0.07] dark:hover:text-zinc-100"
+                variant="ghost" size="icon-sm"
               >
                 <Pencil className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -556,7 +558,7 @@ export function Term2FolderSelector({
             onClick={() => setShowHidden((v) => !v)}
             aria-pressed={showHidden}
             title={showHidden ? 'Hide dot-folders' : 'Show hidden dot-folders'}
-            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] transition-colors ${
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs transition-colors ${
               showHidden
                 ? 'bg-teal-500/12 font-medium text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
                 : 'text-zinc-500 hover:bg-black/[0.04] hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/[0.06]'
@@ -579,7 +581,7 @@ export function Term2FolderSelector({
                   {error ?? cleanUserFacingMessage(failedValidation?.reason ?? 'This folder cannot be opened.')}
                 </p>
                 {failedValidation?.checks.some((check) => check.name === 'contained' && check.status === 'error') && (
-                  <p className="text-[11px] text-red-700/80 dark:text-red-300/80">
+                  <p className="text-xs text-red-700/80 dark:text-red-300/80">
                     {homeFolder
                       ? `Choose a folder inside ${homeFolder}.`
                       : 'Choose a folder inside the allowed workspace roots.'}
@@ -587,7 +589,7 @@ export function Term2FolderSelector({
                 )}
               </div>
               {(lastValidRoot || homeFolder) && (
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     setError(null);
@@ -597,14 +599,14 @@ export function Term2FolderSelector({
                       void openRoot(target);
                     }
                   }}
-                  className="shrink-0 rounded-md border border-red-300 bg-white px-2 py-1 text-[11px] font-medium text-red-800 hover:bg-red-50 dark:border-red-800 dark:bg-zinc-900 dark:text-red-200"
+                  variant="outline" size="xs" className="shrink-0 text-destructive"
                 >
                   Back to {baseName(lastValidRoot || homeFolder || '')}
-                </button>
+                </Button>
               )}
             </div>
             {failedValidation && !failedValidation.valid && failedValidation.checks.length > 0 && (
-              <details className="mt-1.5 text-[11px]">
+              <details className="mt-1.5 text-xs">
                 <summary className="cursor-pointer opacity-80 hover:opacity-100">Folder checks</summary>
                 <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                   {failedValidation.checks.map((check) => (
@@ -633,18 +635,18 @@ export function Term2FolderSelector({
                   <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
                     No folders match “{filter}”
                   </p>
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setFilter('')}
-                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                    variant="link" size="xs"
                   >
                     Clear filter
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <>
                   <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">No subfolders here</p>
-                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
                     {directoryEntries.hiddenCount > 0 && !showHidden
                       ? `${directoryEntries.hiddenCount} hidden folder${directoryEntries.hiddenCount === 1 ? '' : 's'} · click “Use ${currentName || 'this folder'}” below to select it.`
                       : `Click “Use ${currentName || 'this folder'}” below to work in this folder.`}
@@ -674,7 +676,7 @@ export function Term2FolderSelector({
                       disabled={busy || Boolean(selectingPath)}
                       aria-label={`Open ${entry.name}`}
                       onClick={() => enterDirectory(entry)}
-                      className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-[13px] text-zinc-800 dark:text-zinc-200"
+                      className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-sm text-zinc-800 dark:text-zinc-200"
                     >
                       {entry.type === 'symlink' ? (
                         <FolderSymlink className="h-4 w-4 shrink-0 text-teal-600/80 dark:text-teal-400/80" />
@@ -683,10 +685,10 @@ export function Term2FolderSelector({
                       )}
                       <span className="min-w-0 truncate font-medium">{entry.name}</span>
                       {entry.targetDisplay && (
-                        <span className="truncate font-mono text-[11px] text-zinc-400">→ {entry.targetDisplay}</span>
+                        <span className="truncate font-mono text-xs text-zinc-400">→ {entry.targetDisplay}</span>
                       )}
                     </button>
-                    <button
+                    <Button
                       type="button"
                       disabled={busy || Boolean(selectingPath)}
                       aria-label={`Select ${entry.name}`}
@@ -694,10 +696,10 @@ export function Term2FolderSelector({
                         event.stopPropagation();
                         void selectFolderPath(entryPath);
                       }}
-                      className="shrink-0 rounded-md border border-black/[0.09] bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 shadow-xs hover:border-teal-500 hover:text-teal-700 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-teal-400 dark:hover:text-teal-300"
+                      variant="outline" size="xs" className="shrink-0"
                     >
                       {isSelectingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Select'}
-                    </button>
+                    </Button>
                     <ChevronRight
                       aria-hidden
                       className="mr-1.5 h-3.5 w-3.5 shrink-0 text-zinc-300 transition-colors group-hover:text-zinc-500 dark:text-zinc-600 dark:group-hover:text-zinc-400"
@@ -720,7 +722,7 @@ export function Term2FolderSelector({
                       <Folder className="h-4 w-4 shrink-0 opacity-50" />
                       <span className="truncate">{entry.name}</span>
                     </span>
-                    <span className="shrink-0 text-[11px]">{cleanReason}</span>
+                    <span className="shrink-0 text-xs">{cleanReason}</span>
                   </li>
                 );
               })}
@@ -730,7 +732,7 @@ export function Term2FolderSelector({
 
         {/* Subtle status strip */}
         {currentPath && !busy && (
-          <div className="flex items-center justify-between border-t border-black/[0.05] bg-zinc-50/50 px-3 py-1 text-[11px] text-zinc-400 dark:border-white/[0.05] dark:bg-white/[0.015] dark:text-zinc-500">
+          <div className="flex items-center justify-between border-t border-black/[0.05] bg-zinc-50/50 px-3 py-1 text-xs text-zinc-400 dark:border-white/[0.05] dark:bg-white/[0.015] dark:text-zinc-500">
             <span className="truncate font-mono" title={currentPath}>
               {currentPath}
             </span>
@@ -757,7 +759,7 @@ export function Term2FolderSelector({
                   role="radio"
                   aria-checked={access === 'read_write'}
                   onClick={() => setAccess('read_write')}
-                  className={`rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     access === 'read_write'
                       ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                       : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
@@ -770,7 +772,7 @@ export function Term2FolderSelector({
                   role="radio"
                   aria-checked={access === 'read'}
                   onClick={() => setAccess('read')}
-                  className={`rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     access === 'read'
                       ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                       : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
@@ -782,18 +784,17 @@ export function Term2FolderSelector({
             ) : (
               <span
                 title="term2-web was started with --read-only. Restart it without that flag to allow editing files."
-                className="rounded-md bg-black/[0.05] px-2 py-1 text-[11px] font-medium text-zinc-600 dark:bg-white/[0.07] dark:text-zinc-400"
+                className="rounded-md bg-black/[0.05] px-2 py-1 text-xs font-medium text-zinc-600 dark:bg-white/[0.07] dark:text-zinc-400"
               >
                 Read only
               </span>
             )}
           </div>
 
-          <button
+          <Button
             type="button"
             disabled={busy || Boolean(selectingPath) || !currentPath}
             onClick={() => void selectFolderPath(currentPath)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {selectingPath === currentPath ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -801,7 +802,7 @@ export function Term2FolderSelector({
               <Check className="h-3.5 w-3.5" />
             )}
             Use {currentName || 'this folder'}
-          </button>
+          </Button>
         </div>
       )}
     </section>

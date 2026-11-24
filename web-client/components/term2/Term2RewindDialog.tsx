@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { History, Loader2, RotateCcw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { term2Client } from '../../lib/api/term2';
 import type { RewindTargetSummary } from '../../lib/term2/types';
 
@@ -131,36 +132,26 @@ export function Term2RewindDialog({
       {selected && files.length > 0 && (
         <div className="rounded-xl border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
           <p className="font-medium">Files changed after this message:</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4 font-mono text-[11px]">
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 font-mono text-xs">
             {files.slice(0, 8).map((file) => (
               <li key={file}>{file}</li>
             ))}
             {files.length > 8 && <li>and {files.length - 8} more…</li>}
           </ul>
-          <p className="mt-1.5 text-[11px] opacity-80">
+          <p className="mt-1.5 text-xs opacity-80">
             Rewinding removes the conversation turns; verify file changes on disk if needed.
           </p>
         </div>
       )}
 
       <div className="flex flex-wrap justify-end gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.08]">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={busy}
-          className="rounded-lg border border-black/[0.1] px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/[0.05]"
-        >
+        <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
           Cancel
-        </button>
-        <button
-          type="button"
-          disabled={!selected || busy}
-          onClick={() => void confirm(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+        </Button>
+        <Button type="button" disabled={!selected || busy} onClick={() => void confirm(true)}>
+          {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
           Rewind &amp; edit prompt
-        </button>
+        </Button>
       </div>
       {expectedRevision ? <span className="sr-only">{expectedRevision}</span> : null}
     </div>

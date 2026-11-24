@@ -10,7 +10,7 @@ export function Term2HelpDialog({ allowWrite }: { allowWrite: boolean }) {
           <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
           Getting started
         </h3>
-        <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] leading-5">
+        <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-5">
           <li>
             <strong>Connect an AI provider</strong> in <em>Settings → Providers &amp; Keys</em> (API key, OAuth sign-in,
             or a local server like Ollama / LM Studio).
@@ -31,9 +31,9 @@ export function Term2HelpDialog({ allowWrite }: { allowWrite: boolean }) {
           <ImagePlus className="h-4 w-4 text-teal-600 dark:text-teal-400" />
           Files, images &amp; skills
         </h3>
-        <ul className="mt-2 space-y-1.5 text-[13px] leading-5">
+        <ul className="mt-2 space-y-1.5 text-sm leading-5">
           <li>
-            Type <kbd className="rounded border border-black/15 px-1.5 py-0.5 font-mono text-[11px] dark:border-white/15">@</kbd>{' '}
+            Type <kbd className="rounded border border-black/15 px-1.5 py-0.5 font-mono text-xs dark:border-white/15">@</kbd>{' '}
             in the message box to search and insert a file path from your folder.
           </li>
           <li>
@@ -55,14 +55,14 @@ export function Term2HelpDialog({ allowWrite }: { allowWrite: boolean }) {
           <ShieldCheck className="h-4 w-4 text-teal-600 dark:text-teal-400" />
           Approvals &amp; folder permissions
         </h3>
-        <p className="mt-1.5 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+        <p className="mt-1.5 text-sm leading-5 text-zinc-600 dark:text-zinc-400">
           For your safety, tool actions ask for your approval before running.{' '}
           {allowWrite ? (
             <>Write access is enabled for folders granted read-and-write access.</>
           ) : (
             <>
               This web session is currently <strong>read-only</strong>. To allow file editing, launch with{' '}
-              <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[12px] dark:bg-zinc-800">
+              <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-800">
                 term2-web --allow-write
               </code>
               .
@@ -76,7 +76,7 @@ export function Term2HelpDialog({ allowWrite }: { allowWrite: boolean }) {
           <Keyboard className="h-4 w-4 text-teal-600 dark:text-teal-400" />
           Keyboard shortcuts
         </h3>
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
           <dt className="font-mono text-xs text-zinc-500">Enter</dt>
           <dd>Send message (or steer the active turn while streaming)</dd>
           <dt className="font-mono text-xs text-zinc-500">Shift + Enter</dt>

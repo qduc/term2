@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentConfigureResultV2 } from '@qduc/agent-wire';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { term2Client, Term2ApiError } from '../../lib/api/term2';
 import type { SessionConfigRecord, SessionConfigUpdate, SettingsProjection } from '../../lib/term2/types';
 
@@ -74,25 +76,30 @@ export function Term2SessionConfig({ config, settings, sessionId, onDiscovered, 
         <span>Model: {config.modelId}</span><span>Reasoning: {config.reasoningEffort}</span><span>Mode: {config.mode}</span><span>Approval: {config.approvalMode ?? 'off'}</span>
       </div>
       {reauthenticationRequired && <p role="alert">Reauthentication is required for this session&apos;s captured provider account.</p>}
-      {stale && <p>Session captured older defaults. Edit explicitly below or <button type="button" onClick={onCreateNewSession} className="underline">create a new session</button>.</p>}
+      {stale && <p>Session captured older defaults. Edit explicitly below or <Button type="button" variant="link" size="xs" className="h-auto p-0" onClick={onCreateNewSession}>create a new session</Button>.</p>}
       {sessionId && <details className="mt-2">
         <summary className="cursor-pointer">Change session configuration</summary>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <label>Model <input aria-label="Session model" key={`${config.configRevision}:model`} defaultValue={config.modelId} disabled={blocked}
             onBlur={(event) => { if (event.target.value !== config.modelId) update({ modelSelection: { model: event.target.value, provider: config.providerId } }); }} className="ml-1 rounded border px-1 py-0.5" /></label>
-          <label>Reasoning <select aria-label="Session reasoning effort" value={config.reasoningEffort} disabled={blocked}
-            onChange={(event) => update({ reasoningEffort: event.target.value as SessionConfigUpdate['reasoningEffort'] })} className="ml-1 rounded border px-1 py-0.5">
-            {['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].map(value => <option key={value} value={value}>{value}</option>)}
-          </select></label>
-          <label>Mode <select aria-label="Session mode" value={config.mode} disabled={blocked}
-            onChange={(event) => update({ mode: event.target.value as SessionConfigRecord['mode'] })} className="ml-1 rounded border px-1 py-0.5">
-            {config.mode === 'pair' && <option value="pair" disabled>pair (current)</option>}
-            {['standard', 'bare', 'lite'].map(value => <option key={value} value={value}>{value}</option>)}
-          </select></label>
-          <label>Approval <select aria-label="Session approval mode" value={config.approvalMode ?? 'off'} disabled={blocked}
-            onChange={(event) => update({ approvalMode: event.target.value as SessionConfigRecord['approvalMode'] })} className="ml-1 rounded border px-1 py-0.5">
-            {['off', 'auto', 'unattended', 'always'].map(value => <option key={value} value={value}>{value}</option>)}
-          </select></label>
+          <label className="flex items-center gap-1">Reasoning <Select value={config.reasoningEffort} disabled={blocked}
+            onValueChange={(value) => update({ reasoningEffort: value as SessionConfigUpdate['reasoningEffort'] })}>
+            <SelectTrigger size="sm" aria-label="Session reasoning effort"><SelectValue /></SelectTrigger>
+            <SelectContent>{['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
+          </Select></label>
+          <label className="flex items-center gap-1">Mode <Select value={config.mode} disabled={blocked}
+            onValueChange={(value) => update({ mode: value as SessionConfigRecord['mode'] })}>
+            <SelectTrigger size="sm" aria-label="Session mode"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {config.mode === 'pair' && <SelectItem value="pair" disabled>pair (current)</SelectItem>}
+              {['standard', 'bare', 'lite'].map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+            </SelectContent>
+          </Select></label>
+          <label className="flex items-center gap-1">Approval <Select value={config.approvalMode ?? 'off'} disabled={blocked}
+            onValueChange={(value) => update({ approvalMode: value as SessionConfigRecord['approvalMode'] })}>
+            <SelectTrigger size="sm" aria-label="Session approval mode"><SelectValue /></SelectTrigger>
+            <SelectContent>{['off', 'auto', 'unattended', 'always'].map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
+          </Select></label>
         </div>
       </details>}
       {result && <div role="status" className="mt-2">
@@ -101,11 +108,11 @@ export function Term2SessionConfig({ config, settings, sessionId, onDiscovered, 
         {outcome?.kind === 'configured' && <p>Original configured outcome: {outcome.configuration.model.provider}/{outcome.configuration.model.model}{outcome.configuration.reasoning !== undefined ? ` · ${outcome.configuration.reasoning}` : ''}{outcome.configuration.temperature !== undefined ? ` · temperature ${outcome.configuration.temperature}` : ''}</p>}
         <details><summary>Original native result / admission revision</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(receipt, null, 2)}</pre></details>
       </div>}
-      {sessionId && <button type="button" disabled={busy} className="mt-2 underline" onClick={() => {
+      {sessionId && <Button type="button" variant="link" size="xs" disabled={busy} className="mt-2 h-auto p-0" onClick={() => {
         void term2Client.readSessionConfig(sessionId).then(value => onDiscovered?.(value)).catch(() => setError('Current-state discovery failed; original command evidence is unchanged.'));
-      }}>Refresh current configuration (separate discovery)</button>}
+      }}>Refresh current configuration (separate discovery)</Button>}
       {original && <details><summary>Original request retained for retry</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(original, null, 2)}</pre></details>}
-      {original && <p className="mt-2">Keep this request until its outcome is known. <button type="button" disabled={busy} onClick={() => void submit(original)} className="underline">Check / retry original command</button></p>}
+      {original && <p className="mt-2">Keep this request until its outcome is known. <Button type="button" variant="link" size="xs" className="h-auto p-0" disabled={busy} onClick={() => void submit(original)}>Check / retry original command</Button></p>}
       {error && <p role="alert" className="mt-1 text-red-700">{error}</p>}
     </section>
   );

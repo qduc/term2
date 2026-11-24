@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Archive, Gauge } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { summarizeReceiptCosts } from '../../lib/term2/receipt-cost';
 import type { ModelSummary, SessionConfigRecord, Term2SessionView } from '../../lib/term2/types';
 
@@ -25,23 +27,6 @@ export function Term2UsagePopover({
   onCompact: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   const allTurns = [...(view.retiredTurns ?? []), ...view.turns];
   let inputTokens = 0;
@@ -79,37 +64,33 @@ export function Term2UsagePopover({
   if (totalTokens === 0 && !hasCost && !contextWindow) return null;
 
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label="Session usage and context"
-        title="View token usage, context window, and cost"
-        className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] tabular-nums text-zinc-500 transition-colors hover:bg-black/[0.04] hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
-      >
-        <Gauge aria-hidden className="h-3.5 w-3.5" />
-        <span>
-          {totalTokens > 0 ? `${formatCompact(totalTokens)} tok` : 'Usage'}
-          {contextRatio !== null ? ` · ${Math.round(contextRatio * 100)}%` : ''}
-          {knownUsd !== null ? ` · $${knownUsd < 0.01 ? knownUsd.toFixed(4) : knownUsd.toFixed(2)}` : ''}
-        </span>
-      </button>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Usage and context details"
-          className="t2-enter absolute bottom-full right-0 z-40 mb-2 w-72 rounded-2xl border border-black/[0.09] bg-white p-3.5 text-xs shadow-[0_16px_40px_-10px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-zinc-900 dark:shadow-[0_16px_40px_-10px_rgba(0,0,0,0.65)]"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          aria-label="Session usage and context"
+          title="View token usage, context window, and cost"
+          className="rounded-full tabular-nums text-muted-foreground"
         >
+          <Gauge aria-hidden />
+          <span>
+            {totalTokens > 0 ? `${formatCompact(totalTokens)} tok` : 'Usage'}
+            {contextRatio !== null ? ` · ${Math.round(contextRatio * 100)}%` : ''}
+            {knownUsd !== null ? ` · $${knownUsd < 0.01 ? knownUsd.toFixed(4) : knownUsd.toFixed(2)}` : ''}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" aria-label="Usage and context details" className="block w-72 text-xs">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Session usage</h3>
-            {config && <span className="font-mono text-[10.5px] text-zinc-400">{config.modelId}</span>}
+            {config && <span className="font-mono text-xs text-zinc-400">{config.modelId}</span>}
           </div>
 
           {contextWindow && (
             <div className="mt-3">
-              <div className="flex justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+              <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
                 <span>Context window</span>
                 <span className="tabular-nums">
                   {lastTurnInput > 0 ? `${formatCompact(lastTurnInput)} / ` : ''}
@@ -129,7 +110,7 @@ export function Term2UsagePopover({
             </div>
           )}
 
-          <dl className="mt-3 grid grid-cols-2 gap-y-1.5 text-[11.5px]">
+          <dl className="mt-3 grid grid-cols-2 gap-y-1.5 text-xs">
             <dt className="text-zinc-500 dark:text-zinc-400">Input tokens</dt>
             <dd className="text-right font-medium tabular-nums text-zinc-800 dark:text-zinc-200">
               {totalInput.toLocaleString()}
@@ -153,7 +134,7 @@ export function Term2UsagePopover({
           </dl>
 
           {receiptSummary && (
-            <p className="mt-2 text-[10.5px] leading-4 text-zinc-400 dark:text-zinc-500">
+            <p className="mt-2 text-xs leading-4 text-zinc-400 dark:text-zinc-500">
               Based on {receiptSummary.pricedRequests} priced
               {receiptSummary.unpricedRequests > 0 ? ` and ${receiptSummary.unpricedRequests} unpriced` : ''} observed
               request{receiptSummary.pricedRequests === 1 ? '' : 's'} ({receiptSummary.state}). Historical coverage is
@@ -162,20 +143,21 @@ export function Term2UsagePopover({
           )}
 
           {canCompact && (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setOpen(false);
                 onCompact();
               }}
-              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-black/[0.08] px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06]"
+              className="mt-3 w-full"
             >
-              <Archive className="h-3.5 w-3.5" />
+              <Archive />
               Compact context to free space
-            </button>
+            </Button>
           )}
-        </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

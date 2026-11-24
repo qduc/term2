@@ -1,20 +1,12 @@
 'use client';
-import { useMemo, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
-import type { SessionListItem } from '../../lib/term2/types';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronRight, Folder, Plus, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import type { SessionListItem, WorkspaceAlias } from '../../lib/term2/types';
 
-function dayGroup(iso: string): string {
-  const then = new Date(iso);
-  if (Number.isNaN(then.getTime())) return 'Older';
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const days = Math.floor((startOfToday.getTime() - then.getTime()) / 86400000) + 1;
-  if (then >= startOfToday) return 'Today';
-  if (days <= 1) return 'Yesterday';
-  if (days <= 7) return 'Previous 7 days';
-  return 'Older';
-}
-const GROUP_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
+const RECENT_COUNT = 5;
+const COLLAPSED_KEY = 'term2:sidebar:collapsedFolders';
 
 /** Only live sessions get a dot; idle ones stay quiet. */
 function StatusDot({ status }: { status: SessionListItem['status'] }) {
@@ -32,16 +24,10 @@ function StatusDot({ status }: { status: SessionListItem['status'] }) {
   return null;
 }
 
-function shortTime(iso: string, precise = false): string {
+function shortTime(iso: string): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return '';
-  const seconds = Math.floor((Date.now() - then) / 1000);
-  if (precise && seconds < 3600) {
-    if (seconds < 60) return `${Math.max(0, seconds)}s`;
-    const minutes = Math.floor(seconds / 60);
-    return `${minutes}m ${seconds % 60}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
+  const minutes = Math.floor((Date.now() - then) / 60000);
   if (minutes < 1) return 'now';
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
@@ -60,36 +46,91 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function getSessionTitle(
-  session: SessionListItem,
-  firstMessage?: string,
-  workspaceLabel?: string,
-  workspaceDisplayName?: string,
-): string {
-  const bestMessage = firstMessage?.trim() || session.title?.trim();
-  if (bestMessage && bestMessage.length > 0) {
-    const firstLine = bestMessage.split('\n')[0];
+function sessionTitle(session: SessionListItem, firstMessage: string | undefined, folderName: string): string {
+  const best = firstMessage?.trim() || session.title?.trim();
+  if (best) {
+    const firstLine = best.split('\n')[0];
     return firstLine.length > 44 ? `${firstLine.slice(0, 44)}…` : firstLine;
   }
-  if (workspaceDisplayName && workspaceDisplayName.trim().length > 0) {
-    return `${workspaceDisplayName.trim()} chat`;
-  }
-  if (workspaceLabel && workspaceLabel.trim().length > 0) {
-    const label = workspaceLabel.trim();
-    if (!label.startsWith('ws_')) {
-      const base = label.includes('/') ? label.split('/').filter(Boolean).pop() : label;
-      return base ? `${base} chat` : 'New chat';
-    }
-  }
-  return 'New chat';
+  return folderName ? `${folderName} chat` : 'New chat';
 }
 
+function readCollapsed(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+interface Entry {
+  session: SessionListItem;
+  title: string;
+  folderName: string;
+}
+
+function ChatRow({
+  entry,
+  active,
+  meta,
+  indent,
+  onSelect,
+}: {
+  entry: Entry;
+  active: boolean;
+  /** Shown on the right: the folder in Recent, the time inside a folder. */
+  meta: 'folder' | 'time';
+  indent?: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const { session, title, folderName } = entry;
+  const when = relativeTime(session.updatedAt);
+  return (
+    <li>
+      <button
+        type="button"
+        aria-current={active ? 'page' : undefined}
+        aria-label={`${title}, ${folderName ? `${folderName}, ` : ''}${when}`}
+        title={`${title} · ${session.status.replace('_', ' ')} · ${when}`}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm transition-colors',
+          indent ? 'pl-8' : 'pl-2.5',
+          active
+            ? 'bg-black/[0.06] font-medium text-foreground dark:bg-white/[0.08]'
+            : 'text-muted-foreground hover:bg-black/[0.035] hover:text-foreground dark:hover:bg-white/[0.04]',
+        )}
+        onClick={() => onSelect(session.id)}
+      >
+        <span className="min-w-0 flex-1 truncate">{title}</span>
+        <StatusDot status={session.status} />
+        {meta === 'folder' && folderName ? (
+          <span className="max-w-[6rem] shrink-0 truncate rounded bg-black/[0.05] px-1.5 py-px text-xs font-normal text-muted-foreground dark:bg-white/[0.07]">
+            {folderName}
+          </span>
+        ) : (
+          <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
+            {shortTime(session.updatedAt)}
+          </span>
+        )}
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Sidebar chat navigation: a short "Recent" list across all folders, then every
+ * saved folder as a collapsible group of its chats. Searching flattens both into
+ * one result list.
+ */
 export function Term2SessionList({
   sessions,
   selected,
   onSelect,
   onCreate,
-  workspaceId,
+  onAddFolder,
+  selectedWorkspaceId,
   workspaces,
   workspaceMetadata,
   firstMessages,
@@ -99,146 +140,229 @@ export function Term2SessionList({
   sessions: SessionListItem[];
   selected: string | null;
   onSelect: (id: string) => void;
-  onCreate: () => void;
-  workspaceId: string | null;
-  workspaces?: Array<{ workspaceId: string; label: string }>;
+  /** Starts a chat in the given folder. */
+  onCreate: (workspaceId: string) => void;
+  onAddFolder?: () => void;
+  selectedWorkspaceId: string | null;
+  workspaces: WorkspaceAlias[];
   workspaceMetadata?: Record<string, { displayName: string; fullPath?: string }>;
   firstMessages?: Record<string, string>;
   nextCursor?: string | null;
   onNextPage?: () => void;
 }) {
-  const workspaceMap = new Map((workspaces ?? []).map((w) => [w.workspaceId, w.label]));
   const [query, setQuery] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  useEffect(() => setCollapsed(readCollapsed()), []);
 
-  const entries = useMemo(
+  const toggleFolder = (workspaceId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(workspaceId)) next.delete(workspaceId);
+      else next.add(workspaceId);
+      try {
+        window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+      } catch {
+        // Collapse state is a convenience; ignore storage failures.
+      }
+      return next;
+    });
+  };
+
+  const folderName = (workspaceId: string) => {
+    const label = workspaceMetadata?.[workspaceId]?.displayName || workspaces.find((w) => w.workspaceId === workspaceId)?.label || '';
+    if (!label || label.startsWith('ws_')) return '';
+    return label.includes('/') ? label.split('/').filter(Boolean).pop() ?? label : label;
+  };
+
+  const entries: Entry[] = useMemo(
     () =>
-      sessions.map((session) => ({
-        session,
-        title: getSessionTitle(
-          session,
-          firstMessages?.[session.id],
-          workspaceMap.get(session.workspaceId),
-          workspaceMetadata?.[session.workspaceId]?.displayName,
-        ),
-      })),
-    // workspaceMap is rebuilt from `workspaces` each render.
+      [...sessions]
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .map((session) => {
+          const name = folderName(session.workspaceId);
+          return { session, folderName: name, title: sessionTitle(session, firstMessages?.[session.id], name) };
+        }),
+    // folderName reads workspaces and workspaceMetadata, which are listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessions, firstMessages, workspaces, workspaceMetadata],
   );
-  const titleCounts = new Map<string, number>();
-  for (const entry of entries) titleCounts.set(entry.title, (titleCounts.get(entry.title) ?? 0) + 1);
-  const apartFor = (session: SessionListItem, title: string) => {
-    const sharedTitle = (titleCounts.get(title) ?? 0) > 1;
-    const folder =
-      workspaceMetadata?.[session.workspaceId]?.displayName || workspaceMap.get(session.workspaceId) || '';
-    const when = shortTime(session.updatedAt, sharedTitle);
-    const apart = sharedTitle ? [folder, when].filter(Boolean).join(' · ') : when;
-    return { sharedTitle, when, apart };
-  };
-  const apartCounts = new Map<string, number>();
-  for (const entry of entries) {
-    const { sharedTitle, apart } = apartFor(entry.session, entry.title);
-    if (!sharedTitle) continue;
-    const key = `${entry.title}\0${apart}`;
-    apartCounts.set(key, (apartCounts.get(key) ?? 0) + 1);
-  }
-  const grouped = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const groups = new Map<string, typeof entries>();
-    for (const entry of entries) {
-      if (needle && !entry.title.toLowerCase().includes(needle)) continue;
-      const key = dayGroup(entry.session.updatedAt);
-      groups.set(key, [...(groups.get(key) ?? []), entry]);
-    }
-    return GROUP_ORDER.filter((key) => groups.has(key)).map((key) => ({ key, items: groups.get(key)! }));
-  }, [entries, query]);
+
+  // Saved folders first (in gateway order), then any folder a listed chat uses that isn't saved.
+  const folders = useMemo(() => {
+    const ids = workspaces.map((w) => w.workspaceId);
+    for (const entry of entries) if (!ids.includes(entry.session.workspaceId)) ids.push(entry.session.workspaceId);
+    return ids.map((workspaceId) => ({
+      workspaceId,
+      name: folderName(workspaceId) || 'Unknown folder',
+      fullPath: workspaceMetadata?.[workspaceId]?.fullPath,
+      access: workspaces.find((w) => w.workspaceId === workspaceId)?.access,
+      chats: entries.filter((entry) => entry.session.workspaceId === workspaceId),
+    }));
+    // folderName reads workspaces and workspaceMetadata, which are listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, workspaces, workspaceMetadata]);
+
+  const needle = query.trim().toLowerCase();
+  const matches = needle
+    ? entries.filter(
+        (entry) => entry.title.toLowerCase().includes(needle) || entry.folderName.toLowerCase().includes(needle),
+      )
+    : [];
+  const recent = entries.slice(0, RECENT_COUNT);
 
   return (
-    <section aria-labelledby="term2-session-heading" className="flex min-h-0 flex-1 flex-col">
-      <button
-        type="button"
-        className="mb-2 flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-zinc-800 transition-colors hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-white/[0.06]"
-        disabled={!workspaceId}
-        onClick={onCreate}
-      >
-        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-teal-600 text-white dark:bg-teal-500 dark:text-zinc-950">
-          <Plus aria-hidden className="h-3.5 w-3.5" strokeWidth={2.25} />
-        </span>
-        New chat
-      </button>
+    <section aria-label="Chats and folders" className="flex min-h-0 flex-1 flex-col">
       {sessions.length > 1 && (
-        <label className="mb-2 flex items-center gap-2 rounded-lg bg-black/[0.04] px-2.5 py-1.5 text-sm transition-colors focus-within:bg-white focus-within:ring-1 focus-within:ring-black/10 dark:bg-white/[0.05] dark:focus-within:bg-white/[0.07] dark:focus-within:ring-white/10">
-          <Search aria-hidden className="h-3.5 w-3.5 text-zinc-400" />
+        <label className="mx-1 mb-2 flex items-center gap-2 rounded-md bg-black/[0.04] px-2.5 py-1.5 text-sm transition-colors focus-within:bg-background focus-within:ring-1 focus-within:ring-ring/40 dark:bg-white/[0.05]">
+          <Search aria-hidden className="size-3.5 text-muted-foreground" />
           <input
             type="search"
             aria-label="Search chats"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search chats…"
-            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-400 [&::-webkit-search-cancel-button]:hidden"
+            placeholder="Search chats"
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
       )}
-      <h2 id="term2-session-heading" className="sr-only">
-        Chat history
-      </h2>
-      {sessions.length === 0 && <p className="px-2.5 py-1 text-sm text-zinc-500">No chats yet.</p>}
-      {sessions.length > 0 && grouped.length === 0 && (
-        <p className="px-2.5 py-1 text-sm text-zinc-500">No matching chats.</p>
-      )}
-      <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 scrollbar-thin">
-        {grouped.map(({ key, items }) => (
-          <div key={key} className="mb-4">
-            <h3 className="px-2.5 pb-1 text-xs font-medium text-zinc-400 dark:text-zinc-500">{key}</h3>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 scrollbar-thin">
+        {needle ? (
+          <>
+            <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">Results</h2>
+            {matches.length === 0 ? (
+              <p className="px-2.5 py-1 text-sm text-muted-foreground">No matching chats.</p>
+            ) : (
+              <ul className="space-y-px">
+                {matches.map((entry) => (
+                  <ChatRow
+                    key={entry.session.id}
+                    entry={entry}
+                    active={selected === entry.session.id}
+                    meta="folder"
+                    onSelect={onSelect}
+                  />
+                ))}
+              </ul>
+            )}
+          </>
+        ) : (
+          <>
+            {recent.length > 0 && (
+              <div className="mb-4">
+                <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">Recent</h2>
+                <ul className="space-y-px">
+                  {recent.map((entry) => (
+                    <ChatRow
+                      key={entry.session.id}
+                      entry={entry}
+                      active={selected === entry.session.id}
+                      meta="folder"
+                      onSelect={onSelect}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pb-1 pl-2.5 pr-1">
+              <h2 className="text-xs font-medium text-muted-foreground">Folders</h2>
+              {onAddFolder && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="Add a folder"
+                  title="Add a folder"
+                  onClick={onAddFolder}
+                  className="text-muted-foreground"
+                >
+                  <Plus />
+                </Button>
+              )}
+            </div>
+            {folders.length === 0 && (
+              <p className="px-2.5 py-1 text-sm text-muted-foreground">
+                {onAddFolder ? 'Add a folder to start chatting.' : 'No folders yet.'}
+              </p>
+            )}
             <ul className="space-y-px">
-              {items.map(({ session, title }) => {
-                const active = selected === session.id;
-                const { sharedTitle, when, apart } = apartFor(session, title);
-                const tied = sharedTitle && (apartCounts.get(`${title}\0${apart}`) ?? 0) > 1;
-                const mark = tied ? `${apart} · ${session.id.slice(-4)}` : apart;
+              {folders.map((folder) => {
+                const open = !collapsed.has(folder.workspaceId);
+                const current = folder.workspaceId === selectedWorkspaceId;
                 return (
-                  <li key={session.id}>
-                    <button
-                      type="button"
-                      aria-current={active ? 'page' : undefined}
-                      aria-label={sharedTitle ? `${title}, ${mark}` : `${title} ${session.id}`}
-                      title={`${title} · ${session.status.replace('_', ' ')} · ${relativeTime(session.updatedAt)}`}
-                      className={`group/item flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
-                        active
-                          ? 'bg-black/[0.06] font-medium text-zinc-900 dark:bg-white/[0.08] dark:text-zinc-50'
-                          : 'text-zinc-600 hover:bg-black/[0.035] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.04] dark:hover:text-zinc-100'
-                      }`}
-                      onClick={() => onSelect(session.id)}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{title}</span>
-                        {sharedTitle && mark && (
-                          <span className="block truncate text-[11px] font-normal text-zinc-400 dark:text-zinc-500">
-                            {mark}
+                  <li key={folder.workspaceId}>
+                    <div className="group/folder flex items-center rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.04]">
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => toggleFolder(folder.workspaceId)}
+                        title={folder.fullPath || folder.name}
+                        className={cn(
+                          'flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-1.5 text-left text-sm',
+                          current ? 'font-medium text-foreground' : 'text-foreground/80',
+                        )}
+                      >
+                        <ChevronRight
+                          aria-hidden
+                          className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')}
+                        />
+                        <Folder aria-hidden className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+                        <span className="truncate">{folder.name}</span>
+                        {folder.access && (
+                          <span className="shrink-0 rounded bg-black/[0.05] px-1 py-px text-xs font-normal text-muted-foreground dark:bg-white/[0.07]">
+                            {folder.access === 'read_write' ? 'R/W' : 'Read'}
                           </span>
                         )}
-                      </span>
-                      <StatusDot status={session.status} />
-                      <span className="shrink-0 text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                        {tied ? session.id.slice(-4) : when}
-                      </span>
-                    </button>
+                      </button>
+                      {folder.access && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`New chat in ${folder.name}`}
+                          title={`New chat in ${folder.name}`}
+                          onClick={() => onCreate(folder.workspaceId)}
+                          className="mr-1 text-muted-foreground opacity-0 focus-visible:opacity-100 group-hover/folder:opacity-100"
+                        >
+                          <Plus />
+                        </Button>
+                      )}
+                    </div>
+                    {open && (
+                      <ul className="space-y-px">
+                        {folder.chats.length === 0 ? (
+                          <li className="py-1 pl-8 text-xs text-muted-foreground">No chats yet</li>
+                        ) : (
+                          folder.chats.map((entry) => (
+                            <ChatRow
+                              key={entry.session.id}
+                              entry={entry}
+                              active={selected === entry.session.id}
+                              meta="time"
+                              indent
+                              onSelect={onSelect}
+                            />
+                          ))
+                        )}
+                      </ul>
+                    )}
                   </li>
                 );
               })}
             </ul>
-          </div>
-        ))}
+            {onNextPage && nextCursor && (
+              <button
+                type="button"
+                className="mt-2 w-full rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]"
+                onClick={onNextPage}
+              >
+                Load older chats
+              </button>
+            )}
+          </>
+        )}
       </div>
-      {onNextPage && nextCursor && (
-        <button
-          type="button"
-          className="mt-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-zinc-500 hover:bg-black/[0.04] hover:text-zinc-800 dark:hover:bg-white/[0.05] dark:hover:text-zinc-200"
-          onClick={onNextPage}
-        >
-          Next agent sessions
-        </button>
-      )}
     </section>
   );
 }

@@ -134,13 +134,16 @@ async function dispatch(
       return {
         ok: true,
         kind: 'rewind_targets',
-        targets: session.rewindTargets().map(({ id, label, discardedTurns, discardedReplies, imageCount }) => ({
-          id,
-          label,
-          discardedTurns,
-          discardedReplies,
-          imageCount,
-        })),
+        targets: session
+          .rewindTargets()
+          .map(({ id, messageId, label, discardedTurns, discardedReplies, imageCount }) => ({
+            id,
+            messageId,
+            label,
+            discardedTurns,
+            discardedReplies,
+            imageCount,
+          })),
       };
     case 'reset':
       return {

@@ -81,6 +81,8 @@ export interface RewindTargetSummary {
   text: string;
   discardedTurns: number;
   discardedMessages: number;
+  /** Images in the target message; Edit and Retry resend text only, so they refuse these. */
+  imageCount?: number;
   editedFiles?: string[];
   affectedFiles?: string[];
 }
@@ -423,6 +425,11 @@ export interface Term2TurnView {
   turnId: string;
   role: 'user' | 'assistant';
   userText?: string;
+  /**
+   * The user message's own id, which rewind targets name. Hydrated turns have a separate
+   * `turnId`; live turns use the message id as their `turnId`, so this is unset there.
+   */
+  userMessageId?: string;
   text: string;
   reasoning: string;
   status: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted' | 'rejected' | 'unknown';

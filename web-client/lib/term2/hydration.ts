@@ -169,6 +169,7 @@ function contextTurns(context: Pick<SessionHydration['snapshot'], 'messages' | '
     const msgText = text(entry.text);
     if (entry.role === 'user') {
       item.userText = (item.userText ?? '') + msgText;
+      item.userMessageId ??= identity(entry.id);
     } else {
       item.text = item.text && msgText ? `${item.text}\n\n${msgText}` : item.text + msgText;
       if (msgText.length > 0) {

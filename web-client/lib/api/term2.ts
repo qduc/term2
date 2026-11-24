@@ -1035,6 +1035,7 @@ export const term2Client = {
                     : '',
             discardedTurns: typeof r.discardedTurns === 'number' ? r.discardedTurns : 0,
             discardedMessages: typeof r.discardedMessages === 'number' ? r.discardedMessages : 0,
+            ...(typeof r.imageCount === 'number' ? { imageCount: r.imageCount } : {}),
             ...(Array.isArray(r.editedFiles) ? { editedFiles: r.editedFiles.filter((f): f is string => typeof f === 'string') } : {}),
             ...(Array.isArray(r.affectedFiles) ? { affectedFiles: r.affectedFiles.filter((f): f is string => typeof f === 'string') } : {}),
           });

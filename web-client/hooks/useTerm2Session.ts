@@ -107,7 +107,11 @@ export interface UseTerm2SessionResult {
   invokeCommand: (commandId: Term2CommandId) => Promise<void>;
   manageQueue: (action: QueueManageAction) => Promise<boolean>;
   controlTask: (action: TaskControlAction) => Promise<boolean>;
-  rewind: (targetId: string, expectedRevision?: string) => Promise<boolean>;
+  /**
+   * `forResend` is for Edit and Retry, which send right after: it skips the "Conversation
+   * rewound." notice and resolves only once the reloaded chat accepts messages again.
+   */
+  rewind: (targetId: string, expectedRevision?: string, options?: { forResend?: boolean }) => Promise<boolean>;
   commandPending: boolean;
   commandNotice: { tone: 'neutral' | 'error'; message: string } | null;
   abort: () => Promise<void>;
@@ -513,7 +517,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   }, []);
 
   const rewind = useCallback(
-    async (targetId: string, expectedRevision?: string) => {
+    async (targetId: string, expectedRevision?: string, options?: { forResend?: boolean }) => {
       const id = sessionIdRef.current;
       if (!id) return false;
       setCommandPendingSessionId(id);
@@ -524,8 +528,16 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
           clientRequestId: crypto.randomUUID(),
           ...(expectedRevision ? { expectedRevision } : {}),
         });
-        setCommandState({ sessionId: id, tone: 'neutral', message: 'Conversation rewound.' });
+        if (!options?.forResend) setCommandState({ sessionId: id, tone: 'neutral', message: 'Conversation rewound.' });
         await refresh();
+        if (!options?.forResend) return true;
+        // The reload reconnects the event stream; a send before it is back would be refused.
+        // UI wait only: on timeout the caller's send is refused and its text is kept.
+        for (let waited = 0; waited < 10_000; waited += 50) {
+          if (sessionIdRef.current !== id) return false;
+          if (viewRef.current.sessionId === id && canSubmitSessionMessage(viewRef.current.status)) return true;
+          await new Promise((resolve) => window.setTimeout(resolve, 50));
+        }
         return true;
       } catch (error) {
         setCommandState({

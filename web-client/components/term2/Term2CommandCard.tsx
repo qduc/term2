@@ -35,6 +35,7 @@ const VERBS: Record<string, [running: string, done: string]> = {
   glob: ['Listing', 'Listed'],
   find_files: ['Listing', 'Listed'],
   shell: ['Running', 'Ran'],
+  run_code: ['Running code', 'Ran code'],
   search_replace: ['Editing', 'Edited'],
   apply_patch: ['Patching', 'Patched'],
   create_file: ['Creating', 'Created'],
@@ -52,6 +53,7 @@ const ICONS: Record<string, LucideIcon> = {
   glob: FolderSearch,
   find_files: FolderSearch,
   shell: SquareTerminal,
+  run_code: SquareTerminal,
   search_replace: FilePen,
   apply_patch: FilePen,
   create_file: FilePlus,
@@ -72,10 +74,23 @@ function targetOf(args: Record<string, unknown> | null): string {
   return '';
 }
 
-export function describeCommand(command: Term2Command): { verb: string; target: string } {
+/** The short label the model gave the call (shell, run_code, …), which the TUI shows instead of the raw command. */
+function labelOf(args: Record<string, unknown> | null): string {
+  const value = args?.description;
+  return typeof value === 'string' ? value.trim().split('\n')[0].slice(0, 120) : '';
+}
+
+/**
+ * How a call reads in one line. A call the model labelled reads as that label alone, as in the TUI's
+ * concise display; `detail` keeps the raw target for a row that has room to show it quietly.
+ */
+export function describeCommand(command: Term2Command): { verb: string; target: string; detail?: string } {
   const verbs = VERBS[command.toolName];
   const active = command.status === 'running';
-  const target = targetOf(parseToolArgs(command.argumentsText));
+  const args = parseToolArgs(command.argumentsText);
+  const target = targetOf(args);
+  const label = labelOf(args);
+  if (label && command.status !== 'pending') return { verb: label, target: '', detail: target };
   return {
     verb:
       command.status === 'pending'
@@ -109,7 +124,7 @@ function ToolIcon({ command }: { command: Term2Command }) {
 export function Term2CommandCard({ command }: { command: Term2Command }) {
   // Closed until the reader opens it; a failure's reason is already on the row.
   const [open, setOpen] = useState(false);
-  const { verb, target } = describeCommand(command);
+  const { verb, target, detail } = describeCommand(command);
   const meta = summarizeCommandMeta(command);
   const cleanError = extractCleanToolError(command.error);
   const errorLine = cleanError?.replace(/^Error:\s*/i, '').split('\n').find((line) => line.trim())?.trim();
@@ -125,7 +140,14 @@ export function Term2CommandCard({ command }: { command: Term2Command }) {
         <span className="flex h-4 w-4 shrink-0 items-center justify-center">
           <ToolIcon command={command} />
         </span>
-        <span className="shrink-0 font-medium text-zinc-700 dark:text-zinc-300">{verb}</span>
+        <span className={`font-medium text-zinc-700 dark:text-zinc-300 ${detail ? 'min-w-0 shrink truncate' : 'shrink-0'}`}>
+          {verb}
+        </span>
+        {detail && !(command.status === 'failed' && errorLine && !open) && (
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-400 dark:text-zinc-500" title={detail}>
+            {detail}
+          </span>
+        )}
         {target && (
           <span
             className={`min-w-0 truncate font-mono text-xs text-zinc-500 dark:text-zinc-400 ${

@@ -30,6 +30,8 @@ import {
   type TaskControlAction,
   type Term2CommandId,
   type Term2CommandResult,
+  type SessionQuota,
+  type SubscriptionQuotaWindow,
   type WorkspaceFileEntry,
   TERM2_COMMAND_IDS,
   TERM2_WIRE_PROTOCOL,
@@ -1102,6 +1104,28 @@ export const term2Client = {
         return {
           entries: Array.isArray(input.entries) ? (input.entries as WorkspaceFileEntry[]) : [],
           truncated: input.truncated === true,
+        };
+      },
+      signal,
+    );
+  },
+  readSessionQuota(sessionId: string, signal?: AbortSignal) {
+    return getJson(
+      `/agent/sessions/${encodeURIComponent(id(sessionId))}/quota`,
+      (value): SessionQuota => {
+        const input = object(value);
+        const windows = input.windows && typeof input.windows === 'object' ? (input.windows as Record<string, unknown>) : {};
+        const window = (entry: unknown): SubscriptionQuotaWindow | null => {
+          if (!entry || typeof entry !== 'object') return null;
+          const { usedPercent, resetAt } = entry as Record<string, unknown>;
+          return typeof usedPercent === 'number' && Number.isFinite(usedPercent) && typeof resetAt === 'number' && Number.isFinite(resetAt)
+            ? { usedPercent, resetAt }
+            : null;
+        };
+        return {
+          provider: typeof input.provider === 'string' ? input.provider : '',
+          subscription: input.subscription === true,
+          windows: { fiveHour: window(windows.fiveHour), weekly: window(windows.weekly) },
         };
       },
       signal,

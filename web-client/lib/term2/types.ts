@@ -69,6 +69,20 @@ export interface SkillSummary {
   isProjectLevel: boolean;
 }
 
+/** One subscription allowance window, as the provider last reported it. */
+export interface SubscriptionQuotaWindow {
+  usedPercent: number;
+  /** Unix seconds. */
+  resetAt: number;
+}
+
+/** A session's subscription allowance; per-request cost is not the meter when `subscription`. */
+export interface SessionQuota {
+  provider: string;
+  subscription: boolean;
+  windows: { fiveHour: SubscriptionQuotaWindow | null; weekly: SubscriptionQuotaWindow | null };
+}
+
 export interface WorkspaceFileEntry {
   path: string;
   type: 'file' | 'directory';

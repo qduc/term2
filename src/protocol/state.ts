@@ -1,6 +1,7 @@
 /** Snapshot projection of the actual native facade. Missing later fields are not inferred from private state. */
 import type { DirectSessionState, DirectToolDisplay } from '../session/facade-types.js';
 import type { DirectDisplayTool, DirectPublicState } from '../session/state.js';
+import { isSubscriptionProvider } from '../model/cost/subscription-providers.js';
 import { DIRECT_PROTOCOL_VERSION, type WireConfiguration, type WireModel, type WireSnapshot } from './wire.js';
 import type { DirectContextState } from '../session/context.js';
 import { publicContext } from './context.js';
@@ -191,5 +192,30 @@ export function snapshotDirectState(
           entry.kind === 'message' || entry.kind === 'tool',
       )
       .map(({ kind, id }) => ({ kind, id })),
+  };
+}
+
+type QuotaWindow = { readonly usedPercent: number; readonly resetAt: number };
+
+/** A session's subscription allowance, as one read-only view of its snapshot. */
+export type SubscriptionQuotaView = {
+  readonly provider: string;
+  /** Per-request cost is not the meter for this provider: a plan allowance is. */
+  readonly subscription: boolean;
+  /** The provider's own last observation; null until a request reports one, and after a model change. */
+  readonly windows: { readonly fiveHour: QuotaWindow | null; readonly weekly: QuotaWindow | null };
+};
+
+/**
+ * For clients the wire does not reach: the Codex quota windows are live-only Session state
+ * (`codex_quota`), not an agent-wire v2 change, so a gateway client reads them on demand.
+ */
+export function subscriptionQuotaView(snapshot: WireSnapshot): SubscriptionQuotaView {
+  const window = (quota: WireSnapshot['codexQuota']) =>
+    quota ? { usedPercent: quota.usedPercent, resetAt: quota.resetAt } : null;
+  return {
+    provider: snapshot.model.provider,
+    subscription: isSubscriptionProvider(snapshot.model.provider),
+    windows: { fiveHour: window(snapshot.codexFiveHourQuota), weekly: window(snapshot.codexQuota) },
   };
 }

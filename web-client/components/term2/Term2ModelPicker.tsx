@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Check, ChevronDown, Loader2, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Minus, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -110,6 +110,40 @@ function ModelDetails({ model, providerLabel }: { model: ModelSummary; providerL
   );
 }
 
+/**
+ * A short, readable model name for the chip: the catalog name without its "Vendor: " prefix
+ * (the provider is shown beside it), or the id without its `vendor/` part when there is no name.
+ */
+export function chipModelName(modelId: string, name?: string): string {
+  const cleaned = name?.replace(/^[^:/]{1,40}:\s+/, '').trim();
+  if (cleaned && cleaned !== modelId) return cleaned;
+  return modelId.includes('/') ? modelId.slice(modelId.lastIndexOf('/') + 1) : modelId;
+}
+
+/** Bars filled per effort level; Extra high fills all three in the accent colour. */
+const EFFORT_BARS: Record<string, number> = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 3 };
+
+function EffortBars({ effort, label }: { effort: string; label: string }) {
+  if (effort === 'none') return <Minus aria-label={`Reasoning ${label}`} className="size-3 text-muted-foreground" />;
+  const filled = EFFORT_BARS[effort];
+  if (filled === undefined) return null;
+  const strong = effort === 'xhigh';
+  return (
+    <span role="img" aria-label={`Reasoning effort ${label}`} className="inline-flex h-2.5 shrink-0 items-end gap-px">
+      {[4, 7, 10].map((height, index) => (
+        <span
+          key={height}
+          style={{ height }}
+          className={cn(
+            'w-[3px] rounded-[1px]',
+            index < filled ? (strong ? 'bg-primary' : 'bg-foreground/70') : 'bg-foreground/20',
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
 export function Term2ModelPicker({
   config,
   models,
@@ -185,6 +219,8 @@ export function Term2ModelPicker({
   const currentEffortMeta = REASONING_LEVELS.find((item) => item.value === effortValue);
   const effortOffered = PICKER_LEVELS.some((level) => level.value === effortValue);
   const chipProvider = providerLabels.get(config.providerId) ?? config.providerId;
+  const currentModel = models.find((m) => m.provider === config.providerId && m.id === config.modelId);
+  const chipName = chipModelName(config.modelId, currentModel?.name);
   const effortLabel = currentEffortMeta?.label ?? effortValue;
   const showEffortInChip = effortValue !== 'default';
 
@@ -228,8 +264,8 @@ export function Term2ModelPicker({
               <span aria-label="Pending change" className="size-1.5 shrink-0 rounded-full bg-amber-500" />
             )}
             <span className="max-w-[8rem] shrink-0 truncate text-muted-foreground">{chipProvider}</span>
-            <span className="min-w-0 truncate font-mono">{config.modelId}</span>
-            {showEffortInChip && <span className="shrink-0 text-muted-foreground">· {effortLabel}</span>}
+            <span className="min-w-0 truncate">{chipName}</span>
+            {showEffortInChip && <EffortBars effort={effortValue} label={effortLabel} />}
             <ChevronDown aria-hidden className="text-muted-foreground" />
           </Button>
         </PopoverTrigger>

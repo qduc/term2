@@ -118,7 +118,7 @@ The public facade groups are:
   `controlTask` (cancel/check_in/foreground/background/drain_notifications),
   `listSessionFiles` (for `@` path mentions), and `readSessionQuota` (the subscription
   flag and the provider's last-reported plan windows; the wire carries no quota change, so
-  the usage popover rereads it after each finished turn). `useTerm2Session` sends
+  the usage popover rereads it after each model response it sees and when opened). `useTerm2Session` sends
   `drain_notifications` itself when an idle chat (no running root turn, root approval,
   or queued or paused message) holds undelivered background notices, once per
   accepted boundary plus one delayed re-ask after a busy or failed answer: the Session

@@ -1294,6 +1294,12 @@ export function Term2SessionShell({
     if (window.innerWidth < 768) return;
     setTasksPanelFor(sessionId);
   }, [sessionId, hasRunning, tasksPanelDismissed]);
+  // Once the last card leaves, the panel is closed, not just empty: a later task must not
+  // bring it back on a small screen, where only the header pill opens it.
+  const anyShown = runningTasks.shown.length > 0;
+  useEffect(() => {
+    if (!anyShown) setTasksPanelFor(null);
+  }, [anyShown]);
 
   const handleRewind = async (target: RewindTargetSummary, restoreText: boolean) => {
     const ok = await session.rewind(target.targetId);

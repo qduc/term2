@@ -11,6 +11,8 @@ export const ASSERTION_PURPOSES = Object.freeze([
   'workspace_candidate_validate',
   'workspace_candidate_browse',
   'workspace_candidate_select',
+  'workspace_remove',
+  'workspace_access_update',
   'model_list',
   'settings_read',
   'settings_write',
@@ -99,6 +101,8 @@ const SAFE_ERROR_CODES = new Set([
   'pairing_invalid',
   'pairing_required',
   'pairing_disabled',
+  'workspace_grant_static',
+  'workspace_write_not_allowed',
 ]);
 
 const SAFE_ERROR_MESSAGES = Object.freeze({
@@ -160,6 +164,10 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
     'OTP invalid/expired — read the current OTP from the gateway console and set TERM2_GATEWAY_PAIRING_OTP',
   pairing_required: 'Agent gateway pairing is required',
   pairing_disabled: 'Agent gateway pairing is unavailable',
+  workspace_grant_static:
+    'This folder was granted in the server’s startup configuration and cannot be changed or removed here',
+  workspace_write_not_allowed:
+    'The server was started without write access, so a folder cannot be given read & write access',
 });
 
 export class Term2GatewayError extends Error {
@@ -197,10 +205,10 @@ function workspaceConflictDetails(details) {
 function workspaceConflictMessage({ existingAccess, grantStorage }) {
   const change =
     grantStorage === 'persisted'
-      ? 'To change access, the operator must stop the server, back up direct-workspace-grants.json in its effective state directory, remove only this root’s grant record, restart, and select the root again. Old sessions will no longer be accessible through that grant.'
+      ? 'To change it, use Change access on this saved folder. Chats started with the current access stop, and open again only if you switch back.'
       : grantStorage === 'static'
         ? 'This is a startup-supplied grant, not an editable persisted grant. Ask the operator to review the startup configuration; deleting persisted records cannot change it.'
-        : 'This grant is in memory only. The operator must restart the host and select the root again; old sessions will lose their grant.';
+        : 'To change it, use Change access on this saved folder; the change lasts until the host restarts. Chats started with the current access stop, and open again only if you switch back.';
   return `This root is already granted with ${existingAccess} access. Select that access to reuse it. ${change} See docs/contracts/14-agent-wire-v2-server.md, “Same-root access conflict”.`;
 }
 
@@ -297,7 +305,14 @@ export function createAgentAssertion({
       retryable: false,
     });
   }
-  if (purpose !== 'session_create' && !isList && !noWorkspace && typeof sessionId !== 'string') {
+  const workspaceEdit = purpose === 'workspace_remove' || purpose === 'workspace_access_update';
+  if (workspaceEdit && sessionId !== undefined) {
+    throw new Term2GatewayError('validation_error', 'Session ID is not valid for a workspace change', {
+      statusCode: 400,
+      retryable: false,
+    });
+  }
+  if (purpose !== 'session_create' && !workspaceEdit && !isList && !noWorkspace && typeof sessionId !== 'string') {
     throw new Term2GatewayError('validation_error', 'Session binding is required', {
       statusCode: 400,
       retryable: false,

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { term2Client, Term2ApiError } from '../../lib/api/term2';
 import type { BrowseEntry, CandidateValidation, WorkspaceAlias } from '../../lib/term2/types';
+import { Term2SavedFolderMenu, type SavedFolderChange } from './Term2SavedFolderMenu';
 
 export interface SelectedTerm2Workspace {
   workspaceId: string;
@@ -73,6 +74,7 @@ export function Term2FolderSelector({
   selectedWorkspaceId = null,
   onSelectExisting,
   onSelected,
+  onSavedFolderChanged,
 }: {
   homeFolder?: string;
   allowWrite?: boolean;
@@ -80,6 +82,8 @@ export function Term2FolderSelector({
   selectedWorkspaceId?: string | null;
   onSelectExisting?: (workspaceId: string) => void;
   onSelected?: (workspace: SelectedTerm2Workspace) => void;
+  /** When set, each saved folder gets a menu to change its access or remove it. */
+  onSavedFolderChanged?: (change: SavedFolderChange) => void;
 }) {
   const [rootPath, setRootPath] = useState<string>('');
   const [rootCandidateId, setRootCandidateId] = useState<string | null>(null);
@@ -357,8 +361,8 @@ export function Term2FolderSelector({
               const active = workspace.workspaceId === selectedWorkspaceId;
               const shortName = workspaceShortName(workspace.label);
               return (
+                <span key={workspace.workspaceId} className="inline-flex max-w-full items-center">
                 <button
-                  key={workspace.workspaceId}
                   type="button"
                   title={workspace.label}
                   onClick={() => onSelectExisting(workspace.workspaceId)}
@@ -375,6 +379,14 @@ export function Term2FolderSelector({
                   </span>
                   {active && <Check className="h-3 w-3 shrink-0 text-teal-600 dark:text-teal-400" />}
                 </button>
+                {onSavedFolderChanged && (
+                  <Term2SavedFolderMenu
+                    workspace={workspace}
+                    allowWrite={allowWrite}
+                    onChanged={onSavedFolderChanged}
+                  />
+                )}
+                </span>
               );
             })}
           </div>

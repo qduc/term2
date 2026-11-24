@@ -1,6 +1,13 @@
 /** Exact private route/method inventory, including the pinned compatibility aliases. */
 import type { AssertionPurpose } from './server-contracts.js';
-export type PrivateRoute = { purpose: AssertionPurpose; legacy?: boolean; sessionId?: string; interactionId?: string };
+export type PrivateRoute = {
+  purpose: AssertionPurpose;
+  legacy?: boolean;
+  sessionId?: string;
+  /** Path workspace id; the assertion must carry the same one. */
+  workspaceId?: string;
+  interactionId?: string;
+};
 export function matchPrivateRoute(method: string, pathname: string): PrivateRoute | null {
   if (method === 'POST' && pathname === '/') return { purpose: 'session_create', legacy: true };
   // GET is canonical for workspace_list; POST is a tested compatibility alias for the pinned BFF wire.
@@ -12,6 +19,11 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
     return { purpose: 'workspace_candidate_browse' };
   if (method === 'POST' && pathname === '/private/agent/v1/workspace/candidates/select')
     return { purpose: 'workspace_candidate_select' };
+  const workspace = pathname.match(/^\/private\/agent\/v1\/workspaces\/([A-Za-z0-9_-]{1,256})(\/access)?$/);
+  if (workspace && !workspace[2] && method === 'DELETE')
+    return { purpose: 'workspace_remove', workspaceId: workspace[1] };
+  if (workspace && workspace[2] && method === 'PUT')
+    return { purpose: 'workspace_access_update', workspaceId: workspace[1] };
   if (method === 'GET' && pathname === '/private/agent/v1/models') return { purpose: 'model_list' };
   if (method === 'GET' && pathname === '/private/agent/v1/settings') return { purpose: 'settings_read' };
   if (method === 'PUT' && pathname === '/private/agent/v1/settings') return { purpose: 'settings_write' };

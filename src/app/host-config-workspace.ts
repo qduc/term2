@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { accessSync, constants } from 'node:fs';
 import type { Principal, WorkspaceGrant } from '../host/index.js';
+import type { ServerWorkspaces } from '../host/server-contracts.js';
 import type { Workspace } from '../tools/index.js';
 import { DirectCandidateRegistry } from './host-config-candidates.js';
 import type { CandidateBrowse, CandidateValidation } from './host-config-candidates.js';
@@ -34,6 +35,12 @@ export type CandidateSelection = {
     access: WorkspaceAccess;
   };
 };
+/** What a grant change leaves behind. `root` is for closing live sessions in-process; it never goes on the wire. */
+export type WorkspaceGrantChange = {
+  readonly workspace: WorkspaceAlias;
+  readonly root: string;
+  readonly grantVersion: number;
+};
 export type WorkspaceAuthorityResult = {
   readonly workspace: Workspace;
   readonly workspaceId: string;
@@ -49,7 +56,11 @@ export type DirectWorkspaceGrantInput = {
 
 /**
  * Persisted workspace grants for one direct process.
- * One canonical root has one grant. Access is fixed at admission and is never widened.
+ * One canonical root has one grant. Selection never changes an existing grant's access;
+ * only `changeGrantAccess` does, and widening there needs the same write permission as a
+ * read & write selection. `removeGrant` and `changeGrantAccess` edit dynamic grants only.
+ * Neither closes live sessions: the caller must release sessions under the returned
+ * root so they reopen through `resolveStoredRoot` with the new authority.
  * Dynamic grants go only to `stateDirectory/direct-workspace-grants.json`.
  * Session ownership is `{ client: ownerUserId, id: workspaceId }` on the direct log, not this file.
  */
@@ -138,6 +149,50 @@ export class DirectWorkspaceAuthority {
     return selection(record);
   }
 
+  /**
+   * Deletes one dynamic grant and persists the file; on a failed write the grant
+   * stays. Works on a grant whose root is gone or outside today's allowed roots,
+   * so stale grants can be cleaned up. Startup-supplied grants are refused.
+   */
+  removeGrant(principal: Principal, workspaceId: string): WorkspaceGrantChange {
+    const record = this.#editable(principal, workspaceId);
+    this.#grants.delete(record.workspaceId);
+    try {
+      this.#persist();
+    } catch {
+      this.#grants.set(record.workspaceId, record);
+      throw new DirectHostConfigError('workspace_grant_not_persisted', 'authority');
+    }
+    return change(record);
+  }
+
+  /**
+   * Sets a dynamic grant's access under a new grant version. Narrowing is always
+   * allowed. Widening needs a server started with write allowed, a root still
+   * inside the allowed roots, at its canonical path, and writable: the checks a
+   * read & write selection makes. A failed write keeps the old grant.
+   */
+  changeGrantAccess(principal: Principal, workspaceId: string, access: WorkspaceAccess): WorkspaceGrantChange {
+    if (access !== 'read' && access !== 'read_write') throw new DirectHostConfigError('validation_error', 'authority');
+    const existing = this.#editable(principal, workspaceId);
+    if (existing.access === access) return change(existing);
+    if (access === 'read_write') {
+      if (!this.#allowWrite) throw new DirectHostConfigError('workspace_write_not_allowed', 'authority');
+      const owned = this.#owned(principal, workspaceId);
+      this.#assertBoundary(this.#exactRoot(owned), 'read_write', 'authority');
+    }
+    const record: GrantRecord = { ...existing, access, grantVersion: this.#issuedVersion + 1 };
+    this.#grants.set(record.workspaceId, record);
+    try {
+      this.#persist();
+    } catch {
+      this.#grants.set(existing.workspaceId, existing);
+      throw new DirectHostConfigError('workspace_grant_not_persisted', 'authority');
+    }
+    this.#issuedVersion = record.grantVersion;
+    return change(record);
+  }
+
   /** HTTP create uses the stored grant's access. A client cannot choose a wider one. */
   resolveGrant(principal: Principal, workspaceId: string): WorkspaceGrant {
     const record = this.#owned(principal, workspaceId);
@@ -180,6 +235,16 @@ export class DirectWorkspaceAuthority {
     if (record.dynamic && !this.#roots.some((root) => contained(root, record.root))) {
       throw new DirectHostConfigError('workspace_authority_revoked', 'authority');
     }
+    return record;
+  }
+
+  /** Owner check only: a missing or out-of-bounds root must not block narrowing or removal. */
+  #editable(principal: Principal, workspaceId: string): GrantRecord {
+    const owner = requirePrincipal(principal);
+    const record = this.#grants.get(workspaceId);
+    if (!record) throw new DirectHostConfigError('workspace_not_found', 'authority');
+    if (record.ownerUserId !== owner) throw new DirectHostConfigError('workspace_owner_mismatch', 'authority');
+    if (!record.dynamic) throw new DirectHostConfigError('workspace_grant_static', 'authority');
     return record;
   }
 
@@ -236,6 +301,45 @@ export class DirectWorkspaceAuthority {
     if (!this.#stateDirectory) return;
     saveDynamicGrants(this.#stateDirectory, [...this.#grants.values()]);
   }
+}
+
+/**
+ * The server's workspace surface: the grant authority plus its two edits. An edit
+ * commits the grant first, then closes every live session in that root (cancelling
+ * running turns), so the next open re-derives access through `resolveStoredRoot`:
+ * a removed grant fails as revoked, a changed one opens with the new access. A
+ * failed close still releases the session and the grant stays changed, so the
+ * edit is reported as done.
+ */
+export function serverWorkspaceAdministration(
+  grants: DirectWorkspaceAuthority,
+  closeWorkspaceSessions: (root: string) => Promise<number>,
+): Required<ServerWorkspaces> {
+  return {
+    list: (principal) => grants.list(principal),
+    resolveGrant: (principal, workspaceId) => grants.resolveGrant(principal, workspaceId),
+    validate: (principal, absolutePath) => grants.validate(principal, absolutePath),
+    browse: (principal, candidateId, child) => grants.browse(principal, candidateId, child),
+    select: (principal, candidateId, access) => grants.select(principal, candidateId, access),
+    async remove(principal, workspaceId) {
+      const removed = grants.removeGrant(principal, workspaceId);
+      const closedSessions = await closeWorkspaceSessions(removed.root);
+      return { workspaceId: removed.workspace.workspaceId, removed: true, closedSessions };
+    },
+    async changeAccess(principal, workspaceId, access) {
+      const changed = grants.changeGrantAccess(principal, workspaceId, access);
+      const closedSessions = await closeWorkspaceSessions(changed.root);
+      return { workspace: changed.workspace, grantVersion: changed.grantVersion, closedSessions };
+    },
+  };
+}
+
+function change(record: GrantRecord): WorkspaceGrantChange {
+  return {
+    workspace: { workspaceId: record.workspaceId, label: record.label, access: record.access },
+    root: record.root,
+    grantVersion: record.grantVersion,
+  };
 }
 
 function selection(record: GrantRecord): CandidateSelection {

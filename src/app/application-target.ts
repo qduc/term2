@@ -49,7 +49,9 @@ function remoteAuthority(workspace: Workspace): DirectAuthority {
     },
     // A live connection is the only SSH grant, and it covers this one endpoint and root.
     resolveStored(root, identity) {
-      if (root === workspace.root && identity?.target === workspace.target) return workspace;
+      // Exact access too: an SSH session reopens only on a connection with the access it started with.
+      if (root === workspace.root && identity?.target === workspace.target && identity.access === workspace.access)
+        return workspace;
       throw new DirectProtocolError('forbidden', 'This session is not on the connected SSH workspace.');
     },
     canRun: ({ root, access }) => root === workspace.root && access === workspace.access,

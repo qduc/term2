@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Term2FolderSelector, type SelectedTerm2Workspace } from './Term2FolderSelector';
+import type { SavedFolderChange } from './Term2SavedFolderMenu';
 import { Term2SetupDialog } from './Term2SetupDialog';
 import { Term2SettingsPanel } from './Term2SettingsPanel';
 import { Term2NativeEvidence } from './Term2NativeEvidence';
@@ -535,6 +536,38 @@ export function Term2SessionShell({
     setSelectedWorkspaceId(folder.workspaceId);
     setDialog(null);
     void refreshWorkspaces().catch(() => setLoadError('Could not refresh saved folders.'));
+  };
+
+  /**
+   * After a saved folder's access changes, its chats keep working (the gateway restarts them
+   * with the narrower access). After removal they no longer open, so leave an open one.
+   */
+  const onSavedFolderChanged = async (change: SavedFolderChange) => {
+    const workspaceId = change.kind === 'removed' ? change.workspaceId : change.workspace.workspaceId;
+    if (change.kind === 'access') {
+      setWorkspaceMetadata((current) =>
+        current[workspaceId]
+          ? { ...current, [workspaceId]: { ...current[workspaceId], access: change.workspace.access } }
+          : current,
+      );
+    }
+    const openChatWorkspace = sessionId
+      ? (session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? session.selectedWorkspaceId)
+      : null;
+    if (change.kind === 'removed' && openChatWorkspace === workspaceId) {
+      const params = new URLSearchParams(window.location.search);
+      params.delete('agentSession');
+      window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    void refreshSessions().catch(() => undefined);
+    try {
+      await refreshWorkspaces();
+    } catch {
+      setLoadError('Could not refresh saved folders.');
+    }
+    // Clear only after the list no longer has the folder, or the auto-select would pick it again.
+    if (change.kind === 'removed' && session.selectedWorkspaceId === workspaceId) setSelectedWorkspaceId(null);
   };
 
   const selectSession = (id: string) => {
@@ -2025,6 +2058,7 @@ export function Term2SessionShell({
               setDialog(null);
             }}
             onSelected={onFolderSelected}
+            onSavedFolderChanged={(change) => void onSavedFolderChanged(change)}
           />
         </Term2SetupDialog>
       )}

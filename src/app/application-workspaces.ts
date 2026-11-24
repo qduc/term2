@@ -12,8 +12,8 @@ export type DirectAuthority = {
   resolveGrant(principal: Principal, grant: WorkspaceGrant): Workspace | Promise<Workspace>;
   /**
    * The current grant for a stored session. `identity` is what the session recorded:
-   * a hint to compare with, never authority. The store refuses any result that
-   * differs from it, so a narrower grant here refuses the session.
+   * a hint to compare with, never authority. The store refuses a result wider than
+   * it and runs the session with a narrower one; `canRun` still decides whether it runs.
    */
   resolveStored(root: string, identity?: Workspace): Workspace | Promise<Workspace>;
   /** May a stored session actually run here, rather than only be listed. */

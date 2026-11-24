@@ -9,6 +9,8 @@ export const ASSERTION_PURPOSES = [
   'workspace_candidate_validate',
   'workspace_candidate_browse',
   'workspace_candidate_select',
+  'workspace_remove',
+  'workspace_access_update',
   'settings_read',
   'settings_write',
   'credential_write',
@@ -110,7 +112,17 @@ export interface ServerWorkspaces {
     candidateId: string,
     access: 'read' | 'read_write',
   ): CandidateSelection | Promise<CandidateSelection>;
+  /** Owner's dynamic grant only. Live sessions under it must be closed before this resolves. */
+  remove?(principal: Principal, workspaceId: string): WorkspaceRemoval | Promise<WorkspaceRemoval>;
+  /** Owner's dynamic grant only; widening obeys the server's write permission. Live sessions are closed. */
+  changeAccess?(
+    principal: Principal,
+    workspaceId: string,
+    access: 'read' | 'read_write',
+  ): WorkspaceAccessChange | Promise<WorkspaceAccessChange>;
 }
+export type WorkspaceRemoval = { workspaceId: string; removed: true; closedSessions: number };
+export type WorkspaceAccessChange = { workspace: WorkspaceAlias; grantVersion: number; closedSessions: number };
 export type ModelCatalogEntry = {
   provider: string;
   id: string;

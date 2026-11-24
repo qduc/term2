@@ -870,6 +870,33 @@ export const term2Client = {
   listWorkspaces(limit = 20, cursor?: string | null, signal?: AbortSignal) {
     return getJson(`/agent/workspaces${query(limit, cursor)}`, validateWorkspacePage, signal);
   },
+  /** Removes a saved folder grant. Its chats no longer open. */
+  removeWorkspace(workspaceId: string, signal?: AbortSignal) {
+    return deleteJson(
+      `/agent/workspaces/${encodeURIComponent(id(workspaceId))}`,
+      (value) => {
+        const input = object(value);
+        if (input.removed !== true || input.workspaceId !== workspaceId)
+          throw new Term2ApiError(503, 'Invalid agent response');
+        return { workspaceId, closedSessions: Number(input.closedSessions) || 0 };
+      },
+      signal,
+    );
+  },
+  /** Changes a saved folder's access. Chats started with the other access stop opening until it is changed back. */
+  changeWorkspaceAccess(workspaceId: string, access: 'read' | 'read_write', signal?: AbortSignal) {
+    if (!['read', 'read_write'].includes(access)) throw new Term2ApiError(400, 'Invalid workspace access');
+    return putJson(
+      `/agent/workspaces/${encodeURIComponent(id(workspaceId))}/access`,
+      { access },
+      (value) => {
+        const workspace = validateWorkspace(object(value).workspace);
+        if (workspace.workspaceId !== workspaceId) throw new Term2ApiError(503, 'Invalid agent response');
+        return workspace;
+      },
+      signal,
+    );
+  },
   listSessions(limit = 20, cursor?: string | null, signal?: AbortSignal) {
     return getJson(`/agent/sessions${query(limit, cursor)}`, validateSessionPage, signal);
   },

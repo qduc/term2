@@ -49,6 +49,12 @@ export function isWorkspaceCandidateSelectBody(body: unknown): body is {
   );
 }
 
+export function isWorkspaceAccessBody(body: unknown): body is { access: 'read' | 'read_write' } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  return Object.keys(value).length === 1 && (value.access === 'read' || value.access === 'read_write');
+}
+
 export function isSettingsWriteBody(
   body: unknown,
 ): body is { expectedRevision: string; changes: Array<{ key: string; value: unknown }> } {

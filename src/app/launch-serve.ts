@@ -28,6 +28,7 @@ import {
   directServeToolPosture,
   DirectGlobalConfiguration,
   DirectWorkspaceAuthority,
+  serverWorkspaceAdministration,
 } from './host-config.js';
 import type { DirectLaunchRequest } from './launch-types.js';
 import { warnIfSandboxUnavailable } from './sandbox-warning.js';
@@ -109,7 +110,7 @@ function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, ow
         if (identity && identity.target !== 'local') {
           throw new DirectProtocolError('forbidden', 'This server does not run SSH sessions.');
         }
-        return access.resolveStoredRoot(root);
+        return access.resolveStoredRoot(root, identity);
       },
       // A read grant is a real grant here, enforced by the tools. Stored roots with no grant already threw.
       canRun: () => true,
@@ -170,7 +171,7 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         mode: getProfileLabel(current.profileId),
         approvalMode: current.approvalMode,
         toolPolicy: directServeToolPosture(
-          workspace.access === 'read_write' && allowWrite,
+          workspace.access === 'read_write' && current.workspaceAccess === 'read_write' && allowWrite,
           current.approvalMode !== 'off',
         ),
         configRevision: current.commandRevision,
@@ -252,10 +253,13 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     authority: serverAuthority(grants, directory, args.localOwnerUserId),
   });
   const auditPath = path.join(stateDir, 'server-audit.jsonl');
+  // Grant edits must release live sessions; a host without this would keep stale authority.
+  const closeWorkspaceSessions = app.host.closeWorkspaceSessions?.bind(app.host);
+  if (!closeWorkspaceSessions) throw new Error('The direct host cannot close workspace sessions.');
   const transport = createDirectServerHost(
     {
       host: app.host,
-      workspaces: grants,
+      workspaces: serverWorkspaceAdministration(grants, closeWorkspaceSessions),
       models: () => configuration.listModels(),
       skills: () =>
         app

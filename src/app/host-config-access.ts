@@ -60,7 +60,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       | { kind: 'read' | 'write'; sessionId: string },
   ): Promise<void>;
   resolveWorkspace(principal: Principal, grant: WorkspaceGrant): Workspace;
-  resolveStoredRoot(root: string): Workspace;
+  resolveStoredRoot(root: string, identity?: Workspace): Workspace;
 } {
   const directory = path.resolve(options.directory);
   const sessions: DirectBoundSessionStore<TCreated, TOpened> = {
@@ -78,6 +78,13 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       if (binding && (binding.client !== required.client || binding.id !== required.id)) {
         throw new DirectHostConfigError('workspace_owner_mismatch', 'authority');
       }
+      // The grant can be removed or changed between the create's check and here. Check it
+      // again in the same tick the store starts, so the host sees this create in flight
+      // when it closes the workspace's sessions.
+      options.authority.resolveWorkspace(
+        { userId: frame.userId, via: 'assertion' },
+        { workspaceId: frame.workspaceId, access: frame.workspace.access },
+      );
       return options.sessions.create(frame.workspace, model, required);
     },
     open: (id, binding) => options.sessions.open(id, binding),
@@ -112,10 +119,18 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       });
       return resolved.workspace;
     },
-    resolveStoredRoot(root) {
+    /**
+     * A stored session runs with the narrower of the access it started with
+     * (`identity`) and the current grant: a narrowed grant narrows it, a widened
+     * grant does not widen it. Without an identity (older logs) the grant applies.
+     */
+    resolveStoredRoot(root, identity) {
       const frame = creation.getStore();
-      if (frame && path.resolve(frame.workspace.root) === path.resolve(root)) return frame.workspace;
-      return options.authority.resolveStoredRoot(root);
+      const current =
+        frame && path.resolve(frame.workspace.root) === path.resolve(root)
+          ? frame.workspace
+          : options.authority.resolveStoredRoot(root);
+      return identity?.access === 'read' ? { ...current, access: 'read' } : current;
     },
   };
 }

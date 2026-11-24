@@ -21,6 +21,8 @@ const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['workspace_candidate_validate', 'POST', '/workspace/candidates/validate'],
   ['workspace_candidate_browse', 'POST', '/workspace/candidates/browse'],
   ['workspace_candidate_select', 'POST', '/workspace/candidates/select'],
+  ['workspace_remove', 'DELETE', '/workspaces/WORKSPACE'],
+  ['workspace_access_update', 'PUT', '/workspaces/WORKSPACE/access'],
   ['settings_read', 'GET', '/settings'],
   ['settings_write', 'PUT', '/settings'],
   ['credential_write', 'POST', '/credentials/test'],
@@ -383,7 +385,7 @@ describe('term2 serve (child process)', () => {
     expect(sessionId).toBeTruthy();
     expect(PRIVATE_ROUTES.map(([purpose]) => purpose).sort()).toEqual([...ASSERTION_PURPOSES].sort());
     for (const [purpose, method, suffix] of PRIVATE_ROUTES) {
-      const route = `/private/agent/v1${suffix.replace('SESSION', sessionId)}`;
+      const route = `/private/agent/v1${suffix.replace('SESSION', sessionId).replace('WORKSPACE', workspaceId)}`;
       const unauthenticated = await socketRequest(socketPath, method, route, {});
       expect(unauthenticated.status, `${purpose}: ${unauthenticated.raw}`).toBe(401);
       const wrongPurpose = purpose === 'model_list' ? 'workspace_list' : 'model_list';
@@ -569,6 +571,354 @@ describe('term2 serve (child process)', () => {
         outcome: 'completed',
       }),
     );
+  }, 180_000);
+
+  it('changes and removes a saved folder grant; stored sessions reopen no wider than they started or than the grant', async () => {
+    const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'serve-grant-edit-')));
+    const stateDir = path.join(tempHome, 'gateway-state');
+    const workspace = path.join(tempHome, 'workspace');
+    fs.mkdirSync(workspace, { recursive: true });
+    disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
+
+    // The first chat request is held open so a turn is still running when access narrows;
+    // later requests answer at once. Each request's tool names are kept to observe the
+    // reopened session's tool graph.
+    const requests: { tools: string[]; aborted: boolean }[] = [];
+    let firstRequestSeen!: () => void;
+    const firstRequest = new Promise<void>((resolve) => (firstRequestSeen = resolve));
+    const server = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url?.includes('/models')) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ object: 'list', data: [{ id: 'serve-mock-model' }] }));
+        return;
+      }
+      let raw = '';
+      req.on('data', (chunk: Buffer | string) => (raw += String(chunk)));
+      req.on('end', () => {
+        const body = JSON.parse(raw) as { tools?: { function?: { name?: string }; name?: string }[] };
+        const record = {
+          tools: (body.tools ?? []).map((tool) => tool.function?.name ?? tool.name ?? '').sort(),
+          aborted: false,
+        };
+        requests.push(record);
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        if (requests.length === 1) {
+          res.on('close', () => (record.aborted = !res.writableEnded));
+          res.flushHeaders();
+          firstRequestSeen();
+          return;
+        }
+        res.end(
+          [
+            'data: {"id":"chatcmpl-grant","choices":[{"delta":{"role":"assistant","content":"after change"}}]}',
+            '',
+            'data: {"id":"chatcmpl-grant","choices":[{"delta":{},"finish_reason":"stop"}]}',
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    disposables.push(
+      () =>
+        new Promise<void>((resolve) => {
+          server.closeAllConnections();
+          server.close(() => resolve());
+        }),
+    );
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const settingsDir = resolveSettingsDirectory({ homeDir: tempHome });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'mockprov', model: 'serve-mock-model' }, retryAttempts: 0 },
+        providers: [
+          { name: 'mockprov', type: 'openai-compatible', baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: 'test-key' },
+        ],
+      }),
+    );
+    const publicKeyPath = path.join(tempHome, 'bff-public.pem');
+    fs.writeFileSync(publicKeyPath, publicKeyPem, 'utf-8');
+
+    const socketPath = path.join(stateDir, 'gateway.sock');
+    const child = spawn(
+      'node',
+      [
+        cliPath(),
+        'serve',
+        '--state-dir',
+        stateDir,
+        '--local-owner',
+        'user-1',
+        '--bff-key',
+        `${KID}=${publicKeyPath}`,
+        '--allow-write',
+      ],
+      { env: createTestChildEnv({ HOME: tempHome, DISABLE_LOGGING: '1' }), stdio: ['ignore', 'ignore', 'pipe'] },
+    );
+    disposables.push(() => {
+      child.kill('SIGKILL');
+    });
+    let stderr = '';
+    // Readiness is announced on stderr after the socket is bound; wait for that line, not a poll.
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`readiness timeout\nstderr:\n${stderr}`)), 60_000);
+      child.on('close', (code, signal) => {
+        clearTimeout(timer);
+        reject(new Error(`serve exited before readiness (code=${code} signal=${signal})\nstderr:\n${stderr}`));
+      });
+      child.stderr.on('data', (chunk: Buffer | string) => {
+        stderr += String(chunk);
+        if (stderr.includes('GATEWAY_READY')) {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    });
+
+    const call = async (
+      method: string,
+      suffix: string,
+      body: unknown,
+      purpose: Parameters<typeof sign>[1],
+      ids: { workspaceId?: string; sessionId?: string } = {},
+      subject = 'user-1',
+    ) => {
+      const response = await socketRequest(
+        socketPath,
+        method,
+        `/private/agent/v1${suffix}`,
+        body,
+        sign(subject, purpose, ids),
+      );
+      return { status: response.status, body: response.raw ? jsonBody(response) : {} };
+    };
+    const ok = async (...args: Parameters<typeof call>) => {
+      const response = await call(...args);
+      expect(response.status, JSON.stringify(response.body)).toBeLessThan(400);
+      return response.body;
+    };
+    const grantsPath = path.join(stateDir, 'direct-workspace-grants.json');
+    const storedGrants = () => JSON.parse(fs.readFileSync(grantsPath, 'utf-8')).grants as Record<string, unknown>[];
+
+    const validated = await ok(
+      'POST',
+      '/workspace/candidates/validate',
+      { absolutePath: workspace },
+      'workspace_candidate_validate',
+    );
+    const selected = await ok(
+      'POST',
+      '/workspace/candidates/select',
+      { candidateId: validated.candidateId, access: 'read_write' },
+      'workspace_candidate_select',
+    );
+    const workspaceId = selected.workspaceId as string;
+    const created = await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId });
+    const sessionId = created.session.id as string;
+    const logPath = path.join(stateDir, 'conversations', `${sessionId}.jsonl`);
+
+    // A turn is running under read & write when the grant narrows.
+    const stream = openEventStream(socketPath, sessionId);
+    disposables.push(stream.close);
+    await stream.waitFor((event) => event.type === 'configuration', 45_000);
+    const first = await ok(
+      'POST',
+      `/sessions/${sessionId}/messages`,
+      { text: 'first', clientRequestId: 'grant-edit-1' },
+      'message_submit',
+      { sessionId },
+    );
+    await firstRequest;
+
+    // The assertion must name the workspace in the path; another owner's edit is refused.
+    expect(
+      await call('PUT', `/workspaces/${workspaceId}/access`, { access: 'read' }, 'workspace_access_update', {
+        workspaceId: 'ws_other',
+      }),
+    ).toMatchObject({ status: 400, body: { error: { code: 'protocol_conflict' } } });
+    expect(
+      await call(
+        'PUT',
+        `/workspaces/${workspaceId}/access`,
+        { access: 'read' },
+        'workspace_access_update',
+        { workspaceId },
+        'other-owner',
+      ),
+    ).toMatchObject({ status: 403, body: { error: { code: 'workspace_forbidden' } } });
+    expect(
+      await call('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId }, 'other-owner'),
+    ).toMatchObject({ status: 403, body: { error: { code: 'workspace_forbidden' } } });
+    expect(
+      await call('PUT', `/workspaces/${workspaceId}/access`, { access: 'write' }, 'workspace_access_update', {
+        workspaceId,
+      }),
+    ).toMatchObject({ status: 400, body: { error: { code: 'validation_error' } } });
+    expect(storedGrants()).toMatchObject([{ workspaceId, access: 'read_write' }]);
+
+    const narrowed = await ok(
+      'PUT',
+      `/workspaces/${workspaceId}/access`,
+      { access: 'read' },
+      'workspace_access_update',
+      {
+        workspaceId,
+      },
+    );
+    expect(narrowed).toEqual({
+      workspace: { workspaceId, label: selected.displayName, access: 'read' },
+      grantVersion: selected.binding.grantVersion + 1,
+      closedSessions: 1,
+    });
+    expect(storedGrants()).toMatchObject([{ workspaceId, access: 'read', grantVersion: narrowed.grantVersion }]);
+    // Closing the live session cancelled the running turn and its provider request.
+    await expect(stream.waitFor(() => false, 10_000)).rejects.toThrow('Event stream ended');
+    await expect.poll(() => requests[0]?.aborted, { timeout: 10_000 }).toBe(true);
+    expect(readFacts(logPath)).toContainEqual(
+      expect.objectContaining({
+        type: 'turn_ended',
+        turnId: first.turnId,
+        outcome: expect.not.stringMatching(/^completed$/),
+      }),
+    );
+
+    // One completed turn on a session; returns the tool names its provider request carried.
+    const runTurn = async (id: string, text: string) => {
+      const events = openEventStream(socketPath, id);
+      disposables.push(events.close);
+      await events.waitFor((event) => event.type === 'configuration', 45_000);
+      const turn = await ok(
+        'POST',
+        `/sessions/${id}/messages`,
+        { text, clientRequestId: `grant-edit-${text}` },
+        'message_submit',
+        { sessionId: id },
+      );
+      await events.waitFor((event) => event.type === 'turn_ended' && event.turnId === turn.turnId, 45_000);
+      events.close();
+      return requests.at(-1)!.tools;
+    };
+    const allowsWrite = async (id: string) =>
+      (await ok('POST', `/sessions/${id}/config?format=direct`, {}, 'session_update', { sessionId: id })).toolPolicy
+        .allowWrite as boolean;
+    const readWriteTools = requests[0]!.tools;
+
+    // A stored session runs with the narrower of its starting access and the current grant.
+    // After narrowing, the read & write session still lists and reopens, read-only: no
+    // write tools reach the model.
+    const forbidden = { status: 403, body: { error: { code: 'workspace_forbidden' } } };
+    expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions.map((item: any) => item.id)).toEqual([
+      sessionId,
+    ]);
+    const readOnlyTools = await runTurn(sessionId, 'second');
+    const writeTools = readWriteTools.filter((name) => !readOnlyTools.includes(name));
+    expect(writeTools.length, JSON.stringify(requests.map((request) => request.tools))).toBeGreaterThan(0);
+    expect(readOnlyTools.every((name) => readWriteTools.includes(name))).toBe(true);
+    expect(await allowsWrite(sessionId)).toBe(false);
+
+    // Widening is allowed because this server was started with --allow-write. It closes the
+    // live session, which reopens still read-only; a new session gets write tools.
+    const widened = await ok(
+      'PUT',
+      `/workspaces/${workspaceId}/access`,
+      { access: 'read_write' },
+      'workspace_access_update',
+      { workspaceId },
+    );
+    expect(widened).toMatchObject({
+      workspace: { access: 'read_write' },
+      grantVersion: narrowed.grantVersion + 1,
+      closedSessions: 1,
+    });
+    // The first session started read & write, so it is read & write again.
+    expect(await runTurn(sessionId, 'third')).toEqual(readWriteTools);
+    expect(await allowsWrite(sessionId)).toBe(true);
+    // A session started under the read grant stays read-only after widening.
+    expect(
+      await ok('PUT', `/workspaces/${workspaceId}/access`, { access: 'read' }, 'workspace_access_update', {
+        workspaceId,
+      }),
+    ).toMatchObject({ workspace: { access: 'read' }, closedSessions: 1 });
+    const readSessionId = (await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId })).session
+      .id as string;
+    expect(await runTurn(readSessionId, 'fourth')).toEqual(readOnlyTools);
+    expect(
+      await ok('PUT', `/workspaces/${workspaceId}/access`, { access: 'read_write' }, 'workspace_access_update', {
+        workspaceId,
+      }),
+    ).toMatchObject({ workspace: { access: 'read_write' }, closedSessions: 1 });
+    expect(await runTurn(readSessionId, 'fifth')).toEqual(readOnlyTools);
+    expect(await allowsWrite(readSessionId)).toBe(false);
+    const newSessionId = (await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId })).session
+      .id as string;
+    expect(await runTurn(newSessionId, 'sixth')).toEqual(readWriteTools);
+    expect(await allowsWrite(newSessionId)).toBe(true);
+    expect(
+      (await ok('GET', '/sessions', undefined, 'session_list')).sessions.map((item: any) => item.id).sort(),
+    ).toEqual([sessionId, readSessionId, newSessionId].sort());
+
+    // Removal: the grant leaves the list and the file, and its sessions no longer open.
+    // The two sessions that just ran are live; listing may have opened the first one too.
+    const removed = await ok('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId });
+    expect(removed).toMatchObject({ workspaceId, removed: true });
+    expect(removed.closedSessions).toBeGreaterThanOrEqual(2);
+    expect(storedGrants()).toEqual([]);
+    expect((await ok('GET', '/workspaces', undefined, 'workspace_list')).workspaces).toEqual([]);
+    expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions).toEqual([]);
+    expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
+    expect(
+      await call(
+        'POST',
+        `/sessions/${sessionId}/messages`,
+        { text: 'after removal', clientRequestId: 'grant-edit-removed' },
+        'message_submit',
+        { sessionId },
+      ),
+    ).toMatchObject({ status: 403, body: { error: { code: 'workspace_forbidden' } } });
+    expect(await call('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId })).toMatchObject({
+      status: 403,
+      body: { error: { code: 'workspace_forbidden' } },
+    });
+    expect(
+      await call('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId }),
+    ).toMatchObject({
+      status: 403,
+      body: { error: { code: 'workspace_forbidden' } },
+    });
+    // Adding the folder back issues a new grant: the old session stays closed and the
+    // list still answers, without it.
+    const revalidated = await ok(
+      'POST',
+      '/workspace/candidates/validate',
+      { absolutePath: workspace },
+      'workspace_candidate_validate',
+    );
+    const reselected = await ok(
+      'POST',
+      '/workspace/candidates/select',
+      { candidateId: revalidated.candidateId, access: 'read_write' },
+      'workspace_candidate_select',
+    );
+    expect(reselected.workspaceId).not.toBe(workspaceId);
+    expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions).toEqual([]);
+    expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
+    expect(requests).toHaveLength(6);
+
+    child.removeAllListeners();
+    child.kill('SIGTERM');
+    const exit = await new Promise<number | null>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`serve did not exit after SIGTERM\nstderr:\n${stderr}`)), 30_000);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+    });
+    expect(exit).toBe(0);
   }, 180_000);
 
   it('pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid', async () => {

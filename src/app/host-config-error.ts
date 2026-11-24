@@ -25,6 +25,8 @@ export type DirectHostConfigErrorCode =
   | 'workspace_not_readable'
   | 'workspace_not_directory'
   | 'write_not_allowed'
+  | 'workspace_write_not_allowed'
+  | 'workspace_grant_static'
   | 'workspace_grant_not_persisted'
   | 'settings_forbidden'
   | 'settings_conflict'
@@ -145,6 +147,10 @@ export function directHostConfigFailure(error: DirectHostConfigError): DirectHos
   if (code === 'workspace_grant_not_persisted' || code === 'configuration_invalid') {
     return failure(503, 'gateway_unavailable', 'gateway unavailable', true);
   }
+  if (code === 'workspace_grant_static')
+    return failure(409, 'workspace_grant_static', 'startup-supplied workspace grants cannot be changed', false);
+  if (code === 'workspace_write_not_allowed')
+    return failure(403, 'workspace_write_not_allowed', 'the server does not allow write access', false);
   if (error.surface === 'candidate') {
     if (code === 'workspace_owner_mismatch' || code === 'workspace_path_escape') {
       return failure(403, 'workspace_forbidden', 'workspace access denied', false);

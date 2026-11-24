@@ -411,3 +411,22 @@ operations before `app.close`; `shutdown` then closes managers. Host
 `closeSession` releases native work/attachments without deleting retained logs.
 A reopened session replaces the old entry in `createDirectMcpRefresh` so later
 catalog notifications target the new runtime.
+
+## Serve workspace grants
+
+`DirectWorkspaceAuthority` (`host-config-workspace.ts`) owns the server's
+workspace grants: `list`, candidate `validate`/`browse`/`select`, and the grant
+checks `resolveGrant`/`resolveWorkspace`/`resolveStoredRoot`. `removeGrant` and
+`changeGrantAccess` edit one dynamic grant of the calling owner, persist the
+grant file and keep the old grant if that write fails; static grants are
+refused, and widening makes the checks a `read_write` selection makes. They do
+not touch sessions. `serverWorkspaceAdministration` is the surface `launchServe`
+hands the server: it runs an edit, then calls
+`DirectHost.closeWorkspaceSessions(root)` so live sessions in that root stop and
+any reopen goes back through the grant checks. A stored session reopens with
+the narrower of the access in its `session_started` `workspaceIdentity` and the
+current grant (`bindDirectSessionAccess.resolveStoredRoot`); the session store
+refuses a resolved workspace wider than that identity, and the runtime builds
+its tools from the resolved one. `sessionConfiguration().workspaceAccess`
+reports it. The
+wire behavior is in contract 13, "Saved folder edits".

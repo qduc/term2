@@ -124,7 +124,7 @@ export function ChatHeader({
         {onNewChat && (
           <button
             onClick={onNewChat}
-            className="inline-flex h-8 items-center gap-1 rounded-lg border border-black/[0.08] px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-black/[0.04] hover:text-zinc-950 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06]"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-black/[0.08] px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-black/[0.04] hover:text-zinc-950 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06] dark:hover:text-white"
             title={newChatLabel}
             aria-label={newChatLabel}
             type="button"

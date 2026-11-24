@@ -4,5 +4,5 @@ export function isTerm2UiEnabled(): boolean {
 }
 
 export function isTerm2LocalControlEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_TERM2_LOCAL_CONTROL_ENABLED === 'true';
+  return process.env.NEXT_PUBLIC_TERM2_LOCAL_CONTROL_ENABLED !== 'false';
 }

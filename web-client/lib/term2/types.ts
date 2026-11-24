@@ -272,6 +272,7 @@ export interface SettingsWriteResult {
   revision: string;
   projection: SettingsProjection;
 }
+export type SessionApprovalMode = 'off' | 'auto' | 'unattended' | 'always';
 export interface SessionConfigRecord {
   sessionId?: string;
   configRevision: string;
@@ -279,6 +280,7 @@ export interface SessionConfigRecord {
   modelId: string;
   reasoningEffort: string;
   mode: 'standard' | 'bare' | 'pair' | 'lite' | 'plan' | 'mentor' | 'orchestrator';
+  approvalMode?: SessionApprovalMode;
   defaultsRevision: string | number;
   toolPolicy?: { allowWrite: boolean; autoApprove: boolean; allowUnsandboxed: boolean; sshEnabled: boolean } | {
     sandbox?: 'enabled' | 'disabled';
@@ -296,6 +298,7 @@ export interface SessionConfigUpdate {
   modelSelection?: { model: string; provider: string };
   reasoningEffort?: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   mode?: SessionConfigRecord['mode'];
+  approvalMode?: SessionApprovalMode;
 }
 
 export interface MessageAdmission {
@@ -396,6 +399,10 @@ export interface Term2SubagentCard {
   error?: string;
   commands: Term2Command[];
 }
+export type Term2TurnItem =
+  | { kind: 'reasoning'; id: string; text: string; streaming?: boolean; modelStep?: number }
+  | { kind: 'text'; id: string; text: string; draft?: boolean; modelStep?: number }
+  | { kind: 'tool'; executionId: string };
 export interface Term2TurnView {
   turnId: string;
   role: 'user' | 'assistant';
@@ -404,6 +411,8 @@ export interface Term2TurnView {
   reasoning: string;
   status: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted' | 'rejected' | 'unknown';
   commands: Term2Command[];
+  /** Chronological sequence of reasoning blocks, assistant text blocks, and tool executions. */
+  items?: Term2TurnItem[];
   subagents?: Term2SubagentCard[];
   /** Transient turn-level note (retry/compaction); cleared on terminal events. */
   transientStatus?: string;

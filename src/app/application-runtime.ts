@@ -95,6 +95,7 @@ export type DirectRuntimeRecord = {
 export type DirectRuntimes = {
   create(context: DirectRuntimeContext): DirectConversationRuntime;
   launching: ReturnType<typeof createLaunchConfigurationScope>['run'];
+  withApprovalMode: ReturnType<typeof createLaunchConfigurationScope>['withApprovalMode'];
   /** Throws unless this application lets a session move from `previous` to `next`. */
   authorizeModel(next: ModelRef, previous: ModelRef): void | Promise<void>;
   /** An open session's runtime, for app-owned policy and commands. */
@@ -215,6 +216,7 @@ export function createDirectRuntimes(
   return {
     authorizeModel,
     launching: launchConfiguration.run,
+    withApprovalMode: launchConfiguration.withApprovalMode,
     create(context) {
       // Metadata records a path, so the store resolves a foreign root narrower
       // rather than refusing it. Running it would act outside this mode's admission.
@@ -347,6 +349,9 @@ export function createDirectRuntimes(
         const approvalMode = launchConfiguration.approvalMode(context.id);
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
+        if (approvalMode !== undefined && tasks?.list().some((task) => !task.result)) {
+          throw new Error('Finish or cancel background work before changing approval mode.');
+        }
         const generation = await prepareDirectConfiguration({
           context: installed.context,
           selection,

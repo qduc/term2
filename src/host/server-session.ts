@@ -430,7 +430,12 @@ async function configureSession(
       'canonical configuration mutation receipt contract unavailable',
       true,
     );
-  const result = await connection.send(command);
+  const result =
+    body.approvalMode !== undefined && presentation.withApprovalMode
+      ? await presentation.withApprovalMode(principal, connection.snapshot, body.approvalMode, () =>
+          connection.send(command),
+        )
+      : await connection.send(command);
   if (format === 'agent-wire-v2') {
     // Native non-receipt results are still versioned results; pre-dispatch validation/
     // authorization failures use the normal safe HTTP error path.

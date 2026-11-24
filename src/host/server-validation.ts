@@ -134,9 +134,17 @@ export function requiresSessionUpdateKeys(body: unknown): boolean {
   const keys = Object.keys(value);
   return (
     keys.every((key) =>
-      ['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode'].includes(key),
+      [
+        'clientRequestId',
+        'expectedRevision',
+        'admission',
+        'modelSelection',
+        'reasoningEffort',
+        'mode',
+        'approvalMode',
+      ].includes(key),
     ) &&
-    keys.some((key) => ['modelSelection', 'reasoningEffort', 'mode'].includes(key)) &&
+    keys.some((key) => ['modelSelection', 'reasoningEffort', 'mode', 'approvalMode'].includes(key)) &&
     (!Object.prototype.hasOwnProperty.call(value, 'clientRequestId') ||
       !Object.prototype.hasOwnProperty.call(value, 'expectedRevision'))
   );
@@ -149,16 +157,25 @@ export function isSessionUpdateBody(body: unknown): body is SessionUpdateBody {
   if (
     Object.keys(value).some(
       (key) =>
-        !['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode'].includes(
-          key,
-        ),
+        ![
+          'clientRequestId',
+          'expectedRevision',
+          'admission',
+          'modelSelection',
+          'reasoningEffort',
+          'mode',
+          'approvalMode',
+        ].includes(key),
     ) ||
     typeof value.clientRequestId !== 'string' ||
     value.clientRequestId.length === 0 ||
     typeof value.expectedRevision !== 'string' ||
     value.expectedRevision.length === 0 ||
     (value.admission !== undefined && value.admission !== 'idle') ||
-    (value.modelSelection === undefined && value.reasoningEffort === undefined && value.mode === undefined)
+    (value.modelSelection === undefined &&
+      value.reasoningEffort === undefined &&
+      value.mode === undefined &&
+      value.approvalMode === undefined)
   )
     return false;
   if (value.modelSelection !== undefined) {
@@ -177,6 +194,11 @@ export function isSessionUpdateBody(body: unknown): body is SessionUpdateBody {
     value.reasoningEffort !== undefined &&
     (typeof value.reasoningEffort !== 'string' ||
       !['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value.reasoningEffort))
+  )
+    return false;
+  if (
+    value.approvalMode !== undefined &&
+    (typeof value.approvalMode !== 'string' || !['off', 'auto', 'unattended', 'always'].includes(value.approvalMode))
   )
     return false;
   return (

@@ -218,12 +218,14 @@ export type SessionMetadata = {
   /** null until the direct durable store exposes this boundary. */
   earliestReplayableSequence: number | null;
 };
+export type SessionApprovalMode = 'off' | 'auto' | 'unattended' | 'always';
 export type SessionConfiguration = {
   sessionId: string;
   providerId: string;
   modelId: string;
   reasoningEffort: string;
   mode: string;
+  approvalMode?: SessionApprovalMode;
   toolPolicy: { allowWrite: boolean; autoApprove: boolean; allowUnsandboxed: boolean; sshEnabled: boolean };
   configRevision: string;
   defaultsRevision: string | number;
@@ -242,6 +244,13 @@ export interface ServerSessionPresentation {
     skillName: string,
     text: string,
   ): Promise<string | null> | string | null;
+  /** Scope session-local approval mode to Session's atomic configure pipeline without pre-acceptance mutation. */
+  withApprovalMode?<Result>(
+    principal: Principal,
+    snapshot: WireSnapshot,
+    approvalMode: SessionApprovalMode,
+    operation: () => Promise<Result>,
+  ): Promise<Result>;
   /** Authorize the supplied logical snapshot cut and prepare the whole requested patch.
    * No effects, generated invocation key, current-revision substitution or partial application. */
   prepareConfiguration?(
@@ -301,6 +310,7 @@ export type SessionUpdateBody = {
   modelSelection?: { model: string; provider: string };
   reasoningEffort?: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   mode?: 'standard' | 'bare' | 'lite';
+  approvalMode?: SessionApprovalMode;
 };
 export type CommandBody = {
   commandId: string;

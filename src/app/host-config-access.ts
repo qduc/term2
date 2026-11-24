@@ -165,9 +165,9 @@ function sessionStart(
   };
 }
 
-export const directServeToolPosture = (allowWrite: boolean) => ({
+export const directServeToolPosture = (allowWrite: boolean, autoApprove = false) => ({
   allowWrite,
-  autoApprove: false as const,
+  autoApprove,
   allowUnsandboxed: false as const,
   sshEnabled: false as const,
 });

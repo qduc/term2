@@ -160,21 +160,51 @@ function contextTurns(context: Pick<SessionHydration['snapshot'], 'messages' | '
   const turns: Term2TurnView[] = [];
   const getTurn = (turnId: string): Term2TurnView => {
     let item = turns.find(item => item.turnId === turnId);
-    if (!item) { item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [] }; turns.push(item); }
+    if (!item) { item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [], items: [] }; turns.push(item); }
     return item;
   };
   const message = (entry: Record<string, unknown>) => {
     if (typeof entry.turnId !== 'string' || entry.role === 'tool') return;
     const item = getTurn(entry.turnId);
-    if (entry.role === 'user') item.userText = (item.userText ?? '') + text(entry.text);
-    else item.text += text(entry.text);
+    const msgText = text(entry.text);
+    if (entry.role === 'user') {
+      item.userText = (item.userText ?? '') + msgText;
+    } else {
+      item.text = item.text && msgText ? `${item.text}\n\n${msgText}` : item.text + msgText;
+      if (msgText.length > 0) {
+        item.items = item.items ?? [];
+        item.items.push({
+          kind: 'text',
+          id: identity(entry.id),
+          text: msgText,
+          ...(entry.draft === true ? { draft: true } : {}),
+          ...(typeof entry.modelStep === 'number' ? { modelStep: entry.modelStep } : {}),
+        });
+      }
+    }
   };
   const tool = (entry: Record<string, unknown>) => {
     const item = getTurn(identity(entry.turnId));
-    item.commands.push({ callId: identity(entry.executionId), toolName: text(entry.toolName), nativeTool: entry,
-      status: entry.status === 'started' ? 'running' : entry.status === 'called' ? 'pending' : entry.status === 'completed' ? entry.isError === true ? 'failed' : 'completed' : 'unknown',
-      ...(typeof entry.output === 'string' ? { output: entry.output } : {}),
+    const executionId = identity(entry.executionId);
+    const argumentsText =
+      typeof entry.input === 'string'
+        ? entry.input
+        : entry.input !== undefined
+          ? JSON.stringify(entry.input)
+          : undefined;
+    const isError = entry.isError === true;
+    const rawOutput = typeof entry.output === 'string' ? entry.output : undefined;
+    item.commands.push({
+      callId: executionId,
+      toolName: text(entry.toolName),
+      nativeTool: entry,
+      status: entry.status === 'started' ? 'running' : entry.status === 'called' ? 'pending' : entry.status === 'completed' ? (isError ? 'failed' : 'completed') : 'unknown',
+      ...(argumentsText !== undefined ? { argumentsText } : {}),
+      ...(rawOutput !== undefined && !isError ? { output: rawOutput } : {}),
+      ...(rawOutput !== undefined && isError ? { error: rawOutput } : {}),
     });
+    item.items = item.items ?? [];
+    item.items.push({ kind: 'tool', executionId });
   };
   if (context.timeline) {
     for (const entry of context.timeline) {
@@ -200,11 +230,29 @@ function contextTurns(context: Pick<SessionHydration['snapshot'], 'messages' | '
   }
   const active = turns.find(item => item.turnId === activeTurnId);
   if (active && (status === 'running' || status === 'awaiting_interaction')) active.status = 'streaming';
-  if (context.reasoningIdentity && typeof context.reasoning === 'string') {
+  if (context.reasoningIdentity && typeof context.reasoning === 'string' && context.reasoning.trim().length > 0) {
     const owner = record(context.reasoningIdentity);
     if (typeof owner.turnId === 'string') {
       const item = turns.find(item => item.turnId === owner.turnId);
-      if (item) item.reasoning = text(context.reasoning);
+      if (item) {
+        const reasoningText = text(context.reasoning);
+        item.reasoning = reasoningText;
+        item.items = item.items ?? [];
+        const modelStep = typeof owner.modelStep === 'number' ? owner.modelStep : undefined;
+        const reasoningItem = {
+          kind: 'reasoning' as const,
+          id: typeof owner.messageId === 'string' ? owner.messageId : `reasoning:${owner.turnId}`,
+          text: reasoningText,
+          ...(modelStep !== undefined ? { modelStep } : {}),
+        };
+        const insertAt =
+          modelStep !== undefined
+            ? item.items.findIndex((entry) => entry.kind === 'text' && entry.modelStep === modelStep)
+            : -1;
+        if (insertAt >= 0) item.items.splice(insertAt, 0, reasoningItem);
+        else if (item.status === 'streaming') item.items.push(reasoningItem);
+        else item.items.unshift(reasoningItem);
+      }
     }
   }
   return turns;

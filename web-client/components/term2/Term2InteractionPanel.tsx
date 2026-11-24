@@ -2,6 +2,7 @@
 import { useId, useState } from 'react';
 import { ChevronRight, MessageCircleQuestion, ShieldAlert, TriangleAlert } from 'lucide-react';
 import type { InteractionResolveRequest, PendingInteraction, Term2SubagentIdentity } from '../../lib/term2/types';
+import { ToolInputPreview } from './Term2ToolContent';
 
 const VARIANT_CONTEXT: Record<PendingInteraction['variant'], string> = {
   ordinary_tool: 'Tool approval requested',
@@ -166,12 +167,21 @@ export function Term2InteractionPanel({
               </pre>
             </details>
           ) : (
-            <pre
-              aria-label="Interaction arguments"
-              className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-zinc-100/80 px-3 py-2.5 font-mono text-[12px] leading-5 dark:bg-white/[0.04]"
-            >
-              {interaction.descriptor.argumentsText}
-            </pre>
+            <div className="space-y-2" aria-label="Interaction arguments">
+              <ToolInputPreview
+                toolName={interaction.descriptor.toolName}
+                argumentsText={interaction.descriptor.argumentsText}
+              />
+              <details className="group/args">
+                <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight aria-hidden className="h-3 w-3 transition-transform group-open/args:rotate-90" />
+                  Raw arguments
+                </summary>
+                <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-zinc-100/80 px-3 py-2.5 font-mono text-[12px] leading-5 dark:bg-white/[0.04]">
+                  {interaction.descriptor.argumentsText}
+                </pre>
+              </details>
+            </div>
           ))}
       </div>
       {askUser && (

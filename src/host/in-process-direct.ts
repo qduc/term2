@@ -63,6 +63,9 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     if (disposed) throw new DirectProtocolError('closed', 'Host is closed.');
   };
 
+  /** Attachments whose open has finished, so a grant change can close them without waiting. */
+  const settled = new WeakMap<Promise<DirectAttachment>, DirectAttachment>();
+
   async function attachment(id: string): Promise<DirectAttachment> {
     await closingSessions.get(id);
     open();
@@ -74,9 +77,12 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       });
       attachments.set(id, pending);
       const original = pending;
-      void pending.catch(() => {
-        if (attachments.get(id) === original) attachments.delete(id);
-      });
+      void pending.then(
+        (attached) => settled.set(original, attached),
+        () => {
+          if (attachments.get(id) === original) attachments.delete(id);
+        },
+      );
     }
     return pending;
   }
@@ -158,9 +164,18 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     },
     async closeWorkspaceSessions(root) {
       open();
+      // Sessions already open start closing now, so none admits a turn under the old
+      // grant while the in-flight work below is awaited.
+      const early = [...attachments.entries()]
+        .filter(([, pending]) => {
+          const attached = settled.get(pending);
+          return attached !== undefined && workspaceRoot(attached.session) === root;
+        })
+        .map(([sessionId]) => sessionId);
+      const releases = early.map((sessionId) => release(sessionId));
       // A create or open that began under the old grant settles into `attachments`; wait for it.
       await Promise.allSettled([...creates]);
-      const pending = [...attachments.entries()];
+      const pending = [...attachments.entries()].filter(([sessionId]) => !early.includes(sessionId));
       const opened = await Promise.allSettled(pending.map(([, attached]) => attached));
       const matching = pending.filter(([, attached], index) => {
         const result = opened[index]!;
@@ -169,7 +184,8 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
           : false;
       });
       // One failed cleanup must not keep the others open; release() drops the attachment either way.
-      const closed = await Promise.allSettled(matching.map(([sessionId]) => release(sessionId)));
+      releases.push(...matching.map(([sessionId]) => release(sessionId)));
+      const closed = await Promise.allSettled(releases);
       return closed.length;
     },
     async listSessions(principal, cursor) {
@@ -201,7 +217,9 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
         open();
         if (attachments.has(created.id)) throw new Error('Store returned an existing session identity');
         const attached = new DirectAttachment(created);
-        attachments.set(created.id, Promise.resolve(attached));
+        const ready = Promise.resolve(attached);
+        settled.set(ready, attached);
+        attachments.set(created.id, ready);
         return connection({ ...principal }, attached);
       } finally {
         creates.delete(pending);

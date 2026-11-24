@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { SettingsProjection } from '../host/server-contracts.js';
-import { getDefaultShellSandboxRunner, sandboxFailure } from '../tools/shell/sandbox/shell-sandbox-runner.js';
+import type { SettingsProjection, ShellSandboxNotice } from '../host/server-contracts.js';
+import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { DirectHostConfigError } from './host-config-error.js';
 import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 
@@ -140,16 +140,18 @@ export class DirectGlobalConfiguration {
   }
 
   /** Cached machine probe. It is not consulted by approval. */
-  readonly #sandboxNotice: Promise<string | undefined>;
+  readonly #sandboxNotice: Promise<ShellSandboxNotice | undefined>;
 
-  async #probeSandbox(): Promise<string | undefined> {
+  async #probeSandbox(): Promise<ShellSandboxNotice | undefined> {
     try {
       const availability = await getDefaultShellSandboxRunner().availability();
       if (availability.type === 'available') return undefined;
-      return sandboxFailure(availability);
+      const code = availability.type;
+      const detail = 'reason' in availability ? noticeDetail(availability.reason) : '';
+      return { code, detail };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      return `Error: Shell sandbox unavailable (probe_failed): ${reason}. The command was not run.`;
+      return { code: 'probe_failed', detail: noticeDetail(reason) };
     }
   }
 
@@ -467,4 +469,13 @@ function safeValue(value: unknown): SettingsProjection['settings']['safeDefaults
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return [...value];
   return undefined;
+}
+
+/** Detail only. The refusal sentence stays out of this projection. */
+function noticeDetail(value: string): string {
+  return value
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
 }

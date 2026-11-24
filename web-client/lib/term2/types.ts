@@ -265,9 +265,13 @@ export interface SettingsProjection {
       network: 'denied' | 'configured' | 'confirmation-required';
     };
   };
-  /** Display-only. Set when this machine cannot run the shell sandbox. */
-  shellSandboxNotice?: string;
+  /** Display-only machine fact. Absent when the shell sandbox can run. */
+  shellSandboxNotice?: ShellSandboxNotice;
   session?: SessionConfigRecord;
+}
+export interface ShellSandboxNotice {
+  code: 'missing_dependency' | 'unsupported_platform' | 'initialization_failed' | 'disabled' | 'probe_failed';
+  detail: string;
 }
 export interface SettingsWriteResult {
   committed: true;

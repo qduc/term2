@@ -18,6 +18,7 @@ import {
   type SessionConfigUpdate,
   type SettingsProjection,
   type SettingsWriteResult,
+  type ShellSandboxNotice,
   type ModelSummary,
   type MessageSubmitOptions,
   type ProviderPresetEntry,
@@ -319,11 +320,25 @@ function jsonValue(value: unknown, depth = 0): boolean {
   }
   return false;
 }
+const SHELL_SANDBOX_CODES = new Set([
+  'missing_dependency',
+  'unsupported_platform',
+  'initialization_failed',
+  'disabled',
+  'probe_failed',
+]);
+function validateShellSandboxNotice(value: unknown): ShellSandboxNotice | undefined {
+  if (value === undefined) return undefined;
+  const notice = object(value);
+  only(notice, ['code', 'detail']);
+  if (!SHELL_SANDBOX_CODES.has(String(notice.code)) || typeof notice.detail !== 'string')
+    throw new Term2ApiError(503, 'Invalid agent response');
+  return { code: notice.code as ShellSandboxNotice['code'], detail: text(notice.detail, 300) };
+}
 export function validateSettings(value: unknown): SettingsProjection {
   const input = object(value);
   only(input, ['schemaVersion', 'revision', 'defaultsRevision', 'settings', 'session', 'shellSandboxNotice']);
-  if (input.shellSandboxNotice !== undefined && typeof input.shellSandboxNotice !== 'string')
-    throw new Term2ApiError(503, 'Invalid agent response');
+  const shellSandboxNotice = validateShellSandboxNotice(input.shellSandboxNotice);
   if (input.schemaVersion !== 1 || typeof input.revision !== 'string' || typeof input.defaultsRevision !== 'string')
     throw new Term2ApiError(503, 'Invalid agent response');
   const settings = object(input.settings);
@@ -439,7 +454,7 @@ export function validateSettings(value: unknown): SettingsProjection {
       safety: safety as SettingsProjection['settings']['safety'],
     },
     ...(input.session === undefined ? {} : { session: validateSessionConfig(input.session) }),
-    ...(typeof input.shellSandboxNotice === 'string' ? { shellSandboxNotice: text(input.shellSandboxNotice, 2000) } : {}),
+    ...(shellSandboxNotice ? { shellSandboxNotice } : {}),
   };
 }
 function validateCredentialProjection(value: unknown): SettingsProjection['settings']['credentials'][string] {

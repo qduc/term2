@@ -252,6 +252,8 @@ it.skipIf(process.platform !== 'linux')(
     const model = await startModel({
       [readPrompt]: [
         { command: 'git log --oneline' },
+        // Reads like a log query, writes a file: only the mount can refuse it.
+        { command: 'git log -1 --output=gitout.txt' },
         { command: 'printf x > blocked.txt' },
         { command: 'printf x > escaped.txt', sandbox: 'unsandboxed' },
       ],
@@ -267,19 +269,19 @@ it.skipIf(process.platform !== 'linux')(
 
     const readSession = await serve.openSession(readRoot, 'read');
     await serve.send(readSession, readPrompt);
-    await expect.poll(() => model.turn(readPrompt).length, { timeout: 60_000 }).toBe(4);
+    await expect.poll(() => model.turn(readPrompt).length, { timeout: 60_000 }).toBe(5);
     const readTurn = model.turn(readPrompt);
     expect(toolNames(readTurn[0])).toContain('shell');
     expect(systemText(readTurn[0])).not.toContain(READ_ONLY_SHELL_UNAVAILABLE_INSTRUCTION);
-    const [log, write, escape] = results(readTurn[3]);
+    const [log, gitWrite, write, escape] = results(readTurn[4]);
     expect(log).toMatch(/^exit 0[\s\S]*first-commit-subject/);
+    expect(gitWrite).toContain('Read-only file system');
     expect(write).toMatch(/^exit [1-9]/);
     expect(write).toContain('Read-only file system');
     // The model's escape request is not honoured in a read session: it runs sandboxed and is refused the same way.
     expect(escape).toMatch(/^exit [1-9]/);
     expect(escape).toContain('Read-only file system');
-    expect(fs.existsSync(path.join(readRoot, 'blocked.txt'))).toBe(false);
-    expect(fs.existsSync(path.join(readRoot, 'escaped.txt'))).toBe(false);
+    expect(fs.readdirSync(readRoot).sort()).toEqual(['.git', 'README.md']);
 
     const writeSession = await serve.openSession(writeRoot, 'read_write');
     await serve.send(writeSession, writePrompt);

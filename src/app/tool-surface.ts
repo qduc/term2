@@ -257,6 +257,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   const isSandboxEscape = (toolName: string, input: unknown): boolean => {
     if (
       remote ||
+      // A read session never runs a command outside the sandbox (shell.ts), so nothing here escapes.
+      readOnly ||
       settings.get('sandbox.enabled') === false ||
       (toolName !== 'shell' && toolName !== 'bash') ||
       !input ||

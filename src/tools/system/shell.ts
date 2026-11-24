@@ -793,7 +793,8 @@ export function createShellToolDefinition(deps: {
         return false;
       }
       try {
-        if (params.sandbox === 'unsandboxed') {
+        // A read session runs this sandboxed anyway (execute), so there is no escape to approve.
+        if (params.sandbox === 'unsandboxed' && !readSession) {
           return true;
         }
 

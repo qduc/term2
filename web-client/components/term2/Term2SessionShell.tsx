@@ -208,8 +208,8 @@ export function Term2SessionShell({
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ turnId: string; message: string } | null>(null);
   // The running tasks panel: which chat it is open for, and chats where the user closed it.
-  const [tasksPanelFor, setTasksPanelFor] = useState<string | null>(null);
-  const [tasksPanelDismissed, setTasksPanelDismissed] = useState<Record<string, true>>({});
+  /** Only the user opens or closes the running tasks panel; nothing toggles it on its own. */
+  const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [startingChat, setStartingChat] = useState(false);
   // "New chat" opens a draft: a folder and a composer, but no gateway session
@@ -1281,25 +1281,8 @@ export function Term2SessionShell({
   };
 
   const runningTasks = useRunningTasks(session.view);
-  const tasksPanelVisible = Boolean(sessionId) && tasksPanelFor === sessionId && runningTasks.shown.length > 0;
-  const closeTasksPanel = () => {
-    if (sessionId) setTasksPanelDismissed((current) => ({ ...current, [sessionId]: true }));
-    setTasksPanelFor(null);
-  };
-  // Open on its own when a task starts, unless the user closed it in this chat. Not on small
-  // screens, where it would cover the chat; the header pill opens it there.
-  const hasRunning = runningTasks.runningCount > 0;
-  useEffect(() => {
-    if (!sessionId || !hasRunning || tasksPanelDismissed[sessionId]) return;
-    if (window.innerWidth < 768) return;
-    setTasksPanelFor(sessionId);
-  }, [sessionId, hasRunning, tasksPanelDismissed]);
-  // Once the last card leaves, the panel is closed, not just empty: a later task must not
-  // bring it back on a small screen, where only the header pill opens it.
-  const anyShown = runningTasks.shown.length > 0;
-  useEffect(() => {
-    if (!anyShown) setTasksPanelFor(null);
-  }, [anyShown]);
+  const tasksPanelVisible = Boolean(sessionId) && tasksPanelOpen;
+  const closeTasksPanel = () => setTasksPanelOpen(false);
 
   const handleRewind = async (target: RewindTargetSummary, restoreText: boolean) => {
     const ok = await session.rewind(target.targetId);
@@ -1435,13 +1418,7 @@ export function Term2SessionShell({
                     count: runningTasks.runningCount,
                     needsYou: runningTasks.needsYouCount,
                     open: tasksPanelVisible,
-                    onClick: () => {
-                      if (tasksPanelVisible) closeTasksPanel();
-                      else {
-                        setTasksPanelDismissed(({ [sessionId]: _removed, ...rest }) => rest);
-                        setTasksPanelFor(sessionId);
-                      }
-                    },
+                    onClick: () => setTasksPanelOpen((open) => !open),
                   }
                 : undefined
             }

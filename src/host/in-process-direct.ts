@@ -26,6 +26,21 @@ export type {
   WorkspaceGrant,
 } from './in-process-direct-types.js';
 
+/**
+ * A session the principal may not read is left out of a list, not a failure of the
+ * list. Grant failures come from the app's authority (DirectHostConfigError, surface
+ * `authority`), matched by shape: the host does not import app code. A removed and
+ * re-added root keeps its old sessions in the store's list under the new grant.
+ */
+function deniedByAuthority(error: unknown): boolean {
+  if (error instanceof DirectProtocolError) return error.code === 'forbidden';
+  return (
+    error instanceof Error &&
+    error.name === 'DirectHostConfigError' &&
+    (error as { surface?: unknown }).surface === 'authority'
+  );
+}
+
 function workspaceRoot(session: DirectSession): string {
   const capture = session.capture(() => undefined);
   try {
@@ -168,7 +183,7 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
           await deps.authorize(principal, { kind: 'read', sessionId: summary.id });
           sessions.push(summary);
         } catch (error) {
-          if (!(error instanceof DirectProtocolError) || error.code !== 'forbidden') throw error;
+          if (!deniedByAuthority(error)) throw error;
         }
       }
       return { sessions, ...(page.cursor !== undefined ? { cursor: page.cursor } : {}) };

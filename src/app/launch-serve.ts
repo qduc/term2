@@ -253,13 +253,13 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     authority: serverAuthority(grants, directory, args.localOwnerUserId),
   });
   const auditPath = path.join(stateDir, 'server-audit.jsonl');
+  // Grant edits must release live sessions; a host without this would keep stale authority.
+  const closeWorkspaceSessions = app.host.closeWorkspaceSessions?.bind(app.host);
+  if (!closeWorkspaceSessions) throw new Error('The direct host cannot close workspace sessions.');
   const transport = createDirectServerHost(
     {
       host: app.host,
-      workspaces: serverWorkspaceAdministration(
-        grants,
-        (root) => app.host.closeWorkspaceSessions?.(root) ?? Promise.resolve(0),
-      ),
+      workspaces: serverWorkspaceAdministration(grants, closeWorkspaceSessions),
       models: () => configuration.listModels(),
       skills: () =>
         app

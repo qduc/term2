@@ -573,7 +573,7 @@ describe('term2 serve (child process)', () => {
     );
   }, 180_000);
 
-  it('changes and removes a saved folder grant, closing live sessions so they reopen under the new authority', async () => {
+  it('changes and removes a saved folder grant, closing its live sessions and refusing sessions started under other access', async () => {
     const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'serve-grant-edit-')));
     const stateDir = path.join(tempHome, 'gateway-state');
     const workspace = path.join(tempHome, 'workspace');
@@ -857,6 +857,23 @@ describe('term2 serve (child process)', () => {
       status: 403,
       body: { error: { code: 'workspace_forbidden' } },
     });
+    // Adding the folder back issues a new grant: the old session stays closed and the
+    // list still answers, without it.
+    const revalidated = await ok(
+      'POST',
+      '/workspace/candidates/validate',
+      { absolutePath: workspace },
+      'workspace_candidate_validate',
+    );
+    const reselected = await ok(
+      'POST',
+      '/workspace/candidates/select',
+      { candidateId: revalidated.candidateId, access: 'read_write' },
+      'workspace_candidate_select',
+    );
+    expect(reselected.workspaceId).not.toBe(workspaceId);
+    expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions).toEqual([]);
+    expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
     expect(requests).toHaveLength(2);
 
     child.removeAllListeners();

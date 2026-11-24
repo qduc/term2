@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Check, ChevronDown, Loader2, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Minus, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,14 +25,20 @@ export const REASONING_LEVELS: ReadonlyArray<{
 
 /** Short labels so all levels fit one segmented control; the full label and hint show on hover. */
 const EFFORT_SHORT_LABELS: Record<string, string> = {
-  default: 'Auto',
   none: 'Off',
-  minimal: 'Min',
   low: 'Low',
   medium: 'Med',
   high: 'High',
-  xhigh: 'Max',
+  xhigh: 'Extra high',
 };
+
+/**
+ * The levels offered in the picker. `default` and `minimal` stay in REASONING_LEVELS so a chat
+ * already set to one still shows its name, but they are no longer offered.
+ */
+const PICKER_LEVELS = REASONING_LEVELS.filter((level) =>
+  ['none', 'low', 'medium', 'high', 'xhigh'].includes(level.value),
+);
 
 function formatContextWindow(tokens?: number): string | null {
   if (!tokens || tokens <= 0) return null;
@@ -101,6 +107,40 @@ function ModelDetails({ model, providerLabel }: { model: ModelSummary; providerL
         </p>
       ))}
     </div>
+  );
+}
+
+/**
+ * A short, readable model name for the chip: the catalog name without its "Vendor: " prefix
+ * (the provider is shown beside it), or the id without its `vendor/` part when there is no name.
+ */
+export function chipModelName(modelId: string, name?: string): string {
+  const cleaned = name?.replace(/^[^:/]{1,40}:\s+/, '').trim();
+  if (cleaned && cleaned !== modelId) return cleaned;
+  return modelId.includes('/') ? modelId.slice(modelId.lastIndexOf('/') + 1) : modelId;
+}
+
+/** Bars filled per effort level; Extra high fills all three in the accent colour. */
+const EFFORT_BARS: Record<string, number> = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 3 };
+
+function EffortBars({ effort, label }: { effort: string; label: string }) {
+  if (effort === 'none') return <Minus aria-label={`Reasoning ${label}`} className="size-3 text-muted-foreground" />;
+  const filled = EFFORT_BARS[effort];
+  if (filled === undefined) return null;
+  const strong = effort === 'xhigh';
+  return (
+    <span role="img" aria-label={`Reasoning effort ${label}`} className="inline-flex h-2.5 shrink-0 items-end gap-px">
+      {[4, 7, 10].map((height, index) => (
+        <span
+          key={height}
+          style={{ height }}
+          className={cn(
+            'w-[3px] rounded-[1px]',
+            index < filled ? (strong ? 'bg-primary' : 'bg-foreground/70') : 'bg-foreground/20',
+          )}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -177,6 +217,10 @@ export function Term2ModelPicker({
 
   const effortValue = config.reasoningEffort || 'default';
   const currentEffortMeta = REASONING_LEVELS.find((item) => item.value === effortValue);
+  const effortOffered = PICKER_LEVELS.some((level) => level.value === effortValue);
+  const chipProvider = providerLabels.get(config.providerId) ?? config.providerId;
+  const currentModel = models.find((m) => m.provider === config.providerId && m.id === config.modelId);
+  const chipName = chipModelName(config.modelId, currentModel?.name);
   const effortLabel = currentEffortMeta?.label ?? effortValue;
   const showEffortInChip = effortValue !== 'default';
 
@@ -205,11 +249,11 @@ export function Term2ModelPicker({
             size="xs"
             disabled={disabled || busy}
             aria-label="Choose model and reasoning effort"
-            title={`Model: ${config.providerId}/${config.modelId} · Reasoning effort: ${effortLabel}${
+            title={`Provider: ${chipProvider} · Model: ${config.modelId} · Reasoning effort: ${effortLabel}${
               pending ? ' · applies when you send your next message' : ''
             }${warning ? ` · ${warning}` : ''}`}
             className={cn(
-              'max-w-[18rem] rounded-full',
+              'max-w-[min(20rem,42vw)] rounded-full',
               pending && 'border-dashed',
               warning && 'border-amber-500/60 text-amber-800 dark:text-amber-300',
             )}
@@ -219,8 +263,9 @@ export function Term2ModelPicker({
             {pending && !busy && (
               <span aria-label="Pending change" className="size-1.5 shrink-0 rounded-full bg-amber-500" />
             )}
-            <span className="truncate font-mono">{config.modelId}</span>
-            {showEffortInChip && <span className="shrink-0 text-muted-foreground">· {effortLabel}</span>}
+            <span className="max-w-[8rem] shrink-0 truncate text-muted-foreground">{chipProvider}</span>
+            <span className="min-w-0 truncate">{chipName}</span>
+            {showEffortInChip && <EffortBars effort={effortValue} label={effortLabel} />}
             <ChevronDown aria-hidden className="text-muted-foreground" />
           </Button>
         </PopoverTrigger>
@@ -416,18 +461,21 @@ export function Term2ModelPicker({
             <div
               role="radiogroup"
               aria-labelledby="term2-effort-label"
-              className="mt-1.5 grid grid-cols-7 gap-0.5 rounded-lg bg-muted p-0.5"
+              className="mt-1.5 grid grid-cols-5 gap-0.5 rounded-lg bg-muted p-0.5"
               onKeyDown={(event) => {
                 if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
                 event.preventDefault();
-                const index = REASONING_LEVELS.findIndex((level) => level.value === effortValue);
+                const index = PICKER_LEVELS.findIndex((level) => level.value === effortValue);
                 const step = event.key === 'ArrowRight' ? 1 : -1;
-                const next = REASONING_LEVELS[(index + step + REASONING_LEVELS.length) % REASONING_LEVELS.length]!;
+                const next =
+                  index === -1
+                    ? PICKER_LEVELS[0]!
+                    : PICKER_LEVELS[(index + step + PICKER_LEVELS.length) % PICKER_LEVELS.length]!;
                 onSelectEffort(next.value);
                 event.currentTarget.querySelector<HTMLButtonElement>(`[data-effort="${next.value}"]`)?.focus();
               }}
             >
-              {REASONING_LEVELS.map((level) => {
+              {PICKER_LEVELS.map((level, levelIndex) => {
                 const selected = level.value === effortValue;
                 return (
                   <button
@@ -437,7 +485,7 @@ export function Term2ModelPicker({
                     aria-checked={selected}
                     aria-label={level.label}
                     data-effort={level.value}
-                    tabIndex={selected ? 0 : -1}
+                    tabIndex={selected || (!effortOffered && levelIndex === 0) ? 0 : -1}
                     title={`${level.label}: ${level.hint}`}
                     disabled={disabled || busy}
                     onClick={() => {

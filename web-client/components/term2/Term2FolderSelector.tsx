@@ -781,7 +781,7 @@ export function Term2FolderSelector({
               </div>
             ) : (
               <span
-                title="Launch term2-web with --allow-write to allow editing files."
+                title="term2-web was started with --read-only. Restart it without that flag to allow editing files."
                 className="rounded-md bg-black/[0.05] px-2 py-1 text-[11px] font-medium text-zinc-600 dark:bg-white/[0.07] dark:text-zinc-400"
               >
                 Read only

@@ -27,8 +27,9 @@ separate and remains enabled. This is startup policy, not a runtime toggle.
 `SettingsService`. The settings owner retains its directory, logger,
 and persistence policies.
 
-`createDirectRuntimes` in `application-runtime.ts` builds session-owned
-settings and tool generations. `approvalAlwaysAsks` pins the session's saved
+`createSessionSettings` in `settings.ts` builds the settings copy one session
+owns; `createDirectRuntimes` in `application-runtime.ts` calls it and builds
+that session's tool generations. `approvalAlwaysAsks` pins the session's saved
 shell auto-approval mode to `off`; `requireSandbox` pins `sandbox.enabled:true`
 after restoring session configuration. ACP sets both options. These overrides
 are in-memory policy and do not rewrite user preferences. ACP v1 can select

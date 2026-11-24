@@ -87,6 +87,22 @@ const SETTING_META: Record<string, SettingMeta> = {
     description: 'How many times to retry transient provider network errors.',
     kind: 'number',
   },
+  'shell.autoApproveMode': {
+    label: 'Default approval mode',
+    description: 'Controls when Term2 asks for confirmation before running commands or editing files in new chats.',
+    kind: 'select',
+    options: [
+      { value: 'off', label: 'Ask — prompt for every action' },
+      { value: 'auto', label: 'Auto — auto-approve safe commands' },
+      { value: 'unattended', label: 'Unattended — auto-approve safe & workspace actions' },
+      { value: 'always', label: 'Always — auto-approve all tools' },
+    ],
+  },
+  'shell.showReview': {
+    label: 'Show approval review details',
+    description: 'Show safety review rationale alongside automated approval decisions.',
+    kind: 'boolean',
+  },
   'shell.timeout': {
     label: 'Shell command timeout',
     description: 'Maximum duration before a shell command times out.',
@@ -255,6 +271,15 @@ export function Term2SettingsPanel({
   };
 
   const requestChange = (key: string, value: unknown, confirmRequired: boolean) => {
+    if (key === 'shell.autoApproveMode' && value === 'always') {
+      openConfirm({
+        key,
+        value,
+        consequence:
+          'Enabling "Always" as the default approval mode will auto-approve all commands and file edits without prompting in future chats. Use only in trusted environments.',
+      });
+      return;
+    }
     if (confirmRequired && value !== null) {
       openConfirm({
         key,
@@ -448,7 +473,7 @@ export function Term2SettingsPanel({
     { id: 'providers', label: 'Providers & Keys' },
     { id: 'models', label: 'Models' },
     { id: 'appearance', label: 'Appearance' },
-    { id: 'limits', label: 'Context & Limits' },
+    { id: 'limits', label: 'Safety & Limits' },
     { id: 'advanced', label: 'Advanced' },
   ];
 
@@ -623,6 +648,7 @@ export function Term2SettingsPanel({
                     <span className="mb-1 block font-medium text-zinc-700 dark:text-zinc-300">Provider name</span>
                     <input
                       required
+                      autoComplete="username"
                       value={providerDraft.name}
                       onChange={(e) => setProviderDraft((c) => ({ ...c, name: e.target.value }))}
                       placeholder="e.g. anthropic, gemini, ollama"
@@ -777,7 +803,39 @@ export function Term2SettingsPanel({
                           {credential.configured ? `Connected (${credential.source})` : 'Not set'}
                         </span>
                       </div>
-                      <form className="mt-2 flex gap-2" onSubmit={(e) => e.preventDefault()} noValidate>
+                      <form
+                        className="mt-2 flex gap-2"
+                        noValidate
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (busy || !credential.writable || credential.source === 'environment' || !credentialDrafts[id]) {
+                            return;
+                          }
+                          setBusy(true);
+                          setError(null);
+                          try {
+                            await term2Client.setCredential(id, credentialDrafts[id]);
+                            setMessage(`${label} API key saved.`);
+                            setCredentialDrafts((c) => ({ ...c, [id]: '' }));
+                            await reload();
+                            onProvidersChanged?.();
+                          } catch (reason) {
+                            setError(reason instanceof Error ? reason.message : 'Credential was not saved');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <input
+                          type="text"
+                          name="username"
+                          value={id}
+                          readOnly
+                          autoComplete="username"
+                          tabIndex={-1}
+                          aria-hidden="true"
+                          className="hidden"
+                        />
                         <input
                           type="password"
                           autoComplete="new-password"
@@ -795,25 +853,10 @@ export function Term2SettingsPanel({
                           className="min-w-0 flex-1 rounded-lg border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-xs dark:border-white/15"
                         />
                         <button
-                          type="button"
+                          type="submit"
                           disabled={
                             busy || !credential.writable || credential.source === 'environment' || !credentialDrafts[id]
                           }
-                          onClick={async () => {
-                            setBusy(true);
-                            setError(null);
-                            try {
-                              await term2Client.setCredential(id, credentialDrafts[id]);
-                              setMessage(`${label} API key saved.`);
-                              setCredentialDrafts((c) => ({ ...c, [id]: '' }));
-                              await reload();
-                              onProvidersChanged?.();
-                            } catch (reason) {
-                              setError(reason instanceof Error ? reason.message : 'Credential was not saved');
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
                           className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
                         >
                           Save key
@@ -1064,6 +1107,8 @@ export function Term2SettingsPanel({
 
       {tab === 'limits' && (
         <div className="space-y-3">
+          {renderSettingRow('shell.autoApproveMode')}
+          {renderSettingRow('shell.showReview')}
           {renderSettingRow('agent.contextCompaction.enabled')}
           {renderSettingRow('agent.contextCompaction.threshold')}
           {renderSettingRow('memory.enabled')}
@@ -1077,11 +1122,20 @@ export function Term2SettingsPanel({
               Safety &amp; gateway permissions
             </h3>
             <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-              These guardrails are enforced by the local gateway process for safety.
+              These guardrails are enforced by the local gateway process. You can also override the approval mode per
+              chat from the composer toolbar.
             </p>
             <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-zinc-600 dark:text-zinc-400">
-              <dt>Tool approvals</dt>
-              <dd className="font-medium text-zinc-900 dark:text-zinc-200">Always ask before running tools</dd>
+              <dt>Default approval mode</dt>
+              <dd className="font-medium text-zinc-900 dark:text-zinc-200">
+                {(() => {
+                  const configured = String(projection.settings.safeDefaults['shell.autoApproveMode']?.value ?? 'off');
+                  if (configured === 'auto') return 'Auto (safe commands)';
+                  if (configured === 'unattended') return 'Unattended';
+                  if (configured === 'always') return 'Always (auto-approve all)';
+                  return 'Ask before running tools';
+                })()}
+              </dd>
               <dt>Folder access</dt>
               <dd className="font-medium text-zinc-900 dark:text-zinc-200">
                 {projection.settings.safety.workspaceAccess === 'read_write' ? 'Read & write enabled' : 'Read only'}

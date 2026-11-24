@@ -108,7 +108,7 @@ export async function handleSessionRoute(
     }
     case 'message_submit': {
       const direct = input.url.searchParams.get('format') === 'direct';
-      const message = directMessage(body, direct);
+      const message = validate.directMessage(body, direct);
       if (!message) return invalid('message request is invalid');
       let submitText = message.text;
       if (message.skill) {
@@ -430,7 +430,12 @@ async function configureSession(
       'canonical configuration mutation receipt contract unavailable',
       true,
     );
-  const result = await connection.send(command);
+  const result =
+    body.approvalMode !== undefined && presentation.withApprovalMode
+      ? await presentation.withApprovalMode(principal, connection.snapshot, body.approvalMode, () =>
+          connection.send(command),
+        )
+      : await connection.send(command);
   if (format === 'agent-wire-v2') {
     // Native non-receipt results are still versioned results; pre-dispatch validation/
     // authorization failures use the normal safe HTTP error path.
@@ -454,45 +459,4 @@ function rejectedAdmission(reason: string): ServerResult {
   if (reason === 'request_conflict')
     return publicError(409, 'idempotency_conflict', 'request conflicts with an existing admission');
   return publicError(409, 'session_not_admitting', 'session is not admitting messages');
-}
-
-function directMessage(
-  body: unknown,
-  direct: boolean,
-): {
-  text: string;
-  clientRequestId: string;
-  attachments?: unknown;
-  delivery?: unknown;
-  expectedSteerTurnId?: string;
-  skill?: string;
-} | null {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-  const value = body as Record<string, unknown>;
-  const allowed = ['text', 'clientRequestId', 'attachments', 'delivery', 'expectedSteerTurnId', 'skill'];
-  if (
-    Object.keys(value).some((key) => !allowed.includes(key)) ||
-    typeof value.text !== 'string' ||
-    value.text.length > 128_000 ||
-    !validate.isOpaqueId(value.clientRequestId)
-  )
-    return null;
-  if (!direct && value.attachments !== undefined && !validate.isImageAttachments(value.attachments)) return null;
-  if (
-    value.delivery !== undefined &&
-    (typeof value.delivery !== 'string' || !['auto', 'steer', 'follow_up', 'reject_if_busy'].includes(value.delivery))
-  )
-    return null;
-  if (value.expectedSteerTurnId !== undefined && !validate.isOpaqueId(value.expectedSteerTurnId)) return null;
-  if (value.skill !== undefined && (typeof value.skill !== 'string' || !value.skill.trim() || value.skill.length > 128))
-    return null;
-  if (!value.text.length && (!Array.isArray(value.attachments) || !value.attachments.length)) return null;
-  return {
-    text: value.text,
-    clientRequestId: value.clientRequestId,
-    ...(value.attachments !== undefined ? { attachments: value.attachments } : {}),
-    ...(value.delivery !== undefined ? { delivery: value.delivery } : {}),
-    ...(typeof value.expectedSteerTurnId === 'string' ? { expectedSteerTurnId: value.expectedSteerTurnId } : {}),
-    ...(typeof value.skill === 'string' ? { skill: value.skill.trim() } : {}),
-  };
 }

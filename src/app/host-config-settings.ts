@@ -26,6 +26,8 @@ const SAFE_KEYS = [
   'webSearch.searxng.baseUrl',
   'memory.enabled',
   'logging.logLevel',
+  'shell.autoApproveMode',
+  'shell.showReview',
   'shell.timeout',
   'shell.maxOutputLines',
   'tools.maxOutputChars',
@@ -50,6 +52,8 @@ const PERSISTENT = new Set<string>([
   'webSearch.searxng.baseUrl',
   'memory.enabled',
   'logging.logLevel',
+  'shell.autoApproveMode',
+  'shell.showReview',
   'shell.timeout',
   'shell.maxOutputLines',
   'tools.maxOutputChars',
@@ -62,6 +66,8 @@ const SESSION_SCOPED = new Set([
   'app.liteMode',
   'app.planMode',
   'app.orchestratorMode',
+  'shell.autoApproveMode',
+  'shell.showReview',
 ]);
 
 export type CredentialSource = 'setting' | 'stored' | 'environment' | 'token-file' | 'local' | 'external' | 'missing';
@@ -302,9 +308,10 @@ export class DirectGlobalConfiguration {
     for (const key of SAFE_KEYS) {
       const actual = key === 'agent.contextCompaction.threshold' ? 'agent.contextCompaction.compactThreshold' : key;
       const safe = safeValue(this.settings.get(actual));
+      const rawSource = this.settings.getSource(actual) ?? 'default';
       safeDefaults[key] = {
         ...(safe === undefined ? {} : { value: safe }),
-        source: this.settings.getSource(actual) ?? 'default',
+        source: rawSource === 'env' ? 'environment' : rawSource,
         scope: SESSION_SCOPED.has(key) ? 'session' : 'global',
         confirmRequired: key.startsWith('shell.') || key === 'agent.maxParallelToolCalls',
         persistable: PERSISTENT.has(key),

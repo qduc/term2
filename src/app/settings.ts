@@ -1,4 +1,18 @@
-/** The app's one settings owner: the source `SettingsService`. Sessions build their own runtime generations from it. */
+/**
+ * The app's one settings owner, and the policy that seeds one session's copy of it.
+ * `SessionSettingsService` never reads or writes the file itself. `createSessionSettings`
+ * fills that copy from the launch selection without letting one session's restored
+ * model or profile rewrite another's. `inheritSessionSettings` carries a session's
+ * copy into a successor created during that call.
+ */
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { isDeepStrictEqual } from 'node:util';
+import { BARE_PROFILE_ID } from '../config/profiles/legacy-adapter.js';
+import { isDroppedProfile } from './dropped-profiles.js';
+import { RUNTIME_MODIFIABLE_SETTINGS } from '../config/settings/settings-schema.js';
+import { buildEnvOverrides } from '../config/settings/settings-env.js';
+import type { DirectRuntimeContext } from '../session/store.js';
+import type { ProfileSelection } from './tool-contract.js';
 import { SettingsService } from './settings-service.js';
 
 export type AppSettingsOptions = NonNullable<ConstructorParameters<typeof SettingsService>[0]>;
@@ -15,7 +29,7 @@ export function createSettingsService(options: AppSettingsOptions = {}): Setting
  * service would save (a `setDynamic` without `persist: false`, `setPersistentDynamic`, `reset` and the
  * transactions built on them) is also applied to the owner, which saves `settings.json` as legacy does.
  */
-export class SessionSettingsService extends SettingsService {
+class SessionSettingsService extends SettingsService {
   // Not a #private field: the base constructor may call the overrides before this class initialises its fields.
   private owner: SettingsService | undefined;
 
@@ -51,4 +65,90 @@ export class SessionSettingsService extends SettingsService {
     const result = super.reset(key);
     return this.owner ? this.owner.reset(key) : result;
   }
+}
+
+/** The settings a new session continues from, carried through the store's creation call. */
+const continuedSettings = new AsyncLocalStorage<SettingsService>();
+
+/** Targets of src/config/settings/ancillary-settings-migration.ts. */
+const ANCILLARY_MIGRATION_TARGETS = [
+  'agent.smartReasoningEffort',
+  'agent.balancedReasoningEffort',
+  'agent.cheapReasoningEffort',
+  'agent.decisionModel',
+] as const;
+
+/**
+ * Legacy's one service migrates an old key (say `agent.mentorReasoningEffort`) only when it loads the file at
+ * launch, and the file it writes keeps the old key without the new one. A session reading that file again would
+ * migrate a key the launch did not have and show a value legacy shows only from its next launch on.
+ */
+function keepLoadTimeMigrations(settings: SettingsService, launch: Pick<SettingsService, 'getDynamic'>): void {
+  for (const key of ANCILLARY_MIGRATION_TARGETS) {
+    const value = launch.getDynamic(key);
+    if (isDeepStrictEqual(value, settings.getDynamic(key))) continue;
+    if (value === undefined) settings.reset(key);
+    else if (settings.isRuntimeModifiable(key)) settings.setDynamic(key, value, { persist: false });
+  }
+}
+
+type SessionSettingsLaunch = {
+  readonly selection: ProfileSelection;
+  readonly profileExplicit?: boolean;
+  readonly approvalAlwaysAsks?: boolean;
+  readonly requireSandbox?: boolean;
+};
+
+/**
+ * A session owns its settings. `selection.settings` only supplies defaults: one
+ * host runs sessions with different models and profiles, and restoring one
+ * session's saved selection must not change another session's.
+ */
+export function createSessionSettings(
+  { selection, profileExplicit, approvalAlwaysAsks, requireSandbox }: SessionSettingsLaunch,
+  { metadata, configuration, model }: DirectRuntimeContext,
+): SettingsService {
+  const continued = continuedSettings.getStore();
+  const defaults = continued ?? selection.settings;
+  const settings = new SessionSettingsService({ env: buildEnvOverrides(), loggingService: selection.logger });
+  // `/clear` must not undo what someone changed, least of all a tightened approval
+  // mode. Only real differences: rewriting a default would change what it means.
+  if (continued) {
+    for (const key of RUNTIME_MODIFIABLE_SETTINGS) {
+      const value = continued.getDynamic(key);
+      if (value !== undefined && !isDeepStrictEqual(value, settings.getDynamic(key))) {
+        settings.setDynamic(key, value, { persist: false });
+      }
+    }
+  }
+  keepLoadTimeMigrations(settings, defaults);
+  // Launch-only policy flags keep their CLI precedence when each session reads its own settings.
+  for (const key of ['shell.autoApproveMode', 'shell.showReview'] as const) {
+    if (defaults.getSource?.(key) === 'cli') settings.setDynamic(key, defaults.get(key), { persist: false });
+  }
+  // The latest configuration, where there is one, outranks the session's start fact.
+  const stored = configuration?.profile ?? metadata?.profile;
+  // A saved dropped workflow is historical data, not authority to reactivate it (#149).
+  const profile = stored && !profileExplicit ? stored.id : defaults.get('app.activeProfileId');
+  settings.set('app.activeProfileId', isDroppedProfile(profile) ? BARE_PROFILE_ID : profile, { persist: false });
+  settings.set('agent.modelSelection', model, { persist: false });
+  const reasoning =
+    configuration?.intent.reasoningEffort ??
+    (metadata ? metadata.reasoning ?? 'default' : defaults.get('agent.reasoningEffort'));
+  settings.set('agent.reasoningEffort', reasoning, { persist: false });
+  const temperature = configuration?.intent.temperature;
+  if (temperature !== undefined) settings.set('agent.temperature', temperature, { persist: false });
+  if (approvalAlwaysAsks) settings.set('shell.autoApproveMode', 'off', { persist: false });
+  if (requireSandbox) settings.set('sandbox.enabled', true, { persist: false });
+  // From here on, what legacy's one service would save is saved through the app's settings owner.
+  if (selection.settings instanceof SettingsService) settings.saveThrough(selection.settings);
+  return settings;
+}
+
+/** A session created during `operation` starts from `source`, not the launch defaults. */
+export function inheritSessionSettings<Result>(
+  source: SettingsService | undefined,
+  operation: () => Promise<Result>,
+): Promise<Result> {
+  return source ? continuedSettings.run(source, operation) : operation();
 }

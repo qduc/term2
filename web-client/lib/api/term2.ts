@@ -343,8 +343,9 @@ export function validateSettings(value: unknown): SettingsProjection {
   for (const [key, raw] of Object.entries(settings.safeDefaults)) {
     const item = object(raw);
     only(item, ['value', 'source', 'scope', 'confirmRequired', 'persistable']);
+    const normalizedSource = item.source === 'env' ? 'environment' : item.source;
     if (
-      !['default', 'config', 'cli', 'environment', 'computed'].includes(String(item.source)) ||
+      !['default', 'config', 'cli', 'environment', 'computed'].includes(String(normalizedSource)) ||
       !['global', 'session'].includes(String(item.scope)) ||
       typeof item.confirmRequired !== 'boolean' ||
       typeof item.persistable !== 'boolean' ||
@@ -353,7 +354,7 @@ export function validateSettings(value: unknown): SettingsProjection {
       throw new Term2ApiError(503, 'Invalid agent response');
     safeDefaults[key] = {
       ...(item.value === undefined ? {} : { value: item.value as never }),
-      source: item.source as never,
+      source: normalizedSource as never,
       scope: item.scope as never,
       confirmRequired: item.confirmRequired,
       persistable: item.persistable,
@@ -406,7 +407,7 @@ export function validateSettings(value: unknown): SettingsProjection {
       if (typeof item.isSelected !== 'boolean' || typeof item.isInUse !== 'boolean')
         throw new Term2ApiError(503, 'Invalid agent response');
       return {
-        id: id(item.id),
+        id: text(item.id, 256),
         label: text(item.label, 256),
         isSelected: item.isSelected,
         isInUse: item.isInUse,
@@ -471,11 +472,17 @@ function validateSessionConfig(value: unknown): SessionConfigRecord {
     'modelId',
     'reasoningEffort',
     'mode',
+    'approvalMode',
     'defaultsRevision',
     'toolPolicy',
     'sessionId',
   ]);
   if (!['standard', 'bare', 'pair', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(input.mode)))
+    throw new Term2ApiError(503, 'Invalid agent response');
+  if (
+    input.approvalMode !== undefined &&
+    !['off', 'auto', 'unattended', 'always'].includes(String(input.approvalMode))
+  )
     throw new Term2ApiError(503, 'Invalid agent response');
   return {
     configRevision: text(input.configRevision, 256),
@@ -483,6 +490,7 @@ function validateSessionConfig(value: unknown): SessionConfigRecord {
     modelId: text(input.modelId, 512),
     reasoningEffort: text(input.reasoningEffort, 128),
     mode: input.mode as SessionConfigRecord['mode'],
+    ...(input.approvalMode === undefined ? {} : { approvalMode: input.approvalMode as SessionConfigRecord['approvalMode'] }),
     defaultsRevision: typeof input.defaultsRevision === 'number' && Number.isSafeInteger(input.defaultsRevision) && input.defaultsRevision >= 0 ? input.defaultsRevision : text(input.defaultsRevision, 256),
     ...(input.sessionId === undefined ? {} : { sessionId: id(input.sessionId) }),
     ...(input.toolPolicy === undefined ? {} : { toolPolicy: input.toolPolicy as SessionConfigRecord['toolPolicy'] }),

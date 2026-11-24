@@ -59,7 +59,7 @@ export function Term2SessionConfig({ config, settings, sessionId, onDiscovered, 
       if (mounted.current) setBusy(false);
     }
   };
-  const update = (selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode'>) => {
+  const update = (selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>) => {
     if (!sessionId || original || submitting.current) return;
     setReceipt(null);
     void submit({ clientRequestId: crypto.randomUUID(), expectedRevision: config.configRevision, admission: 'idle', ...selection });
@@ -71,7 +71,7 @@ export function Term2SessionConfig({ config, settings, sessionId, onDiscovered, 
     <section aria-labelledby="term2-session-config-heading" className="border-b border-zinc-200 bg-white px-4 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <h2 id="term2-session-config-heading" className="font-semibold">Current session configuration (discovery)</h2>
-        <span>Model: {config.modelId}</span><span>Reasoning: {config.reasoningEffort}</span><span>Mode: {config.mode}</span>
+        <span>Model: {config.modelId}</span><span>Reasoning: {config.reasoningEffort}</span><span>Mode: {config.mode}</span><span>Approval: {config.approvalMode ?? 'off'}</span>
       </div>
       {reauthenticationRequired && <p role="alert">Reauthentication is required for this session&apos;s captured provider account.</p>}
       {stale && <p>Session captured older defaults. Edit explicitly below or <button type="button" onClick={onCreateNewSession} className="underline">create a new session</button>.</p>}
@@ -88,6 +88,10 @@ export function Term2SessionConfig({ config, settings, sessionId, onDiscovered, 
             onChange={(event) => update({ mode: event.target.value as SessionConfigRecord['mode'] })} className="ml-1 rounded border px-1 py-0.5">
             {config.mode === 'pair' && <option value="pair" disabled>pair (current)</option>}
             {['standard', 'bare', 'lite'].map(value => <option key={value} value={value}>{value}</option>)}
+          </select></label>
+          <label>Approval <select aria-label="Session approval mode" value={config.approvalMode ?? 'off'} disabled={blocked}
+            onChange={(event) => update({ approvalMode: event.target.value as SessionConfigRecord['approvalMode'] })} className="ml-1 rounded border px-1 py-0.5">
+            {['off', 'auto', 'unattended', 'always'].map(value => <option key={value} value={value}>{value}</option>)}
           </select></label>
         </div>
       </details>}

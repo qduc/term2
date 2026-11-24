@@ -12,22 +12,34 @@ function sameModelOnly(next: ModelRef, previous: ModelRef): void {
 }
 
 export function createLaunchConfigurationScope(authorizeModel: AuthorizeModel = sameModelOnly) {
-  const context = new AsyncLocalStorage<{ sessionId: string; configuration: DirectAppConfiguration }>();
+  const context = new AsyncLocalStorage<{
+    sessionId: string;
+    configuration: DirectAppConfiguration;
+    isLaunch: boolean;
+  }>();
   return {
     authorizeModel,
     run<Result>(sessionId: string, configuration: DirectAppConfiguration, operation: () => Promise<Result>) {
-      return context.run({ sessionId, configuration }, operation);
+      return context.run({ sessionId, configuration, isLaunch: true }, operation);
+    },
+    withApprovalMode<Result>(
+      sessionId: string,
+      approvalMode: NonNullable<DirectAppConfiguration['approvalMode']>,
+      operation: () => Promise<Result>,
+    ) {
+      return context.run({ sessionId, configuration: { approvalMode }, isLaunch: false }, operation);
     },
     approvalMode(sessionId: string) {
       const launch = context.getStore();
       return launch?.sessionId === sessionId ? launch.configuration.approvalMode : undefined;
     },
     active(sessionId: string): boolean {
-      return context.getStore()?.sessionId === sessionId;
+      const launch = context.getStore();
+      return Boolean(launch?.sessionId === sessionId && launch.isLaunch);
     },
     authorize(sessionId: string, next: ModelRef, previous: ModelRef): void | Promise<void> {
       const launch = context.getStore();
-      const selected = launch?.sessionId === sessionId ? launch.configuration.model : undefined;
+      const selected = launch?.sessionId === sessionId && launch.isLaunch ? launch.configuration.model : undefined;
       if (selected && selected.provider === next.provider && selected.model === next.model) return;
       return authorizeModel(next, previous);
     },

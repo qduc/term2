@@ -95,6 +95,12 @@ export type DirectApplication = {
     configuration: DirectCommandConfiguration,
     approvalMode?: DirectApprovalMode,
   ): Promise<void>;
+  /** Carry an approval-mode selection through Session's atomic configure pipeline without pre-acceptance mutation. */
+  withApprovalMode<Result>(
+    sessionId: string,
+    approvalMode: DirectApprovalMode,
+    operation: () => Promise<Result>,
+  ): Promise<Result>;
   /** `undefined` clears it. Throws if another write got there first. */
   setGoal(sessionId: string, goal: DurableGoal | undefined, source: 'user' | 'launcher'): Promise<void>;
   /** The durable goal of a session, and whether one is set at all. */
@@ -273,6 +279,9 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       throw new Error(
         outcome?.kind === 'rejected' ? outcome.message : 'Could not apply the requested resume configuration.',
       );
+    },
+    withApprovalMode(sessionId, approvalMode, operation) {
+      return runtimes.withApprovalMode(sessionId, approvalMode, operation);
     },
     async setGoal(sessionId, goal, source) {
       writeGoal(await store.open(sessionId), goal, source);

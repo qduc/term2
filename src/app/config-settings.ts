@@ -35,8 +35,9 @@ const sessionUpdate = z
     expectedRevision: z.string().min(1),
     admission: z.literal('idle').optional(),
     modelSelection: ModelSelectionSchema.strict().optional(),
-    reasoningEffort: AgentSettingsSchema.out.shape.reasoningEffort.optional(),
+    reasoningEffort: AgentSettingsSchema.out.shape.reasoningEffort.unwrap().optional(),
     mode: z.enum(['standard', 'bare', 'lite']).optional(),
+    approvalMode: z.enum(['off', 'auto', 'unattended', 'always']).optional(),
   })
   .strict();
 
@@ -44,13 +45,27 @@ const sessionUpdate = z
  * and native revision on retries; do not read current revision, guess defaults,
  * mutate settings, or resolve a model's effective reasoning before acceptance.
  * Unknown fields and empty mutation bodies are rejected, never partially applied. */
-export function prepareDirectSessionConfigurationCommand(body: unknown) {
+export function prepareDirectSessionConfigurationCommand(
+  body: unknown,
+  currentModel?: { readonly provider: string; readonly model: string },
+) {
   const value = sessionUpdate.parse(body);
-  if (value.modelSelection === undefined && value.reasoningEffort === undefined && value.mode === undefined) {
+  if (
+    value.modelSelection === undefined &&
+    value.reasoningEffort === undefined &&
+    value.mode === undefined &&
+    value.approvalMode === undefined
+  ) {
     throw new Error('Session configuration mutation requires at least one selection field.');
   }
+  const needsModelForApprovalRebuild =
+    value.approvalMode !== undefined &&
+    value.modelSelection === undefined &&
+    value.reasoningEffort === undefined &&
+    value.mode === undefined;
+  const model = value.modelSelection ?? (needsModelForApprovalRebuild ? currentModel : undefined);
   const configuration: DirectAppConfiguration = {
-    ...(value.modelSelection !== undefined ? { model: value.modelSelection } : {}),
+    ...(model !== undefined ? { model } : {}),
     ...(value.reasoningEffort !== undefined ? { reasoning: value.reasoningEffort } : {}),
     ...(value.mode !== undefined ? { profileId: canonicalProfileId(`builtin:${value.mode}`) } : {}),
   };

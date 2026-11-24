@@ -6,10 +6,8 @@ import {
   ArrowDown,
   ArrowUp,
   AtSign,
-  Brain,
   Check,
   CheckCircle2,
-  ChevronRight,
   ChevronsUpDown,
   CircleAlert,
   CircleHelp,
@@ -28,8 +26,7 @@ import {
 } from 'lucide-react';
 import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Session';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
-import { Term2ToolGroup } from './Term2ToolGroup';
-import { Term2Markdown } from './Term2Markdown';
+import { Term2TurnTimeline } from './Term2TurnTimeline';
 import { describeCommand } from './Term2CommandCard';
 import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2SessionList } from './Term2SessionList';
@@ -42,6 +39,7 @@ import { Term2NativeEvidence } from './Term2NativeEvidence';
 import { Term2SessionConfig } from './Term2SessionConfig';
 import { Term2CommandMenu } from './Term2CommandMenu';
 import { Term2ModelPicker } from './Term2ModelPicker';
+import { Term2ApprovalPicker } from './Term2ApprovalPicker';
 import { Term2UsagePopover } from './Term2UsagePopover';
 import { Term2QueueBar } from './Term2QueueBar';
 import { Term2RewindDialog } from './Term2RewindDialog';
@@ -497,15 +495,17 @@ export function Term2SessionShell({
   };
 
   const handleUpdateSessionConfig = async (
-    selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode'>,
+    selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>,
   ) => {
     if (!sessionId || !discoveredConfig || configBusy) return;
     setConfigBusy(true);
     setConfigError(null);
     try {
+      const latest = await term2Client.readSessionConfig(sessionId);
+      setDiscoveredConfig(latest);
       const response = await term2Client.updateSessionConfig(sessionId, {
         clientRequestId: crypto.randomUUID(),
-        expectedRevision: discoveredConfig.configRevision,
+        expectedRevision: latest.configRevision,
         admission: 'idle',
         ...selection,
       });
@@ -718,6 +718,9 @@ export function Term2SessionShell({
               const { verb, target } = describeCommand(active);
               return `${verb}${target ? ` ${target}` : ''}…`;
             }
+            const lastItem = lastTurn.items?.[lastTurn.items.length - 1];
+            if (lastItem?.kind === 'reasoning' && lastItem.streaming) return 'Thinking…';
+            if (lastItem?.kind === 'text' && lastItem.text) return null;
             return lastTurn.text ? null : lastTurn.reasoning ? 'Thinking…' : 'Working…';
           })()
         : null;
@@ -1007,15 +1010,15 @@ export function Term2SessionShell({
                 const info = getWorkspaceInfo(workspace.workspaceId);
                 return (
                   <option key={workspace.workspaceId} value={workspace.workspaceId} title={info.fullPath}>
-                    {info.displayName} ({info.access === 'read_write' ? 'read & write' : 'read only'})
+                    {info.displayName} · {info.access === 'read_write' ? 'R/W' : 'Read'}
                   </option>
                 );
               })}
               {session.selectedWorkspaceId &&
                 !session.workspaces.some((workspace) => workspace.workspaceId === session.selectedWorkspaceId) && (
                   <option value={session.selectedWorkspaceId} title={selectedWorkspaceInfo.fullPath}>
-                    {selectedWorkspaceInfo.displayName} (
-                    {selectedWorkspaceInfo.access === 'read_write' ? 'read & write' : 'read only'})
+                    {selectedWorkspaceInfo.displayName} ·{' '}
+                    {selectedWorkspaceInfo.access === 'read_write' ? 'R/W' : 'Read'}
                   </option>
                 )}
             </select>
@@ -1061,7 +1064,7 @@ export function Term2SessionShell({
             onModelChange={() => {}}
             showModelSelector={false}
             title={sessionTitle}
-            subtitle={selectedWorkspaceInfo.displayName || 'term2'}
+            subtitle={selectedWorkspaceInfo.displayName || undefined}
             subtitleTooltip={selectedWorkspaceInfo.fullPath || undefined}
             onOpenFolder={localControlEnabled ? () => setDialog('folder') : undefined}
             onNewChat={session.selectedWorkspaceId ? () => void createNewChat() : undefined}
@@ -1070,9 +1073,9 @@ export function Term2SessionShell({
             onOpenSettings={() => setDialog('settings')}
             showSettingsButton={localControlEnabled}
             onToggleLeftSidebar={() => setSidebarOpen((open) => !open)}
-            showLeftSidebarButton
+            showLeftSidebarButton={!sidebarOpen}
             alwaysShowLeftSidebarButton
-            leftSidebarToggleLabel="Toggle chat history"
+            leftSidebarToggleLabel="Open chat history"
             showRightSidebarButton={false}
           />
           <section
@@ -1094,7 +1097,7 @@ export function Term2SessionShell({
             <div
               ref={scrollRef}
               onScroll={onScroll}
-              className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin sm:px-6 ${sessionId ? 'pb-56' : 'pb-12'}`}
+              className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin sm:px-6 ${sessionId ? 'pb-60' : 'pb-12'}`}
             >
               <div className="mx-auto w-full max-w-[46rem] space-y-6">
                 {!sessionId && (
@@ -1356,29 +1359,7 @@ export function Term2SessionShell({
                       </div>
                     )}
                     <div className="min-w-0 space-y-4">
-                      {turn.reasoning && (
-                        <details className="group/reason text-sm" open={displayMode === 'detailed' || undefined}>
-                          <summary className="-ml-2 inline-flex cursor-pointer list-none select-none items-center gap-2 rounded-lg px-2 py-1 text-zinc-500 transition-colors hover:bg-black/[0.035] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[0.04] dark:hover:text-zinc-100 [&::-webkit-details-marker]:hidden">
-                            <Brain aria-hidden className="h-4 w-4" strokeWidth={1.75} />
-                            <span className={turn.status === 'streaming' && !turn.text ? 't2-shimmer' : undefined}>
-                              {turn.status === 'streaming' && !turn.text ? 'Thinking…' : 'Thought process'}
-                            </span>
-                            <ChevronRight
-                              aria-hidden
-                              className="h-3.5 w-3.5 transition-transform group-open/reason:rotate-90"
-                            />
-                          </summary>
-                          <div className="ml-[7px] mt-2 border-l-2 border-zinc-200 pl-4 dark:border-zinc-800">
-                            <Term2Markdown
-                              text={turn.reasoning}
-                              className="!text-[13px] !leading-6 !text-zinc-500 dark:!text-zinc-400"
-                            />
-                          </div>
-                        </details>
-                      )}
-                      {turn.commands.length > 0 && (
-                        <Term2ToolGroup commands={turn.commands} defaultExpanded={displayMode === 'detailed'} />
-                      )}
+                      <Term2TurnTimeline turn={turn} displayMode={displayMode} />
                       {(turn.subagents ?? []).length > 0 && (
                         <div className="space-y-2">
                           {(turn.subagents ?? [])
@@ -1393,7 +1374,6 @@ export function Term2SessionShell({
                             ))}
                         </div>
                       )}
-                      {turn.text && <Term2Markdown text={turn.text} />}
                       {turn.status !== 'completed' && turn.status !== 'streaming' && turn.status !== 'pending' && (
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2.5 py-0.5 text-xs text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">
@@ -1539,14 +1519,16 @@ export function Term2SessionShell({
             {sessionId && (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-white from-65% to-transparent px-3 pb-3 pt-10 dark:from-zinc-900 sm:px-6 sm:pb-4">
                 {!pinned && (
-                  <button
-                    type="button"
-                    aria-label="Jump to latest"
-                    className="t2-enter pointer-events-auto absolute left-1/2 top-0 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-black/[0.08] bg-white/90 text-zinc-600 shadow-md backdrop-blur transition-colors hover:text-zinc-900 dark:border-white/10 dark:bg-zinc-800/90 dark:text-zinc-300 dark:hover:text-white"
-                    onClick={scrollToLatest}
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </button>
+                  <div className="mb-2 flex justify-center">
+                    <button
+                      type="button"
+                      aria-label="Jump to latest"
+                      className="t2-enter pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-white/95 text-zinc-600 shadow-md backdrop-blur transition-colors hover:text-zinc-900 dark:border-white/10 dark:bg-zinc-800/95 dark:text-zinc-300 dark:hover:text-white"
+                      onClick={scrollToLatest}
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
 
                 <Term2QueueBar view={session.view} onManageQueue={session.manageQueue} />
@@ -1752,9 +1734,11 @@ export function Term2SessionShell({
                     disabled={composerDisabled}
                     className="block max-h-60 min-h-[52px] w-full resize-none bg-transparent px-5 pb-1 pt-4 text-[15px] leading-6 outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed dark:placeholder:text-zinc-500"
                     placeholder={
-                      hasStreamingTurn
-                        ? 'Type to steer this turn (Enter) or queue a follow-up (Alt+Enter)…'
-                        : 'Ask about your files… (type @ for files, / for actions)'
+                      interactionPending
+                        ? 'Respond to the approval prompt above to continue…'
+                        : hasStreamingTurn
+                          ? 'Steer (Enter) or queue follow-up (Alt+Enter)…'
+                          : 'Ask about your files… (@ files, / actions)'
                     }
                   />
                   <input
@@ -1832,21 +1816,29 @@ export function Term2SessionShell({
                     </div>
 
                     {sessionConfig && (
-                      <Term2ModelPicker
-                        config={sessionConfig}
-                        models={models}
-                        loadingModels={loadingModels}
-                        settings={settings}
-                        disabled={commandDisabled}
-                        busy={configBusy}
-                        onSelectModel={(provider, model) =>
-                          void handleUpdateSessionConfig({ modelSelection: { provider, model } })
-                        }
-                        onSelectEffort={(reasoningEffort) => void handleUpdateSessionConfig({ reasoningEffort })}
-                        onToggleFavorite={settings ? (key) => void handleToggleFavorite(key) : undefined}
-                        onRefreshModels={() => void reloadModels()}
-                        onOpenSettings={() => setDialog('settings')}
-                      />
+                      <>
+                        <Term2ModelPicker
+                          config={sessionConfig}
+                          models={models}
+                          loadingModels={loadingModels}
+                          settings={settings}
+                          disabled={commandDisabled}
+                          busy={configBusy}
+                          onSelectModel={(provider, model) =>
+                            void handleUpdateSessionConfig({ modelSelection: { provider, model } })
+                          }
+                          onSelectEffort={(reasoningEffort) => void handleUpdateSessionConfig({ reasoningEffort })}
+                          onToggleFavorite={settings ? (key) => void handleToggleFavorite(key) : undefined}
+                          onRefreshModels={() => void reloadModels()}
+                          onOpenSettings={() => setDialog('settings')}
+                        />
+                        <Term2ApprovalPicker
+                          mode={sessionConfig.approvalMode ?? 'off'}
+                          disabled={commandDisabled}
+                          busy={configBusy}
+                          onSelect={(approvalMode) => void handleUpdateSessionConfig({ approvalMode })}
+                        />
+                      </>
                     )}
 
                     <div className="ml-auto flex items-center gap-1.5">
@@ -1914,10 +1906,16 @@ export function Term2SessionShell({
       </div>
 
       {dialog === 'folder' && (
-        <Term2SetupDialog title="Choose a folder" onClose={() => setDialog(null)}>
+        <Term2SetupDialog title="Choose a folder" wide onClose={() => setDialog(null)}>
           <Term2FolderSelector
             homeFolder={homeFolder}
             allowWrite={effectiveAllowWrite}
+            savedWorkspaces={session.workspaces}
+            selectedWorkspaceId={session.selectedWorkspaceId}
+            onSelectExisting={(workspaceId) => {
+              chooseWorkspace(workspaceId);
+              setDialog(null);
+            }}
             onSelected={onFolderSelected}
           />
         </Term2SetupDialog>

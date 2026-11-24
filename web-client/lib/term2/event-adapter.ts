@@ -13,6 +13,7 @@ import {
   type Term2Command,
   type Term2SessionView,
   type Term2SubagentCard,
+  type Term2TurnItem,
   type Term2TurnView,
 } from './types';
 
@@ -342,8 +343,116 @@ function cloneTurns(turns: Term2TurnView[]): Term2TurnView[] {
   return turns.map(item => ({
     ...item,
     commands: item.commands.map(entry => ({ ...entry })),
+    ...(item.items ? { items: item.items.map(entry => ({ ...entry })) } : {}),
     subagents: item.subagents?.map(card => ({ ...card, commands: card.commands.map(entry => ({ ...entry })) })),
   }));
+}
+
+function ensureTurnItems(turnView: Term2TurnView): Term2TurnItem[] {
+  if (!turnView.items) turnView.items = [];
+  return turnView.items;
+}
+
+function upsertTurnTextItem(
+  turnView: Term2TurnView,
+  messageId: string,
+  content: string,
+  options?: { replacesDraftId?: string; draft?: boolean; modelStep?: number },
+): void {
+  const items = ensureTurnItems(turnView);
+  const replaces = options?.replacesDraftId;
+  let index = replaces ? items.findIndex((entry) => entry.kind === 'text' && entry.id === replaces) : -1;
+  if (index < 0) index = items.findIndex((entry) => entry.kind === 'text' && entry.id === messageId);
+  if (index < 0) index = items.findIndex((entry) => entry.kind === 'text' && entry.id === '__stream_text__');
+  if (content.length === 0) {
+    turnView.items = items.filter(
+      (entry) =>
+        !(
+          entry.kind === 'text' &&
+          (entry.id === messageId || (replaces && entry.id === replaces) || entry.id === '__stream_text__')
+        ),
+    );
+    return;
+  }
+  const next: Term2TurnItem = {
+    kind: 'text',
+    id: messageId,
+    text: content,
+    ...(options?.draft ? { draft: true } : {}),
+    ...(options?.modelStep !== undefined ? { modelStep: options.modelStep } : {}),
+  };
+  if (index >= 0) {
+    items[index] = next;
+    turnView.items = items.filter(
+      (entry, pos) =>
+        pos === index ||
+        !(
+          entry.kind === 'text' &&
+          (entry.id === messageId || (replaces && entry.id === replaces) || entry.id === '__stream_text__')
+        ),
+    );
+  } else {
+    items.push(next);
+  }
+}
+
+function removeTurnTextIds(turnView: Term2TurnView, ids: readonly (string | undefined)[]): void {
+  if (!turnView.items) return;
+  const targets = new Set(ids.filter((value): value is string => Boolean(value)));
+  if (targets.size === 0) return;
+  turnView.items = turnView.items.filter((entry) => !(entry.kind === 'text' && targets.has(entry.id)));
+}
+
+function upsertTurnReasoningItem(
+  turnView: Term2TurnView,
+  reasoningId: string,
+  content: string,
+  options?: { modelStep?: number; streaming?: boolean },
+): void {
+  if (!content.trim()) return;
+  const items = ensureTurnItems(turnView);
+  let existingIndex = items.findIndex((entry) => entry.kind === 'reasoning' && entry.id === reasoningId);
+  if (existingIndex < 0) {
+    existingIndex = items.findIndex((entry) => entry.kind === 'reasoning' && entry.id === '__stream_reasoning__');
+  }
+  const next: Term2TurnItem = {
+    kind: 'reasoning',
+    id: reasoningId,
+    text: content,
+    ...(options?.streaming ? { streaming: true } : {}),
+    ...(options?.modelStep !== undefined ? { modelStep: options.modelStep } : {}),
+  };
+  if (existingIndex >= 0) {
+    items[existingIndex] = next;
+    return;
+  }
+  const stepTextIndex = items.findIndex(
+    (entry) =>
+      entry.kind === 'text' &&
+      ((options?.modelStep !== undefined && entry.modelStep === options.modelStep) ||
+        entry.id === '__stream_text__' ||
+        entry.draft === true),
+  );
+  if (stepTextIndex >= 0) {
+    items.splice(stepTextIndex, 0, next);
+    return;
+  }
+  items.push(next);
+}
+
+function ensureTurnToolItem(turnView: Term2TurnView, executionId: string): void {
+  const items = ensureTurnItems(turnView);
+  if (!items.some((entry) => entry.kind === 'tool' && entry.executionId === executionId)) {
+    items.push({ kind: 'tool', executionId });
+  }
+}
+
+function settleStreamingItems(turnView: Term2TurnView): void {
+  if (!turnView.items) return;
+  for (const entry of turnView.items) {
+    if (entry.kind === 'reasoning' && entry.streaming) entry.streaming = false;
+    if (entry.kind === 'text' && entry.draft) entry.draft = false;
+  }
 }
 
 /** Drop only connection-local UI observations, never accepted summaries, native
@@ -359,29 +468,137 @@ export function clearTerm2LiveEvidence(view: Term2SessionView): Term2SessionView
 export function presentTerm2SessionView(view: Term2SessionView): Term2SessionView {
   const failure = view.liveChanges?.slice().reverse().find(change => change.type === 'turn_failed');
   const payload = failure?.payload;
-  return { ...view,
-    ...(payload ? {
-      status: 'error' as const,
-      error: typeof payload.reason === 'string' ? payload.reason : 'Live runtime failure; refresh for current accepted state.',
-      turns: view.turns.map(turn => turn.turnId !== payload.turnId ? turn : {
-        ...turn, status: 'failed' as const, transientFailure: true, transientStatus: undefined,
-        error: typeof payload.reason === 'string' ? payload.reason : undefined,
-        ...(typeof payload.finalText === 'string' ? { text: payload.finalText } : {}),
-      }),
-    } : {}),
-    ...(view.branches ? { branches: Object.fromEntries(Object.entries(view.branches).map(([key, branch]) => [key, { ...branch, view: presentTerm2SessionView(branch.view) }])) } : {}),
+  const liveReasoningByTurn = new Map<string, string>();
+  const activeStreamingTurnId = view.turns.find((t) => t.status === 'streaming')?.turnId;
+  if (view.liveChanges) {
+    for (const change of view.liveChanges) {
+      if (change.type !== 'reasoning_delta') continue;
+      const turnId =
+        typeof change.payload.turnId === 'string' && change.payload.turnId.length > 0
+          ? change.payload.turnId
+          : activeStreamingTurnId;
+      const delta = typeof change.payload.delta === 'string' ? change.payload.delta : '';
+      if (!turnId || !delta) continue;
+      liveReasoningByTurn.set(turnId, (liveReasoningByTurn.get(turnId) ?? '') + delta);
+    }
+  }
+  const hasOverlay = Boolean(payload || liveReasoningByTurn.size > 0);
+  const turns = hasOverlay
+    ? view.turns.map((turnItem) => {
+        let updated = turnItem;
+        const liveReasoning = liveReasoningByTurn.get(turnItem.turnId);
+        if (liveReasoning && liveReasoning.trim().length > 0) {
+          const baseItems = updated.items ? [...updated.items] : [];
+          const existingStreamIdx = baseItems.findIndex(
+            (entry) => entry.kind === 'reasoning' && entry.id === '__stream_reasoning__',
+          );
+          const lastReasoning = [...baseItems].reverse().find((entry) => entry.kind === 'reasoning');
+          const liveBlock: Term2TurnItem = {
+            kind: 'reasoning',
+            id: '__live_reasoning__',
+            text: liveReasoning,
+            streaming: true,
+          };
+          if (existingStreamIdx >= 0) {
+            baseItems[existingStreamIdx] = liveBlock;
+          } else if (!lastReasoning || lastReasoning.text !== liveReasoning) {
+            const draftTextIdx = baseItems.findIndex(
+              (entry) => entry.kind === 'text' && (entry.id === '__stream_text__' || entry.draft === true),
+            );
+            if (draftTextIdx >= 0) {
+              baseItems.splice(draftTextIdx, 0, liveBlock);
+            } else {
+              baseItems.push(liveBlock);
+            }
+          }
+          updated = {
+            ...updated,
+            reasoning: updated.reasoning ? updated.reasoning : liveReasoning,
+            items: baseItems,
+          };
+        }
+        if (payload && updated.turnId === payload.turnId) {
+          const finalText = typeof payload.finalText === 'string' ? payload.finalText : undefined;
+          let nextItems = updated.items;
+          if (finalText && finalText.length > 0 && updated.items && updated.items.length > 0) {
+            nextItems = [...updated.items];
+            const existingIdx = nextItems.findIndex(
+              (entry) => entry.kind === 'text' && (entry.id === '__live_final__' || entry.id === '__stream_text__'),
+            );
+            const finalItem: Term2TurnItem = { kind: 'text', id: '__live_final__', text: finalText };
+            if (existingIdx >= 0) nextItems[existingIdx] = finalItem;
+            else nextItems.push(finalItem);
+          }
+          updated = {
+            ...updated,
+            status: 'failed' as const,
+            transientFailure: true,
+            transientStatus: undefined,
+            error: typeof payload.reason === 'string' ? payload.reason : undefined,
+            ...(finalText !== undefined ? { text: finalText } : {}),
+            ...(nextItems !== updated.items ? { items: nextItems } : {}),
+          };
+        }
+        return updated;
+      })
+    : view.turns;
+  return {
+    ...view,
+    ...(payload
+      ? {
+          status: 'error' as const,
+          error:
+            typeof payload.reason === 'string'
+              ? payload.reason
+              : 'Live runtime failure; refresh for current accepted state.',
+        }
+      : {}),
+    ...(hasOverlay ? { turns } : {}),
+    ...(view.branches
+      ? {
+          branches: Object.fromEntries(
+            Object.entries(view.branches).map(([key, branch]) => [
+              key,
+              { ...branch, view: presentTerm2SessionView(branch.view) },
+            ]),
+          ),
+        }
+      : {}),
   };
 }
 
 function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedChange): Term2SessionView {
+  const clearsLiveFailure = [
+    'assistant_started',
+    'turn_completed',
+    'turn_failed',
+    'turn_aborted',
+    'session_rotated',
+    'history_replaced',
+  ].includes(event.type);
+  const clearsLiveReasoning = [
+    'reasoning',
+    'tool_called',
+    'turn_completed',
+    'turn_failed',
+    'turn_aborted',
+    'session_rotated',
+    'history_replaced',
+  ].includes(event.type);
   const view: Term2SessionView = {
     ...previous,
     turns: cloneTurns(previous.turns),
     retiredTurns: previous.retiredTurns ? cloneTurns(previous.retiredTurns) : undefined,
     error: null,
-    // New native accepted lifecycle supersedes a prior live failure observation.
-    liveChanges: ['assistant_started', 'turn_completed', 'turn_failed', 'turn_aborted', 'session_rotated', 'history_replaced'].includes(event.type)
-      ? previous.liveChanges?.filter(change => change.type !== 'turn_failed') : previous.liveChanges,
+    // New native accepted lifecycle supersedes prior connection-local observations.
+    liveChanges:
+      clearsLiveFailure || clearsLiveReasoning
+        ? previous.liveChanges?.filter(
+            (change) =>
+              !(clearsLiveFailure && change.type === 'turn_failed') &&
+              !(clearsLiveReasoning && change.type === 'reasoning_delta'),
+          )
+        : previous.liveChanges,
   };
   const payload: Readonly<Record<string, unknown>> = event.payload;
   switch (event.type) {
@@ -394,11 +611,12 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       const toolName = id(tool.toolName);
       if (tool.status !== 'called' || !('input' in tool)) throw new Term2ProtocolError('Invalid accepted tool call');
       let item = view.turns.find(item => item.turnId === turnId);
-      if (!item) { item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [] }; view.turns.push(item); }
+      if (!item) { item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [], items: [] }; view.turns.push(item); }
       const entry = command(item, executionId, toolName);
       entry.nativeTool = tool;
       entry.toolName = toolName;
       entry.argumentsText = typeof tool.input === 'string' ? tool.input : JSON.stringify(tool.input);
+      ensureTurnToolItem(item, executionId);
       // Called is pending, not a physical start or a foreground status change.
       break;
     }
@@ -415,14 +633,27 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
         const messages = view.nativeState.messages?.filter(entry => entry.message.turnId === turnId).map(entry => entry.message) ?? [];
         let item = view.turns.find(item => item.turnId === turnId);
         if (!item && messages.some(message => message.role !== 'tool')) {
-          item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [] };
+          item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [], items: [] };
           view.turns.push(item);
         }
         if (!item) continue;
         item.role = 'assistant';
         const users = messages.filter(message => message.role === 'user');
         item.userText = users.length ? users.map(message => message.text).join('') : undefined;
-        item.text = messages.filter(message => message.role === 'assistant').map(message => message.text).join('');
+        item.text = messages
+          .filter(message => message.role === 'assistant')
+          .map(message => message.text)
+          .filter(chunk => chunk.length > 0)
+          .join('\n\n');
+        if (incoming.message.turnId === turnId && incoming.message.role === 'assistant') {
+          upsertTurnTextItem(item, incoming.message.id, incoming.message.text, {
+            replacesDraftId: replacedId,
+            draft: incoming.message.draft,
+            modelStep: incoming.message.modelStep,
+          });
+        } else {
+          removeTurnTextIds(item, [incoming.message.id, replacedId]);
+        }
       }
       break;
     }
@@ -477,24 +708,69 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       view.status = 'running';
       break;
     }
-    case 'text_delta':
-      turn(view, payloadId(payload, 'turnId')).text += text(payload.delta);
+    case 'text_delta': {
+      const targetTurn = turn(view, payloadId(payload, 'turnId'));
+      const delta = text(payload.delta);
+      targetTurn.text += delta;
+      if (delta) {
+        const items = ensureTurnItems(targetTurn);
+        const last = items.at(-1);
+        if (last && last.kind === 'text' && last.id === '__stream_text__') {
+          last.text += delta;
+        } else {
+          items.push({ kind: 'text', id: '__stream_text__', text: delta, draft: true });
+        }
+      }
       view.status = 'running';
       break;
-    case 'reasoning':
+    }
+    case 'reasoning': {
       // Native messageId/modelStep is not a v1 turn identity. Preserve it exactly.
       view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      const reasoningText = text(payload.text);
+      if (reasoningText.trim().length > 0) {
+        const explicitTurnId = typeof payload.turnId === 'string' ? payload.turnId : undefined;
+        const targetTurn =
+          (explicitTurnId ? view.turns.find((t) => t.turnId === explicitTurnId) : undefined) ??
+          view.turns.find((t) => t.status === 'streaming');
+        if (targetTurn) {
+          const messageId =
+            typeof payload.messageId === 'string' && payload.messageId.length > 0
+              ? payload.messageId
+              : `reasoning:${targetTurn.items?.length ?? 0}`;
+          const modelStep = typeof payload.modelStep === 'number' ? payload.modelStep : undefined;
+          upsertTurnReasoningItem(targetTurn, messageId, reasoningText, { modelStep });
+          targetTurn.reasoning = (targetTurn.items ?? [])
+            .filter((entry): entry is Extract<Term2TurnItem, { kind: 'reasoning' }> => entry.kind === 'reasoning')
+            .map((entry) => entry.text)
+            .join('\n\n');
+        }
+      }
       break;
-    case 'reasoning_delta':
-      turn(view, payloadId(payload, 'turnId')).reasoning += text(payload.delta);
+    }
+    case 'reasoning_delta': {
+      const targetTurn = turn(view, payloadId(payload, 'turnId'));
+      const delta = text(payload.delta);
+      targetTurn.reasoning += delta;
+      if (delta) {
+        const items = ensureTurnItems(targetTurn);
+        const last = items.at(-1);
+        if (last && last.kind === 'reasoning' && last.id === '__stream_reasoning__') {
+          last.text += delta;
+        } else {
+          items.push({ kind: 'reasoning', id: '__stream_reasoning__', text: delta, streaming: true });
+        }
+      }
       view.status = 'running';
       break;
+    }
     case 'tool_started': {
       const item = turnForCommand(view, payloadId(payload, 'turnId'));
       const callId = payloadId(payload, 'callId');
       const entry = command(item, callId, text(payload.toolName, 256) || 'Tool');
       entry.status = 'running';
       if (payload.argumentsText !== undefined) entry.argumentsText = text(payload.argumentsText, 8192);
+      ensureTurnToolItem(item, callId);
       view.status = 'running';
       break;
     }
@@ -732,7 +1008,10 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       // Native rotation replaces ROOT provider context, not tasks/queue/costs.
       // Keep native evidence and branches; do not invent a reset/usage event.
       // Keep measured usage/task cards, not predecessor root text/reasoning/tools.
-      view.retiredTurns = [...(previous.retiredTurns ?? []), ...previous.turns.map(item => ({ ...item, text: '', userText: undefined, reasoning: '', commands: [] }))];
+      view.retiredTurns = [
+        ...(previous.retiredTurns ?? []),
+        ...previous.turns.map(item => ({ ...item, text: '', userText: undefined, reasoning: '', commands: [], items: undefined })),
+      ];
       view.hydration = undefined;
       if (previous.nativeState) view.nativeState = { ...previous.nativeState, messages: undefined };
       view.turns = [];
@@ -767,6 +1046,10 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       removeTrailingInterruptedTurns(view);
       const item = completedTurn(view, payloadId(payload, 'turnId'), payload.text);
       settleCommands(item, 'completed');
+      settleStreamingItems(item);
+      if (item.text && (!item.items || !item.items.some((entry) => entry.kind === 'text'))) {
+        upsertTurnTextItem(item, `${item.turnId}:final`, item.text);
+      }
       item.status = 'completed';
       item.transientStatus = undefined;
       view.status = 'connected';
@@ -776,13 +1059,20 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       removeTrailingInterruptedTurns(view);
       const item = turn(view, payloadId(payload, 'turnId'));
       settleCommands(item, 'failed');
+      settleStreamingItems(item);
       item.status = 'failed';
       item.transientStatus = undefined;
       item.error =
         typeof payload.reason === 'string' && TURN_FAILURE_REASONS.has(payload.reason)
           ? payload.reason
           : 'runtime_error';
-      if (typeof payload.finalText === 'string') item.text = text(payload.finalText, 16_384);
+      if (typeof payload.finalText === 'string') {
+        const finalText = text(payload.finalText, 16_384);
+        item.text = finalText;
+        if (finalText.length > 0 && item.items && item.items.length > 0) {
+          upsertTurnTextItem(item, `${item.turnId}:final`, finalText);
+        }
+      }
       view.status = 'error';
       view.error = item.error;
       break;
@@ -790,6 +1080,7 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
     case 'turn_aborted': {
       const item = turn(view, payloadId(payload, 'turnId'));
       settleCommands(item, 'aborted');
+      settleStreamingItems(item);
       item.status = 'aborted';
       item.transientStatus = undefined;
       view.status = 'interrupted';

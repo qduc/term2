@@ -1,14 +1,8 @@
 import * as oauthAccounts from '../model/providers/oauth-session-account.js';
 /** Assembles one Session's runtime from the real tool surface. Runs no provider and no tool. */
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { isDeepStrictEqual } from 'node:util';
 import { LocalExecutionContext } from './tool-contract.js';
 import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
-import { BARE_PROFILE_ID } from '../config/profiles/legacy-adapter.js';
-import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
-import { RUNTIME_MODIFIABLE_SETTINGS } from '../config/settings/settings-schema.js';
-import { buildEnvOverrides } from '../config/settings/settings-env.js';
 import { SettingsService } from './settings-service.js';
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
@@ -45,7 +39,7 @@ import { createDirectSessionMemory, directMainMemoryEnabled } from './memory.js'
 import { contextMilestones, runPolicy } from './application-policy.js';
 import { createDirectVerificationOperations } from './verifier.js';
 import { withGenerationGuard } from './generation-guard.js';
-import { SessionSettingsService } from './settings.js';
+import { createSessionSettings, inheritSessionSettings } from './settings.js';
 import { createNativeSessionBrowser } from './native-session-browser.js';
 import { nativeBrowserId } from './native-session-browser-store.js';
 import { createLaunchConfigurationScope } from './launch-configuration.js';
@@ -95,6 +89,7 @@ export type DirectRuntimeRecord = {
 export type DirectRuntimes = {
   create(context: DirectRuntimeContext): DirectConversationRuntime;
   launching: ReturnType<typeof createLaunchConfigurationScope>['run'];
+  withApprovalMode: ReturnType<typeof createLaunchConfigurationScope>['withApprovalMode'];
   /** Throws unless this application lets a session move from `previous` to `next`. */
   authorizeModel(next: ModelRef, previous: ModelRef): void | Promise<void>;
   /** An open session's runtime, for app-owned policy and commands. */
@@ -104,77 +99,6 @@ export type DirectRuntimes = {
 };
 
 export type DirectSessionSettings = SettingsService;
-
-/** The settings a new session continues from, carried through the store's creation call. */
-const continuedSettings = new AsyncLocalStorage<DirectSessionSettings>();
-
-/** Targets of src/config/settings/ancillary-settings-migration.ts. */
-const ANCILLARY_MIGRATION_TARGETS = [
-  'agent.smartReasoningEffort',
-  'agent.balancedReasoningEffort',
-  'agent.cheapReasoningEffort',
-  'agent.decisionModel',
-] as const;
-
-/**
- * Legacy's one service migrates an old key (say `agent.mentorReasoningEffort`) only when it loads the file at
- * launch, and the file it writes keeps the old key without the new one. A session reading that file again would
- * migrate a key the launch did not have and show a value legacy shows only from its next launch on.
- */
-function keepLoadTimeMigrations(settings: SettingsService, launch: Pick<SettingsService, 'getDynamic'>): void {
-  for (const key of ANCILLARY_MIGRATION_TARGETS) {
-    const value = launch.getDynamic(key);
-    if (isDeepStrictEqual(value, settings.getDynamic(key))) continue;
-    if (value === undefined) settings.reset(key);
-    else if (settings.isRuntimeModifiable(key)) settings.setDynamic(key, value, { persist: false });
-  }
-}
-
-/**
- * A session owns its settings. `selection.settings` only supplies defaults: one
- * host runs sessions with different models and profiles, and restoring one
- * session's saved selection must not change another session's.
- */
-function sessionSettings(
-  { selection, profileExplicit, approvalAlwaysAsks, requireSandbox }: DirectRuntimeOptions,
-  { metadata, configuration, model }: DirectRuntimeContext,
-): DirectSessionSettings {
-  const continued = continuedSettings.getStore();
-  const defaults = continued ?? selection.settings;
-  const settings = new SessionSettingsService({ env: buildEnvOverrides(), loggingService: selection.logger });
-  // `/clear` must not undo what someone changed, least of all a tightened approval
-  // mode. Only real differences: rewriting a default would change what it means.
-  if (continued) {
-    for (const key of RUNTIME_MODIFIABLE_SETTINGS) {
-      const value = continued.getDynamic(key);
-      if (value !== undefined && !isDeepStrictEqual(value, settings.getDynamic(key))) {
-        settings.setDynamic(key, value, { persist: false });
-      }
-    }
-  }
-  keepLoadTimeMigrations(settings, defaults);
-  // Launch-only policy flags keep their CLI precedence when each session reads its own settings.
-  for (const key of ['shell.autoApproveMode', 'shell.showReview'] as const) {
-    if (defaults.getSource?.(key) === 'cli') settings.setDynamic(key, defaults.get(key), { persist: false });
-  }
-  // The latest configuration, where there is one, outranks the session's start fact.
-  const stored = configuration?.profile ?? metadata?.profile;
-  // A saved dropped workflow is historical data, not authority to reactivate it (#149).
-  const profile = stored && !profileExplicit ? stored.id : defaults.get('app.activeProfileId');
-  settings.set('app.activeProfileId', isDroppedProfile(profile) ? BARE_PROFILE_ID : profile, { persist: false });
-  settings.set('agent.modelSelection', model, { persist: false });
-  const reasoning =
-    configuration?.intent.reasoningEffort ??
-    (metadata ? metadata.reasoning ?? 'default' : defaults.get('agent.reasoningEffort'));
-  settings.set('agent.reasoningEffort', reasoning, { persist: false });
-  const temperature = configuration?.intent.temperature;
-  if (temperature !== undefined) settings.set('agent.temperature', temperature, { persist: false });
-  if (approvalAlwaysAsks) settings.set('shell.autoApproveMode', 'off', { persist: false });
-  if (requireSandbox) settings.set('sandbox.enabled', true, { persist: false });
-  // From here on, what legacy's one service would save is saved through the app's settings owner.
-  if (selection.settings instanceof SettingsService) settings.saveThrough(selection.settings);
-  return settings;
-}
 
 /**
  * `verifier.model` names a model on the session's provider. Empty means the
@@ -215,6 +139,7 @@ export function createDirectRuntimes(
   return {
     authorizeModel,
     launching: launchConfiguration.run,
+    withApprovalMode: launchConfiguration.withApprovalMode,
     create(context) {
       // Metadata records a path, so the store resolves a foreign root narrower
       // rather than refusing it. Running it would act outside this mode's admission.
@@ -225,7 +150,7 @@ export function createDirectRuntimes(
       if (context.binding?.client === 'ssh' && context.binding.id !== options.sessionBinding?.id) {
         throw new Error('resume conversation belongs to a different SSH workspace');
       }
-      const settings = sessionSettings(options, context);
+      const settings = createSessionSettings(options, context);
       const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
       const reasoning = createForegroundReasoningPublisher(context.id);
       const selection = withEffortRejection(
@@ -347,6 +272,9 @@ export function createDirectRuntimes(
         const approvalMode = launchConfiguration.approvalMode(context.id);
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
+        if (approvalMode !== undefined && tasks?.list().some((task) => !task.result)) {
+          throw new Error('Finish or cancel background work before changing approval mode.');
+        }
         const generation = await prepareDirectConfiguration({
           context: installed.context,
           selection,
@@ -514,8 +442,7 @@ export function createDirectRuntimes(
     },
     get: (sessionId) => records.get(sessionId),
     inheriting(sessionId, operation) {
-      const source = records.get(sessionId)?.settings;
-      return source ? continuedSettings.run(source, operation) : operation();
+      return inheritSessionSettings(records.get(sessionId)?.settings, operation);
     },
   };
 }

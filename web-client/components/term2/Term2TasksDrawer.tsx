@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { ArrowDownToLine, Bot, ChevronDown, ChevronRight, Loader2, Square, Terminal, X } from 'lucide-react';
 import type { TaskControlAction, Term2SessionView } from '../../lib/term2/types';
-import { Term2Markdown } from './Term2Markdown';
-import { Term2ToolGroup } from './Term2ToolGroup';
+import { Term2TurnTimeline } from './Term2TurnTimeline';
 
 const ACTIVE_STATUSES = new Set(['running', 'queued', 'pending', 'waiting', 'cancelling', 'awaiting_interaction']);
 
@@ -126,8 +125,7 @@ export function Term2TasksDrawer({
                     <div className="mt-2 space-y-2 border-l-2 border-zinc-200 pl-3 dark:border-zinc-700">
                       {branch.view.turns.map((turn) => (
                         <div key={turn.turnId} className="space-y-1.5">
-                          {turn.commands.length > 0 && <Term2ToolGroup commands={turn.commands} />}
-                          {turn.text && <Term2Markdown text={turn.text} className="!text-xs !leading-5" />}
+                          <Term2TurnTimeline turn={turn} displayMode="concise" />
                         </div>
                       ))}
                     </div>
@@ -156,8 +154,7 @@ export function Term2TasksDrawer({
                 <div className="mt-2 space-y-2">
                   {branch.turns.map((turn) => (
                     <div key={turn.turnId} className="space-y-1.5">
-                      {turn.commands.length > 0 && <Term2ToolGroup commands={turn.commands} />}
-                      {turn.text && <Term2Markdown text={turn.text} className="!text-xs !leading-5" />}
+                      <Term2TurnTimeline turn={turn} displayMode="concise" />
                     </div>
                   ))}
                 </div>

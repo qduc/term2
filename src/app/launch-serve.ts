@@ -2,8 +2,8 @@
  * `term2 serve` on the direct host. This owns a separate state directory and its
  * own conversations: it never reads or writes the old gateway's trust, replay or
  * session data. One process writes each log, so no other client shares them.
- * Security posture is fixed here, not configured: tools are never auto-approved
- * and never run unsandboxed.
+ * Sandbox isolation stays required (tools never run unsandboxed); approval mode
+ * defaults to `off` (ask) and can be configured per session or via safe settings.
  */
 import { appendFile } from 'node:fs/promises';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -168,7 +168,11 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         modelId: current.model.model,
         reasoningEffort: current.reasoningEffort,
         mode: getProfileLabel(current.profileId),
-        toolPolicy: directServeToolPosture(workspace.access === 'read_write' && allowWrite),
+        approvalMode: current.approvalMode,
+        toolPolicy: directServeToolPosture(
+          workspace.access === 'read_write' && allowWrite,
+          current.approvalMode !== 'off',
+        ),
         configRevision: current.commandRevision,
         defaultsRevision,
       };
@@ -190,9 +194,13 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         skill: { name: skill.name, description: skill.description, body: skill.body },
       }).text;
     },
+    withApprovalMode(principal, snapshot, approvalMode, operation) {
+      owned(principal, snapshot.sessionId, snapshot.seq);
+      return app.withApprovalMode(snapshot.sessionId, approvalMode, operation);
+    },
     prepareConfiguration(principal, snapshot, body) {
       owned(principal, snapshot.sessionId, snapshot.seq);
-      return prepareDirectSessionConfigurationCommand(body);
+      return prepareDirectSessionConfigurationCommand(body, snapshot.model);
     },
   };
 }
@@ -236,7 +244,6 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     conversationsDir: directory,
     selection,
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
-    approvalAlwaysAsks: true,
     async authorizeModel(next, previous) {
       // A same-selection refresh/rollover does not depend on a fresh catalog.
       if (next.provider === previous.provider && next.model === previous.model) return;

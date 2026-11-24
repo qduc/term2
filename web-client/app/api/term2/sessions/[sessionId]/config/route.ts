@@ -22,13 +22,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ ses
     if (new URL(request.url).searchParams.get('format') !== TERM2_WIRE_PROTOCOL) throw new LocalValidationError('agent-wire-v2 negotiation required');
     const body = await readJsonBody(request);
     const discovery = Object.keys(body).length === 0;
-    const allowedKeys = ['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode'];
+    const allowedKeys = ['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode', 'approvalMode'];
     if (!discovery) {
       if (Object.keys(body).some((key) => !allowedKeys.includes(key)) ||
           typeof body.clientRequestId !== 'string' || !body.clientRequestId ||
           typeof body.expectedRevision !== 'string' || !body.expectedRevision ||
           (body.admission !== undefined && body.admission !== 'idle') ||
-          !['modelSelection', 'reasoningEffort', 'mode'].some(key => key in body))
+          !['modelSelection', 'reasoningEffort', 'mode', 'approvalMode'].some(key => key in body))
         throw new LocalValidationError('Invalid keyed session configuration');
       if (body.modelSelection !== undefined) {
         const model = body.modelSelection as Record<string, unknown>;
@@ -38,7 +38,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ ses
           throw new LocalValidationError('Invalid model selection');
       }
       if ((body.reasoningEffort !== undefined && (typeof body.reasoningEffort !== 'string' || !['default','none','minimal','low','medium','high','xhigh'].includes(body.reasoningEffort))) ||
-          (body.mode !== undefined && (typeof body.mode !== 'string' || !['standard','bare','lite','plan','mentor','orchestrator'].includes(body.mode))))
+          (body.mode !== undefined && (typeof body.mode !== 'string' || !['standard','bare','lite','plan','mentor','orchestrator'].includes(body.mode))) ||
+          (body.approvalMode !== undefined && (typeof body.approvalMode !== 'string' || !['off','auto','unattended','always'].includes(body.approvalMode))))
         throw new LocalValidationError('Invalid session selection');
     }
     const response = await term2GatewayClient.request({

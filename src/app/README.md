@@ -37,6 +37,10 @@ another approval mode through the app's idle configuration scope. It rebuilds
 the session's approval policy while preserving its sandbox preference. The choice stays in the
 live runtime. In Ask and Assisted, a local foreground shell receives its
 invocation-scoped escape capability only after the distinct one-time grant.
+The web gateway also enables the distinct grant for local writable sessions;
+it retains the ordinary sandboxed-shell approval policy. Read sessions cannot
+escape. The scripted `run_code` child path does not offer this grant; it refuses
+an explicit escape instead of silently executing under a different sandbox.
 `persistSessionConfiguration:false` also keeps native configuration changes
 session-local; ACP opts out while the terminal UI retains saved defaults. The
 native generation's install step records settings through `SessionSettingsService`,

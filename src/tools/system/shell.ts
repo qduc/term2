@@ -881,8 +881,9 @@ export function createShellToolDefinition(deps: {
           ? _context[APPROVED_SHELL_ESCAPE]
           : undefined;
       if (sandbox === 'unsandboxed' && !allowUnsandboxed) {
-        if (escapeCwd === undefined) sandbox = 'default';
-        else if (background || escapeCwd !== cwd) {
+        if (escapeCwd === undefined) {
+          return 'Error: This session cannot run this command outside the sandbox without an explicit outside-sandbox grant. Command not executed.';
+        } else if (background || escapeCwd !== cwd) {
           return 'Error: Outside-sandbox approval does not match this foreground command directory.';
         }
       }

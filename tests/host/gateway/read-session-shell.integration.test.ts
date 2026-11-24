@@ -2,6 +2,8 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createGatewayAssertion } from '../../../src/host/server-assertion.js';
@@ -93,7 +95,10 @@ async function startModel(scripts: Record<string, readonly Call[]>) {
       );
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
   const address = server.address();
   cleanup.push(
     () =>
@@ -115,6 +120,39 @@ async function startModel(scripts: Record<string, readonly Call[]>) {
 
 async function startServe(w: World, options: { allowWrite: boolean; env?: NodeJS.ProcessEnv }) {
   const stateDir = path.join(w.home, 'gateway-state');
+  const socketPath = path.join(w.root, 's');
+  const tls = process.env.TERM2_TEST_GATEWAY_TLS === '1';
+  let port = 0;
+  const certPath = path.join(w.root, 'cert.pem');
+  const keyPath = path.join(w.root, 'key.pem');
+  if (tls) {
+    execFileSync(
+      'openssl',
+      [
+        'req',
+        '-x509',
+        '-newkey',
+        'rsa:2048',
+        '-nodes',
+        '-keyout',
+        keyPath,
+        '-out',
+        certPath,
+        '-subj',
+        '/CN=localhost',
+        '-days',
+        '1',
+      ],
+      { stdio: 'ignore' },
+    );
+    const probe = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once('error', reject);
+      probe.listen(0, '127.0.0.1', resolve);
+    });
+    port = (probe.address() as net.AddressInfo).port;
+    await new Promise<void>((resolve, reject) => probe.close((error) => (error ? reject(error) : resolve())));
+  }
   const publicKeyPath = path.join(w.home, 'bff-public.pem');
   fs.writeFileSync(publicKeyPath, keys.publicKey, 'utf-8');
   const child: ChildProcess = spawn(
@@ -124,6 +162,9 @@ async function startServe(w: World, options: { allowWrite: boolean; env?: NodeJS
       'serve',
       '--state-dir',
       stateDir,
+      ...(tls
+        ? ['--listen', `127.0.0.1:${port}`, '--tls-cert', certPath, '--tls-key', keyPath]
+        : ['--socket', socketPath]),
       '--local-owner',
       'owner',
       '--bff-key',
@@ -144,7 +185,6 @@ async function startServe(w: World, options: { allowWrite: boolean; env?: NodeJS
       interval: 50,
     })
     .toBe(true);
-  const socketPath = path.join(stateDir, 'gateway.sock');
   const rpc = (
     purpose: AssertionPurpose,
     method: string,
@@ -163,9 +203,9 @@ async function startServe(w: World, options: { allowWrite: boolean; env?: NodeJS
         purpose,
         ...ids,
       });
-      const request = http.request(
+      const request = (tls ? https : http).request(
         {
-          socketPath,
+          ...(tls ? { hostname: '127.0.0.1', port, rejectUnauthorized: false } : { socketPath }),
           method,
           path: `/private/agent/v1${suffix}`,
           headers: {
@@ -212,7 +252,16 @@ async function startServe(w: World, options: { allowWrite: boolean; env?: NodeJS
         sessionId,
       },
     );
-  return { openSession, send };
+  const read = (sessionId: string) => rpc('session_read', 'POST', `/sessions/${sessionId}`, {}, { sessionId });
+  const resolve = (sessionId: string, interactionId: string, answer: string) =>
+    rpc(
+      'interaction_resolve',
+      'POST',
+      `/sessions/${sessionId}/interactions/${interactionId}`,
+      { revision: 1, answer },
+      { sessionId },
+    );
+  return { openSession, send, read, resolve };
 }
 
 /** A git repository with one commit, created under the world's home (serve admits folders under HOME). */
@@ -235,6 +284,80 @@ const systemText = (request: Request | undefined) =>
     .join('\n');
 const results = (request: Request | undefined) =>
   (request?.messages ?? []).filter((message) => message.role === 'tool').map((message) => text(message.content));
+
+it.each([true, false])(
+  'asks for a scoped web shell escape with sandbox enabled=%s',
+  { timeout: 120_000 },
+  async (enabled) => {
+    world = createWorld('t2s');
+    const w = world;
+    const root = path.join(w.home, 'workspace');
+    fs.mkdirSync(root);
+    const allowed = path.join(w.outside, 'allowed.txt');
+    const denied = path.join(w.outside, 'denied.txt');
+    const model = await startModel({
+      allow: [{ command: `printf allowed > ${allowed}`, sandbox: 'unsandboxed' }],
+      reject: [{ command: `printf denied > ${denied}`, sandbox: 'unsandboxed' }],
+    });
+    writeWorldSettings(w, model.baseUrl, {
+      sandbox: { enabled },
+      shell: { autoApproveMode: 'off' },
+      agent: { completionVerification: false },
+    });
+    const serve = await startServe(w, { allowWrite: true });
+    for (const [prompt, answer, target] of [
+      ['allow', 'unsandboxed-once', allowed],
+      ['reject', 'reject', denied],
+    ] as const) {
+      const sessionId = await serve.openSession(root, 'read_write');
+      await serve.send(sessionId, prompt);
+      let interaction: any;
+      await expect
+        .poll(
+          async () => {
+            interaction = (await serve.read(sessionId)).session.interaction?.interaction;
+            return interaction?.choices?.map((choice: { id: string }) => choice.id);
+          },
+          { timeout: 60_000 },
+        )
+        .toContain('unsandboxed-once');
+      expect(interaction.choices.map((choice: { id: string }) => choice.id)).not.toContain('approve');
+      expect(fs.existsSync(target)).toBe(false);
+      await serve.resolve(sessionId, interaction.interactionId, answer);
+      await expect.poll(() => model.turn(prompt).length, { timeout: 60_000 }).toBe(2);
+      if (answer === 'unsandboxed-once') expect(fs.readFileSync(target, 'utf8')).toBe('allowed');
+      else expect(fs.existsSync(target)).toBe(false);
+    }
+  },
+);
+
+it('requires Docker host-control approval in always mode', { timeout: 120_000 }, async () => {
+  world = createWorld('t2d');
+  const w = world;
+  const root = path.join(w.home, 'workspace');
+  fs.mkdirSync(root);
+  const model = await startModel({ docker: [{ command: 'docker version' }] });
+  writeWorldSettings(w, model.baseUrl, {
+    sandbox: { enabled: true },
+    shell: { autoApproveMode: 'always' },
+    agent: { completionVerification: false },
+  });
+  const serve = await startServe(w, { allowWrite: true });
+  const sessionId = await serve.openSession(root, 'read_write');
+  await serve.send(sessionId, 'docker');
+  let interaction: any;
+  await expect
+    .poll(
+      async () => {
+        interaction = (await serve.read(sessionId)).session.interaction?.interaction;
+        return interaction?.choices?.map((choice: { id: string }) => choice.id);
+      },
+      { timeout: 60_000 },
+    )
+    .toContain('docker-allow-once');
+  await serve.resolve(sessionId, interaction.interactionId, 'reject');
+  await expect.poll(() => model.turn('docker').length, { timeout: 60_000 }).toBe(2);
+});
 
 it.skipIf(process.platform !== 'linux')(
   'a read session runs shell inside the sandbox with sandbox.enabled=false; read & write stays unsandboxed',
@@ -278,9 +401,9 @@ it.skipIf(process.platform !== 'linux')(
     expect(gitWrite).toContain('Read-only file system');
     expect(write).toMatch(/^exit [1-9]/);
     expect(write).toContain('Read-only file system');
-    // The model's escape request is not honoured in a read session: it runs sandboxed and is refused the same way.
-    expect(escape).toMatch(/^exit [1-9]/);
-    expect(escape).toContain('Read-only file system');
+    // A read session cannot escape, and must not silently run a different command than requested.
+    expect(escape).toContain('outside-sandbox grant');
+    expect(escape).toContain('Command not executed');
     expect(fs.readdirSync(readRoot).sort()).toEqual(['.git', 'README.md']);
 
     const writeSession = await serve.openSession(writeRoot, 'read_write');

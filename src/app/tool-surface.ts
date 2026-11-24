@@ -220,6 +220,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     withAnswer: (answer, operation) => answers.run(answer, operation),
     checkInterceptors: deps.checkToolInterceptors,
     shellEscapeCwd: options.shellEscapeApproval && !remote && !readOnly ? () => executionContext.getCwd() : undefined,
+    sandboxedShellFastPath: options.shellEscapeApproval && !options.preserveSandboxedShellApproval,
     // Read the mode per call: a mode change must apply to the next command, not the next surface.
     confirmSandboxedShell: options.shellEscapeApproval
       ? (command) =>

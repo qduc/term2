@@ -596,8 +596,11 @@ Rules, and why they are shaped this way:
   boundary. A `read` session (its effective access, see §8) runs every shell
   command inside the filesystem sandbox with workspace writes disabled,
   whatever `sandbox.enabled` says; `sandbox.enabled` governs only `read_write`
-  sessions. A model's `sandbox: "unsandboxed"` request still runs sandboxed,
-  and a read session gets no Docker host control. Availability is probed once
+  sessions. A read session's `sandbox: "unsandboxed"` request is refused without
+  executing the command, and a read session gets no Docker host control. A writable
+  local session may request a foreground shell escape via a distinct, cwd-bound
+  one-time grant, subject to the configured approval mode. Ordinary sandboxed shell
+  commands retain their existing approval policy. Availability is probed once
   when the session's runtime is built and kept for that session. If the sandbox
   is unavailable (or the probe fails, or the folder is over SSH), the session
   offers no `shell` tool, to the root or to its child agents, and its

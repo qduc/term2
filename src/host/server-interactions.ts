@@ -62,7 +62,10 @@ export class ServerInteractions {
           { id: 'cancel', label: 'Cancel' },
         ]
       : [
-          ...(interaction.toolName === 'sandbox_network_access' ? [] : [{ id: 'approve', label: 'Allow' }]),
+          ...(interaction.toolName === 'sandbox_network_access' ||
+          interaction.supportedGrants.includes('unsandboxed-once')
+            ? []
+            : [{ id: 'approve', label: 'Allow' }]),
           ...interaction.supportedGrants.map((grant) => ({ id: grant, label: grantLabel(grant) })),
           { id: 'reject', label: 'Reject' },
         ];

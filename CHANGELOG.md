@@ -17,7 +17,7 @@
 
 - Require Docker host-control approval even when `shell.autoApproveMode` is set to `always`.
 - Fix web chat creation, folder selection, error recovery, approval prompts, running-tasks panel toggling, and the ordering, streaming drain, and formatting of conversation and subagent events.
-- Wake the agent when a background task finishes while a web chat is idle, and restore idle status after resolving a background task's approval.
+- Wake the agent when a background task finishes while a web chat is idle, and restore idle status after resolving a background task's approval (#402).
 - Count dated and `latest` model aliases as the same model when displaying prices.
 
 ## [2.0.1] - 2026-11-23

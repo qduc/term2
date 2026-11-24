@@ -240,15 +240,14 @@ export const helpText = (): string => `
 
     $ term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
         [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
-        [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
+        [--pairing] [--bff-key <kid>=<pem path>]...
         [--issuer <iss>] [--audience <aud>] [--allow-write]
 
     Transport defaults to a Unix socket at <state-dir>/gateway.sock (mode 0660). TLS network
     mode requires --listen with --tls-cert and --tls-key, and binds loopback unless
-    --allow-remote is also given. Browser-selected workspaces must live under your home
-    directory unless --workspace-root (repeatable) adds allowed roots. --allow-write admits
-    read_write workspace grants (workspace write access); without it every admitted root is
-    read-only.
+    --allow-remote is also given. The browser may select any folder you can read. --allow-write
+    admits read_write workspace grants (workspace write access); without it every admitted
+    root is read-only.
 
   ACP launcher (term2 acp)
     Serves the Agent Client Protocol v2 over stdio as newline-delimited JSON-RPC, so an editor

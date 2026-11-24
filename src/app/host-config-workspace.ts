@@ -8,7 +8,6 @@ import type { CandidateBrowse, CandidateValidation } from './host-config-candida
 import { DirectHostConfigError, requirePrincipal } from './host-config-error.js';
 import {
   canonicalizeUse,
-  contained,
   grantFromInput,
   inspectRestoredRoot,
   loadDynamicGrants,
@@ -66,7 +65,6 @@ export type DirectWorkspaceGrantInput = {
  */
 export class DirectWorkspaceAuthority {
   readonly #allowWrite: boolean;
-  readonly #roots: readonly string[];
   readonly #stateDirectory?: string;
   readonly #grants = new Map<string, GrantRecord>();
   readonly #candidates: DirectCandidateRegistry;
@@ -74,14 +72,12 @@ export class DirectWorkspaceAuthority {
 
   constructor(options: {
     readonly allowWrite: boolean;
-    readonly allowedRoots: readonly string[];
     readonly staticGrants?: readonly DirectWorkspaceGrantInput[];
     readonly stateDirectory?: string;
     readonly now?: () => number;
   }) {
     this.#allowWrite = options.allowWrite;
-    this.#roots = options.allowedRoots.map((root) => requireCanonicalDirectory(root));
-    this.#candidates = new DirectCandidateRegistry(this.#roots, options.now);
+    this.#candidates = new DirectCandidateRegistry(options.now);
     for (const input of options.staticGrants ?? []) this.#addStatic(input);
     if (options.stateDirectory !== undefined) {
       this.#stateDirectory = requireStateDirectory(options.stateDirectory);
@@ -232,9 +228,6 @@ export class DirectWorkspaceAuthority {
     const record = this.#grants.get(workspaceId);
     if (!record) throw new DirectHostConfigError('workspace_not_found', 'authority');
     if (record.ownerUserId !== owner) throw new DirectHostConfigError('workspace_owner_mismatch', 'authority');
-    if (record.dynamic && !this.#roots.some((root) => contained(root, record.root))) {
-      throw new DirectHostConfigError('workspace_authority_revoked', 'authority');
-    }
     return record;
   }
 

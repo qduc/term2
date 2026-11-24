@@ -167,7 +167,7 @@ set does not yet back.
 | Raw provider traffic capture | `TERM2_RAW_TRAFFIC` | Supported | A debugging aid. |
 | Unattended profile | `TERM2_SUPERVISED=1` | Experimental | |
 | Automatic memory canary | `TERM2_AUTOMATIC_MEMORY_CANARY=1` | Experimental | |
-| Gateway workspace grants | `term2 serve --allow-write`, `--workspace-root` | Experimental | Tier of the gateway. |
+| Gateway workspace grants | `term2 serve --allow-write` | Experimental | Tier of the gateway. |
 
 ## Persisted formats
 

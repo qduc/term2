@@ -24,7 +24,6 @@ it('routes workspace and local-owner configuration operations through their auth
   const ledger = new MemoryReplayLedger();
   const workspaces = new DirectWorkspaceAuthority({
     allowWrite: true,
-    allowedRoots: [workspace],
     stateDirectory: directory,
   });
   const calls: unknown[] = [];

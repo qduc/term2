@@ -227,7 +227,6 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
   // Grants and globals live here, in this state directory, and never in a conversation.
   const grants = new DirectWorkspaceAuthority({
     allowWrite: args.allowWrite,
-    allowedRoots: args.workspaceRoots,
     stateDirectory: stateDir,
   });
   const product = createDirectProductPorts();
@@ -263,7 +262,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       models: () => configuration.listModels(),
       skills: () =>
         app
-          .skills(args.workspaceRoots[0] ?? homedir())
+          .skills(homedir())
           .map((skill) => ({ name: skill.name, description: skill.description, isProjectLevel: skill.isProjectLevel })),
       configuration,
       presentation: presentation({ app, directory, grants, configuration, allowWrite: args.allowWrite }),
@@ -302,11 +301,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       args.transport.kind === 'socket'
         ? `transport=socket path=${args.transport.socketPath}`
         : `transport=tls host=${args.transport.host} port=${args.transport.port}`;
-    process.stderr.write(
-      `GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${
-        args.pairing ? 'on' : 'off'
-      } workspaceRoots=${args.workspaceRoots.join(',')}\n`,
-    );
+    process.stderr.write(`GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${args.pairing ? 'on' : 'off'}\n`);
     await stopped;
   } catch (error) {
     process.stderr.write(`term2 serve: server failed to start: ${messageOf(error)}\n`);

@@ -21,6 +21,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { SettingsConflictError, Term2ApiError, term2Client } from '../../../lib/api/term2';
 import type { ModelSummary, ProviderPresetEntry, SettingsProjection } from '../../../lib/term2/types';
 import { CredentialField } from './CredentialField';
+import { ModelsSummary } from './ModelsSummary';
 import { FavoriteModelsControl, ModelPoolControl, NicknamesControl, RevokeListControl } from './ListSettingControls';
 import { ProvidersSection } from './ProvidersSection';
 import { NumberField, SettingRow, controlId, type CommitResult, type RowStatus } from './SettingRow';
@@ -790,6 +791,25 @@ export function Term2SettingsPage({
         onNavigate={(id) => onNavigate('providers', id)}
         onReload={reload}
         onModelsChanged={onModelsChanged}
+      />
+    );
+  } else if (section === 'models') {
+    body = (
+      <ModelsSummary
+        items={items.filter((item) => item.section === 'models')}
+        value={stored}
+        providerLabel={providerLabel}
+        isModified={isModified}
+        lockedReason={lockedReason}
+        status={(item) => rowStatus[item.id]}
+        editor={(item) => (
+          <>
+            {listControl(item)}
+            {item.kind === 'model-tier' && itemKeys(item)[1] && <div className="mt-3">{tierEffortControl(item)}</div>}
+          </>
+        )}
+        onCommit={(item, value) => void commit(item, value)}
+        onReset={reset}
       />
     );
   } else {

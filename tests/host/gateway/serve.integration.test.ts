@@ -21,6 +21,8 @@ const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['workspace_candidate_validate', 'POST', '/workspace/candidates/validate'],
   ['workspace_candidate_browse', 'POST', '/workspace/candidates/browse'],
   ['workspace_candidate_select', 'POST', '/workspace/candidates/select'],
+  ['workspace_remove', 'DELETE', '/workspaces/WORKSPACE'],
+  ['workspace_access_update', 'PUT', '/workspaces/WORKSPACE/access'],
   ['settings_read', 'GET', '/settings'],
   ['settings_write', 'PUT', '/settings'],
   ['credential_write', 'POST', '/credentials/test'],
@@ -383,7 +385,7 @@ describe('term2 serve (child process)', () => {
     expect(sessionId).toBeTruthy();
     expect(PRIVATE_ROUTES.map(([purpose]) => purpose).sort()).toEqual([...ASSERTION_PURPOSES].sort());
     for (const [purpose, method, suffix] of PRIVATE_ROUTES) {
-      const route = `/private/agent/v1${suffix.replace('SESSION', sessionId)}`;
+      const route = `/private/agent/v1${suffix.replace('SESSION', sessionId).replace('WORKSPACE', workspaceId)}`;
       const unauthenticated = await socketRequest(socketPath, method, route, {});
       expect(unauthenticated.status, `${purpose}: ${unauthenticated.raw}`).toBe(401);
       const wrongPurpose = purpose === 'model_list' ? 'workspace_list' : 'model_list';
@@ -569,6 +571,304 @@ describe('term2 serve (child process)', () => {
         outcome: 'completed',
       }),
     );
+  }, 180_000);
+
+  it('changes and removes a saved folder grant, closing live sessions so they reopen under the new authority', async () => {
+    const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'serve-grant-edit-')));
+    const stateDir = path.join(tempHome, 'gateway-state');
+    const workspace = path.join(tempHome, 'workspace');
+    fs.mkdirSync(workspace, { recursive: true });
+    disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
+
+    // The first chat request is held open so a turn is still running when access narrows;
+    // later requests answer at once. Each request's tool names are kept to observe the
+    // reopened session's tool graph.
+    const requests: { tools: string[]; aborted: boolean }[] = [];
+    let firstRequestSeen!: () => void;
+    const firstRequest = new Promise<void>((resolve) => (firstRequestSeen = resolve));
+    const server = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url?.includes('/models')) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ object: 'list', data: [{ id: 'serve-mock-model' }] }));
+        return;
+      }
+      let raw = '';
+      req.on('data', (chunk: Buffer | string) => (raw += String(chunk)));
+      req.on('end', () => {
+        const body = JSON.parse(raw) as { tools?: { function?: { name?: string }; name?: string }[] };
+        const record = {
+          tools: (body.tools ?? []).map((tool) => tool.function?.name ?? tool.name ?? '').sort(),
+          aborted: false,
+        };
+        requests.push(record);
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        if (requests.length === 1) {
+          res.on('close', () => (record.aborted = !res.writableEnded));
+          res.flushHeaders();
+          firstRequestSeen();
+          return;
+        }
+        res.end(
+          [
+            'data: {"id":"chatcmpl-grant","choices":[{"delta":{"role":"assistant","content":"after change"}}]}',
+            '',
+            'data: {"id":"chatcmpl-grant","choices":[{"delta":{},"finish_reason":"stop"}]}',
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    disposables.push(
+      () =>
+        new Promise<void>((resolve) => {
+          server.closeAllConnections();
+          server.close(() => resolve());
+        }),
+    );
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const settingsDir = resolveSettingsDirectory({ homeDir: tempHome });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'mockprov', model: 'serve-mock-model' }, retryAttempts: 0 },
+        providers: [
+          { name: 'mockprov', type: 'openai-compatible', baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: 'test-key' },
+        ],
+      }),
+    );
+    const publicKeyPath = path.join(tempHome, 'bff-public.pem');
+    fs.writeFileSync(publicKeyPath, publicKeyPem, 'utf-8');
+
+    const socketPath = path.join(stateDir, 'gateway.sock');
+    const child = spawn(
+      'node',
+      [
+        cliPath(),
+        'serve',
+        '--state-dir',
+        stateDir,
+        '--local-owner',
+        'user-1',
+        '--bff-key',
+        `${KID}=${publicKeyPath}`,
+        '--allow-write',
+      ],
+      { env: createTestChildEnv({ HOME: tempHome, DISABLE_LOGGING: '1' }), stdio: ['ignore', 'ignore', 'pipe'] },
+    );
+    disposables.push(() => {
+      child.kill('SIGKILL');
+    });
+    let stderr = '';
+    // Readiness is announced on stderr after the socket is bound; wait for that line, not a poll.
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`readiness timeout\nstderr:\n${stderr}`)), 60_000);
+      child.on('close', (code, signal) => {
+        clearTimeout(timer);
+        reject(new Error(`serve exited before readiness (code=${code} signal=${signal})\nstderr:\n${stderr}`));
+      });
+      child.stderr.on('data', (chunk: Buffer | string) => {
+        stderr += String(chunk);
+        if (stderr.includes('GATEWAY_READY')) {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    });
+
+    const call = async (
+      method: string,
+      suffix: string,
+      body: unknown,
+      purpose: Parameters<typeof sign>[1],
+      ids: { workspaceId?: string; sessionId?: string } = {},
+      subject = 'user-1',
+    ) => {
+      const response = await socketRequest(
+        socketPath,
+        method,
+        `/private/agent/v1${suffix}`,
+        body,
+        sign(subject, purpose, ids),
+      );
+      return { status: response.status, body: response.raw ? jsonBody(response) : {} };
+    };
+    const ok = async (...args: Parameters<typeof call>) => {
+      const response = await call(...args);
+      expect(response.status, JSON.stringify(response.body)).toBeLessThan(400);
+      return response.body;
+    };
+    const grantsPath = path.join(stateDir, 'direct-workspace-grants.json');
+    const storedGrants = () => JSON.parse(fs.readFileSync(grantsPath, 'utf-8')).grants as Record<string, unknown>[];
+
+    const validated = await ok(
+      'POST',
+      '/workspace/candidates/validate',
+      { absolutePath: workspace },
+      'workspace_candidate_validate',
+    );
+    const selected = await ok(
+      'POST',
+      '/workspace/candidates/select',
+      { candidateId: validated.candidateId, access: 'read_write' },
+      'workspace_candidate_select',
+    );
+    const workspaceId = selected.workspaceId as string;
+    const created = await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId });
+    const sessionId = created.session.id as string;
+    const logPath = path.join(stateDir, 'conversations', `${sessionId}.jsonl`);
+
+    // A turn is running under read & write when the grant narrows.
+    const stream = openEventStream(socketPath, sessionId);
+    disposables.push(stream.close);
+    await stream.waitFor((event) => event.type === 'configuration', 45_000);
+    const first = await ok(
+      'POST',
+      `/sessions/${sessionId}/messages`,
+      { text: 'first', clientRequestId: 'grant-edit-1' },
+      'message_submit',
+      { sessionId },
+    );
+    await firstRequest;
+
+    // The assertion must name the workspace in the path; another owner's edit is refused.
+    expect(
+      await call('PUT', `/workspaces/${workspaceId}/access`, { access: 'read' }, 'workspace_access_update', {
+        workspaceId: 'ws_other',
+      }),
+    ).toMatchObject({ status: 400, body: { error: { code: 'protocol_conflict' } } });
+    expect(
+      await call(
+        'PUT',
+        `/workspaces/${workspaceId}/access`,
+        { access: 'read' },
+        'workspace_access_update',
+        { workspaceId },
+        'other-owner',
+      ),
+    ).toMatchObject({ status: 403, body: { error: { code: 'workspace_forbidden' } } });
+    expect(
+      await call('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId }, 'other-owner'),
+    ).toMatchObject({ status: 403, body: { error: { code: 'workspace_forbidden' } } });
+    expect(
+      await call('PUT', `/workspaces/${workspaceId}/access`, { access: 'write' }, 'workspace_access_update', {
+        workspaceId,
+      }),
+    ).toMatchObject({ status: 400, body: { error: { code: 'validation_error' } } });
+    expect(storedGrants()).toMatchObject([{ workspaceId, access: 'read_write' }]);
+
+    const narrowed = await ok(
+      'PUT',
+      `/workspaces/${workspaceId}/access`,
+      { access: 'read' },
+      'workspace_access_update',
+      {
+        workspaceId,
+      },
+    );
+    expect(narrowed).toEqual({
+      workspace: { workspaceId, label: selected.displayName, access: 'read' },
+      grantVersion: selected.binding.grantVersion + 1,
+      closedSessions: 1,
+    });
+    expect(storedGrants()).toMatchObject([{ workspaceId, access: 'read', grantVersion: narrowed.grantVersion }]);
+    // Closing the live session cancelled the running turn and its provider request.
+    await expect(stream.waitFor(() => false, 10_000)).rejects.toThrow('Event stream ended');
+    await expect.poll(() => requests[0]?.aborted, { timeout: 10_000 }).toBe(true);
+    expect(readFacts(logPath)).toContainEqual(
+      expect.objectContaining({
+        type: 'turn_ended',
+        turnId: first.turnId,
+        outcome: expect.not.stringMatching(/^completed$/),
+      }),
+    );
+
+    // A session keeps the access it started with, so this one no longer opens under the
+    // read grant. A new session in the folder runs read-only: no write tools reach the model.
+    const forbidden = { status: 403, body: { error: { code: 'workspace_forbidden' } } };
+    expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
+    const readCreated = await ok('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId });
+    const readSessionId = readCreated.session.id as string;
+    const readStream = openEventStream(socketPath, readSessionId);
+    disposables.push(readStream.close);
+    await readStream.waitFor((event) => event.type === 'configuration', 45_000);
+    const second = await ok(
+      'POST',
+      `/sessions/${readSessionId}/messages`,
+      { text: 'second', clientRequestId: 'grant-edit-2' },
+      'message_submit',
+      { sessionId: readSessionId },
+    );
+    await readStream.waitFor((event) => event.type === 'turn_ended' && event.turnId === second.turnId, 45_000);
+    readStream.close();
+    const writeTools = requests[0]!.tools.filter((name) => !requests[1]!.tools.includes(name));
+    expect(writeTools.length, JSON.stringify(requests.map((request) => request.tools))).toBeGreaterThan(0);
+    expect(requests[1]!.tools.every((name) => requests[0]!.tools.includes(name))).toBe(true);
+
+    // Widening is allowed because this server was started with --allow-write. It closes the
+    // live read session; the first session opens again and the read one no longer does.
+    const widened = await ok(
+      'PUT',
+      `/workspaces/${workspaceId}/access`,
+      { access: 'read_write' },
+      'workspace_access_update',
+      { workspaceId },
+    );
+    expect(widened).toMatchObject({
+      workspace: { access: 'read_write' },
+      grantVersion: narrowed.grantVersion + 1,
+      closedSessions: 1,
+    });
+    expect((await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).status).toBe(200);
+    expect(
+      await call('POST', `/sessions/${readSessionId}`, {}, 'session_read', { sessionId: readSessionId }),
+    ).toMatchObject(forbidden);
+
+    // Removal: the grant leaves the list and the file, and its sessions no longer open.
+    expect(await ok('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId })).toEqual({
+      workspaceId,
+      removed: true,
+      closedSessions: 1,
+    });
+    expect(storedGrants()).toEqual([]);
+    expect((await ok('GET', '/workspaces', undefined, 'workspace_list')).workspaces).toEqual([]);
+    expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions).toEqual([]);
+    expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
+    expect(
+      await call(
+        'POST',
+        `/sessions/${sessionId}/messages`,
+        { text: 'third', clientRequestId: 'grant-edit-3' },
+        'message_submit',
+        { sessionId },
+      ),
+    ).toMatchObject({ status: 403, body: { error: { code: 'workspace_forbidden' } } });
+    expect(await call('POST', '/sessions', { workspaceId }, 'session_create', { workspaceId })).toMatchObject({
+      status: 403,
+      body: { error: { code: 'workspace_forbidden' } },
+    });
+    expect(
+      await call('DELETE', `/workspaces/${workspaceId}`, undefined, 'workspace_remove', { workspaceId }),
+    ).toMatchObject({
+      status: 403,
+      body: { error: { code: 'workspace_forbidden' } },
+    });
+    expect(requests).toHaveLength(2);
+
+    child.removeAllListeners();
+    child.kill('SIGTERM');
+    const exit = await new Promise<number | null>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`serve did not exit after SIGTERM\nstderr:\n${stderr}`)), 30_000);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+    });
+    expect(exit).toBe(0);
   }, 180_000);
 
   it('pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid', async () => {

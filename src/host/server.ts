@@ -81,6 +81,8 @@ function createDirectServerHandler(
       return publicError(404, 'not_found', 'gateway route not found');
     if (!route.legacy && route.sessionId && route.sessionId !== claims.sessionId)
       return publicError(400, 'protocol_conflict', 'gateway path and assertion session do not match');
+    if (route.workspaceId && route.workspaceId !== claims.workspaceId)
+      return publicError(400, 'protocol_conflict', 'gateway path and assertion workspace do not match');
     if (!route.legacy && route.purpose !== claims.purpose)
       return publicError(400, 'protocol_conflict', 'gateway purpose does not match route');
     if (LOCAL_OWNER_PURPOSES.has(claims.purpose) && claims.sub !== dependencies.localOwnerUserId)

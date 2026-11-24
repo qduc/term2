@@ -78,6 +78,20 @@ export function mapServerError(error: unknown): ServerResult {
       return publicError(503, 'model_catalog_unavailable', 'model catalog unavailable', true);
     if (code === 'model_unavailable') return publicError(422, 'validation_error', 'model is unavailable');
     if (code === 'workspace_grant_not_persisted' || code === 'configuration_invalid') return unavailable('gateway');
+    if (code === 'workspace_grant_static')
+      return publicError(
+        409,
+        'workspace_grant_static',
+        'This folder was granted in the server’s startup configuration and cannot be changed or removed here.',
+        false,
+      );
+    if (code === 'workspace_write_not_allowed')
+      return publicError(
+        403,
+        'workspace_write_not_allowed',
+        'The server was started without write access, so a folder cannot be given read & write access.',
+        false,
+      );
     if (code === 'workspace_grant_mismatch' && surface === 'authority') {
       const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined;
       const existingAccess =
@@ -90,10 +104,10 @@ export function mapServerError(error: unknown): ServerResult {
       ) {
         const change =
           grantStorage === 'persisted'
-            ? 'To change access, the operator must stop the server, back up direct-workspace-grants.json in its effective state directory, remove only this root’s grant record, restart, and select the root again. Old sessions will no longer be accessible through that grant.'
+            ? 'To change it, use Change access on this saved folder. Chats started with the current access stop, and open again only if you switch back.'
             : grantStorage === 'static'
             ? 'This is a startup-supplied grant, not an editable persisted grant. Ask the operator to review the startup configuration; deleting persisted records cannot change it.'
-            : 'This grant is in memory only. The operator must restart the host and select the root again; old sessions will lose their grant.';
+            : 'To change it, use Change access on this saved folder; the change lasts until the host restarts. Chats started with the current access stop, and open again only if you switch back.';
         return publicError(
           403,
           'workspace_forbidden',

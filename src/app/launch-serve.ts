@@ -28,6 +28,7 @@ import {
   directServeToolPosture,
   DirectGlobalConfiguration,
   DirectWorkspaceAuthority,
+  serverWorkspaceAdministration,
 } from './host-config.js';
 import type { DirectLaunchRequest } from './launch-types.js';
 import { warnIfSandboxUnavailable } from './sandbox-warning.js';
@@ -255,7 +256,10 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
   const transport = createDirectServerHost(
     {
       host: app.host,
-      workspaces: grants,
+      workspaces: serverWorkspaceAdministration(
+        grants,
+        (root) => app.host.closeWorkspaceSessions?.(root) ?? Promise.resolve(0),
+      ),
       models: () => configuration.listModels(),
       skills: () =>
         app

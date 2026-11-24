@@ -51,7 +51,7 @@ of forwarding arbitrary upstream diagnostics.
 
 An owner selecting an already-granted root with different access receives the
 existing HTTP 403 `workspace_forbidden`, nonretryable, with the existing access
-and operator guidance. Selecting the same access reuses the grant. Ownership is
+and guidance. Selecting the same access reuses the grant. Ownership is
 checked before disclosing access; other-owner and other grant failures retain
 their generic errors. The BFF accepts only the `read`/`read_write` access and
 `persisted`/`static`/`memory` storage enums and constructs its own message, rather
@@ -59,56 +59,27 @@ than forwarding upstream text or paths. The folder selector's existing error
 alert displays that message. Write-policy and filesystem checks still precede
 the conflict check; a denied write request can therefore retain its generic 403.
 
-### Operator procedure for a persisted dynamic grant
+### Changing or removing a grant
 
-This maintenance procedure removes authority, not conversation data. Confirm that losing access to the
-old grant's sessions is acceptable before proceeding; otherwise keep the existing
-access. There is no in-place access migration or browser revoke control.
+A persisted or in-memory dynamic grant is changed in place with
+`PUT /private/agent/v1/workspaces/:workspaceId/access` or removed with
+`DELETE /private/agent/v1/workspaces/:workspaceId`; the web folder picker's
+saved-folder menu calls them. Contract 13, "Saved folder edits", has the
+status codes and live-session behavior. Stopping the server to hand-edit
+`direct-workspace-grants.json` is no longer needed.
 
-1. Identify the running direct server's effective state directory from its launch
-   arguments and environment. `prepareStateDir` in `launch-serve.ts` uses
-   an explicit nondefault `--state-dir` (canonicalized). When the requested path
-   equals `defaultServeStateDir`, it substitutes the sibling `gateway-next` leaf:
-   `$XDG_STATE_HOME/term2-nodejs/gateway-next`, or, with XDG_STATE_HOME unset,
-   `$HOME/.local/state/term2-nodejs/gateway-next`. This substitution also applies
-   when the default path was explicitly supplied. Do not edit the legacy
-   `gateway` directory or assume the BFF owns this file.
-2. Stop the server and any other process using that state directory; confirm they
-   have exited. Grants are loaded into memory at startup, so editing a running
-   server's file neither revokes its active authority nor prevents a later save
-   from overwriting the edit.
-3. Privately back up `<effective-state-directory>/direct-workspace-grants.json`,
-   preserving owner-only permissions (file 0600, directory 0700). Its format is
-   an object with `version: 1` and a `grants` array. Identify exactly one entry
-   using its canonical `root`, `ownerUserId` and `workspaceId`; confirm its
-   `access`. If the file/entry is absent, ambiguous, or malformed, stop rather
-   than deleting other records or inventing a replacement.
-4. Remove **only that array entry**, preserving `version: 1`, every other entry
-   and their fields. Validate JSON before replacing the file; retain its private
-   ownership/mode. Do not delete the whole file, change access/IDs/versions in
-   place, or edit conversation logs, pairing keys, or replay state.
-5. Restart with the same state directory, identity and allowed roots. In the
-   browser, check the path again and select the desired access. `read_write`
-   still requires `--allow-write` and filesystem write permission. A new grant
-   gets a new workspace ID; create a new session under it. Confirm unrelated
-   workspace grants remain usable.
+Existing direct sessions record the grant's workspace ID in their
+`session_started` binding and its access in `workspaceIdentity`
+(`bindDirectSessionAccess` in `host-config-access.ts` checks both). An access
+change therefore stops older sessions until the access is set back, and a
+removal stops them for good: re-granting the same root issues a new ID that
+does not reauthorize them. Their logs remain on disk.
 
-Existing direct sessions record the old workspace ID in their `session_started`
-binding. Removing that grant makes authorization fail for those sessions even
-after re-granting the same root: the new ID does not migrate or reauthorize them.
-Their logs remain on disk. Stopping the server also interrupts active work and
-connections. A private backup permits operator recovery of the original grant
-while stopped, but it must not be restored alongside a new grant for the same
-root; duplicate roots/IDs fail startup. This is not a promise of session migration.
-
-Only dynamic records are saved by `saveDynamicGrants` and reloaded by
-`loadDynamicGrants` in `host-config-workspace-grants.ts`. Startup-supplied
-`staticGrants` are not in that file and cannot be changed by this procedure;
-consult the embedding operator's startup configuration instead. The direct
-`launchServe` composition supplies no static grants. An embedded authority
-without `stateDirectory` has only in-memory dynamic grants; restarting clears
-those, not any static inputs. `bindDirectSessionAccess` in
-`host-config-access.ts` establishes the old-session limitation above.
+Startup-supplied `staticGrants` are not in the grant file and both routes refuse
+them (`409 workspace_grant_static`); consult the embedding operator's startup
+configuration instead. The direct `launchServe` composition supplies no static
+grants. An embedded authority without `stateDirectory` has only in-memory
+dynamic grants; restarting clears those, not any static inputs.
 
 ## Negotiation
 

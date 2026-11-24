@@ -18,7 +18,7 @@ export type {
   DirectHostConfigFailure,
   DirectHostConfigSurface,
 } from './host-config-error.js';
-export { DirectWorkspaceAuthority } from './host-config-workspace.js';
+export { DirectWorkspaceAuthority, serverWorkspaceAdministration } from './host-config-workspace.js';
 export type {
   CandidateBrowse,
   CandidateSelection,
@@ -27,6 +27,7 @@ export type {
   WorkspaceAlias,
   WorkspaceAuthorityResult,
   WorkspaceAccess,
+  WorkspaceGrantChange,
 } from './host-config-workspace.js';
 export { DirectGlobalConfiguration } from './host-config-settings.js';
 export type { SettingsProjection } from './host-config-settings.js';

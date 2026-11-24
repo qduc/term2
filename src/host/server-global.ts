@@ -44,6 +44,15 @@ export class ServerGlobalRoutes {
         return workspaces?.select
           ? { status: 200, body: await workspaces.select(principal, body.candidateId, body.access) }
           : missing('workspace candidates');
+      case 'workspace_remove':
+        return workspaces?.remove
+          ? { status: 200, body: await workspaces.remove(principal, route.workspaceId!) }
+          : missing('workspace administration');
+      case 'workspace_access_update':
+        if (!validate.isWorkspaceAccessBody(body)) return invalid('workspace');
+        return workspaces?.changeAccess
+          ? { status: 200, body: await workspaces.changeAccess(principal, route.workspaceId!, body.access) }
+          : missing('workspace administration');
       case 'model_list':
         return this.dependencies.models
           ? { status: 200, body: { models: await this.dependencies.models() } }

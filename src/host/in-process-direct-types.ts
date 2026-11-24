@@ -26,6 +26,13 @@ export interface DirectHost {
   connect(principal: Principal, sessionId: string, fromSeq: number): Promise<DirectReplayConnection>;
   /** Explicitly drain/release a live Session and its subscriptions; retained logs remain reopenable. */
   closeSession?(principal: Principal, sessionId: string): Promise<void>;
+  /**
+   * Close every live Session whose workspace root is `root`, including ones still
+   * opening or being created, and cancel their running work. Used after the root's
+   * grant changes, so a reopen re-derives authority from the grant. No principal:
+   * the caller has already authorized the grant change. Returns how many closed.
+   */
+  closeWorkspaceSessions?(root: string): Promise<number>;
   /** Host shutdown owns runtime/store disposal; no persisted domain-close is implied. */
   dispose(): Promise<void>;
 }

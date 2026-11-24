@@ -36,6 +36,8 @@ purpose assertion that must equal the route's purpose. The table's "Purpose" col
 | `POST /private/agent/v1/workspace/candidates/validate` | `workspace_candidate_validate` | `{ absolutePath }` | `200` validator result | BFF route `POST /term2/workspace/candidates/validate` → `createForwarder` |
 | `POST /private/agent/v1/workspace/candidates/browse` | `workspace_candidate_browse` | `{ candidateId, child? }` | `200` browse result | BFF route `POST /term2/workspace/candidates/browse` → `createForwarder` |
 | `POST /private/agent/v1/workspace/candidates/select` | `workspace_candidate_select` | `{ candidateId, access }` | `200` select result including `binding` | BFF route `POST /term2/workspace/candidates/select` → `createForwarder` |
+| `DELETE /private/agent/v1/workspaces/:workspaceId` | `workspace_remove` (assertion carries the same `workspaceId`) | — | `200 { workspaceId, removed: true, closedSessions }` | BFF route `DELETE /agent/workspaces/:workspaceId` → `forward` |
+| `PUT /private/agent/v1/workspaces/:workspaceId/access` | `workspace_access_update` (assertion carries the same `workspaceId`) | `{ access: 'read' \| 'read_write' }` (`isWorkspaceAccessBody`) | `200 { workspace: { workspaceId, label, access }, grantVersion, closedSessions }` | BFF route `PUT /agent/workspaces/:workspaceId/access` → `forward` |
 | `GET /private/agent/v1/models` | `model_list` | — | `200 { models: [{ provider, id, name?, default_reasoning_level?, contextWindow? }] }` | BFF route `GET /term2/models` → `Term2GatewayClient.request()` |
 | `GET /private/agent/v1/settings` | `settings_read` | — | `200` `buildSettingsProjection(settings, access)` | `Term2LocalControlBroker.getSettings` ← BFF route `GET /term2/settings` |
 | `PUT /private/agent/v1/settings` | `settings_write` | `{ expectedRevision, changes: [{ key, value }] }` (`isSettingsWriteBody`) | `200 { committed: true, revision, projection }` | `Term2LocalControlBroker.putSettings` |
@@ -529,6 +531,31 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 - Replaying a request with the same `clientRequestId` and identical payload returns HTTP 200 with the original outcome (`outcome`, `turnId`, or compaction token metrics) and `replayed: true`.
 - Replayed compaction records are safely decoded: completed, non-reducing, and no-op compactions return status 200 with `outcome: 'completed'`, `'not_reduced'`, or `'nothing_to_retry'` (a replayed `not_reduced` carries the recorded `tokensBefore`/`tokensAfter`). Interrupted compactions (`compact:in_progress`) return HTTP 409 `compact_interrupted` with `retryable: false`. Failed compactions (`compact:failed`, optionally suffixed with the bounded reason code since 2026-09-12) return HTTP 409 `compact_failed` with `retryable: false`. Unrecognized compaction states return HTTP 500 `compact_invalid_state` with `retryable: false`. Replayed failed retries return HTTP 409 `retry_failed` with `retryable: false`.
 - Replaying a `clientRequestId` with a different payload body throws an idempotency conflict and returns `409 idempotency_conflict`.
+
+## Saved folder edits (workspace grants)
+
+`workspace_remove` and `workspace_access_update` edit one dynamic grant owned
+by the asserting principal. A path `workspaceId` that differs from the
+assertion's is `400 protocol_conflict`; another owner's or an unknown grant is
+`403 workspace_forbidden`. Startup-supplied (static) grants are refused with
+`409 workspace_grant_static`. Narrowing `read_write` → `read` is always
+allowed. Widening needs a server started with write allowed (`term2 serve
+--allow-write`; otherwise `403 workspace_write_not_allowed`), a root still
+inside the allowed roots at its canonical path, and OS write access (otherwise
+`403 workspace_forbidden`). A change gets a new `grantVersion`. If the grant
+file cannot be written the grant stays as it was and the route answers
+`503 gateway_unavailable` (`retryable: true`).
+
+After committing the grant, the server closes every live session in that root
+(`DirectHost.closeWorkspaceSessions`), cancelling running turns and ending
+their event streams, including replay subscribers; `closedSessions` counts
+them. A session keeps the access recorded in its `session_started`
+`workspaceIdentity`, so after an access change it no longer opens (`403
+workspace_forbidden`) and drops from `session_list` until the access is set
+back. After removal its sessions never open again, even if the root is
+selected again: the new grant has a new `workspaceId`. Logs stay on disk.
+The web folder picker offers both actions from each saved folder's menu
+(`Term2SavedFolderMenu`).
 
 ## 9. Restart recovery: the per-session provider/model snapshot (F3, 2026-09-12)
 

@@ -26,6 +26,7 @@ export type DirectBoundSessionStore<TCreated, TOpened> = {
 type StartFact = {
   readonly type?: string;
   readonly workspace?: string;
+  readonly workspaceIdentity?: { readonly access?: string };
   readonly model?: { readonly provider?: string; readonly model?: string };
   readonly binding?: { readonly client?: string; readonly id?: string };
   readonly reasoning?: string;
@@ -78,6 +79,13 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       if (binding && (binding.client !== required.client || binding.id !== required.id)) {
         throw new DirectHostConfigError('workspace_owner_mismatch', 'authority');
       }
+      // The grant can be removed or changed between the create's check and here. Check it
+      // again in the same tick the store starts, so the host sees this create in flight
+      // when it closes the workspace's sessions.
+      options.authority.resolveWorkspace(
+        { userId: frame.userId, via: 'assertion' },
+        { workspaceId: frame.workspaceId, access: frame.workspace.access },
+      );
       return options.sessions.create(frame.workspace, model, required);
     },
     open: (id, binding) => options.sessions.open(id, binding),
@@ -101,6 +109,10 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       const grant = options.authority.resolveGrant(principal, started.binding.id);
       const resolved = options.authority.resolveWorkspace(principal, grant);
       if (path.resolve(resolved.workspace.root) !== path.resolve(started.root)) throw forbidden();
+      // The store reopens a session only with the access it started with. After a grant's
+      // access changes, refuse here as a grant mismatch rather than fail in the store.
+      if (started.access !== undefined && started.access !== resolved.workspace.access)
+        throw new DirectHostConfigError('workspace_grant_mismatch', 'authority');
       // A read grant still chats, as in the legacy gateway: its tools, not its commands, are read-only.
     },
     resolveWorkspace(principal, grant) {
@@ -131,6 +143,8 @@ function sessionStart(
 ): {
   binding?: Binding;
   root: string;
+  /** Access recorded in `workspaceIdentity`; absent on older logs. */
+  access?: string;
   at: string;
   seq: number;
   reasoning?: string;
@@ -155,6 +169,7 @@ function sessionStart(
   return {
     ...(binding ? { binding } : {}),
     root: fact.workspace,
+    ...(typeof fact.workspaceIdentity?.access === 'string' ? { access: fact.workspaceIdentity.access } : {}),
     at: line.at,
     seq: line.seq as number,
     ...(typeof fact.reasoning === 'string' ? { reasoning: fact.reasoning } : {}),

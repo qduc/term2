@@ -26,10 +26,20 @@ export type {
   WorkspaceGrant,
 } from './in-process-direct-types.js';
 
+function workspaceRoot(session: DirectSession): string {
+  const capture = session.capture(() => undefined);
+  try {
+    return capture.state.workspace.root;
+  } finally {
+    capture.unsubscribe();
+  }
+}
+
 /** Host owns the supplied store until dispose; each connection owns only its subscription. */
 export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
   const attachments = new Map<string, Promise<DirectAttachment>>();
-  const connections = new Set<DirectEventQueue>();
+  /** Every subscriber queue and its session, replay views included: they do not belong to an attachment. */
+  const connections = new Map<DirectEventQueue, string>();
   const creates = new Set<Promise<DirectSession>>();
   const closingSessions = new Map<string, Promise<void>>();
   let disposed = false;
@@ -65,7 +75,7 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     open();
     const view = fromSeq === undefined ? attached.connect() : directReplayView(attached.session, fromSeq);
     if (view.events.closed) throw new DirectProtocolError('internal_error', 'Session attachment failed.');
-    connections.add(view.events);
+    connections.set(view.events, attached.session.id);
     view.events.onClose = () => connections.delete(view.events);
     let closed = false;
     const result = {
@@ -102,29 +112,50 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     };
     return result as DirectConnection | DirectReplayConnection;
   }
+  async function release(sessionId: string): Promise<void> {
+    const existing = closingSessions.get(sessionId);
+    if (existing) return await existing;
+    const pending = attachments.get(sessionId);
+    if (!pending) return;
+    const closing = (async () => {
+      const attached = await pending;
+      try {
+        await attached.session.close();
+      } finally {
+        attached.close();
+        // Replay subscribers watch the closed Session object directly; end them too so clients reconnect.
+        for (const [events, id] of [...connections]) if (id === sessionId) events.close();
+        if (attachments.get(sessionId) === pending) attachments.delete(sessionId);
+      }
+    })();
+    closingSessions.set(sessionId, closing);
+    try {
+      await closing;
+    } finally {
+      if (closingSessions.get(sessionId) === closing) closingSessions.delete(sessionId);
+    }
+  }
   return {
     async closeSession(principal, sessionId) {
       open();
       await deps.authorize(principal, { kind: 'write', sessionId });
-      const existing = closingSessions.get(sessionId);
-      if (existing) return await existing;
-      const pending = attachments.get(sessionId);
-      if (!pending) return;
-      const closing = (async () => {
-        const attached = await pending;
-        try {
-          await attached.session.close();
-        } finally {
-          attached.close();
-          if (attachments.get(sessionId) === pending) attachments.delete(sessionId);
-        }
-      })();
-      closingSessions.set(sessionId, closing);
-      try {
-        await closing;
-      } finally {
-        if (closingSessions.get(sessionId) === closing) closingSessions.delete(sessionId);
-      }
+      await release(sessionId);
+    },
+    async closeWorkspaceSessions(root) {
+      open();
+      // A create or open that began under the old grant settles into `attachments`; wait for it.
+      await Promise.allSettled([...creates]);
+      const pending = [...attachments.entries()];
+      const opened = await Promise.allSettled(pending.map(([, attached]) => attached));
+      const matching = pending.filter(([, attached], index) => {
+        const result = opened[index]!;
+        return result.status === 'fulfilled' && attachments.get(pending[index]![0]) === attached
+          ? workspaceRoot(result.value.session) === root
+          : false;
+      });
+      // One failed cleanup must not keep the others open; release() drops the attachment either way.
+      const closed = await Promise.allSettled(matching.map(([sessionId]) => release(sessionId)));
+      return closed.length;
     },
     async listSessions(principal, cursor) {
       open();
@@ -181,7 +212,7 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
           const results = await Promise.allSettled([...attachments.values()]);
           for (const result of results) if (result.status === 'fulfilled') result.value.close();
           attachments.clear();
-          for (const events of [...connections]) events.close();
+          for (const events of [...connections.keys()]) events.close();
           await deps.sessions.close();
         })();
       }

@@ -52,6 +52,7 @@ type SourceToolOptions = {
   readonly sessionId: string;
   readonly checkInterceptors?: (name: string, input: unknown) => Promise<string | null>;
   readonly shellEscapeCwd?: () => string;
+  readonly sandboxedShellFastPath?: boolean;
   readonly confirmSandboxedShell?: (command: string) => boolean;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
   readonly offered?: readonly AnyToolDefinition[];
@@ -134,7 +135,6 @@ function shellEscape(
 ): input is { command: string; sandbox: 'unsandboxed'; background?: boolean } {
   return (
     options.shellEscapeCwd !== undefined &&
-    options.settings.get('sandbox.enabled') !== false &&
     toolName === 'shell' &&
     input !== null &&
     typeof input === 'object' &&
@@ -183,7 +183,7 @@ async function approvalFor(
     };
   }
   // The sandbox runner fails closed when it cannot confine a default command.
-  if (options.shellEscapeCwd && definition.name === 'shell' && !docker) {
+  if (options.shellEscapeCwd && options.sandboxedShellFastPath && definition.name === 'shell' && !docker) {
     if (
       input !== null &&
       typeof input === 'object' &&
@@ -198,9 +198,9 @@ async function approvalFor(
   const protectedWrite = protectedWriteForFileTool(definition.name, input);
   if (
     !protectedWrite &&
+    !docker &&
     (policy.kind === 'auto_approve' ||
-      ((!docker || !options.shellEscapeCwd) &&
-        shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode'))))
+      shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode')))
   ) {
     // Legacy stages every call whose definition needs approval (with a policy registry, every valid call) even
     // when policy approves it; the engine never groups a staged call, so a parallel-safe one leaves the batch.

@@ -243,7 +243,13 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
   const app = await createDirectApplication({
     conversationsDir: directory,
     selection,
-    surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
+    surface: () => ({
+      autoApprove: false,
+      interactive: true,
+      allowUnsandboxed: false,
+      shellEscapeApproval: true,
+      preserveSandboxedShellApproval: true,
+    }),
     async authorizeModel(next, previous) {
       // A same-selection refresh/rollover does not depend on a fresh catalog.
       if (next.provider === previous.provider && next.model === previous.model) return;

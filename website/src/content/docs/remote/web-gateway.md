@@ -17,13 +17,15 @@ On your first visit, follow the two-step checklist to **Connect** an AI provider
 
 The web app uses the same saved settings and provider credentials as the CLI. If you already set up a provider there, don't enter the key again. Start `term2-web` from the same shell environment if your CLI gets its credentials from environment variables. If a chat needs an API key that hasn't been configured, it will point you to **Settings**.
 
-This is a single-user interface bound to loopback. You can pick any folder under your home directory and grant it read-and-write or read-only access; every file edit still asks for your approval. To allow only read-only grants, pass `--read-only`; to narrow which folders can be picked, pass `--workspace-root <dir>`:
+This is a single-user interface bound to loopback. You can pick a folder the user running Term2 can read and grant it read-and-write or read-only access. Approval mode controls which actions ask for approval. To allow only read-only grants, pass `--read-only`:
 
 ```bash
-term2-web --read-only --workspace-root ~/projects
+term2-web --read-only
 ```
 
 Unlike `term2-web`, a separately run `term2 serve` gateway stays read-only unless you pass `--allow-write`.
+
+In a writable session, a direct foreground shell call can request a one-time escape from the shell sandbox. The configured approval mode governs that request; an approved command can access files outside the selected folder. Read-only sessions cannot grant a shell escape.
 
 Don't expose it through a proxy or port forward to other users. The signing key and Unix socket are temporary; gateway session state persists across launches.
 

@@ -43,6 +43,8 @@ async function harness(
     approve?: (request: ToolInteractionRequest) => string | undefined;
     owner?: boolean;
     bare?: boolean;
+    restrictEscape?: boolean;
+    escapeApproval?: boolean;
   } = {},
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'term2-script-shell-'));
@@ -86,6 +88,7 @@ async function harness(
     backgroundShellRegistry: shellTools.registry,
     postExecuteDeniedRead: true,
     shellSandboxRunner: options.sandboxRunner,
+    allowUnsandboxed: !options.restrictEscape,
   });
   const code = createRunCodeToolDefinition({
     loggingService: logger,
@@ -125,6 +128,7 @@ async function harness(
     sessionAccess: access,
     sessionId: 'script-shell-session',
     withAnswer: (_answer, operation) => operation(),
+    ...(options.escapeApproval ? { shellEscapeCwd: () => executionContext.getCwd() } : {}),
   });
   cleanups.push(() => registry.dispose());
   const context = (signal: AbortSignal): ToolContext => {
@@ -217,6 +221,49 @@ function sandboxFixture() {
 }
 
 describe('shell inside run_code through the wrapped tool graph', () => {
+  it('requires a one-time escape grant in a restricted session and never silently downgrades', async () => {
+    const fixture = sandboxFixture();
+    const denied = await harness({ sandboxRunner: fixture.runner, restrictEscape: true, approve: () => 'y' });
+    const command = 'printf denied > denied.txt';
+    const script = `return await tools.shell(${JSON.stringify({ command, sandbox: 'unsandboxed' })});`;
+    expect(await denied.run(script)).toContain('Command not executed');
+    expect(existsSync(join(denied.cwd, 'denied.txt'))).toBe(false);
+
+    const approved = await harness({
+      sandboxRunner: fixture.runner,
+      restrictEscape: true,
+      escapeApproval: true,
+      approve: () => 'unsandboxed-once',
+    });
+    const direct = approved.registry.get('shell')!;
+    const input = direct.parse({ command, sandbox: 'unsandboxed' });
+    const context = approved.context(new AbortController().signal);
+    const approval = await direct.approval!(input, context);
+    expect(approval).toMatchObject({ kind: 'ask', grants: ['unsandboxed-once'] });
+    expect((await direct.execute(input, context)).output).toContain('explicit outside-sandbox grant');
+    expect(existsSync(join(approved.cwd, 'denied.txt'))).toBe(false);
+    expect(await direct.approval!(input, context)).toMatchObject({ kind: 'ask', grants: ['unsandboxed-once'] });
+    const defaultInput = direct.parse({ command, sandbox: 'default' });
+    const defaultControl = denied.registry.get('shell')!;
+    expect(await direct.approval!(defaultInput, context)).toEqual(
+      await defaultControl.approval!(
+        defaultControl.parse({ command, sandbox: 'default' }),
+        denied.context(new AbortController().signal),
+      ),
+    );
+    expect((await direct.execute(input, { ...context, approvalGrant: 'unsandboxed-once' })).output).toContain('exit 0');
+    expect(await readFile(join(approved.cwd, 'denied.txt'), 'utf8')).toBe('denied');
+
+    const rejected = await harness({
+      sandboxRunner: fixture.runner,
+      restrictEscape: true,
+      escapeApproval: true,
+      approve: () => 'reject',
+    });
+    await rejected.run(script);
+    expect(existsSync(join(rejected.cwd, 'denied.txt'))).toBe(false);
+  });
+
   it('reports missing sandbox dependencies and refuses to execute the command', async () => {
     let wrapped = false;
     const f = await harness({

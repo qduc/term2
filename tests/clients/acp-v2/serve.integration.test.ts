@@ -37,11 +37,13 @@ const textTurnBody = [
   '',
 ].join('\n');
 
+const DEFAULT_CREATE_FILE = { path: '.term2/hooks/probe.sh', content: 'written\n', overwrite: true };
+
 /**
- * One real shell call; ACP must ask even when saved settings auto-approve.
+ * One real approval-required tool call; ACP must ask even when saved settings auto-approve.
  */
-function approvalToolTurnBody(command: string, toolName = 'shell', toolInput?: object): string {
-  const arguments_ = JSON.stringify(toolInput ?? { command, sandbox: 'unsandboxed' });
+function approvalToolTurnBody(command: string, toolName = 'create_file', toolInput?: object): string {
+  const arguments_ = JSON.stringify(toolInput ?? (toolName === 'create_file' ? DEFAULT_CREATE_FILE : { command }));
   return [
     `data: ${JSON.stringify({
       id: 'chatcmpl-acp-tool',
@@ -140,7 +142,13 @@ type ChildSession = {
 const runAcpChild = async (
   permission: ((params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>) | undefined,
   body: (session: ChildSession) => Promise<void>,
-  options: { command?: string; sandbox?: boolean; providerFailure?: string } = {},
+  options: {
+    command?: string;
+    toolName?: string;
+    toolInput?: object;
+    sandbox?: boolean;
+    providerFailure?: string;
+  } = {},
 ): Promise<{
   stdoutText: string;
   stderr: string;
@@ -151,12 +159,14 @@ const runAcpChild = async (
   const conversationsDir = path.join(tempHome, 'conversations');
   const workspace = path.join(tempHome, 'workspace');
   fs.mkdirSync(workspace, { recursive: true });
-  const workspaceFile = path.join(workspace, 'probe.txt');
+  const workspaceFile = path.join(workspace, '.term2', 'hooks', 'probe.sh');
   fs.mkdirSync(path.join(tempHome, 'scratch'));
   disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
 
   const mock = await startModelMock(['acp-mock-model'], {
     toolCommand: options.command ?? 'echo written > probe.txt',
+    toolName: options.toolName,
+    toolInput: options.toolInput,
     providerFailure: options.providerFailure,
   });
   disposables.push(mock.close);
@@ -339,7 +349,7 @@ it('reports the provider failure after acknowledging the ACP v2 prompt', async (
 
 describe('term2 acp real-tool permission round trips', () => {
   it.each(['reject', 'unknown', 'unsandboxed-once', 'allow-remember', 'cancelled', 'malformed', 'unsupported'])(
-    'fails closed for %s without executing the shell',
+    'fails closed for %s without executing the tool',
     async (reply) => {
       const result = await runAcpChild(
         reply === 'unsupported'
@@ -355,7 +365,7 @@ describe('term2 acp real-tool permission round trips', () => {
             expect(session.permissionRequests).toHaveLength(1);
             const request = session.permissionRequests[0]!;
             expect(request.sessionId).toBe(session.sessionId);
-            expect(request.subject).toMatchObject({ type: 'tool_call', toolCall: { name: 'shell' } });
+            expect(request.subject).toMatchObject({ type: 'tool_call', toolCall: { name: 'create_file' } });
             expect(request.options.map((option) => option.optionId)).toEqual(['approve', 'reject']);
           }
           expect(fs.existsSync(session.workspaceFile)).toBe(false);
@@ -367,25 +377,14 @@ describe('term2 acp real-tool permission round trips', () => {
   );
 
   it.each(['approve', 'allow-once'])(
-    'honors %s without granting an unsandboxed escape',
+    'honors %s for an approval-required workspace write',
     async (optionId) => {
       const result = await runAcpChild(
         async () => ({ outcome: { outcome: 'selected', optionId } }),
         async (session) => {
           await toolTurn(session);
           expect(session.permissionRequests).toHaveLength(1);
-          const output = session.updates.filter(
-            ({ update }) => update.sessionUpdate === 'tool_call_update' || update.sessionUpdate === 'tool_call',
-          );
-          if (process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') {
-            expect(fs.existsSync(session.workspaceFile), JSON.stringify(session.updates)).toBe(true);
-          }
-          if (fs.existsSync(session.workspaceFile)) {
-            expect(fs.readFileSync(session.workspaceFile, 'utf8').trim()).toBe('written');
-          } else {
-            // Hosts without working sandbox support must refuse, even after approval.
-            expect(JSON.stringify(output)).toMatch(/sandbox|bwrap/i);
-          }
+          expect(fs.readFileSync(session.workspaceFile, 'utf8').trim()).toBe('written');
         },
       );
       assertTransport(result);
@@ -418,11 +417,22 @@ describe('term2 acp real-tool permission round trips', () => {
             .toolCall.toolCallId;
         });
         expect(new Set(ids).size).toBe(2);
-        if (process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') {
-          expect(fs.readFileSync(session.workspaceFile, 'utf8')).toBe('written\n');
-        }
+        expect(fs.readFileSync(session.workspaceFile, 'utf8').trim()).toBe('written');
       },
-      { command: 'echo written >> probe.txt' },
+    );
+    assertTransport(result);
+  }, 60_000);
+
+  it('refuses explicit unsandboxed requests in ACP v2 without executing', async () => {
+    const result = await runAcpChild(
+      async () => ({ outcome: { outcome: 'selected', optionId: 'approve' } }),
+      async (session) => {
+        await toolTurn(session);
+        expect(session.permissionRequests).toHaveLength(1);
+        expect(fs.existsSync(path.join(session.workspace, 'probe.txt'))).toBe(false);
+        expect(JSON.stringify(session.updates)).toContain('Command not executed');
+      },
+      { toolName: 'shell', toolInput: { command: 'echo written > probe.txt', sandbox: 'unsandboxed' } },
     );
     assertTransport(result);
   }, 60_000);
@@ -432,11 +442,10 @@ describe('term2 acp real-tool permission round trips', () => {
       async () => ({ outcome: { outcome: 'selected', optionId: 'approve' } }),
       async (session) => {
         await toolTurn(session);
-        expect(session.permissionRequests).toHaveLength(1);
         // The target is outside both the workspace and isolated child scratch.
         expect(fs.existsSync(path.join(path.dirname(session.workspace), 'escaped.txt'))).toBe(false);
       },
-      { command: 'echo escaped > ../escaped.txt', sandbox: false },
+      { toolName: 'shell', command: 'echo escaped > ../escaped.txt', sandbox: false },
     );
     assertTransport(result);
   }, 60_000);

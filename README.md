@@ -140,7 +140,7 @@ pnpm --dir website build
 pnpm --dir website preview
 ```
 
-Run `term2-web` after installing the npm package, then open `http://127.0.0.1:3000`. It starts the bundled web app and its private gateway together, without pairing. Press `Ctrl+C` to stop both. Access is local, and you can grant a folder read-and-write or read-only access when you pick it (every file edit still asks for your approval). Pass `--read-only` to allow only read-only grants, and optionally `--workspace-root <dir>` to limit which folders can be picked. See [web setup](https://qduc.github.io/term2/remote/web-gateway/) for details.
+Run `term2-web` after installing the npm package, then open `http://127.0.0.1:3000`. It starts the bundled web app and its private gateway together, without pairing. Press `Ctrl+C` to stop both. Access is local, and you can grant a folder read-and-write or read-only access when you pick it. Approval mode controls which actions ask for approval; an approved outside-sandbox command can access files outside that folder. Pass `--read-only` to allow only read-only grants. See [web setup](https://qduc.github.io/term2/remote/web-gateway/) for details.
 
 ## License
 

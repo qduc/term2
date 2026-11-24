@@ -65,6 +65,8 @@ export type ToolSurfaceOptions = {
   readonly sandboxAvailable?: boolean;
   /** Require a distinct one-time grant for foreground shell escape. */
   readonly shellEscapeApproval?: boolean;
+  /** Keep the normal shell approval policy when escape grants are enabled. */
+  readonly preserveSandboxedShellApproval?: boolean;
   readonly discordSend?: import('../clients/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;
 };

@@ -24,6 +24,7 @@ on:
       - unlabeled
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -143,6 +144,13 @@ jobs:
             echo "$changed"
             exit 1
           fi
+      - name: Reject unapproved CI budget raises
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-ci-budget.mjs
       - uses: ./.github/actions/setup-tests
       - name: Typecheck production and check layer boundaries
         run: |
@@ -190,6 +198,17 @@ jobs:
             }
           }
           NODE
+      - name: Check out CI budget scripts
+        if: github.event_name == 'pull_request' && !inputs.ref
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts
+      - name: Enforce CI code-time budget
+        if: github.event_name == 'pull_request' && !inputs.ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-ci-runtime.mjs
 
   integration:
     needs: changes
@@ -212,9 +231,8 @@ jobs:
           TERM2_ACP_REQUIRE_SHELL_SUCCESS: '1'
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
 
-  # The benches ran after the integration cases on that runner, adding ~19s to
-  # the slowest job (2026-11-09). They read only a fresh build, not test output,
-  # so they run on their own runner with the integration job's tools.
+  # The benches and packed-tarball smoke check read only a fresh build, not test output.
+  # Running the tarball smoke check here reuses this runner's build and keeps e2e under 2m.
   bench:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
@@ -228,6 +246,7 @@ jobs:
         id: setup
         with:
           ripgrep: 'true'
+          web-client: 'true'
       - name: Build the CLI
         run: node scripts/build.mjs
       - name: Check the headless path
@@ -235,27 +254,7 @@ jobs:
       - name: Check the production message path budget
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node --unhandled-rejections=strict --import tsx bench/hops.mts
-
-  e2e:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref || github.sha }}
-      - uses: ./.github/actions/setup-tests
-        id: setup
-        with:
-          lane: e2e
-          web-client: 'true'
-      - name: Run E2E process cases
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
-      - name: Check golden parity
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: node parity/run.mjs check --cli dist/cli.js
-      # What users install is the tarball, not the checkout: pack the build this job just tested,
+      # What users install is the tarball, not the checkout: pack the build this job just created,
       # install it outside the repository, launch the web UI and replay a recorded provider turn.
       # publish.yml runs the same two commands before it publishes.
       - name: Restore Next.js build cache for packed web UI
@@ -281,6 +280,25 @@ jobs:
         run: |
           pnpm pack --pack-destination "$RUNNER_TEMP/term2-pack"
           pnpm release:smoke --tgz "$RUNNER_TEMP"/term2-pack/*.tgz
+
+  e2e:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: ./.github/actions/setup-tests
+        id: setup
+        with:
+          lane: e2e
+      - name: Run E2E process cases
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
+      - name: Check golden parity
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node parity/run.mjs check --cli dist/cli.js
 
   provider-black-box:
     needs: changes

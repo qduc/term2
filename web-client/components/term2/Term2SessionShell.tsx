@@ -538,7 +538,10 @@ export function Term2SessionShell({
     void refreshWorkspaces().catch(() => setLoadError('Could not refresh saved folders.'));
   };
 
-  /** After a saved folder's access changes or it is removed, its open chat may no longer open: leave it. */
+  /**
+   * After a saved folder's access changes, its chats keep working (the gateway restarts them
+   * with the narrower access). After removal they no longer open, so leave an open one.
+   */
   const onSavedFolderChanged = async (change: SavedFolderChange) => {
     const workspaceId = change.kind === 'removed' ? change.workspaceId : change.workspace.workspaceId;
     if (change.kind === 'access') {
@@ -551,7 +554,7 @@ export function Term2SessionShell({
     const openChatWorkspace = sessionId
       ? (session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? session.selectedWorkspaceId)
       : null;
-    if (openChatWorkspace === workspaceId) {
+    if (change.kind === 'removed' && openChatWorkspace === workspaceId) {
       const params = new URLSearchParams(window.location.search);
       params.delete('agentSession');
       window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);

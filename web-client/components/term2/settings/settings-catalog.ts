@@ -1,10 +1,13 @@
 import type { SettingsProjection } from '../../../lib/term2/types';
+import { CONTEXT_ITEMS, MODEL_ITEMS, PARITY_DEFAULTS, PERMISSION_ITEMS, TOOL_ITEMS } from './settings-catalog-parity';
 
 /** The settings page's sections, in menu order. The id is the `?settings=` URL value. */
 export const SETTINGS_SECTIONS = [
   { id: 'providers', label: 'Providers' },
+  { id: 'models', label: 'Models' },
   { id: 'safety', label: 'Approvals and safety' },
   { id: 'conversation', label: 'Conversation' },
+  { id: 'tools', label: 'Tools' },
   { id: 'web-search', label: 'Web search' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'advanced', label: 'Advanced' },
@@ -41,12 +44,26 @@ export interface SettingItem {
   section: SettingsSectionId;
   group?: string;
   source: 'server' | 'local' | 'credential' | 'info';
-  kind: 'boolean' | 'number' | 'select' | 'text' | 'credential' | 'compaction' | 'duration-limit' | 'info';
+  kind:
+    | 'boolean'
+    | 'number'
+    | 'select'
+    | 'text'
+    | 'credential'
+    | 'compaction'
+    | 'duration-limit'
+    | 'info'
+    | 'model-pool'
+    | 'favorites'
+    | 'nicknames'
+    | 'revoke-list';
   label: string;
   description: string;
   /** Everyday words search also matches ("dark" finds the theme). */
   keywords?: string[];
   options?: SettingOption[];
+  /** Shown while the value is empty: what applies instead (a text field's or select's placeholder). */
+  placeholder?: string;
   /** Unit shown after a number, in display units. */
   unit?: string;
   /** Display value = stored value × factor (for example ms → s is 0.001). Writes divide it back. */
@@ -86,12 +103,18 @@ export const SERVER_DEFAULTS: Record<string, unknown> = {
   'webSearch.searxng.baseUrl': undefined,
   'webSearch.firecrawl.baseUrl': undefined,
   'logging.logLevel': 'info',
+  ...PARITY_DEFAULTS,
 };
 
 export function differsFromDefault(key: string, value: unknown): boolean {
   if (!(key in SERVER_DEFAULTS)) return false;
   const fallback = SERVER_DEFAULTS[key];
-  const empty = (candidate: unknown) => candidate === undefined || candidate === null || candidate === '';
+  const empty = (candidate: unknown) =>
+    candidate === undefined ||
+    candidate === null ||
+    candidate === '' ||
+    (Array.isArray(candidate) && candidate.length === 0) ||
+    (typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length === 0);
   if (empty(fallback)) return !empty(value);
   return JSON.stringify(value) !== JSON.stringify(fallback);
 }
@@ -109,7 +132,6 @@ export const NEVER_SHOWN_KEYS = new Set([
   'agent.temperature',
   'agent.modelSelection',
   'agent.reasoningEffort',
-  'agent.favoriteModels',
 ]);
 
 const SEARCH_PROVIDERS = ['tavily', 'exa', 'firecrawl', 'searxng'];
@@ -168,9 +190,11 @@ export const SETTING_ITEMS: SettingItem[] = [
     source: 'info',
     kind: 'info',
     label: 'Sandbox and network',
-    description: 'What the local gateway enforces for shell commands. Set when term2 starts.',
+    description: 'What applies to shell commands right now.',
     keywords: ['sandbox', 'isolation', 'isolated', 'network', 'internet access', 'confined', 'folder access'],
   },
+
+  ...PERMISSION_ITEMS,
 
   // Conversation
   {
@@ -197,6 +221,10 @@ export const SETTING_ITEMS: SettingItem[] = [
     max: 95,
     step: '5',
   },
+
+  ...CONTEXT_ITEMS,
+  ...TOOL_ITEMS,
+  ...MODEL_ITEMS,
 
   // Web search
   {
@@ -499,8 +527,10 @@ export const SECTION_KEYWORDS: Record<SettingsSectionId, string[]> = {
     'openai', 'anthropic', 'claude', 'gemini', 'google', 'openrouter', 'ollama', 'grok', 'xai', 'codex',
     'llama', 'local model', 'server', 'base url',
   ],
-  safety: ['approval', 'permissions', 'sandbox', 'safety', 'security'],
-  conversation: ['memory', 'context', 'compaction', 'chat'],
+  models: ['model', 'models', 'tier', 'helper', 'subagent', 'mentor', 'verifier', 'favorite', 'nickname'],
+  safety: ['approval', 'permissions', 'sandbox', 'safety', 'security', 'docker', 'network'],
+  conversation: ['memory', 'context', 'compaction', 'chat', 'rollover'],
+  tools: ['tools', 'shell', 'files', 'subagents', 'skills', 'background', 'workflow'],
   'web-search': ['search', 'internet', 'browse', 'web'],
   appearance: ['theme', 'dark', 'light', 'display', 'look'],
   advanced: ['limits', 'timeout', 'logs', 'debug'],

@@ -32,6 +32,9 @@ export type {
 export { DirectGlobalConfiguration } from './host-config-settings.js';
 export type { SettingsProjection } from './host-config-settings.js';
 import { createSettingsService } from './settings.js';
+import { loadSettingsFromFile } from '../config/settings/file/settings-persistence.js';
+import { SettingsSchema } from '../config/settings/settings-schema.js';
+import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
 import { createDirectAccountPorts } from './cli-account-commands.js';
 import type { DirectSettingsBackend } from './host-config-settings.js';
 
@@ -47,6 +50,22 @@ export function createDirectProductPorts(options: { settingsDir?: string } = {})
       setPersistent: (key, value) => service.setPersistentDynamic(key, value),
       setPersistentTransaction: (changes) => service.setPersistentDynamicTransaction(changes),
       reset: (key) => service.reset(key),
+      // Another process (the TUI) may have changed the file since this service loaded it.
+      getStored: (key) => {
+        const loaded = loadSettingsFromFile({
+          settingsDir: options.settingsDir ?? resolveSettingsDirectory(),
+          schema: SettingsSchema,
+          disableLogging: true,
+        });
+        if (loaded.hadErrors || loaded.versionRefusal) return undefined;
+        return key
+          .split('.')
+          .reduce<unknown>(
+            (value, part) =>
+              value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined,
+            loaded.validated,
+          );
+      },
     },
     ...createDirectAccountPorts(service),
   };

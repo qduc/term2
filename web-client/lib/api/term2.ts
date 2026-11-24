@@ -324,10 +324,31 @@ function validatePricing(value: unknown): NonNullable<ModelSummary['pricing']> {
   });
   return { ...validatePrices(input), ...(tiers && tiers.length > 0 ? { tiers } : {}) };
 }
+/** Mirrors the gateway's web settings policy: scalars, string lists, model pools, string maps. */
 function safeValue(value: unknown): boolean {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
-  return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length <= 2_048);
+  if (Array.isArray(value))
+    return (
+      value.length <= 256 &&
+      (value.every((item) => typeof item === 'string' && item.length <= 2_048) || value.every(poolEntryValue))
+    );
+  if (!value || typeof value !== 'object') return false;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return (
+    entries.length <= 256 &&
+    entries.every(([key, item]) => key.length <= 256 && typeof item === 'string' && item.length <= 1_024)
+  );
+}
+function poolEntryValue(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const { model, provider, reasoningEffort, ...rest } = value as Record<string, unknown>;
+  return (
+    Object.keys(rest).length === 0 &&
+    typeof model === 'string' && model.trim().length > 0 &&
+    typeof provider === 'string' && provider.trim().length > 0 &&
+    (reasoningEffort === undefined || typeof reasoningEffort === 'string')
+  );
 }
 function modelSelectionValue(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;

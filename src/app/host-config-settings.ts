@@ -4,73 +4,7 @@ import { catalogDetails } from '../model/providers/model-catalog/catalog-details
 import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { DirectHostConfigError } from './host-config-error.js';
 import { CREDENTIAL_SETTINGS } from './credential-settings.js';
-
-const SAFE_KEYS = [
-  'agent.modelSelection',
-  'agent.reasoningEffort',
-  'agent.temperature',
-  'agent.maxTurns',
-  'agent.maxOutputTokens',
-  'agent.maxStreamOutputChars',
-  'agent.maxModelRequestDurationMs',
-  'agent.retryAttempts',
-  'agent.maxParallelToolCalls',
-  'agent.contextCompaction.enabled',
-  'agent.contextCompaction.threshold',
-  'agent.favoriteModels',
-  'app.activeProfileId',
-  'app.mentorMode',
-  'app.liteMode',
-  'app.planMode',
-  'app.orchestratorMode',
-  'webSearch.provider',
-  'webSearch.firecrawl.baseUrl',
-  'webSearch.searxng.baseUrl',
-  'memory.enabled',
-  'logging.logLevel',
-  'shell.autoApproveMode',
-  'shell.showReview',
-  'shell.timeout',
-  'shell.maxOutputLines',
-  'tools.maxOutputChars',
-] as const;
-
-const PERSISTENT = new Set<string>([
-  'agent.modelSelection',
-  'agent.reasoningEffort',
-  'agent.temperature',
-  'agent.maxTurns',
-  'agent.maxOutputTokens',
-  'agent.maxStreamOutputChars',
-  'agent.maxModelRequestDurationMs',
-  'agent.retryAttempts',
-  'agent.maxParallelToolCalls',
-  'agent.contextCompaction.enabled',
-  'agent.contextCompaction.threshold',
-  'agent.favoriteModels',
-  'app.liteMode',
-  'webSearch.provider',
-  'webSearch.firecrawl.baseUrl',
-  'webSearch.searxng.baseUrl',
-  'memory.enabled',
-  'logging.logLevel',
-  'shell.autoApproveMode',
-  'shell.showReview',
-  'shell.timeout',
-  'shell.maxOutputLines',
-  'tools.maxOutputChars',
-]);
-const SESSION_SCOPED = new Set([
-  'agent.modelSelection',
-  'agent.reasoningEffort',
-  'app.activeProfileId',
-  'app.mentorMode',
-  'app.liteMode',
-  'app.planMode',
-  'app.orchestratorMode',
-  'shell.autoApproveMode',
-  'shell.showReview',
-]);
+import { WEB_SETTINGS, onlyRevokes, webSettingValue } from '../config/settings/web-settings-policy.js';
 
 export type CredentialSource = 'setting' | 'stored' | 'environment' | 'token-file' | 'local' | 'external' | 'missing';
 export type SecretFreeCredential = {
@@ -88,6 +22,8 @@ export type DirectSettingsBackend = {
   setPersistent(key: string, value: unknown): { status?: string } | undefined;
   setPersistentTransaction(changes: readonly { key: string; value: unknown }[]): { status?: string } | undefined;
   reset(key: string): { status?: string } | undefined;
+  /** The value in the settings file right now; undefined when absent or unreadable. */
+  getStored?(key: string): unknown;
 };
 export type CredentialDescription = { configured: boolean; required: boolean; source: CredentialSource };
 export type DirectCredentialBackend = { describe(providerId: string): CredentialDescription };
@@ -180,12 +116,20 @@ export class DirectGlobalConfiguration {
     }
     const finalByKey = new Map<string, unknown>();
     for (const change of changes) {
-      if (!PERSISTENT.has(change.key) || !(SAFE_KEYS as readonly string[]).includes(change.key)) {
+      const rule = Object.hasOwn(WEB_SETTINGS, change.key) ? WEB_SETTINGS[change.key] : undefined;
+      if (!rule || rule.readOnly) throw new DirectHostConfigError('settings_not_allowed', 'config');
+      if (webSettingValue(change.value) === undefined) throw new DirectHostConfigError('validation_error', 'config');
+      const actualKey = rule.storedAs ?? change.key;
+      // A revoke-only grant list can lose entries from the web, never gain one or be reset.
+      // Check against the file too: this copy may still hold a grant revoked elsewhere since.
+      if (
+        rule.revokeOnly &&
+        !(
+          onlyRevokes(this.settings.get(actualKey), change.value) &&
+          (!this.settings.getStored || onlyRevokes(this.settings.getStored(actualKey) ?? [], change.value))
+        )
+      )
         throw new DirectHostConfigError('settings_not_allowed', 'config');
-      }
-      if (!isSafeValue(change.value)) throw new DirectHostConfigError('validation_error', 'config');
-      const actualKey =
-        change.key === 'agent.contextCompaction.threshold' ? 'agent.contextCompaction.compactThreshold' : change.key;
       finalByKey.set(actualKey, change.value);
     }
     const toPersist: { key: string; value: unknown }[] = [];
@@ -330,16 +274,16 @@ export class DirectGlobalConfiguration {
 
   #projection(): SettingsProjection {
     const safeDefaults: SettingsProjection['settings']['safeDefaults'] = {};
-    for (const key of SAFE_KEYS) {
-      const actual = key === 'agent.contextCompaction.threshold' ? 'agent.contextCompaction.compactThreshold' : key;
-      const safe = safeValue(this.settings.get(actual));
+    for (const [key, rule] of Object.entries(WEB_SETTINGS)) {
+      const actual = rule.storedAs ?? key;
+      const safe = webSettingValue(this.settings.get(actual));
       const rawSource = this.settings.getSource(actual) ?? 'default';
       safeDefaults[key] = {
         ...(safe === undefined ? {} : { value: safe }),
         source: rawSource === 'env' ? 'environment' : rawSource,
-        scope: SESSION_SCOPED.has(key) ? 'session' : 'global',
-        confirmRequired: key.startsWith('shell.') || key === 'agent.maxParallelToolCalls',
-        persistable: PERSISTENT.has(key),
+        scope: rule.session ? 'session' : 'global',
+        confirmRequired: rule.confirm === true,
+        persistable: !rule.readOnly,
       };
     }
     const credentials: Record<string, SecretFreeCredential> = {};
@@ -427,48 +371,6 @@ export class DirectGlobalConfiguration {
       };
     });
   }
-}
-
-function isSafeValue(value: unknown): boolean {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean' ||
-    (Array.isArray(value) && value.every((item) => typeof item === 'string'))
-  ) {
-    return true;
-  }
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    return (
-      Object.keys(record).length === 2 &&
-      typeof record.model === 'string' &&
-      record.model.trim().length > 0 &&
-      typeof record.provider === 'string' &&
-      record.provider.trim().length > 0
-    );
-  }
-  return false;
-}
-
-function safeValue(value: unknown): SettingsProjection['settings']['safeDefaults'][string]['value'] {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    if (
-      typeof record.model === 'string' &&
-      record.model.trim() &&
-      typeof record.provider === 'string' &&
-      record.provider.trim()
-    ) {
-      return { model: record.model.trim(), provider: record.provider.trim() };
-    }
-    return undefined;
-  }
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return [...value];
-  return undefined;
 }
 
 /** Detail only. The refusal sentence stays out of this projection. */

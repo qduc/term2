@@ -42,6 +42,9 @@ export function Term2Entry({ homeFolder, allowWrite = false }: { homeFolder?: st
   const requested = searchParams.get('term2') === '1' || !!searchParams.get('agentSession');
   const sessionId = searchParams.get('agentSession');
   const hasLegacyConflict = !!sessionId && !!searchParams.get('c');
+  // `?settings=<section>&provider=<id>` opens the settings page over the chat; Back and refresh keep it.
+  const settingsSection = searchParams.get('settings');
+  const settingsProvider = searchParams.get('provider');
 
   const handleExit = () => {
     exitAgentMode(pathname, searchParams, router);
@@ -76,6 +79,8 @@ export function Term2Entry({ homeFolder, allowWrite = false }: { homeFolder?: st
         authUserId={user?.id ?? null}
         homeFolder={homeFolder}
         allowWrite={allowWrite}
+        settingsSection={settingsSection}
+        settingsProvider={settingsProvider}
       />
     );
   return (
@@ -84,6 +89,8 @@ export function Term2Entry({ homeFolder, allowWrite = false }: { homeFolder?: st
       authUserId={user?.id ?? null}
       homeFolder={homeFolder}
       allowWrite={allowWrite}
+      settingsSection={settingsSection}
+      settingsProvider={settingsProvider}
     />
   );
 }

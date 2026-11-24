@@ -32,6 +32,9 @@ export function argumentStreamEvent(sessionId: string, event: DirectArgumentStre
         payload: {
           agentId: event.taskId,
           branchId: event.branchId,
+          // The branch's own producing turn, as accepted branch events carry it; the v2
+          // encoder refuses a branch change without it and that ends the client's stream.
+          turnId: event.turnId,
           parentTurnId: event.parentTurnId,
           rootTurnId: event.rootTurnId,
           event: child,

@@ -2,20 +2,64 @@
 import { useId, useState } from 'react';
 import { ChevronRight, MessageCircleQuestion, ShieldAlert, TriangleAlert } from 'lucide-react';
 import type { InteractionResolveRequest, PendingInteraction, Term2SubagentIdentity } from '../../lib/term2/types';
+import { describeCommand } from './Term2CommandCard';
 import { ToolInputPreview } from './Term2ToolContent';
 
-const VARIANT_CONTEXT: Record<PendingInteraction['variant'], string> = {
-  ordinary_tool: 'Tool approval requested',
-  folder_read: 'Folder access requested',
-  outside_workspace_edit: 'Outside-workspace edit requested',
-  denied_read: 'Sandbox denied read',
-  docker_host_control: 'Docker host control requested',
-  sandbox_network_access: 'Sandbox network access requested',
-  post_execute: 'Post-execute approval',
-  ask_user: 'Question requested',
-  max_turns: 'Turn-limit check-in',
-  run_budget: 'Run-budget check-in',
+const VARIANT_TITLE: Partial<Record<PendingInteraction['variant'], string>> = {
+  folder_read: 'Allow reading this folder?',
+  outside_workspace_edit: 'Allow an edit outside this folder?',
+  denied_read: 'Allow reading a protected file?',
+  docker_host_control: 'Allow control of Docker on this computer?',
+  sandbox_network_access: 'Allow internet access?',
+  post_execute: 'Approve what this command did?',
+  max_turns: 'Keep going? It reached its turn limit',
+  run_budget: 'Keep going? It reached its run budget',
 };
+
+/** Imperative verbs for an approval question ("Edit src/app.ts?"); describeCommand has the target. */
+const TOOL_ASK: Record<string, string> = {
+  read_file: 'Read',
+  view_file: 'Read',
+  grep: 'Search',
+  glob: 'List',
+  find_files: 'List',
+  search_replace: 'Edit',
+  apply_patch: 'Apply this patch to',
+  create_file: 'Create',
+  web_search: 'Search the web for',
+  web_fetch: 'Fetch',
+};
+
+function parsedArgs(text: string): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(text);
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The card's heading: what is being asked, as a plain question, not the tool's internal name. */
+function approvalTitle(interaction: PendingInteraction): string {
+  const { toolName, argumentsText } = interaction.descriptor;
+  if (interaction.askUser) return 'A question for you';
+  if (toolName === 'sandbox_network_access') {
+    const { host, port } = parsedArgs(argumentsText);
+    if (typeof host === 'string' && host) {
+      const shownPort = typeof port === 'number' && port !== 443 && port !== 80 ? `:${port}` : '';
+      return `Allow internet access to ${host}${shownPort}?`;
+    }
+  }
+  const byVariant = VARIANT_TITLE[interaction.variant];
+  if (byVariant) return byVariant;
+  if (toolName === 'shell') return 'Run this command?';
+  const verb = TOOL_ASK[toolName];
+  if (verb) {
+    const { target } = describeCommand({ callId: '', toolName, status: 'pending', argumentsText });
+    return target ? `${verb} ${target}?` : `${verb}?`;
+  }
+  return `Allow ${toolName.replace(/_/g, ' ')}?`;
+}
 
 export function Term2InteractionPanel({
   interaction,
@@ -97,25 +141,19 @@ export function Term2InteractionPanel({
       aria-labelledby="term2-interaction-heading"
       className="t2-enter overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-amber-500/20 dark:border-white/[0.08] dark:bg-zinc-900 dark:shadow-none"
     >
-      <div className="flex gap-3 px-4 pt-4">
+      <div className="flex items-center gap-3 px-4 pt-4">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
           <HeaderIcon aria-hidden className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-            Action required{subagent ? ` · Subagent: ${subagent.role}` : ''}
-          </p>
-          <h2 id="term2-interaction-heading" className="mt-0.5 font-medium text-zinc-900 dark:text-zinc-100">
-            {VARIANT_CONTEXT[interaction.variant]}
+          <h2 id="term2-interaction-heading" className="break-words font-medium text-zinc-900 dark:text-zinc-100">
+            {approvalTitle(interaction)}
           </h2>
-          <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-            {display?.warning || (
-              <>
-                <span className="font-mono text-[13px]">{interaction.descriptor.toolName}</span>
-                {interaction.descriptor.agentName ? ` · requested by ${interaction.descriptor.agentName}` : ''}
-              </>
-            )}
-          </p>
+          {(display?.warning || subagent) && (
+            <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+              {display?.warning || `Asked by the ${subagent!.role} subagent`}
+            </p>
+          )}
           {shellSandboxNotice && interaction.descriptor.toolName === 'shell' && (
             <p
               role="alert"
@@ -168,8 +206,11 @@ export function Term2InteractionPanel({
             <details className="group/args">
               <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
                 <ChevronRight aria-hidden className="h-3 w-3 transition-transform group-open/args:rotate-90" />
-                Raw arguments
+                Details
               </summary>
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Tool <span className="font-mono">{interaction.descriptor.toolName}</span>
+              </p>
               <pre
                 aria-label="Interaction arguments"
                 className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-zinc-100/80 px-3 py-2.5 font-mono text-[12px] leading-5 dark:bg-white/[0.04]"
@@ -179,15 +220,21 @@ export function Term2InteractionPanel({
             </details>
           ) : (
             <div className="space-y-2" aria-label="Interaction arguments">
-              <ToolInputPreview
-                toolName={interaction.descriptor.toolName}
-                argumentsText={interaction.descriptor.argumentsText}
-              />
+              {/* The heading already names the host; its table would repeat it. */}
+              {interaction.descriptor.toolName !== 'sandbox_network_access' && (
+                <ToolInputPreview
+                  toolName={interaction.descriptor.toolName}
+                  argumentsText={interaction.descriptor.argumentsText}
+                />
+              )}
               <details className="group/args">
                 <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
                   <ChevronRight aria-hidden className="h-3 w-3 transition-transform group-open/args:rotate-90" />
-                  Raw arguments
+                  Details
                 </summary>
+                <p className="mt-1.5 text-xs text-zinc-500">
+                  Tool <span className="font-mono">{interaction.descriptor.toolName}</span>
+                </p>
                 <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-zinc-100/80 px-3 py-2.5 font-mono text-[12px] leading-5 dark:bg-white/[0.04]">
                   {interaction.descriptor.argumentsText}
                 </pre>

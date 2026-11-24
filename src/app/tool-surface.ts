@@ -68,6 +68,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   skillsService?.discoverSkills();
   const policies = new ToolApprovalPolicyRegistry();
   const readOnly = remote?.sourcePolicy.readOnly ?? workspace.access === 'read';
+  // A read session's shell runs only inside the local sandbox, whatever sandbox.enabled says. Without one
+  // (an SSH folder, or a sandbox that was not known to be available when the session started) every
+  // shell call would be refused, so the model is not offered shell at all (shell.ts keeps the guard).
+  const shellWithheld = readOnly && (remote !== undefined || options.sandboxAvailable !== true);
   const sessionAccess = new SessionAccessState(settings, {
     allowEdit: remote?.sourcePolicy.allowEdit ?? !readOnly,
     isRemote: () => executionContext.isRemote(),
@@ -111,6 +115,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     executionContext,
     skillsService,
     readOnly,
+    shellWithheld,
     graph: () => sourceGraph,
     toolContext: sourceToolContext,
     createExecutionContext: (root) => new LocalExecutionContext(root),
@@ -153,6 +158,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     mcpToolSource: mcp?.source,
     sessionAccess,
     readOnly,
+    readSession: readOnly,
+    shellWithheld,
     shellChildRegistry: shellChildren,
     skillsService,
     sessionBrowser,
@@ -403,6 +410,20 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
           };
     },
   };
+}
+
+/**
+ * Whether a session's shell can run: probed once when a local read session's runtime is built, and kept
+ * for that session (`ToolSurfaceOptions.sandboxAvailable`). Other sessions do not pay for the probe.
+ * A failed probe counts as unavailable.
+ */
+export async function probeReadSessionSandbox(workspace: Workspace): Promise<boolean | undefined> {
+  if (workspace.access !== 'read' || workspace.target !== 'local') return undefined;
+  try {
+    return (await getDefaultShellSandboxRunner().availability()).type === 'available';
+  } catch {
+    return false;
+  }
 }
 
 /** Snapshot authority before building tools; an SSH adapter must match a current grant exactly. */

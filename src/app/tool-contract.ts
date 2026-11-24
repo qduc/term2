@@ -58,6 +58,11 @@ export type ToolSurfaceOptions = {
    * Never enables source memory tools; it only keeps the source prompt truthful. */
   readonly promptMemoryEnabled?: boolean;
   readonly allowUnsandboxed?: boolean;
+  /**
+   * The local shell sandbox was probed available when this session started. Read sessions only:
+   * without `true` a read session offers no shell (fail closed). Rebuilds reuse the session's value.
+   */
+  readonly sandboxAvailable?: boolean;
   /** Require a distinct one-time grant for foreground shell escape. */
   readonly shellEscapeApproval?: boolean;
   readonly discordSend?: import('../clients/discord/discord-outbound.js').DiscordSend;

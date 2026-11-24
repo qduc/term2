@@ -58,6 +58,8 @@ export type DirectSubagentToolsOptions = {
   readonly executionContext: ExecutionContext;
   readonly skillsService?: SkillsService;
   readonly readOnly: boolean;
+  /** A read session whose sandbox cannot run: no child is offered shell (app/tool-surface.ts). */
+  readonly shellWithheld?: boolean;
   readonly graph: () => readonly AnyToolDefinition[];
   readonly targetInvocation?: InvocationScope;
   readonly toolContext: (invocation: unknown) => ToolContext;
@@ -198,6 +200,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     // Legacy launches a writer without a worktree (in the workspace) and in a read-only session (its factory
     // then offers no writes); plan mode is refused earlier by the plan-mode interceptor.
     if (definition.canWrite && planMode) throw new Error('This session cannot delegate writes');
+    if (options.shellWithheld && definition.canRunShell) definition = { ...definition, canRunShell: false };
     // Children retain their admission root even if the parent later changes its lease.
     let executionContext = options.executionContext.isRemote()
       ? options.executionContext
@@ -242,6 +245,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       toolPolicy: policy,
       skillsService,
       readOnly: options.readOnly || planMode,
+      readSession: options.readOnly,
       ...(options.sessionBrowser ? { sessionBrowser: options.sessionBrowser } : {}),
     });
     // Reviewer remains evidence-only: its sole delegated path is another

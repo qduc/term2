@@ -14,7 +14,7 @@ import type { DirectRolloverPreparer } from '../session/session-rotation.js';
 import type { DirectVerificationOperations } from '../session/goal-verification.js';
 import { DEFAULT_BUDGETS } from '../session/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/store.js';
-import { createToolSurface } from './tool-surface.js';
+import { createToolSurface, probeReadSessionSandbox } from './tool-surface.js';
 import { sessionApprovalReview, workspaceSnapshotPort } from './lib/approval-model.js';
 import type { DirectHookRuntime } from './application-hooks.js';
 import {
@@ -87,7 +87,7 @@ export type DirectRuntimeRecord = {
 };
 
 export type DirectRuntimes = {
-  create(context: DirectRuntimeContext): DirectConversationRuntime;
+  create(context: DirectRuntimeContext): Promise<DirectConversationRuntime>;
   launching: ReturnType<typeof createLaunchConfigurationScope>['run'];
   withApprovalMode: ReturnType<typeof createLaunchConfigurationScope>['withApprovalMode'];
   /** Throws unless this application lets a session move from `previous` to `next`. */
@@ -140,7 +140,7 @@ export function createDirectRuntimes(
     authorizeModel,
     launching: launchConfiguration.run,
     withApprovalMode: launchConfiguration.withApprovalMode,
-    create(context) {
+    async create(context) {
       // Metadata records a path, so the store resolves a foreign root narrower
       // rather than refusing it. Running it would act outside this mode's admission.
       if (context.metadata && !options.canRun(context.workspace)) {
@@ -150,6 +150,8 @@ export function createDirectRuntimes(
       if (context.binding?.client === 'ssh' && context.binding.id !== options.sessionBinding?.id) {
         throw new Error('resume conversation belongs to a different SSH workspace');
       }
+      // Before anything is registered for this session: the probe is the only wait here.
+      const sandboxAvailable = await probeReadSessionSandbox(context.workspace);
       const settings = createSessionSettings(options, context);
       const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
       const reasoning = createForegroundReasoningPublisher(context.id);
@@ -166,7 +168,11 @@ export function createDirectRuntimes(
         if (key === 'tools.maxOutputChars') trimConfig.maxCharacters = settings.get('tools.maxOutputChars');
         if (key === 'shell.maxOutputLines') trimConfig.maxLines = settings.get('shell.maxOutputLines');
       });
-      const suppliedSurfaceOptions = { ...options.surface(context.id), trimConfig: () => trimConfig };
+      const suppliedSurfaceOptions = {
+        ...options.surface(context.id),
+        trimConfig: () => trimConfig,
+        sandboxAvailable,
+      };
       const surfaceOptions = {
         ...suppliedSurfaceOptions,
         ...(!suppliedSurfaceOptions.remote

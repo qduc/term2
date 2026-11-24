@@ -280,6 +280,16 @@ snapshot rather than guessed.
 MCP capture in `mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.
 
+A read session's shell runs only inside the local sandbox (`readSession` on the
+shell tool), whatever `sandbox.enabled` says. `createDirectRuntimes` probes
+availability once per local read session (`probeReadSessionSandbox`) before
+building it, and passes the answer as `ToolSurfaceOptions.sandboxAvailable`;
+configuration rebuilds reuse it. Without `true` (unavailable, probe failed, SSH)
+the surface withholds shell from the root and its child agents, keeps the
+dedicated search tools, and the prompt carries
+a one-line notice (`buildPromptSpec`, `shellWithheld`). The shell guard stays as the backstop
+for a sandbox that stops working mid-session.
+
 `web_search` is offered only when the configured search provider has its key or
 base URL (`isWebSearchAvailable`); `web_fetch` needs no configuration and is always
 offered with the web capability. Availability is evaluated when the tool surface is

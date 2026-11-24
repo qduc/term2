@@ -8,6 +8,10 @@ type PromptConstructorBaseOptions = {
   sandboxEnabled?: boolean;
   executionContext?: ExecutionContext;
   fileReadEnabled?: boolean;
+  /** The profile has shell, but this read session withholds it because its sandbox cannot run. */
+  shellWithheld?: boolean;
+  /** False in a read session: a sandboxed shell may write only $TMPDIR. */
+  workspaceWritable?: boolean;
 };
 
 export type PromptConstructorOptions = PromptConstructorBaseOptions &
@@ -16,6 +20,10 @@ export type PromptConstructorOptions = PromptConstructorBaseOptions &
     | { runCodeEnabled?: false; editorSurface?: never }
     | { runCodeEnabled: boolean; editorSurface: ScriptEditorSurface }
   );
+
+/** A read session without a working sandbox offers no shell (app/tool-surface.ts). */
+const READ_ONLY_SHELL_UNAVAILABLE_INSTRUCTION =
+  'Shell is unavailable in this read-only folder. Use the read, search, and list tools instead.';
 
 export type PromptSpec = {
   basePromptContent: string;
@@ -30,7 +38,21 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     runCodeEnabled = false,
     editorSurface = 'none',
     fileReadEnabled = false,
+    shellWithheld = false,
+    workspaceWritable = true,
   } = options;
+  const shellOffered = runCodeEnabled && !shellWithheld;
+  const inlineSections: string[] = [];
+  if (sandboxEnabled && shellOffered && !executionContext?.isRemote()) {
+    inlineSections.push(
+      workspaceWritable
+        ? 'Sandboxed shell writes are allowed only inside the workspace and $TMPDIR. Use $TMPDIR for scratch files.'
+        : 'Sandboxed shell writes are allowed only inside $TMPDIR; the workspace is read-only. Use $TMPDIR for scratch files.',
+    );
+  }
+  if (shellWithheld) {
+    inlineSections.push(READ_ONLY_SHELL_UNAVAILABLE_INSTRUCTION);
+  }
   // Bare is the only selectable built-in profile; it owns its prompt and only
   // concise capability guidance is added.
   if (profile.instructions.identity.kind !== 'markdown') {
@@ -39,12 +61,9 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   return {
     basePromptContent: renderBareToolGuidance(profile.instructions.identity.content, {
       fileReadEnabled,
-      shellEnabled: runCodeEnabled,
+      shellEnabled: shellOffered,
       editorSurface,
     }),
-    inlineSections:
-      sandboxEnabled && runCodeEnabled && !executionContext?.isRemote()
-        ? ['Sandboxed shell writes are allowed only inside the workspace and $TMPDIR. Use $TMPDIR for scratch files.']
-        : [],
+    inlineSections,
   };
 }

@@ -1017,6 +1017,7 @@ export class SubagentToolFactory {
   #memoryCapabilities: MemoryCapabilityBuilder;
   #nestedCompatibility?: NestedToolCompatibilityState;
   #readOnly: boolean;
+  #readSession: boolean;
   #shellSandboxRunner?: ShellSandboxRunner;
   #scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   #runExplorer?: ExplorerRunner;
@@ -1031,6 +1032,8 @@ export class SubagentToolFactory {
     skillsService?: SkillsService;
     nestedCompatibility?: NestedToolCompatibilityState;
     readOnly?: boolean;
+    /** The session's workspace access is read (not plan mode): shell runs only sandboxed. */
+    readSession?: boolean;
     shellSandboxRunner?: ShellSandboxRunner;
     scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     /** Prior-session transcript browser; provisioned to the librarian only. */
@@ -1044,6 +1047,7 @@ export class SubagentToolFactory {
     this.#skillsService = deps.skillsService;
     this.#nestedCompatibility = deps.nestedCompatibility;
     this.#readOnly = deps.readOnly ?? false;
+    this.#readSession = deps.readSession ?? false;
     this.#shellSandboxRunner = deps.scopedSandbox?.runner ?? deps.shellSandboxRunner;
     this.#scopedSandbox = deps.scopedSandbox;
     this.#sessionBrowser = deps.sessionBrowser;
@@ -1196,6 +1200,7 @@ export class SubagentToolFactory {
           executionContext,
           searchViaShell,
           readOnly: this.#readOnly,
+          readSession: this.#readSession,
           nestedCompatibility: this.#nestedCompatibility,
           ...(this.#shellSandboxRunner ? { shellSandboxRunner: this.#shellSandboxRunner } : {}),
           ...(this.#scopedSandbox

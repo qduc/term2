@@ -35,13 +35,19 @@ function resolveWorkerFile(): string {
 
 function createDefaultWorker(workerFile: string): Worker {
   const bootstrap = `
-import('node:module').then(({ createRequire }) => {
+import('node:module').then(async ({ createRequire }) => {
   const req = createRequire(import.meta.url);
   const { workerData } = req('node:worker_threads');
-  // Resolve the loader from the installed app, not the user's project cwd.
-  const { createJiti } = createRequire(workerData.workerFile)('jiti');
-  const jiti = createJiti(workerData.workerFile);
-  const mod = jiti(workerData.workerFile);
+  const { pathToFileURL } = req('node:url');
+  let mod;
+  if (workerData.workerFile.endsWith('.js')) {
+    mod = await import(pathToFileURL(workerData.workerFile).href);
+  } else {
+    // Resolve the loader from the installed app, not the user's project cwd.
+    const { createJiti } = createRequire(workerData.workerFile)('jiti');
+    const jiti = createJiti(workerData.workerFile);
+    mod = jiti(workerData.workerFile);
+  }
   mod.runSessionIndexWorker();
 });
 `;

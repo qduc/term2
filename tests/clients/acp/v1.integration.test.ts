@@ -234,7 +234,7 @@ async function fixture(
   }
 }
 
-describe('ACP v1 built CLI compatibility for Air', () => {
+describe.concurrent('ACP v1 built CLI compatibility for Air', () => {
   it('returns a safe provider failure message on session/prompt and can run the next prompt', async () => {
     await fixture(
       async ({ context, workspace, updates }) => {

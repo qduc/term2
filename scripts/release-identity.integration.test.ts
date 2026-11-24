@@ -87,7 +87,7 @@ const cases = [
   ['manual dispatch', 'missing Git', false],
 ] as const;
 
-it.each(cases)(
+it.concurrent.each(cases)(
   '%s: %s (accepted=%s)',
   async (route, scenario, accepted) => {
     expect(command).toBe('pnpm');

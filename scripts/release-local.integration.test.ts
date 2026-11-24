@@ -22,7 +22,7 @@ async function run(cwd: string, env: NodeJS.ProcessEnv, command: string, args: s
 
 // Exercise the supported release-script continuation, not just pnpm publish:
 // dirty pre-tag build -> release commit -> create/reuse tag -> build -> retries.
-it.each(['create tag', 'existing tag', 'build failure'] as const)(
+it.concurrent.each(['create tag', 'existing tag', 'build failure'] as const)(
   '--publish-local resumes with %s before publication',
   async (scenario) => {
     const fixture = await mkdtemp(path.join(tmpdir(), 'term2-release-local-'));

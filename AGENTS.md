@@ -80,6 +80,8 @@ Preserve the shared checkout and other agents’ work.
 
 UI components use `useTheme()` for colours and `useSkin()` for layout. Skins live
 under `src/clients/tui/presentation/skins/<name>/`; component colour literals bypass this boundary.
+The web UI (`web-client/`) follows the owner's design intent in the `web-ui-design` skill;
+read it before designing or restyling a web screen.
 
 ## Evidence and institutional knowledge
 

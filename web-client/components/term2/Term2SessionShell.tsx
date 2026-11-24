@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Session';
+import { shellSandboxMachineFact } from '../../lib/term2/shell-sandbox-notice';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
 import { Term2TurnTimeline } from './Term2TurnTimeline';
 import { describeCommand } from './Term2CommandCard';
@@ -67,6 +68,7 @@ import type {
 const PROMPT_HISTORY_KEY = 'term2.web.promptHistory';
 const DISPLAY_MODE_KEY = 'term2.web.displayMode';
 const NOTIFICATIONS_KEY = 'term2.web.notifications';
+const DIAGNOSTICS_KEY = 'term2.web.diagnostics';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
@@ -203,6 +205,7 @@ export function Term2SessionShell({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<'concise' | 'detailed'>('concise');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const savedDraftRef = useRef<string>('');
@@ -224,6 +227,7 @@ export function Term2SessionShell({
     const savedDisplay = readLocalString(DISPLAY_MODE_KEY);
     if (savedDisplay === 'detailed' || savedDisplay === 'concise') setDisplayMode(savedDisplay);
     if (readLocalString(NOTIFICATIONS_KEY) === 'true') setNotificationsEnabled(true);
+    if (readLocalString(DIAGNOSTICS_KEY) === 'true') setShowDiagnostics(true);
     setPromptHistory(readPromptHistory());
   }, []);
 
@@ -231,6 +235,15 @@ export function Term2SessionShell({
     setDisplayMode(mode);
     try {
       window.localStorage.setItem(DISPLAY_MODE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const updateDiagnostics = (enabled: boolean) => {
+    setShowDiagnostics(enabled);
+    try {
+      window.localStorage.setItem(DIAGNOSTICS_KEY, String(enabled));
     } catch {
       /* ignore */
     }
@@ -952,16 +965,11 @@ export function Term2SessionShell({
 
   return (
     <main className="relative flex h-dvh max-h-dvh overflow-hidden bg-[#f7f7f8] text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <div
-        className={`fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] md:hidden ${sidebarOpen ? '' : 'hidden'}`}
-        onClick={() => setSidebarOpen(false)}
-        aria-hidden="true"
-      />
       <aside
         aria-label="Chat history and folders"
         inert={!sidebarOpen ? true : undefined}
         aria-hidden={!sidebarOpen ? 'true' : undefined}
-        className={`fixed inset-y-0 left-0 z-50 flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-[70] flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full invisible pointer-events-none md:-ml-[17.5rem]'
         }`}
       >
@@ -1478,6 +1486,7 @@ export function Term2SessionShell({
                     }:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
                     interaction={session.view.pendingInteraction.interaction}
                     subagent={session.view.pendingInteraction.subagent}
+                    shellSandboxNotice={shellSandboxMachineFact(settings?.shellSandboxNotice) ?? undefined}
                     onResolve={session.resolveInteraction}
                     disabled={aborting}
                   />
@@ -1493,7 +1502,7 @@ export function Term2SessionShell({
 
                 {sessionId && <Term2TasksDrawer view={session.view} onControlTask={session.controlTask} />}
 
-                {sessionId && (session.view.turns.length > 0 || Boolean(session.view.error)) && (
+                {showDiagnostics && sessionId && (session.view.turns.length > 0 || Boolean(session.view.error)) && (
                   <details className="pt-2 text-xs text-zinc-400 dark:text-zinc-500">
                     <summary className="cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300">
                       Diagnostics &amp; raw session state
@@ -1517,7 +1526,7 @@ export function Term2SessionShell({
             </div>
 
             {sessionId && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-white from-65% to-transparent px-3 pb-3 pt-10 dark:from-zinc-900 sm:px-6 sm:pb-4">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 overflow-visible bg-gradient-to-t from-white from-65% to-transparent px-3 pb-3 pt-10 dark:from-zinc-900 sm:px-6 sm:pb-4">
                 {!pinned && (
                   <div className="mb-2 flex justify-center">
                     <button
@@ -1564,7 +1573,7 @@ export function Term2SessionShell({
                   }}
                   onDragLeave={() => setDraggingFile(false)}
                   onDrop={handleDrop}
-                  className={`pointer-events-auto relative mx-auto max-w-[46rem] rounded-[26px] border bg-white shadow-[0_2px_6px_rgba(0,0,0,0.03),0_12px_32px_-12px_rgba(0,0,0,0.12)] transition-[border-color,box-shadow] focus-within:border-black/[0.16] focus-within:shadow-[0_2px_6px_rgba(0,0,0,0.04),0_16px_40px_-12px_rgba(0,0,0,0.18)] dark:bg-zinc-800/80 dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] dark:focus-within:border-white/[0.18] ${
+                  className={`pointer-events-auto relative mx-auto max-w-[46rem] overflow-visible rounded-[26px] border bg-white shadow-[0_2px_6px_rgba(0,0,0,0.03),0_12px_32px_-12px_rgba(0,0,0,0.12)] transition-[border-color,box-shadow] focus-within:border-black/[0.16] focus-within:shadow-[0_2px_6px_rgba(0,0,0,0.04),0_16px_40px_-12px_rgba(0,0,0,0.18)] dark:bg-zinc-800/80 dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] dark:focus-within:border-white/[0.18] ${
                     draggingFile
                       ? 'border-teal-500 ring-2 ring-teal-500/20'
                       : 'border-black/[0.08] dark:border-white/[0.09]'
@@ -1931,8 +1940,18 @@ export function Term2SessionShell({
             onDisplayModeChange={updateDisplayMode}
             notificationsEnabled={notificationsEnabled}
             onNotificationsChange={updateNotifications}
+            showDiagnostics={showDiagnostics}
+            onShowDiagnosticsChange={updateDiagnostics}
           />
         </Term2SetupDialog>
+      )}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Dismiss chat history"
+          className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[2px] md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
       {dialog === 'help' && (
         <Term2SetupDialog title="Help & shortcuts" onClose={() => setDialog(null)}>

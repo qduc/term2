@@ -180,6 +180,12 @@ export type SettingsProjection = {
       network: 'denied' | 'configured' | 'confirmation-required';
     };
   };
+  /** Display-only machine fact. Absent when the shell sandbox can run. Not an approval decision. */
+  shellSandboxNotice?: ShellSandboxNotice;
+};
+export type ShellSandboxNotice = {
+  code: string;
+  detail: string;
 };
 /** App-owned global configuration authority. Implementations must redact secrets in all results,
  * enforce the settings allowlist/revision transaction and persist before reporting committed.

@@ -694,7 +694,7 @@ export function Term2FolderSelector({
                         event.stopPropagation();
                         void selectFolderPath(entryPath);
                       }}
-                      className="shrink-0 rounded-md border border-black/[0.09] bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 opacity-0 shadow-xs transition-opacity hover:border-teal-500 hover:text-teal-700 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-teal-400 dark:hover:text-teal-300"
+                      className="shrink-0 rounded-md border border-black/[0.09] bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 shadow-xs hover:border-teal-500 hover:text-teal-700 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-teal-400 dark:hover:text-teal-300"
                     >
                       {isSelectingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Select'}
                     </button>

@@ -146,6 +146,8 @@ export function Term2SettingsPanel({
   onDisplayModeChange,
   notificationsEnabled = false,
   onNotificationsChange,
+  showDiagnostics = false,
+  onShowDiagnosticsChange,
 }: {
   onLoaded?: (settings: SettingsProjection) => void;
   onProvidersChanged?: () => void;
@@ -155,6 +157,8 @@ export function Term2SettingsPanel({
   onDisplayModeChange?: (mode: 'concise' | 'detailed') => void;
   notificationsEnabled?: boolean;
   onNotificationsChange?: (enabled: boolean) => void;
+  showDiagnostics?: boolean;
+  onShowDiagnosticsChange?: (enabled: boolean) => void;
 }) {
   const { theme, setTheme } = useTheme();
   const [tab, setTab] = useState<SettingsTab>('providers');
@@ -1050,6 +1054,33 @@ export function Term2SettingsPanel({
               ))}
             </div>
           </div>
+
+          {onShowDiagnosticsChange && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.07] p-3 dark:border-white/[0.08]">
+              <div>
+                <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Diagnostics</h3>
+                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  Show raw session state under the transcript. Off until you turn it on.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showDiagnostics}
+                aria-label="Show diagnostics"
+                onClick={() => onShowDiagnosticsChange(!showDiagnostics)}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                  showDiagnostics ? 'bg-teal-600' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                    showDiagnostics ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           {onDisplayModeChange && (
             <div className="rounded-xl border border-black/[0.07] p-3 dark:border-white/[0.08]">

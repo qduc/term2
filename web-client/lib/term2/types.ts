@@ -265,7 +265,13 @@ export interface SettingsProjection {
       network: 'denied' | 'configured' | 'confirmation-required';
     };
   };
+  /** Display-only machine fact. Absent when the shell sandbox can run. */
+  shellSandboxNotice?: ShellSandboxNotice;
   session?: SessionConfigRecord;
+}
+export interface ShellSandboxNotice {
+  code: string;
+  detail: string;
 }
 export interface SettingsWriteResult {
   committed: true;

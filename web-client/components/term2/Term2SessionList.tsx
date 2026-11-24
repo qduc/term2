@@ -32,10 +32,16 @@ function StatusDot({ status }: { status: SessionListItem['status'] }) {
   return null;
 }
 
-function shortTime(iso: string): string {
+function shortTime(iso: string, precise = false): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return '';
-  const minutes = Math.floor((Date.now() - then) / 60000);
+  const seconds = Math.floor((Date.now() - then) / 1000);
+  if (precise && seconds < 3600) {
+    if (seconds < 60) return `${Math.max(0, seconds)}s`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ${seconds % 60}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
   if (minutes < 1) return 'now';
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
@@ -119,6 +125,23 @@ export function Term2SessionList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessions, firstMessages, workspaces, workspaceMetadata],
   );
+  const titleCounts = new Map<string, number>();
+  for (const entry of entries) titleCounts.set(entry.title, (titleCounts.get(entry.title) ?? 0) + 1);
+  const apartFor = (session: SessionListItem, title: string) => {
+    const sharedTitle = (titleCounts.get(title) ?? 0) > 1;
+    const folder =
+      workspaceMetadata?.[session.workspaceId]?.displayName || workspaceMap.get(session.workspaceId) || '';
+    const when = shortTime(session.updatedAt, sharedTitle);
+    const apart = sharedTitle ? [folder, when].filter(Boolean).join(' · ') : when;
+    return { sharedTitle, when, apart };
+  };
+  const apartCounts = new Map<string, number>();
+  for (const entry of entries) {
+    const { sharedTitle, apart } = apartFor(entry.session, entry.title);
+    if (!sharedTitle) continue;
+    const key = `${entry.title}\0${apart}`;
+    apartCounts.set(key, (apartCounts.get(key) ?? 0) + 1);
+  }
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const groups = new Map<string, typeof entries>();
@@ -170,12 +193,15 @@ export function Term2SessionList({
             <ul className="space-y-px">
               {items.map(({ session, title }) => {
                 const active = selected === session.id;
+                const { sharedTitle, when, apart } = apartFor(session, title);
+                const tied = sharedTitle && (apartCounts.get(`${title}\0${apart}`) ?? 0) > 1;
+                const mark = tied ? `${apart} · ${session.id.slice(-4)}` : apart;
                 return (
                   <li key={session.id}>
                     <button
                       type="button"
                       aria-current={active ? 'page' : undefined}
-                      aria-label={`${title} ${session.id}`}
+                      aria-label={sharedTitle ? `${title}, ${mark}` : `${title} ${session.id}`}
                       title={`${title} · ${session.status.replace('_', ' ')} · ${relativeTime(session.updatedAt)}`}
                       className={`group/item flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
                         active
@@ -184,10 +210,17 @@ export function Term2SessionList({
                       }`}
                       onClick={() => onSelect(session.id)}
                     >
-                      <span className="min-w-0 flex-1 truncate">{title}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{title}</span>
+                        {sharedTitle && mark && (
+                          <span className="block truncate text-[11px] font-normal text-zinc-400 dark:text-zinc-500">
+                            {mark}
+                          </span>
+                        )}
+                      </span>
                       <StatusDot status={session.status} />
                       <span className="shrink-0 text-[11px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                        {shortTime(session.updatedAt)}
+                        {tied ? session.id.slice(-4) : when}
                       </span>
                     </button>
                   </li>

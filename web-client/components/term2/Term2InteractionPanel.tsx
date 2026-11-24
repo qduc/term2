@@ -23,6 +23,7 @@ export function Term2InteractionPanel({
   subagent,
   onResolve,
   disabled,
+  shellSandboxNotice,
 }: {
   interaction: PendingInteraction;
   recovered?: boolean;
@@ -30,6 +31,8 @@ export function Term2InteractionPanel({
   subagent?: Term2SubagentIdentity;
   onResolve: (request: InteractionResolveRequest) => void;
   disabled?: boolean;
+  /** Machine fact for a shell card. It does not change the choice. */
+  shellSandboxNotice?: string | null;
 }) {
   const [answer, setAnswer] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
@@ -113,6 +116,14 @@ export function Term2InteractionPanel({
               </>
             )}
           </p>
+          {shellSandboxNotice && interaction.descriptor.toolName === 'shell' && (
+            <p
+              role="alert"
+              className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs text-amber-950 dark:text-amber-100"
+            >
+              {shellSandboxNotice}
+            </p>
+          )}
         </div>
       </div>
       <div aria-label="Interaction details" className="space-y-2 px-4 pt-3 text-sm">

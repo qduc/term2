@@ -18,6 +18,7 @@ import {
   type SessionConfigUpdate,
   type SettingsProjection,
   type SettingsWriteResult,
+  type ShellSandboxNotice,
   type ModelSummary,
   type MessageSubmitOptions,
   type ProviderPresetEntry,
@@ -319,9 +320,21 @@ function jsonValue(value: unknown, depth = 0): boolean {
   }
   return false;
 }
+function validateShellSandboxNotice(value: unknown): ShellSandboxNotice | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const notice = value as Record<string, unknown>;
+  if (Object.keys(notice).some((key) => key !== 'code' && key !== 'detail')) return undefined;
+  const { code, detail } = notice;
+  if (typeof code !== 'string' || typeof detail !== 'string') return undefined;
+  if (code.length === 0 || code.length > 64 || detail.length > 300) return undefined;
+  if (/[\u0000-\u001f\u007f]/u.test(code) || /[\u0000-\u001f\u007f]/u.test(detail)) return undefined;
+  return { code, detail };
+}
 export function validateSettings(value: unknown): SettingsProjection {
   const input = object(value);
-  only(input, ['schemaVersion', 'revision', 'defaultsRevision', 'settings', 'session']);
+  only(input, ['schemaVersion', 'revision', 'defaultsRevision', 'settings', 'session', 'shellSandboxNotice']);
+  const shellSandboxNotice = validateShellSandboxNotice(input.shellSandboxNotice);
   if (input.schemaVersion !== 1 || typeof input.revision !== 'string' || typeof input.defaultsRevision !== 'string')
     throw new Term2ApiError(503, 'Invalid agent response');
   const settings = object(input.settings);
@@ -437,6 +450,7 @@ export function validateSettings(value: unknown): SettingsProjection {
       safety: safety as SettingsProjection['settings']['safety'],
     },
     ...(input.session === undefined ? {} : { session: validateSessionConfig(input.session) }),
+    ...(shellSandboxNotice ? { shellSandboxNotice } : {}),
   };
 }
 function validateCredentialProjection(value: unknown): SettingsProjection['settings']['credentials'][string] {

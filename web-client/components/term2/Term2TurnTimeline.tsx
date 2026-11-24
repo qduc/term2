@@ -11,9 +11,8 @@ type RenderSegment =
   | { kind: 'tools'; key: string; commands: Term2Command[] };
 
 /**
- * Group only consecutive tool calls into a single collapsible run, matching
- * TUI's `groupTools()` semantics so thinking blocks, text replies, and tool
- * runs appear in exact chronological order.
+ * Keep thinking, text, and each tool call in chronological order. A tool call
+ * is its own row, including when one reply starts several at once.
  */
 function buildSegments(turn: Term2TurnView): RenderSegment[] {
   const commandById = new Map(turn.commands.map((cmd) => [cmd.callId, cmd]));
@@ -26,12 +25,8 @@ function buildSegments(turn: Term2TurnView): RenderSegment[] {
         const cmd = commandById.get(entry.executionId);
         if (!cmd || usedTools.has(cmd.callId)) continue;
         usedTools.add(cmd.callId);
-        const previous = segments.at(-1);
-        if (previous && previous.kind === 'tools') {
-          previous.commands.push(cmd);
-        } else {
-          segments.push({ kind: 'tools', key: `tools:${cmd.callId}`, commands: [cmd] });
-        }
+        // One row per call. A parallel reply must not collapse into a single "Read N files" line.
+        segments.push({ kind: 'tools', key: `tools:${cmd.callId}`, commands: [cmd] });
       } else if (entry.kind === 'reasoning') {
         if (!entry.text.trim()) continue;
         segments.push({ kind: 'reasoning', id: entry.id, text: entry.text, streaming: entry.streaming });
@@ -41,8 +36,8 @@ function buildSegments(turn: Term2TurnView): RenderSegment[] {
       }
     }
     const remainingTools = turn.commands.filter((cmd) => !usedTools.has(cmd.callId));
-    if (remainingTools.length > 0) {
-      segments.push({ kind: 'tools', key: `tools:extra:${remainingTools[0].callId}`, commands: remainingTools });
+    for (const cmd of remainingTools) {
+      segments.push({ kind: 'tools', key: `tools:extra:${cmd.callId}`, commands: [cmd] });
     }
     return segments;
   }
@@ -57,8 +52,8 @@ function buildSegments(turn: Term2TurnView): RenderSegment[] {
       streaming: turn.status === 'streaming' && !turn.text && turn.commands.length === 0,
     });
   }
-  if (turn.commands.length > 0) {
-    fallback.push({ kind: 'tools', key: `${turn.turnId}:tools`, commands: turn.commands });
+  for (const cmd of turn.commands) {
+    fallback.push({ kind: 'tools', key: `${turn.turnId}:tools:${cmd.callId}`, commands: [cmd] });
   }
   if (turn.text) {
     fallback.push({ kind: 'text', id: `${turn.turnId}:text`, text: turn.text });

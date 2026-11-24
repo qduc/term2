@@ -107,7 +107,9 @@ function ToolIcon({ command }: { command: Term2Command }) {
 }
 
 export function Term2CommandCard({ command }: { command: Term2Command }) {
-  const [open, setOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  // The failure reason lives in this card. Opening only the group still hides it.
+  const open = userOpen ?? command.status === 'failed';
   const { verb, target } = describeCommand(command);
   const meta = summarizeCommandMeta(command);
   const cleanError = extractCleanToolError(command.error);
@@ -118,7 +120,7 @@ export function Term2CommandCard({ command }: { command: Term2Command }) {
         type="button"
         aria-expanded={open}
         className="group/row flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-black/[0.035] dark:hover:bg-white/[0.04]"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setUserOpen(!open)}
       >
         <span className="flex h-4 w-4 shrink-0 items-center justify-center">
           <ToolIcon command={command} />

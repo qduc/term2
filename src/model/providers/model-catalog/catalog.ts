@@ -152,17 +152,40 @@ function lookupModelAnyProvider(catalog: ModelCatalogData, modelId: string): Cat
   return findModelMatches(catalog, modelId)[0]?.info;
 }
 
-/** An entry for exactly this model id (ignoring a leading `vendor/`), never a prefix or alias match. */
-function exactInModels(models: Record<string, CatalogModelInfo>, wanted: string): CatalogModelInfo | undefined {
-  if (models[wanted]) return models[wanted];
-  const wantedBare = stripVendor(wanted);
-  for (const [catalogId, info] of Object.entries(models)) if (stripVendor(catalogId) === wantedBare) return info;
-  return undefined;
+/**
+ * A suffix that names the same model, not another one: a release date (`-20251120`,
+ * `-2025-11-20`, `@20251120`), a short version stamp (`-0613`), or `latest`. Tier words such as
+ * `-pro`, `-mini` or `:batch` are deliberately absent: those are different models with their own prices.
+ */
+const SAME_MODEL_SUFFIX = /^[-@:](?:\d{4}-\d{2}-\d{2}|\d{8}|\d{4}|latest)$/;
+
+/** `a` and `b` name the same model: equal, or one is the other plus a date/version/latest suffix. */
+function sameModelId(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  return long.startsWith(short) && SAME_MODEL_SUFFIX.test(long.slice(short.length));
 }
 
 /**
- * Metadata only when the catalog lists this exact model, preferring the given provider. Unlike
- * getCatalogModel it never resolves `gpt-x-pro` to `gpt-x`, so it is safe for showing a model's prices.
+ * An entry for this model under any of its names (ignoring a leading `vendor/` and date or
+ * `latest` aliases), never a different tier of it. Exact ids win over aliases.
+ */
+function exactInModels(models: Record<string, CatalogModelInfo>, wanted: string): CatalogModelInfo | undefined {
+  if (models[wanted]) return models[wanted];
+  const wantedBare = stripVendor(wanted);
+  let alias: CatalogModelInfo | undefined;
+  for (const [catalogId, info] of Object.entries(models)) {
+    const catalogBare = stripVendor(catalogId);
+    if (catalogBare === wantedBare) return info;
+    if (!alias && sameModelId(catalogBare, wantedBare)) alias = info;
+  }
+  return alias;
+}
+
+/**
+ * Metadata only when the catalog lists this model, preferring the given provider. Date and
+ * `latest` aliases count as the same model; unlike getCatalogModel it never resolves a different
+ * tier (`gpt-x-pro` to `gpt-x`), so it is safe for showing a model's prices.
  */
 export function getExactCatalogModel(providerId: string, modelId: string): CatalogModelInfo | undefined {
   const wanted = normalizeId(modelId);

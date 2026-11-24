@@ -952,16 +952,11 @@ export function Term2SessionShell({
 
   return (
     <main className="relative flex h-dvh max-h-dvh overflow-hidden bg-[#f7f7f8] text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <div
-        className={`fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] md:hidden ${sidebarOpen ? '' : 'hidden'}`}
-        onClick={() => setSidebarOpen(false)}
-        aria-hidden="true"
-      />
       <aside
         aria-label="Chat history and folders"
         inert={!sidebarOpen ? true : undefined}
         aria-hidden={!sidebarOpen ? 'true' : undefined}
-        className={`fixed inset-y-0 left-0 z-50 flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-[70] flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full invisible pointer-events-none md:-ml-[17.5rem]'
         }`}
       >
@@ -1933,6 +1928,14 @@ export function Term2SessionShell({
             onNotificationsChange={updateNotifications}
           />
         </Term2SetupDialog>
+      )}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Dismiss chat history"
+          className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[2px] md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
       {dialog === 'help' && (
         <Term2SetupDialog title="Help & shortcuts" onClose={() => setDialog(null)}>

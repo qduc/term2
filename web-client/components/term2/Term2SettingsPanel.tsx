@@ -2,6 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ExternalLink, Loader2, Plus, RotateCcw, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SettingsConflictError, Term2ApiError, term2Client } from '../../lib/api/term2';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { ModelSummary, ProviderPresetEntry, SettingsProjection } from '../../lib/term2/types';
@@ -177,7 +190,6 @@ export function Term2SettingsPanel({
     value: unknown;
     consequence: string;
   } | null>(null);
-  const confirmCancelButtonRef = useRef<HTMLButtonElement | null>(null);
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
   const [conflict, setConflict] = useState<SettingsConflictError | null>(null);
   const [conflictKey, setConflictKey] = useState<string | null>(null);
@@ -196,10 +208,6 @@ export function Term2SettingsPanel({
       lastFocusedElementRef.current.focus();
     }
   };
-
-  useEffect(() => {
-    if (confirm) confirmCancelButtonRef.current?.focus();
-  }, [confirm]);
 
   const reload = useCallback(async () => {
     setBusy(true);
@@ -338,9 +346,9 @@ export function Term2SettingsPanel({
             {error}
           </p>
         )}
-        <button type="button" onClick={() => void reload()} className="text-teal-700 underline dark:text-teal-400">
+        <Button type="button" onClick={() => void reload()} variant="link" size="sm" className="h-auto p-0">
           Retry loading settings
-        </button>
+        </Button>
       </div>
     );
   }
@@ -395,22 +403,25 @@ export function Term2SettingsPanel({
             </label>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{meta.description}</p>
           </div>
-          <select
-            id={`term2-setting-${key}`}
+          <Select
             value={currentString}
             disabled={busy || isReadOnly}
-            onChange={(event) => requestChange(key, event.target.value, setting.confirmRequired)}
-            className="rounded-lg border border-black/[0.12] bg-white px-2.5 py-1.5 text-xs text-zinc-900 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"
+            onValueChange={(value) => requestChange(key, value, setting.confirmRequired)}
           >
-            {!meta.options.some((o) => o.value === currentString) && currentString && (
-              <option value={currentString}>{currentString}</option>
-            )}
-            {meta.options.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id={`term2-setting-${key}`} size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {!meta.options.some((o) => o.value === currentString) && currentString && (
+                <SelectItem value={currentString}>{currentString}</SelectItem>
+              )}
+              {meta.options.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       );
     }
@@ -431,29 +442,29 @@ export function Term2SettingsPanel({
             {meta?.description && <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{meta.description}</p>}
           </div>
           {setting.source !== 'default' && !isReadOnly && (
-            <button
+            <Button
               type="button"
               disabled={busy}
               title={`Reset ${label} to default`}
               onClick={() => void submit(key, null)}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-zinc-500 hover:bg-black/[0.04] hover:text-zinc-800 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
+              variant="ghost" size="xs"
             >
               <RotateCcw className="h-3 w-3" />
               Reset
-            </button>
+            </Button>
           )}
         </div>
         <div className="mt-2 flex items-center gap-2">
-          <input
+          <Input
             id={`term2-setting-${key}`}
             type={meta?.kind === 'number' ? 'number' : 'text'}
             step={key === 'agent.temperature' || key === 'agent.contextCompaction.threshold' ? '0.05' : undefined}
             value={draftVal}
             disabled={isReadOnly || busy}
             onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
-            className="min-w-0 flex-1 rounded-lg border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-xs disabled:opacity-60 dark:border-white/15"
+            className="min-w-0 flex-1"
           />
-          <button
+          <Button
             type="button"
             disabled={busy || isReadOnly || !dirty}
             onClick={() => {
@@ -464,10 +475,10 @@ export function Term2SettingsPanel({
                 setError(reason instanceof Error ? reason.message : 'Invalid value');
               }
             }}
-            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-35 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+            size="sm"
           >
             Save
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -514,20 +525,17 @@ export function Term2SettingsPanel({
     <section aria-label="Term2 settings" className="space-y-4">
       <div className="flex flex-wrap gap-1 border-b border-black/[0.08] pb-2 dark:border-white/10" role="tablist">
         {tabs.map((item) => (
-          <button
+          <Button
             key={item.id}
             type="button"
             role="tab"
             aria-selected={tab === item.id}
             onClick={() => setTab(item.id)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              tab === item.id
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-zinc-600 hover:bg-black/[0.05] dark:text-zinc-400 dark:hover:bg-white/[0.06]'
-            }`}
+            variant={tab === item.id ? 'default' : 'ghost'}
+            size="sm"
           >
             {item.label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -546,15 +554,15 @@ export function Term2SettingsPanel({
         <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
           <p className="font-semibold">Settings changed externally. Review before saving.</p>
           <div className="mt-2 flex gap-2">
-            <button type="button" onClick={() => void reload()} className="rounded border px-2 py-1">
+            <Button type="button" onClick={() => void reload()} variant="outline" size="xs">
               Reload latest
-            </button>
-            <button type="button" onClick={() => void keepDraft()} className="rounded border px-2 py-1">
+            </Button>
+            <Button type="button" onClick={() => void keepDraft()} variant="outline" size="xs">
               Keep my change
-            </button>
-            <button type="button" onClick={() => setConflict(null)} className="rounded border px-2 py-1">
+            </Button>
+            <Button type="button" onClick={() => setConflict(null)} variant="outline" size="xs">
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -570,14 +578,14 @@ export function Term2SettingsPanel({
                   your machine and are never sent in chat messages.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={() => setAddingProvider((v) => !v)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
+                size="sm"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add provider
-              </button>
+              </Button>
             </div>
 
             {addingProvider && (
@@ -586,13 +594,13 @@ export function Term2SettingsPanel({
                   <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                     Add a provider from a preset or custom URL
                   </h4>
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setAddingProvider(false)}
-                    className="text-xs text-zinc-500 hover:underline"
+                    variant="link" size="xs"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
 
                 {presets.length > 0 && (
@@ -609,7 +617,7 @@ export function Term2SettingsPanel({
                     </div>
                     <div className="mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto scrollbar-thin">
                       {filteredPresets.map((preset) => (
-                        <button
+                        <Button
                           key={preset.id}
                           type="button"
                           onClick={() =>
@@ -620,7 +628,7 @@ export function Term2SettingsPanel({
                               baseUrl: preset.baseUrl ?? '',
                             }))
                           }
-                          className="inline-flex items-center gap-1 rounded-full border border-black/[0.1] bg-white px-2.5 py-1 text-[11.5px] text-zinc-700 transition-colors hover:border-teal-500 hover:text-teal-800 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-teal-400"
+                          variant="outline" size="xs" className="rounded-full"
                         >
                           <span>{preset.name}</span>
                           {preset.docsUrl && (
@@ -635,7 +643,7 @@ export function Term2SettingsPanel({
                               <ExternalLink className="h-2.5 w-2.5" />
                             </a>
                           )}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </div>
@@ -650,59 +658,60 @@ export function Term2SettingsPanel({
                 >
                   <label className="text-xs">
                     <span className="mb-1 block font-medium text-zinc-700 dark:text-zinc-300">Provider name</span>
-                    <input
+                    <Input
                       required
                       autoComplete="username"
                       value={providerDraft.name}
                       onChange={(e) => setProviderDraft((c) => ({ ...c, name: e.target.value }))}
                       placeholder="e.g. anthropic, gemini, ollama"
-                      className="w-full rounded-lg border border-black/[0.12] bg-white px-2.5 py-1.5 text-xs dark:border-white/15 dark:bg-zinc-900"
                     />
                   </label>
                   <label className="text-xs">
                     <span className="mb-1 block font-medium text-zinc-700 dark:text-zinc-300">API format</span>
-                    <select
+                    <Select
                       value={providerDraft.type}
-                      onChange={(e) => setProviderDraft((c) => ({ ...c, type: e.target.value }))}
-                      className="w-full rounded-lg border border-black/[0.12] bg-white px-2.5 py-1.5 text-xs dark:border-white/15 dark:bg-zinc-900"
+                      onValueChange={(value) => setProviderDraft((c) => ({ ...c, type: value }))}
                     >
-                      {providerTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger size="sm" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {providerTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </label>
                   <label className="text-xs sm:col-span-2">
                     <span className="mb-1 block font-medium text-zinc-700 dark:text-zinc-300">Base URL</span>
-                    <input
+                    <Input
                       value={providerDraft.baseUrl}
                       onChange={(e) => setProviderDraft((c) => ({ ...c, baseUrl: e.target.value }))}
                       placeholder="https://api.anthropic.com/v1"
-                      className="w-full rounded-lg border border-black/[0.12] bg-white px-2.5 py-1.5 text-xs dark:border-white/15 dark:bg-zinc-900"
                     />
                   </label>
                   <label className="text-xs sm:col-span-2">
                     <span className="mb-1 block font-medium text-zinc-700 dark:text-zinc-300">
                       API key (optional for local servers like Ollama)
                     </span>
-                    <input
+                    <Input
                       type="password"
                       autoComplete="new-password"
                       value={providerDraft.apiKey}
                       onChange={(e) => setProviderDraft((c) => ({ ...c, apiKey: e.target.value }))}
                       placeholder="Paste API key…"
-                      className="w-full rounded-lg border border-black/[0.12] bg-white px-2.5 py-1.5 text-xs dark:border-white/15 dark:bg-zinc-900"
                     />
                   </label>
                   <div className="flex justify-end gap-2 sm:col-span-2">
-                    <button
+                    <Button
                       type="submit"
                       disabled={busy || !providerDraft.name.trim()}
-                      className="rounded-lg bg-teal-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-40"
+                      size="sm"
                     >
                       Save provider
-                    </button>
+                    </Button>
                   </div>
                 </form>
               </div>
@@ -723,15 +732,15 @@ export function Term2SettingsPanel({
                       >
                         <div className="min-w-0">
                           <span className="font-medium text-zinc-900 dark:text-zinc-100">{provider.label}</span>
-                          <span className="ml-1.5 font-mono text-[11px] text-zinc-400">({provider.id})</span>
+                          <span className="ml-1.5 font-mono text-xs text-zinc-400">({provider.id})</span>
                           {provider.id === preferredProvider && (
-                            <span className="ml-1.5 rounded-full bg-teal-500/15 px-1.5 py-0.5 text-[10px] text-teal-700 dark:text-teal-300">
+                            <span className="ml-1.5 rounded-full bg-teal-500/15 px-1.5 py-0.5 text-xs text-teal-700 dark:text-teal-300">
                               used by this chat
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
+                          <Button
                             type="button"
                             disabled={busy}
                             onClick={async () => {
@@ -748,11 +757,11 @@ export function Term2SettingsPanel({
                                 setBusy(false);
                               }
                             }}
-                            className="rounded-md border border-black/[0.1] px-2 py-1 text-[11px] dark:border-white/10"
+                            variant="outline" size="xs"
                           >
                             {provider.disabled ? 'Enable' : 'Disable'}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
                             disabled={busy}
                             aria-label={`Delete ${provider.label}`}
@@ -763,10 +772,10 @@ export function Term2SettingsPanel({
                                 consequence: `Delete custom provider “${provider.label}” and its stored configuration?`,
                               })
                             }
-                            className="rounded-md p-1 text-zinc-400 hover:bg-red-500/10 hover:text-red-600"
+                            variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          </Button>
                         </div>
                       </li>
                     ))}
@@ -792,13 +801,13 @@ export function Term2SettingsPanel({
                           {label}
                           {isSearchKey && <span className="ml-1.5 font-normal text-zinc-400">· web search</span>}
                           {id === preferredProvider && (
-                            <span className="ml-1.5 rounded-full bg-teal-500/15 px-1.5 py-0.5 text-[10px] text-teal-700 dark:text-teal-300">
+                            <span className="ml-1.5 rounded-full bg-teal-500/15 px-1.5 py-0.5 text-xs text-teal-700 dark:text-teal-300">
                               used by this chat
                             </span>
                           )}
                         </span>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10.5px] font-medium ${
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                             credential.configured
                               ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
                               : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
@@ -840,7 +849,7 @@ export function Term2SettingsPanel({
                           aria-hidden="true"
                           className="hidden"
                         />
-                        <input
+                        <Input
                           type="password"
                           autoComplete="new-password"
                           aria-label={`${label} API key`}
@@ -854,19 +863,19 @@ export function Term2SettingsPanel({
                                 ? 'Paste a new key to replace…'
                                 : `Paste your ${label} API key`
                           }
-                          className="min-w-0 flex-1 rounded-lg border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-xs dark:border-white/15"
+                          className="min-w-0 flex-1"
                         />
-                        <button
+                        <Button
                           type="submit"
                           disabled={
                             busy || !credential.writable || credential.source === 'environment' || !credentialDrafts[id]
                           }
-                          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+                          size="sm"
                         >
                           Save key
-                        </button>
+                        </Button>
                         {credential.configured && credential.writable && credential.source !== 'environment' && (
-                          <button
+                          <Button
                             type="button"
                             disabled={busy}
                             onClick={() =>
@@ -876,10 +885,10 @@ export function Term2SettingsPanel({
                                 consequence: `Remove stored API key for ${label}?`,
                               })
                             }
-                            className="rounded-lg border border-black/[0.12] px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-white/15 dark:text-red-400 dark:hover:bg-red-950/30"
+                            variant="destructive" size="sm"
                           >
                             Remove
-                          </button>
+                          </Button>
                         )}
                       </form>
                     </div>
@@ -901,7 +910,7 @@ export function Term2SettingsPanel({
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium capitalize text-zinc-900 dark:text-zinc-100">{provider}</span>
-                    <button
+                    <Button
                       type="button"
                       disabled={busy || oauthBusy !== null}
                       onClick={async () => {
@@ -923,11 +932,11 @@ export function Term2SettingsPanel({
                           setOauthBusy(null);
                         }
                       }}
-                      className="inline-flex items-center gap-1 rounded-lg border border-black/[0.12] px-2.5 py-1 font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-40 dark:border-white/15 dark:text-zinc-200 dark:hover:bg-white/[0.06]"
+                      variant="outline" size="sm"
                     >
                       {oauthBusy === provider && <Loader2 className="h-3 w-3 animate-spin" />}
                       Sign in with {provider}
-                    </button>
+                    </Button>
                   </div>
                   {accounts.length > 0 && (
                     <ul className="mt-2 space-y-1 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
@@ -942,28 +951,28 @@ export function Term2SettingsPanel({
                           </span>
                           <span className="flex gap-2">
                             {!account.isSelected && (
-                              <button
+                              <Button
                                 type="button"
                                 onClick={async () => {
                                   await term2Client.oauthSelect(provider, account.id);
                                   await reload();
                                 }}
-                                className="text-teal-700 hover:underline dark:text-teal-400"
+                                variant="link" size="xs" className="h-auto p-0"
                               >
                                 Use account
-                              </button>
+                              </Button>
                             )}
-                            <button
+                            <Button
                               type="button"
                               onClick={async () => {
                                 await term2Client.oauthDelete(provider, account.id);
                                 await reload();
                                 onProvidersChanged?.();
                               }}
-                              className="text-red-600 hover:underline dark:text-red-400"
+                              variant="link" size="xs" className="h-auto p-0 text-destructive"
                             >
                               Sign out
-                            </button>
+                            </Button>
                           </span>
                         </li>
                       ))}
@@ -989,12 +998,10 @@ export function Term2SettingsPanel({
               </code>
             </p>
             {models.length > 0 ? (
-              <select
-                id="term2-default-model"
+              <Select
                 disabled={busy}
                 value={defaultModelValue ? `${defaultModelValue.provider}/${defaultModelValue.model}` : ''}
-                onChange={(event) => {
-                  const raw = event.target.value;
+                onValueChange={(raw) => {
                   const slash = raw.indexOf('/');
                   if (slash <= 0) return;
                   void submit('agent.modelSelection', {
@@ -1002,22 +1009,26 @@ export function Term2SettingsPanel({
                     model: raw.slice(slash + 1),
                   });
                 }}
-                className="mt-2 w-full rounded-lg border border-black/[0.12] bg-white px-2.5 py-1.5 font-mono text-xs dark:border-white/15 dark:bg-zinc-900"
               >
-                {defaultModelValue &&
-                  !models.some(
-                    (m) => m.provider === defaultModelValue.provider && m.id === defaultModelValue.model,
-                  ) && (
-                    <option value={`${defaultModelValue.provider}/${defaultModelValue.model}`}>
-                      {defaultModelValue.provider}/{defaultModelValue.model}
-                    </option>
-                  )}
-                {models.map((m) => (
-                  <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
-                    {m.provider} / {m.id}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="term2-default-model" className="mt-2 w-full font-mono">
+                  <SelectValue placeholder="Choose a model" />
+                </SelectTrigger>
+                <SelectContent position="popper" className="max-h-72">
+                  {defaultModelValue &&
+                    !models.some(
+                      (m) => m.provider === defaultModelValue.provider && m.id === defaultModelValue.model,
+                    ) && (
+                      <SelectItem value={`${defaultModelValue.provider}/${defaultModelValue.model}`}>
+                        {defaultModelValue.provider}/{defaultModelValue.model}
+                      </SelectItem>
+                    )}
+                  {models.map((m) => (
+                    <SelectItem key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`} className="font-mono">
+                      {m.provider} / {m.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : (
               <p className="mt-2 text-xs text-zinc-500">
                 Connect a provider in the Providers &amp; Keys tab to choose from its models.
@@ -1039,18 +1050,16 @@ export function Term2SettingsPanel({
             </p>
             <div className="mt-2.5 flex gap-2">
               {(['system', 'light', 'dark'] as const).map((mode) => (
-                <button
+                <Button
                   key={mode}
                   type="button"
                   onClick={() => setTheme(mode)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                    theme === mode
-                      ? 'border-teal-600 bg-teal-600 text-white'
-                      : 'border-black/[0.1] text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/[0.06]'
-                  }`}
+                  variant={theme === mode ? 'default' : 'outline'}
+                  size="sm"
+                  className="capitalize"
                 >
                   {mode}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -1090,18 +1099,16 @@ export function Term2SettingsPanel({
               </p>
               <div className="mt-2.5 flex gap-2">
                 {(['concise', 'detailed'] as const).map((mode) => (
-                  <button
+                  <Button
                     key={mode}
                     type="button"
                     onClick={() => onDisplayModeChange(mode)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                      displayMode === mode
-                        ? 'border-teal-600 bg-teal-600 text-white'
-                        : 'border-black/[0.1] text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/[0.06]'
-                    }`}
+                    variant={displayMode === mode ? 'default' : 'outline'}
+                    size="sm"
+                    className="capitalize"
                   >
                     {mode}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -1210,80 +1217,66 @@ export function Term2SettingsPanel({
         </div>
       )}
 
-      {confirm && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="term2-confirm-heading"
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.stopPropagation();
-              closeConfirm();
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        >
-          <div className="max-w-md rounded-2xl bg-white p-5 text-zinc-900 shadow-xl dark:bg-zinc-900 dark:text-zinc-100">
-            <h3 id="term2-confirm-heading" className="font-semibold">
-              {confirm.key.startsWith('credential:')
+      <AlertDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) closeConfirm();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm?.key.startsWith('credential:')
                 ? 'Remove API key'
-                : confirm.key.startsWith('provider-delete:')
+                : confirm?.key.startsWith('provider-delete:')
                   ? 'Delete provider'
                   : 'Confirm setting change'}
-            </h3>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{confirm.consequence}</p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                ref={confirmCancelButtonRef}
-                type="button"
-                onClick={closeConfirm}
-                className="rounded-lg border border-black/[0.1] px-3 py-1.5 text-sm dark:border-white/10"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const pending = confirm;
-                  closeConfirm();
-                  if (pending.key.startsWith('credential:')) {
-                    const credId = pending.key.slice('credential:'.length);
-                    setBusy(true);
-                    try {
-                      await term2Client.deleteCredential(credId);
-                      setMessage('API key removed.');
-                      await reload();
-                      onProvidersChanged?.();
-                    } catch (reason) {
-                      setError(reason instanceof Error ? reason.message : 'Credential was not deleted');
-                    } finally {
-                      setBusy(false);
-                    }
-                  } else if (pending.key.startsWith('provider-delete:')) {
-                    const providerId = String(pending.value);
-                    setBusy(true);
-                    try {
-                      await term2Client.deleteProvider(providerId);
-                      setMessage('Custom provider deleted.');
-                      await reload();
-                      onProvidersChanged?.();
-                    } catch (reason) {
-                      setError(reason instanceof Error ? reason.message : 'Provider was not deleted');
-                    } finally {
-                      setBusy(false);
-                    }
-                  } else {
-                    void submit(pending.key, pending.value);
+            </AlertDialogTitle>
+            <AlertDialogDescription>{confirm?.consequence}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                const pending = confirm;
+                if (!pending) return;
+                closeConfirm();
+                if (pending.key.startsWith('credential:')) {
+                  const credId = pending.key.slice('credential:'.length);
+                  setBusy(true);
+                  try {
+                    await term2Client.deleteCredential(credId);
+                    setMessage('API key removed.');
+                    await reload();
+                    onProvidersChanged?.();
+                  } catch (reason) {
+                    setError(reason instanceof Error ? reason.message : 'Credential was not deleted');
+                  } finally {
+                    setBusy(false);
                   }
-                }}
-                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                } else if (pending.key.startsWith('provider-delete:')) {
+                  const providerId = String(pending.value);
+                  setBusy(true);
+                  try {
+                    await term2Client.deleteProvider(providerId);
+                    setMessage('Custom provider deleted.');
+                    await reload();
+                    onProvidersChanged?.();
+                  } catch (reason) {
+                    setError(reason instanceof Error ? reason.message : 'Provider was not deleted');
+                  } finally {
+                    setBusy(false);
+                  }
+                } else {
+                  void submit(pending.key, pending.value);
+                }
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

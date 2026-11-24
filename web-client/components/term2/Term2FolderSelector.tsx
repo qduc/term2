@@ -427,6 +427,7 @@ export function Term2FolderSelector({
               <input
                 ref={pathInputRef}
                 id="term2-folder-path"
+                data-escape-cancels-edit
                 value={pathDraft}
                 disabled={busy}
                 onChange={(event) => setPathDraft(event.target.value)}

@@ -1,9 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { Archive, Ellipsis, Loader2, RotateCcw, Wrench } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Archive, AtSign, ImagePlus, Loader2, Plus, RotateCcw, Wand2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { TERM2_COMMAND_IDS, type Term2CommandId } from '../../lib/term2/types';
 
 const COMMAND_LABELS: Record<Term2CommandId, string> = {
@@ -24,19 +33,40 @@ const COMMAND_ICONS: Record<Term2CommandId, typeof Archive> = {
   'retry-turn': RotateCcw,
 };
 
-/** Session commands live behind one composer button so they don't crowd the input. */
+/**
+ * The composer's single "+" menu: add-to-message actions (image, file mention,
+ * skill) and session commands, so they don't crowd the input as separate buttons.
+ */
 export function Term2CommandMenu({
-  disabled,
+  composerDisabled,
+  commandsDisabled,
   pending,
   notice,
+  onAttachImage,
+  onMentionFile,
+  onUseSkill,
   onCommand,
 }: {
-  disabled: boolean;
+  composerDisabled: boolean;
+  commandsDisabled: boolean;
   pending: boolean;
   notice: { tone: 'neutral' | 'error'; message: string } | null;
+  onAttachImage: () => void;
+  onMentionFile: () => void;
+  /** Opens the skill picker; called after the menu has closed so the picker can take focus. */
+  onUseSkill: () => void;
   onCommand: (commandId: Term2CommandId) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Actions that move focus elsewhere (composer, skill picker) must stop the
+  // menu from returning focus to the "+" button as it closes.
+  const keepFocusRef = useRef(false);
+  const disabled = composerDisabled && commandsDisabled;
+  const select = (action: () => void, keepFocus = true) => () => {
+    keepFocusRef.current = keepFocus;
+    action();
+  };
+
   return (
     <div className="flex min-w-0 items-center gap-2">
       <DropdownMenu modal={false} open={open && !disabled} onOpenChange={setOpen}>
@@ -45,26 +75,65 @@ export function Term2CommandMenu({
             type="button"
             variant="outline"
             size="icon"
-            aria-label="Session commands"
-            title="Session commands"
+            aria-label="Add to message and session commands"
+            title="Attach, mention, skills and commands"
             className="rounded-full"
           >
-            {pending ? <Loader2 aria-hidden className="animate-spin" /> : <Ellipsis aria-hidden />}
+            {pending ? <Loader2 aria-hidden className="animate-spin" /> : <Plus aria-hidden />}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" className="w-64">
-          {TERM2_COMMAND_IDS.map((commandId) => {
-            const Icon = COMMAND_ICONS[commandId];
-            return (
-              <DropdownMenuItem key={commandId} onSelect={() => onCommand(commandId)} className="items-start">
-                <Icon aria-hidden className="mt-0.5" strokeWidth={1.75} />
-                <span className="min-w-0">
-                  <span className="block">{COMMAND_LABELS[commandId]}</span>
-                  <span className="block text-xs text-muted-foreground">{COMMAND_HINTS[commandId]}</span>
-                </span>
-              </DropdownMenuItem>
-            );
-          })}
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          className="w-64"
+          onCloseAutoFocus={(event) => {
+            if (!keepFocusRef.current) return;
+            keepFocusRef.current = false;
+            event.preventDefault();
+          }}
+        >
+          <DropdownMenuGroup>
+            <DropdownMenuItem disabled={composerDisabled} onSelect={select(onAttachImage, false)}>
+              <ImagePlus aria-hidden strokeWidth={1.75} />
+              Attach image
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={composerDisabled} onSelect={select(onMentionFile)}>
+              <AtSign aria-hidden strokeWidth={1.75} />
+              Mention a file
+              <DropdownMenuShortcut>@</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={composerDisabled}
+              onSelect={select(() => {
+                // Let the menu finish closing before the picker opens and takes focus.
+                window.setTimeout(onUseSkill, 0);
+              })}
+            >
+              <Wand2 aria-hidden strokeWidth={1.75} />
+              Use a skill…
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Session</DropdownMenuLabel>
+            {TERM2_COMMAND_IDS.map((commandId) => {
+              const Icon = COMMAND_ICONS[commandId];
+              return (
+                <DropdownMenuItem
+                  key={commandId}
+                  disabled={commandsDisabled}
+                  onSelect={select(() => onCommand(commandId), false)}
+                  className="items-start"
+                >
+                  <Icon aria-hidden className="mt-0.5" strokeWidth={1.75} />
+                  <span className="min-w-0">
+                    <span className="block">{COMMAND_LABELS[commandId]}</span>
+                    <span className="block text-xs text-muted-foreground">{COMMAND_HINTS[commandId]}</span>
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
       {pending && <span className="text-xs text-zinc-500">Running…</span>}

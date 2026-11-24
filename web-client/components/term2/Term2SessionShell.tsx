@@ -5,7 +5,6 @@ import {
   Archive,
   ArrowDown,
   ArrowUp,
-  AtSign,
   Check,
   CheckCircle2,
   ChevronsUpDown,
@@ -14,7 +13,6 @@ import {
   Copy,
   Folder,
   History,
-  ImagePlus,
   PanelLeft,
   Plus,
   RotateCcw,
@@ -34,7 +32,7 @@ import { Term2SessionList } from './Term2SessionList';
 import { Term2StatusBanner } from './Term2StatusBanner';
 import { ChatHeader } from '../ChatHeader';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Term2FolderSelector, type SelectedTerm2Workspace } from './Term2FolderSelector';
 import { Term2SetupDialog } from './Term2SetupDialog';
@@ -1735,42 +1733,6 @@ export function Term2SessionShell({
                     }}
                   />
                   <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    <Term2CommandMenu
-                      disabled={commandDisabled}
-                      pending={session.commandPending}
-                      notice={session.commandNotice}
-                      onCommand={(commandId) => void session.invokeCommand(commandId)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      disabled={composerDisabled}
-                      title="Attach image (or paste / drag-and-drop)"
-                      aria-label="Attach image"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="rounded-full"
-                    >
-                      <ImagePlus strokeWidth={1.75} />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      disabled={composerDisabled}
-                      title="Mention a file (@)"
-                      aria-label="Mention a file"
-                      onClick={() => {
-                        const prefix = input && !input.endsWith(' ') ? `${input} @` : `${input}@`;
-                        setInput(prefix);
-                        setCursorPos(prefix.length);
-                        ensureSessionFiles();
-                        composerRef.current?.focus();
-                      }}
-                      className="rounded-full"
-                    >
-                      <AtSign strokeWidth={1.75} />
-                    </Button>
                     <Popover
                       open={skillsOpen}
                       onOpenChange={(open) => {
@@ -1778,19 +1740,26 @@ export function Term2SessionShell({
                         else setSkillsOpen(false);
                       }}
                     >
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant={armedSkill ? 'secondary' : 'outline'}
-                          size="icon"
-                          disabled={composerDisabled}
-                          title="Use a skill"
-                          aria-label="Use a skill"
-                          className="rounded-full"
-                        >
-                          <Wand2 strokeWidth={1.75} />
-                        </Button>
-                      </PopoverTrigger>
+                      <PopoverAnchor asChild>
+                        <div className="min-w-0">
+                          <Term2CommandMenu
+                            composerDisabled={composerDisabled}
+                            commandsDisabled={commandDisabled}
+                            pending={session.commandPending}
+                            notice={session.commandNotice}
+                            onAttachImage={() => fileInputRef.current?.click()}
+                            onMentionFile={() => {
+                              const prefix = input && !input.endsWith(' ') ? `${input} @` : `${input}@`;
+                              setInput(prefix);
+                              setCursorPos(prefix.length);
+                              ensureSessionFiles();
+                              composerRef.current?.focus();
+                            }}
+                            onUseSkill={openSkillsMenu}
+                            onCommand={(commandId) => void session.invokeCommand(commandId)}
+                          />
+                        </div>
+                      </PopoverAnchor>
                       <PopoverContent
                         side="top"
                         align="start"
@@ -1904,9 +1873,6 @@ export function Term2SessionShell({
                     </div>
                   </div>
                 </div>
-                <p className="mt-2 hidden text-center text-xs text-zinc-400 sm:block dark:text-zinc-500">
-                  Enter to send · Shift+Enter for new line · @ mention files · ⌘K actions
-                </p>
               </div>
             )}
           </section>

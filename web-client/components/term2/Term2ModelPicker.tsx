@@ -1,17 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Check, ChevronDown, Loader2, RefreshCw, Search, Sparkles, Star } from 'lucide-react';
+import { Check, ChevronDown, Loader2, RefreshCw, Search, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { ModelSummary, SessionConfigRecord, SessionConfigUpdate, SettingsProjection } from '../../lib/term2/types';
@@ -29,6 +21,17 @@ export const REASONING_LEVELS: ReadonlyArray<{
   { value: 'high', label: 'High', hint: 'Deep reasoning for hard tasks' },
   { value: 'xhigh', label: 'Extra high', hint: 'Maximum reasoning effort' },
 ];
+
+/** Short labels so all levels fit one segmented control; the full label and hint show on hover. */
+const EFFORT_SHORT_LABELS: Record<string, string> = {
+  default: 'Auto',
+  none: 'Off',
+  minimal: 'Min',
+  low: 'Low',
+  medium: 'Med',
+  high: 'High',
+  xhigh: 'Max',
+};
 
 function formatContextWindow(tokens?: number): string | null {
   if (!tokens || tokens <= 0) return null;
@@ -61,7 +64,7 @@ export function Term2ModelPicker({
   onRefreshModels: () => void;
   onOpenSettings: () => void;
 }) {
-  const [openMenu, setOpenMenu] = useState<'model' | 'effort' | null>(null);
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<'all' | 'favorites'>('all');
 
@@ -98,11 +101,10 @@ export function Term2ModelPicker({
     });
   }, [models, query, tab, favoriteSet, providerLabels, config.providerId]);
 
-  const currentEffortMeta = REASONING_LEVELS.find((item) => item.value === config.reasoningEffort) ?? {
-    value: 'default',
-    label: config.reasoningEffort || 'Default',
-    hint: '',
-  };
+  const effortValue = config.reasoningEffort || 'default';
+  const currentEffortMeta = REASONING_LEVELS.find((item) => item.value === effortValue);
+  const effortLabel = currentEffortMeta?.label ?? effortValue;
+  const showEffortInChip = effortValue !== 'default';
 
   const trimmedQuery = query.trim();
   const exactInList = models.some(
@@ -117,27 +119,26 @@ export function Term2ModelPicker({
     } else {
       onSelectModel(config.providerId, trimmedQuery);
     }
-    setOpenMenu(null);
+    setOpen(false);
     setQuery('');
   };
 
-  const setMenu = (menu: 'model' | 'effort') => (open: boolean) => setOpenMenu(open ? menu : null);
-
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <Popover open={openMenu === 'model'} onOpenChange={setMenu('model')}>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
             variant="outline"
             size="xs"
             disabled={disabled || busy}
-            aria-label="Choose model"
-            title={`Model: ${config.providerId}/${config.modelId} (click to switch)`}
-            className="max-w-[14rem] rounded-full font-mono"
+            aria-label="Choose model and reasoning effort"
+            title={`Model: ${config.providerId}/${config.modelId} · Reasoning effort: ${effortLabel}`}
+            className="max-w-[18rem] rounded-full"
           >
             {busy ? <Loader2 aria-hidden className="animate-spin" /> : null}
-            <span className="truncate">{config.modelId}</span>
+            <span className="truncate font-mono">{config.modelId}</span>
+            {showEffortInChip && <span className="shrink-0 text-muted-foreground">· {effortLabel}</span>}
             <ChevronDown aria-hidden className="text-muted-foreground" />
           </Button>
         </PopoverTrigger>
@@ -200,7 +201,7 @@ export function Term2ModelPicker({
               variant="link"
               size="xs"
               onClick={() => {
-                setOpenMenu(null);
+                setOpen(false);
                 onOpenSettings();
               }}
             >
@@ -222,7 +223,7 @@ export function Term2ModelPicker({
                       type="button"
                       size="sm"
                       onClick={() => {
-                        setOpenMenu(null);
+                        setOpen(false);
                         onOpenSettings();
                       }}
                     >
@@ -251,7 +252,7 @@ export function Term2ModelPicker({
                           type="button"
                           onClick={() => {
                             onSelectModel(model.provider, model.id);
-                            setOpenMenu(null);
+                            setOpen(false);
                             setQuery('');
                           }}
                           className={cn(
@@ -304,42 +305,58 @@ export function Term2ModelPicker({
               </div>
             )}
           </div>
+          <div className="border-t px-3 py-2.5">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <span id="term2-effort-label" className="font-medium">
+                Reasoning effort
+              </span>
+              <span className="truncate text-muted-foreground">{currentEffortMeta?.hint}</span>
+            </div>
+            <div
+              role="radiogroup"
+              aria-labelledby="term2-effort-label"
+              className="mt-1.5 grid grid-cols-7 gap-0.5 rounded-lg bg-muted p-0.5"
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                event.preventDefault();
+                const index = REASONING_LEVELS.findIndex((level) => level.value === effortValue);
+                const step = event.key === 'ArrowRight' ? 1 : -1;
+                const next = REASONING_LEVELS[(index + step + REASONING_LEVELS.length) % REASONING_LEVELS.length]!;
+                onSelectEffort(next.value);
+                event.currentTarget
+                  .querySelector<HTMLButtonElement>(`[data-effort="${next.value}"]`)
+                  ?.focus();
+              }}
+            >
+              {REASONING_LEVELS.map((level) => {
+                const selected = level.value === effortValue;
+                return (
+                  <button
+                    key={level.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={level.label}
+                    data-effort={level.value}
+                    tabIndex={selected ? 0 : -1}
+                    title={`${level.label}: ${level.hint}`}
+                    disabled={disabled || busy}
+                    onClick={() => {
+                      if (!selected) onSelectEffort(level.value);
+                    }}
+                    className={cn(
+                      'rounded-md py-1 text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50',
+                      selected && 'bg-background font-medium text-foreground shadow-sm',
+                    )}
+                  >
+                    {EFFORT_SHORT_LABELS[level.value] ?? level.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </PopoverContent>
       </Popover>
-
-      <DropdownMenu modal={false} open={openMenu === 'effort'} onOpenChange={setMenu('effort')}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            disabled={disabled || busy}
-            aria-label="Reasoning effort"
-            title={`Reasoning effort: ${currentEffortMeta.label}`}
-            className="rounded-full"
-          >
-            <Sparkles aria-hidden />
-            <span>{currentEffortMeta.label}</span>
-            <ChevronDown aria-hidden className="text-muted-foreground" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" aria-label="Select reasoning effort" className="w-60">
-          <DropdownMenuLabel>Reasoning effort</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={config.reasoningEffort}
-            onValueChange={(value) => onSelectEffort(value as NonNullable<SessionConfigUpdate['reasoningEffort']>)}
-          >
-            {REASONING_LEVELS.map((level) => (
-              <DropdownMenuRadioItem key={level.value} value={level.value} className="items-start">
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium">{level.label}</span>
-                  <span className="block text-xs text-muted-foreground">{level.hint}</span>
-                </span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   );
 }

@@ -114,7 +114,7 @@ export function Term2SkillsPopover({
             key={skill.name}
             type="button"
             onClick={() => onSelect(active ? null : skill)}
-            className={`flex w-full flex-col gap-0.5 rounded-md px-2.5 py-2 text-left transition-colors ${
+            className={`flex w-full flex-col gap-0.5 rounded-md px-2.5 py-2 text-left outline-none transition-colors focus-visible:bg-accent ${
               active
                 ? 'bg-accent text-accent-foreground'
                 : 'hover:bg-accent'

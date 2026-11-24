@@ -202,12 +202,7 @@ export function Term2SettingsPanel({
     setConfirm(pending);
   };
 
-  const closeConfirm = () => {
-    setConfirm(null);
-    if (lastFocusedElementRef.current && typeof lastFocusedElementRef.current.focus === 'function') {
-      lastFocusedElementRef.current.focus();
-    }
-  };
+  const closeConfirm = () => setConfirm(null);
 
   const reload = useCallback(async () => {
     setBusy(true);
@@ -1223,7 +1218,13 @@ export function Term2SettingsPanel({
           if (!open) closeConfirm();
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            // No AlertDialogTrigger: return focus to the control that asked for confirmation.
+            event.preventDefault();
+            if (lastFocusedElementRef.current?.isConnected) lastFocusedElementRef.current.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>
               {confirm?.key.startsWith('credential:')

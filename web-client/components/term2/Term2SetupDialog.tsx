@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +16,8 @@ export function Term2SetupDialog({
   wide?: boolean;
   children: ReactNode;
 }) {
+  // There is no DialogTrigger, so Radix has nothing to refocus on close; return focus to the opener.
+  const [opener] = useState(() => (typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null)));
   return (
     <Dialog
       open
@@ -25,6 +27,10 @@ export function Term2SetupDialog({
     >
       <DialogContent
         aria-describedby={undefined}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (opener?.isConnected) opener.focus();
+        }}
         onEscapeKeyDown={(event) => {
           // Fields that use Escape to cancel an inline edit opt out of closing the dialog.
           if ((event.target as Element | null)?.closest?.('[data-escape-cancels-edit]')) event.preventDefault();

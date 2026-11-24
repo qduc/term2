@@ -1524,7 +1524,7 @@ export function Term2SessionShell({
             </div>
 
             {sessionId && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-white from-65% to-transparent px-3 pb-3 pt-10 dark:from-zinc-900 sm:px-6 sm:pb-4">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 overflow-visible bg-gradient-to-t from-white from-65% to-transparent px-3 pb-3 pt-10 dark:from-zinc-900 sm:px-6 sm:pb-4">
                 {!pinned && (
                   <div className="mb-2 flex justify-center">
                     <button
@@ -1571,7 +1571,7 @@ export function Term2SessionShell({
                   }}
                   onDragLeave={() => setDraggingFile(false)}
                   onDrop={handleDrop}
-                  className={`pointer-events-auto relative mx-auto max-w-[46rem] rounded-[26px] border bg-white shadow-[0_2px_6px_rgba(0,0,0,0.03),0_12px_32px_-12px_rgba(0,0,0,0.12)] transition-[border-color,box-shadow] focus-within:border-black/[0.16] focus-within:shadow-[0_2px_6px_rgba(0,0,0,0.04),0_16px_40px_-12px_rgba(0,0,0,0.18)] dark:bg-zinc-800/80 dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] dark:focus-within:border-white/[0.18] ${
+                  className={`pointer-events-auto relative mx-auto max-w-[46rem] overflow-visible rounded-[26px] border bg-white shadow-[0_2px_6px_rgba(0,0,0,0.03),0_12px_32px_-12px_rgba(0,0,0,0.12)] transition-[border-color,box-shadow] focus-within:border-black/[0.16] focus-within:shadow-[0_2px_6px_rgba(0,0,0,0.04),0_16px_40px_-12px_rgba(0,0,0,0.18)] dark:bg-zinc-800/80 dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] dark:focus-within:border-white/[0.18] ${
                     draggingFile
                       ? 'border-teal-500 ring-2 ring-teal-500/20'
                       : 'border-black/[0.08] dark:border-white/[0.09]'

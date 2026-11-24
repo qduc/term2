@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { FileText, Folder, Sparkles, Wand2, type LucideIcon } from 'lucide-react';
 import type { SkillSummary, WorkspaceFileEntry } from '../../lib/term2/types';
 
@@ -153,11 +154,18 @@ export function Term2QuickPalette({
   activeIndex: number;
   query: string;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const selected = listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+    selected?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, actions]);
   return (
     <div
+      ref={listRef}
       role="listbox"
       aria-label="Quick actions"
-      className="t2-enter absolute bottom-full left-0 z-40 mb-2 max-h-72 w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-black/[0.09] bg-white p-1.5 shadow-[0_14px_36px_-10px_rgba(0,0,0,0.2)] scrollbar-thin dark:border-white/10 dark:bg-zinc-900 dark:shadow-[0_14px_36px_-10px_rgba(0,0,0,0.65)]"
+      className="t2-enter absolute bottom-full left-0 z-50 mb-2 max-h-[min(18rem,calc(100dvh-9rem))] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-2xl border border-black/[0.09] bg-white p-1.5 shadow-[0_14px_36px_-10px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-zinc-900 dark:shadow-[0_14px_36px_-10px_rgba(0,0,0,0.65)]"
+      style={{ scrollbarWidth: 'thin' }}
     >
       <div className="flex items-center justify-between px-2.5 py-1 text-[11px] text-zinc-400">
         <span>Quick actions {query ? `matching “${query}”` : ''}</span>

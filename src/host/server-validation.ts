@@ -362,8 +362,55 @@ export function isTaskControlBody(
   );
 }
 
+/**
+ * A submitted message the route may turn into a `submit` command. Unknown keys,
+ * an oversized body, a non-opaque id, a bad delivery or skill, or text with no
+ * attachment are refused here so the route does not re-decide them. Non-direct
+ * clients may attach only the images `isImageAttachments` already accepts.
+ */
+export function directMessage(
+  body: unknown,
+  direct: boolean,
+): {
+  text: string;
+  clientRequestId: string;
+  attachments?: unknown;
+  delivery?: unknown;
+  expectedSteerTurnId?: string;
+  skill?: string;
+} | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const value = body as Record<string, unknown>;
+  const allowed = ['text', 'clientRequestId', 'attachments', 'delivery', 'expectedSteerTurnId', 'skill'];
+  if (
+    Object.keys(value).some((key) => !allowed.includes(key)) ||
+    typeof value.text !== 'string' ||
+    value.text.length > 128_000 ||
+    !isOpaqueId(value.clientRequestId)
+  )
+    return null;
+  if (!direct && value.attachments !== undefined && !isImageAttachments(value.attachments)) return null;
+  if (
+    value.delivery !== undefined &&
+    (typeof value.delivery !== 'string' || !['auto', 'steer', 'follow_up', 'reject_if_busy'].includes(value.delivery))
+  )
+    return null;
+  if (value.expectedSteerTurnId !== undefined && !isOpaqueId(value.expectedSteerTurnId)) return null;
+  if (value.skill !== undefined && (typeof value.skill !== 'string' || !value.skill.trim() || value.skill.length > 128))
+    return null;
+  if (!value.text.length && (!Array.isArray(value.attachments) || !value.attachments.length)) return null;
+  return {
+    text: value.text,
+    clientRequestId: value.clientRequestId,
+    ...(value.attachments !== undefined ? { attachments: value.attachments } : {}),
+    ...(value.delivery !== undefined ? { delivery: value.delivery } : {}),
+    ...(typeof value.expectedSteerTurnId === 'string' ? { expectedSteerTurnId: value.expectedSteerTurnId } : {}),
+    ...(typeof value.skill === 'string' ? { skill: value.skill.trim() } : {}),
+  };
+}
+
 const IMAGE_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-export function isImageAttachments(value: unknown): value is Array<{ type: 'image'; mediaType: string; data: string }> {
+function isImageAttachments(value: unknown): value is Array<{ type: 'image'; mediaType: string; data: string }> {
   if (!Array.isArray(value) || value.length === 0 || value.length > 4) return false;
   return value.every((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return false;

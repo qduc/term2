@@ -38,7 +38,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Term2FolderSelector, type SelectedTerm2Workspace } from './Term2FolderSelector';
 import type { SavedFolderChange } from './Term2SavedFolderMenu';
 import { Term2SetupDialog } from './Term2SetupDialog';
-import { Term2SettingsPanel } from './Term2SettingsPanel';
+import { Term2SettingsPage } from './settings/Term2SettingsPage';
+import { parseSettingsSection, type SettingsSectionId } from './settings/settings-catalog';
 import { Term2NativeEvidence } from './Term2NativeEvidence';
 import { Term2SessionConfig } from './Term2SessionConfig';
 import { Term2CommandMenu } from './Term2CommandMenu';
@@ -97,6 +98,18 @@ function Wordmark() {
       term2
     </span>
   );
+}
+
+/** The current URL with the settings page's parameters set (or removed when `section` is null). */
+function settingsUrl(section: SettingsSectionId | null, provider?: string | null): string {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('settings');
+  url.searchParams.delete('provider');
+  if (section) {
+    url.searchParams.set('settings', section);
+    if (provider) url.searchParams.set('provider', provider);
+  }
+  return url.toString();
 }
 
 function readLocalString(key: string): string | null {
@@ -164,12 +177,18 @@ export function Term2SessionShell({
   authUserId,
   homeFolder,
   allowWrite = false,
+  settingsSection = null,
+  settingsProvider = null,
 }: {
   initialSessionId: string | null;
   /** Current authenticated user id (or null). A change resets session selection. */
   authUserId?: string | null;
   homeFolder?: string;
   allowWrite?: boolean;
+  /** `?settings=` URL value; when set, the settings page replaces the chat view. */
+  settingsSection?: string | null;
+  /** `?provider=` URL value: the provider shown on the settings page's Providers section. */
+  settingsProvider?: string | null;
 }) {
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
   const [prevInitialSessionId, setPrevInitialSessionId] = useState(initialSessionId);
@@ -184,7 +203,7 @@ export function Term2SessionShell({
   const [draggingFile, setDraggingFile] = useState(false);
   const [armedSkill, setArmedSkill] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [dialog, setDialog] = useState<'folder' | 'settings' | 'help' | 'rewind' | null>(null);
+  const [dialog, setDialog] = useState<'folder' | 'help' | 'rewind' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
   const [startingChat, setStartingChat] = useState(false);
   // "New chat" opens a draft: a folder and a composer, but no gateway session
@@ -239,6 +258,29 @@ export function Term2SessionShell({
     Record<string, { displayName: string; fullPath: string; access?: string }>
   >({});
   const localControlEnabled = isTerm2LocalControlEnabled();
+  const activeSettingsSection = localControlEnabled ? parseSettingsSection(settingsSection) : null;
+  const settingsOpen = activeSettingsSection !== null;
+
+  /** Opens the settings page as a new history entry, so browser Back returns to the chat. */
+  const openSettings = useCallback((section: SettingsSectionId = 'providers', provider?: string | null) => {
+    window.history.pushState({ term2Settings: true }, '', settingsUrl(section, provider));
+  }, []);
+  /** Moves within settings without adding history entries. */
+  const navigateSettings = useCallback((section: SettingsSectionId, provider?: string | null) => {
+    window.history.replaceState(
+      { term2Settings: Boolean((window.history.state as { term2Settings?: boolean } | null)?.term2Settings) },
+      '',
+      settingsUrl(section, provider),
+    );
+  }, []);
+  const closeSettings = useCallback(() => {
+    // Opened from the chat: go back to that entry. Opened from a link or a refresh: drop the parameters.
+    if ((window.history.state as { term2Settings?: boolean } | null)?.term2Settings) {
+      window.history.back();
+      return;
+    }
+    window.history.replaceState({}, '', settingsUrl(null));
+  }, []);
   const session = useTerm2Session(sessionId);
   const { refreshWorkspaces, refreshSessions, loadNextSessions, setSelectedWorkspaceId } = session;
   const prevUserIdRef = useRef(authUserId ?? null);
@@ -989,8 +1031,9 @@ export function Term2SessionShell({
     }
   }, [interactionPending, hasStreamingTurn, session.view.status, notificationsEnabled]);
 
-  // Global Cmd/Ctrl+K quick palette shortcut.
+  // Global Cmd/Ctrl+K quick palette shortcut. The settings page uses it for its search box.
   useEffect(() => {
+    if (settingsOpen) return;
     const onGlobalKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -1003,7 +1046,7 @@ export function Term2SessionShell({
     };
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
-  }, [sessionId]);
+  }, [sessionId, settingsOpen]);
 
   // Smart auto-scroll pinning.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1139,7 +1182,7 @@ export function Term2SessionShell({
         disabled: !localControlEnabled,
         run: () => {
           clearPalette();
-          setDialog('settings');
+          openSettings();
         },
       },
       {
@@ -1196,7 +1239,7 @@ export function Term2SessionShell({
         aria-label="Chat history and folders"
         inert={!sidebarOpen ? true : undefined}
         aria-hidden={!sidebarOpen ? 'true' : undefined}
-        className={`fixed inset-y-0 left-0 z-[70] flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
+        className={`${settingsOpen ? 'hidden! ' : ''}fixed inset-y-0 left-0 z-[70] flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full invisible pointer-events-none md:-ml-[17.5rem]'
         }`}
       >
@@ -1267,7 +1310,28 @@ export function Term2SessionShell({
         </div>
       </aside>
 
-      <div className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen ? '' : 'md:pl-2'}`}>
+      {settingsOpen && activeSettingsSection && (
+        <Term2SettingsPage
+          section={activeSettingsSection}
+          provider={settingsProvider}
+          onNavigate={navigateSettings}
+          onClose={closeSettings}
+          onLoaded={setSettings}
+          models={models}
+          modelsLoading={loadingModels}
+          onModelsChanged={reloadModels}
+          displayMode={displayMode}
+          onDisplayModeChange={updateDisplayMode}
+          notificationsEnabled={notificationsEnabled}
+          onNotificationsChange={updateNotifications}
+          showDiagnostics={showDiagnostics}
+          onShowDiagnosticsChange={updateDiagnostics}
+        />
+      )}
+      {/* Hidden, not unmounted, while settings is open so the chat keeps its scroll position and draft. */}
+      <div
+        className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen ? '' : 'md:pl-2'} ${settingsOpen ? 'hidden!' : ''}`}
+      >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-zinc-900 md:rounded-2xl md:border md:border-black/[0.06] md:shadow-[0_1px_3px_rgba(0,0,0,0.04)] md:dark:border-white/[0.06]">
           <ChatHeader
             isStreaming={canAbort && hasStreamingTurn}
@@ -1281,7 +1345,7 @@ export function Term2SessionShell({
             onNewChat={!sidebarOpen && session.selectedWorkspaceId ? () => void createNewChat() : undefined}
             newChatLabel="New chat"
             onOpenHelp={() => setDialog('help')}
-            onOpenSettings={() => setDialog('settings')}
+            onOpenSettings={() => openSettings()}
             showSettingsButton={localControlEnabled}
             onToggleLeftSidebar={() => setSidebarOpen((open) => !open)}
             showLeftSidebarButton={!sidebarOpen}
@@ -1351,7 +1415,7 @@ export function Term2SessionShell({
                             type="button"
                             size="sm"
                             variant={hasAnyConfiguredProvider ? 'outline' : 'default'}
-                            onClick={() => setDialog('settings')}
+                            onClick={() => openSettings()}
                           >
                             {hasAnyConfiguredProvider ? 'Manage' : 'Connect'}
                           </Button>
@@ -1496,7 +1560,7 @@ export function Term2SessionShell({
                       )}
                       <Button
                         type="button"
-                        onClick={() => setDialog('settings')}
+                        onClick={() => openSettings('providers', providerId || null)}
                         variant="outline" size="sm"
                       >
                         Open provider settings
@@ -1628,7 +1692,7 @@ export function Term2SessionShell({
                             {localControlEnabled && (
                               <Button
                                 type="button"
-                                onClick={() => setDialog('settings')}
+                                onClick={() => openSettings('providers', providerId || null)}
                                 variant="outline" size="xs"
                               >
                                 Settings
@@ -2033,7 +2097,7 @@ export function Term2SessionShell({
                           onSelectEffort={(reasoningEffort) => void handleUpdateSessionConfig({ reasoningEffort })}
                           onToggleFavorite={settings ? (key) => void handleToggleFavorite(key) : undefined}
                           onRefreshModels={() => void reloadModels()}
-                          onOpenSettings={() => setDialog('settings')}
+                          onOpenSettings={() => openSettings()}
                           pending={Boolean(stagedForChat)}
                           note={pickerNote}
                           warning={pickerWarning}
@@ -2129,23 +2193,7 @@ export function Term2SessionShell({
           />
         </Term2SetupDialog>
       )}
-      {dialog === 'settings' && (
-        <Term2SetupDialog title="Settings" wide fixedHeight onClose={() => setDialog(null)}>
-          <Term2SettingsPanel
-            onLoaded={setSettings}
-            onProvidersChanged={() => void reloadModels()}
-            preferredProvider={sessionConfig?.providerId}
-            models={models}
-            displayMode={displayMode}
-            onDisplayModeChange={updateDisplayMode}
-            notificationsEnabled={notificationsEnabled}
-            onNotificationsChange={updateNotifications}
-            showDiagnostics={showDiagnostics}
-            onShowDiagnosticsChange={updateDiagnostics}
-          />
-        </Term2SetupDialog>
-      )}
-      {sidebarOpen && (
+      {sidebarOpen && !settingsOpen && (
         <button
           type="button"
           aria-label="Dismiss chat history"

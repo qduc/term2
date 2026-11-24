@@ -9,7 +9,10 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-const project = fileURLToPath(new URL('./web-client/', import.meta.url));
+// `pnpm dev:web` runs this file from scripts/ with TERM2_WEB_DEV=1: it serves the
+// web-client sources with `next dev` against the repository's built CLI.
+const dev = process.env.TERM2_WEB_DEV === '1';
+const project = fileURLToPath(new URL(dev ? '../web-client/' : './web-client/', import.meta.url));
 const argv = process.argv.slice(2);
 if (argv.includes('--help') || argv.includes('-h')) {
   console.log(
@@ -54,13 +57,17 @@ for (let index = 0; index < argv.length; index += 1) {
     process.exit(1);
   }
 }
-if (!existsSync(path.join(project, '.next', 'BUILD_ID'))) {
+if (dev && !existsSync(fileURLToPath(new URL('../dist/cli.js', import.meta.url)))) {
+  console.error('Run pnpm build (or pnpm dev) first: the web dev server needs the built term2 CLI.');
+  process.exit(1);
+}
+if (!dev && !existsSync(path.join(project, '.next', 'BUILD_ID'))) {
   console.error('The term2 web build is missing. Reinstall the npm package, or pack it after running pnpm build.');
   process.exit(1);
 }
 
-const cli = fileURLToPath(new URL('./cli.js', import.meta.url));
-const next = createRequire(import.meta.url).resolve('next/dist/bin/next');
+const cli = fileURLToPath(new URL(dev ? '../dist/cli.js' : './cli.js', import.meta.url));
+const next = createRequire(dev ? path.join(project, 'package.json') : import.meta.url).resolve('next/dist/bin/next');
 const children = [];
 let stop;
 const stopped = new Promise((resolve) => {
@@ -127,12 +134,12 @@ try {
   });
   if ((await Promise.race([ready, stopped])) === true) {
     // Do not expose the single-owner BFF to the network or inherit pairing settings.
-    start([next, 'start', project, '--hostname', '127.0.0.1'], {
+    start([next, dev ? 'dev' : 'start', project, '--hostname', '127.0.0.1'], {
       stdio: ['ignore', 'inherit', 'inherit'],
       env: {
         ...process.env,
         ...(portOverride !== undefined ? { PORT: portOverride } : {}),
-        NODE_ENV: 'production',
+        NODE_ENV: dev ? 'development' : 'production',
         NEXT_TELEMETRY_DISABLED: '1',
         TERM2_PACKAGED_WEB: 'true',
         TERM2_WEB_ALLOW_WRITE: allowWrite ? 'true' : 'false',

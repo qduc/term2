@@ -45,6 +45,7 @@
     "build": "node scripts/build-with-rollback.mjs",
     "build:restore": "node scripts/restore-build-output.mjs",
     "dev": "node scripts/dev.mjs",
+    "dev:web": "cross-env TERM2_WEB_DEV=1 node scripts/start-web.mjs",
     "typecheck": "tsc --noEmit",
     "test": "cross-env NODE_ENV=test node scripts/run-test.mjs",
     "arch:report": "node scripts/arch-report.mjs",

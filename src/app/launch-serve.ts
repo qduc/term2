@@ -161,7 +161,7 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
       const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
       const { workspace } = grants.resolveWorkspace(principal, grant);
       const current = await app.sessionConfiguration(snapshot.sessionId);
-      const { defaultsRevision } = configuration.read();
+      const { defaultsRevision } = await configuration.read();
       return {
         sessionId: current.sessionId,
         providerId: current.model.provider,

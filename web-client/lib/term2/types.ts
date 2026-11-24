@@ -265,6 +265,8 @@ export interface SettingsProjection {
       network: 'denied' | 'configured' | 'confirmation-required';
     };
   };
+  /** Display-only. Set when this machine cannot run the shell sandbox. */
+  shellSandboxNotice?: string;
   session?: SessionConfigRecord;
 }
 export interface SettingsWriteResult {

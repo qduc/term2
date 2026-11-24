@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SettingsProjection } from '../host/server-contracts.js';
+import { getDefaultShellSandboxRunner, sandboxFailure } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { DirectHostConfigError } from './host-config-error.js';
 import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 
@@ -134,10 +135,32 @@ export class DirectGlobalConfiguration {
     private readonly oauth: DirectOAuthBackend,
     private readonly models: DirectModelBackend,
     private readonly allowWrite: boolean,
-  ) {}
+  ) {
+    this.#sandboxNotice = this.#probeSandbox();
+  }
 
-  read(): SettingsProjection {
-    return this.#projection();
+  /** Cached machine probe. It is not consulted by approval. */
+  readonly #sandboxNotice: Promise<string | undefined>;
+
+  async #probeSandbox(): Promise<string | undefined> {
+    try {
+      const availability = await getDefaultShellSandboxRunner().availability();
+      if (availability.type === 'available') return undefined;
+      return sandboxFailure(availability);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return `Error: Shell sandbox unavailable (probe_failed): ${reason}. The command was not run.`;
+    }
+  }
+
+  async read(): Promise<SettingsProjection> {
+    return this.#withSandboxNotice(this.#projection());
+  }
+
+  /** The notice is attached after the revision hash. It never changes a write. */
+  async #withSandboxNotice(projection: SettingsProjection): Promise<SettingsProjection> {
+    const shellSandboxNotice = await this.#sandboxNotice;
+    return shellSandboxNotice ? { ...projection, shellSandboxNotice } : projection;
   }
 
   async write(
@@ -184,7 +207,7 @@ export class DirectGlobalConfiguration {
       }
       throw error;
     }
-    return this.#projection();
+    return this.#withSandboxNotice(this.#projection());
   }
 
   listProviderPresets() {

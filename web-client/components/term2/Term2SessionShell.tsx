@@ -1485,6 +1485,7 @@ export function Term2SessionShell({
                     }:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
                     interaction={session.view.pendingInteraction.interaction}
                     subagent={session.view.pendingInteraction.subagent}
+                    shellSandboxNotice={settings?.shellSandboxNotice}
                     onResolve={session.resolveInteraction}
                     disabled={aborting}
                   />

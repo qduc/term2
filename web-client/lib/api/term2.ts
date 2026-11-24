@@ -321,7 +321,9 @@ function jsonValue(value: unknown, depth = 0): boolean {
 }
 export function validateSettings(value: unknown): SettingsProjection {
   const input = object(value);
-  only(input, ['schemaVersion', 'revision', 'defaultsRevision', 'settings', 'session']);
+  only(input, ['schemaVersion', 'revision', 'defaultsRevision', 'settings', 'session', 'shellSandboxNotice']);
+  if (input.shellSandboxNotice !== undefined && typeof input.shellSandboxNotice !== 'string')
+    throw new Term2ApiError(503, 'Invalid agent response');
   if (input.schemaVersion !== 1 || typeof input.revision !== 'string' || typeof input.defaultsRevision !== 'string')
     throw new Term2ApiError(503, 'Invalid agent response');
   const settings = object(input.settings);
@@ -437,6 +439,7 @@ export function validateSettings(value: unknown): SettingsProjection {
       safety: safety as SettingsProjection['settings']['safety'],
     },
     ...(input.session === undefined ? {} : { session: validateSessionConfig(input.session) }),
+    ...(typeof input.shellSandboxNotice === 'string' ? { shellSandboxNotice: text(input.shellSandboxNotice, 2000) } : {}),
   };
 }
 function validateCredentialProjection(value: unknown): SettingsProjection['settings']['credentials'][string] {

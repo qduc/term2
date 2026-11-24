@@ -593,11 +593,20 @@ Rules, and why they are shaped this way:
   admitted on a physically writable folder under `--allow-write`. For a
   `read_write` grant the probe still requires both `--allow-write` and OS
   write access to the folder. The runtime, not the probe, enforces the tool
-  boundary. A `read` session refuses shell execution unless the command runs
-  inside the filesystem sandbox; with `sandbox.enabled=false`, this includes
-  shell reads such as `cat`. Built-in read tools remain available. This
-  admission policy requires both the fail-closed shell guard and production
-  `allowWrite` forwarding. Disabling the sandbox for a `read_write` session
+  boundary. A `read` session (its effective access, see §8) runs every shell
+  command inside the filesystem sandbox with workspace writes disabled,
+  whatever `sandbox.enabled` says; `sandbox.enabled` governs only `read_write`
+  sessions. A model's `sandbox: "unsandboxed"` request still runs sandboxed,
+  and a read session gets no Docker host control. Availability is probed once
+  when the session's runtime is built and kept for that session. If the sandbox
+  is unavailable (or the probe fails, or the folder is over SSH), the session
+  offers no `shell` tool, to the root or to its child agents, and its
+  instructions say shell is unavailable in this read-only folder and to use the
+  read, search and list tools. A shell call that still reaches the guard (the
+  sandbox stopped working mid-session) is refused with an error telling the
+  model shell is unavailable for the rest of the session and not to retry it.
+  Built-in read tools remain available. This admission policy requires both the
+  fail-closed shell guard and production `allowWrite` forwarding. Disabling the sandbox for a `read_write` session
   also removes shell filesystem confinement; admission's root checks do not
   confine those commands.
 - **Absent vs corrupt (the legacy-record rule).** A session created before the

@@ -320,20 +320,16 @@ function jsonValue(value: unknown, depth = 0): boolean {
   }
   return false;
 }
-const SHELL_SANDBOX_CODES = new Set([
-  'missing_dependency',
-  'unsupported_platform',
-  'initialization_failed',
-  'disabled',
-  'probe_failed',
-]);
 function validateShellSandboxNotice(value: unknown): ShellSandboxNotice | undefined {
   if (value === undefined) return undefined;
-  const notice = object(value);
-  only(notice, ['code', 'detail']);
-  if (!SHELL_SANDBOX_CODES.has(String(notice.code)) || typeof notice.detail !== 'string')
-    throw new Term2ApiError(503, 'Invalid agent response');
-  return { code: notice.code as ShellSandboxNotice['code'], detail: text(notice.detail, 300) };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const notice = value as Record<string, unknown>;
+  if (Object.keys(notice).some((key) => key !== 'code' && key !== 'detail')) return undefined;
+  const { code, detail } = notice;
+  if (typeof code !== 'string' || typeof detail !== 'string') return undefined;
+  if (code.length === 0 || code.length > 64 || detail.length > 300) return undefined;
+  if (/[\u0000-\u001f\u007f]/u.test(code) || /[\u0000-\u001f\u007f]/u.test(detail)) return undefined;
+  return { code, detail };
 }
 export function validateSettings(value: unknown): SettingsProjection {
   const input = object(value);

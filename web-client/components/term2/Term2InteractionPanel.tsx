@@ -31,7 +31,7 @@ export function Term2InteractionPanel({
   subagent?: Term2SubagentIdentity;
   onResolve: (request: InteractionResolveRequest) => void;
   disabled?: boolean;
-  /** Display sentence for this shell card. It does not change the choice. */
+  /** Machine fact for a shell card. It does not change the choice. */
   shellSandboxNotice?: string | null;
 }) {
   const [answer, setAnswer] = useState('');

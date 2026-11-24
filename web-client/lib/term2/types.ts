@@ -270,7 +270,7 @@ export interface SettingsProjection {
   session?: SessionConfigRecord;
 }
 export interface ShellSandboxNotice {
-  code: 'missing_dependency' | 'unsupported_platform' | 'initialization_failed' | 'disabled' | 'probe_failed';
+  code: string;
   detail: string;
 }
 export interface SettingsWriteResult {

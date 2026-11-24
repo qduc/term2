@@ -184,7 +184,7 @@ export type SettingsProjection = {
   shellSandboxNotice?: ShellSandboxNotice;
 };
 export type ShellSandboxNotice = {
-  code: 'missing_dependency' | 'unsupported_platform' | 'initialization_failed' | 'disabled' | 'probe_failed';
+  code: string;
   detail: string;
 };
 /** App-owned global configuration authority. Implementations must redact secrets in all results,

@@ -25,7 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Session';
-import { shellSandboxApprovalCopy } from '../../lib/term2/shell-sandbox-notice';
+import { shellSandboxMachineFact } from '../../lib/term2/shell-sandbox-notice';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
 import { Term2TurnTimeline } from './Term2TurnTimeline';
 import { describeCommand } from './Term2CommandCard';
@@ -1486,18 +1486,7 @@ export function Term2SessionShell({
                     }:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
                     interaction={session.view.pendingInteraction.interaction}
                     subagent={session.view.pendingInteraction.subagent}
-                    shellSandboxNotice={
-                      shellSandboxApprovalCopy({
-                        notice: settings?.shellSandboxNotice,
-                        sandboxSetting: settings?.settings.safety.sandbox,
-                        workspaceAccess: settings?.settings.safety.workspaceAccess,
-                        argumentsText: session.view.pendingInteraction.interaction.descriptor.argumentsText,
-                        sshEnabled:
-                          sessionConfig?.toolPolicy !== undefined &&
-                          'sshEnabled' in sessionConfig.toolPolicy &&
-                          sessionConfig.toolPolicy.sshEnabled === true,
-                      }) ?? undefined
-                    }
+                    shellSandboxNotice={shellSandboxMachineFact(settings?.shellSandboxNotice) ?? undefined}
                     onResolve={session.resolveInteraction}
                     disabled={aborting}
                   />

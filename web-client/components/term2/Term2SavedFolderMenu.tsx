@@ -1,7 +1,29 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Check, MoreHorizontal } from 'lucide-react';
+import { useState } from 'react';
+import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 import { Term2ApiError, term2Client } from '../../lib/api/term2';
 import type { WorkspaceAlias } from '../../lib/term2/types';
 
@@ -9,165 +31,165 @@ export type SavedFolderChange =
   | { kind: 'access'; workspace: WorkspaceAlias }
   | { kind: 'removed'; workspaceId: string };
 
-const ACCESS_OPTIONS = [
-  { value: 'read_write', label: 'Read & write' },
-  { value: 'read', label: 'Read only' },
-] as const;
-
 /**
- * Per-folder actions for a saved folder: change its access or remove it. The gateway
- * closes the folder's live chats either way. After a change a chat reopens with the
- * narrower of the access it started with and the folder's new access, so it never
- * gains access; after removal its chats do not open at all.
+ * Per-folder actions for a saved folder: start a chat there (optional), change its
+ * access, or remove it. The gateway closes the folder's live chats either way. After
+ * a change a chat reopens with the narrower of the access it started with and the
+ * folder's new access, so it never gains access; after removal its chats do not open.
  */
 export function Term2SavedFolderMenu({
   workspace,
+  displayName,
   allowWrite,
   onChanged,
+  onNewChat,
+  className,
 }: {
   workspace: WorkspaceAlias;
+  /** Short folder name for labels; defaults to the workspace label. */
+  displayName?: string;
   /** False when the server refuses read & write; widening is then disabled. */
   allowWrite: boolean;
   onChanged: (change: SavedFolderChange) => void;
+  onNewChat?: () => void;
+  className?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const name = displayName || workspace.label;
+  const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) close();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
-    };
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  function close() {
-    setOpen(false);
-    setConfirmingRemove(false);
-    setError(null);
-  }
-
-  async function run(action: () => Promise<SavedFolderChange>) {
+  async function run(action: () => Promise<SavedFolderChange>): Promise<boolean> {
     setBusy(true);
     setError(null);
     try {
       onChanged(await action());
-      close();
+      return true;
     } catch (reason) {
       setError(reason instanceof Term2ApiError ? reason.message : 'Could not update this folder');
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  const changeAccess = (access: WorkspaceAlias['access']) => {
-    if (access === workspace.access) return close();
-    void run(async () => ({
+  const changeAccess = async (access: WorkspaceAlias['access']) => {
+    if (access === workspace.access) return;
+    const ok = await run(async () => ({
       kind: 'access',
       workspace: await term2Client.changeWorkspaceAccess(workspace.workspaceId, access),
     }));
+    if (ok) setMenuOpen(false);
   };
 
-  const remove = () =>
-    void run(async () => {
+  const remove = async () => {
+    const ok = await run(async () => {
       await term2Client.removeWorkspace(workspace.workspaceId);
       return { kind: 'removed', workspaceId: workspace.workspaceId };
     });
+    if (ok) setConfirmingRemove(false);
+  };
 
   return (
-    <div ref={rootRef} className="relative inline-flex">
-      <button
-        type="button"
-        aria-label={`Folder options for ${workspace.label}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => (open ? close() : setOpen(true))}
-        className="flex h-7 w-6 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-black/[0.05] hover:text-zinc-700 dark:hover:bg-white/[0.07] dark:hover:text-zinc-200"
+    <>
+      <DropdownMenu
+        modal={false}
+        open={menuOpen}
+        onOpenChange={(open) => {
+          setMenuOpen(open);
+          if (open) setError(null);
+        }}
       >
-        <MoreHorizontal className="h-3.5 w-3.5" />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-black/[0.09] bg-white p-1 text-xs shadow-lg dark:border-white/[0.09] dark:bg-zinc-900"
-        >
-          {confirmingRemove ? (
-            <div className="space-y-2 p-2">
-              <p className="text-zinc-700 dark:text-zinc-200">
-                Remove this folder? Its chats will no longer open, even if you add the folder again.
-              </p>
-              <div className="flex justify-end gap-1.5">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setConfirmingRemove(false)}
-                  className="rounded-md px-2 py-1 text-zinc-600 hover:bg-black/[0.05] dark:text-zinc-300 dark:hover:bg-white/[0.07]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={remove}
-                  className="rounded-md bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700 disabled:opacity-60"
-                >
-                  {busy ? 'Removing…' : 'Remove'}
-                </button>
-              </div>
-            </div>
-          ) : (
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Folder options for ${name}`}
+            title="Folder options"
+            className={cn('text-muted-foreground', className)}
+          >
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          {onNewChat && (
             <>
-              <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-                Access
-              </div>
-              {ACCESS_OPTIONS.map((option) => {
-                const current = option.value === workspace.access;
-                const refused = option.value === 'read_write' && !allowWrite && !current;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={current}
-                    disabled={busy || refused}
-                    title={refused ? 'The server was started without write access' : undefined}
-                    onClick={() => changeAccess(option.value)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-zinc-700 hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-white/[0.07]"
-                  >
-                    <Check className={`h-3.5 w-3.5 ${current ? 'opacity-100' : 'opacity-0'}`} />
-                    {option.label}
-                  </button>
-                );
-              })}
-              <p className="px-2 pb-1.5 pt-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
-                Open chats in this folder restart. Existing chats never get more access than they started with.
-              </p>
-              <div className="my-1 border-t border-black/[0.07] dark:border-white/[0.07]" />
-              <button
-                type="button"
-                role="menuitem"
-                disabled={busy}
-                onClick={() => setConfirmingRemove(true)}
-                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-red-600 hover:bg-red-500/10 dark:text-red-400"
-              >
-                Remove folder…
-              </button>
+              <DropdownMenuItem onSelect={onNewChat}>
+                <Plus aria-hidden />
+                New chat here
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
             </>
           )}
-          {error && <p className="px-2 pb-1.5 text-[11px] text-red-600 dark:text-red-400">{error}</p>}
-        </div>
-      )}
-    </div>
+          <DropdownMenuLabel className="text-xs text-muted-foreground">Access</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={workspace.access}>
+            <DropdownMenuRadioItem
+              value="read_write"
+              disabled={busy || (!allowWrite && workspace.access !== 'read_write')}
+              title={!allowWrite ? 'The server was started with --read-only' : undefined}
+              onSelect={(event) => {
+                event.preventDefault();
+                void changeAccess('read_write');
+              }}
+            >
+              Read and write
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem
+              value="read"
+              disabled={busy}
+              onSelect={(event) => {
+                event.preventDefault();
+                void changeAccess('read');
+              }}
+            >
+              Read only
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <p className="px-2 pb-1.5 pt-1 text-xs leading-snug text-muted-foreground">
+            Open chats in this folder restart. Existing chats never get more access than they started with.
+          </p>
+          {error && !confirmingRemove && <p className="px-2 pb-1.5 text-xs text-destructive">{error}</p>}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={busy}
+            onSelect={() => {
+              setError(null);
+              setConfirmingRemove(true);
+            }}
+          >
+            <Trash2 aria-hidden />
+            Remove folder…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog open={confirmingRemove} onOpenChange={(open) => !busy && setConfirmingRemove(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its chats will no longer open, even if you add the folder again. Files in the folder aren&apos;t touched.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault();
+                void remove();
+              }}
+            >
+              {busy ? 'Removing…' : 'Remove folder'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

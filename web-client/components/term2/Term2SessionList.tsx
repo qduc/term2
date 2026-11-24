@@ -4,6 +4,7 @@ import { ChevronRight, Folder, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SessionListItem, WorkspaceAlias } from '../../lib/term2/types';
+import { Term2SavedFolderMenu, type SavedFolderChange } from './Term2SavedFolderMenu';
 
 const RECENT_COUNT = 5;
 const COLLAPSED_KEY = 'term2:sidebar:collapsedFolders';
@@ -130,6 +131,8 @@ export function Term2SessionList({
   onSelect,
   onCreate,
   onAddFolder,
+  onSavedFolderChanged,
+  allowWrite = false,
   selectedWorkspaceId,
   workspaces,
   workspaceMetadata,
@@ -143,6 +146,10 @@ export function Term2SessionList({
   /** Starts a chat in the given folder. */
   onCreate: (workspaceId: string) => void;
   onAddFolder?: () => void;
+  /** Enables each saved folder's menu (change access, remove). */
+  onSavedFolderChanged?: (change: SavedFolderChange) => void;
+  /** Whether the server allows read & write; widening is disabled otherwise. */
+  allowWrite?: boolean;
   selectedWorkspaceId: string | null;
   workspaces: WorkspaceAlias[];
   workspaceMetadata?: Record<string, { displayName: string; fullPath?: string }>;
@@ -195,6 +202,7 @@ export function Term2SessionList({
       workspaceId,
       name: folderName(workspaceId) || 'Unknown folder',
       fullPath: workspaceMetadata?.[workspaceId]?.fullPath,
+      saved: workspaces.find((w) => w.workspaceId === workspaceId),
       access: workspaces.find((w) => w.workspaceId === workspaceId)?.access,
       chats: entries.filter((entry) => entry.session.workspaceId === workspaceId),
     }));
@@ -323,10 +331,20 @@ export function Term2SessionList({
                           aria-label={`New chat in ${folder.name}`}
                           title={`New chat in ${folder.name}`}
                           onClick={() => onCreate(folder.workspaceId)}
-                          className="mr-1 text-muted-foreground opacity-0 focus-visible:opacity-100 group-hover/folder:opacity-100"
+                          className="text-muted-foreground opacity-0 focus-visible:opacity-100 group-hover/folder:opacity-100"
                         >
                           <Plus />
                         </Button>
+                      )}
+                      {folder.saved && onSavedFolderChanged && (
+                        <Term2SavedFolderMenu
+                          workspace={folder.saved}
+                          displayName={folder.name}
+                          allowWrite={allowWrite}
+                          onChanged={onSavedFolderChanged}
+                          onNewChat={() => onCreate(folder.workspaceId)}
+                          className="mr-1 opacity-0 focus-visible:opacity-100 group-hover/folder:opacity-100 data-[state=open]:opacity-100"
+                        />
                       )}
                     </div>
                     {open && (

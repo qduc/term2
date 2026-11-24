@@ -33,6 +33,7 @@ export function NumberField({
   min,
   max,
   step,
+  integer,
   disabled,
   saving,
   label,
@@ -40,6 +41,7 @@ export function NumberField({
 }: {
   id: string;
   value: unknown;
+  integer?: boolean;
   factor?: number;
   unit?: string;
   min?: number;
@@ -78,8 +80,14 @@ export function NumberField({
       );
       return;
     }
+    if (integer && factor === 1 && !Number.isInteger(parsed)) {
+      setError('Enter a whole number.');
+      return;
+    }
     setError(null);
-    if (onCommit(fromDisplay(parsed, factor)) === 'saving') setPending(raw);
+    // Seconds may have decimals; the stored milliseconds must still be whole.
+    const stored = integer ? Math.round(fromDisplay(parsed, factor)) : fromDisplay(parsed, factor);
+    if (onCommit(stored) === 'saving') setPending(raw);
   };
 
   return (
@@ -240,6 +248,7 @@ export function SettingRow({
         min={item.min}
         max={item.max}
         step={item.step}
+        integer={item.integer}
         disabled={disabled}
         saving={saving}
         onCommit={(stored) => onCommit(stored)}

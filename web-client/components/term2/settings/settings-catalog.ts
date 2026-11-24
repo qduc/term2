@@ -54,6 +54,8 @@ export interface SettingItem {
   min?: number;
   max?: number;
   step?: string;
+  /** The stored value must be a whole number (counts, milliseconds). */
+  integer?: boolean;
   /** Gateway keys the row reads and writes. Defaults to `[id]` for server rows. */
   keys?: string[];
   /** Rows that only matter for one choice (a search provider's address or key). */
@@ -317,6 +319,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   // Advanced → Limits
   {
     id: 'agent.maxTurns',
+    integer: true,
     section: 'advanced',
     group: 'Per turn',
     source: 'server',
@@ -329,6 +332,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'agent.maxParallelToolCalls',
+    integer: true,
     section: 'advanced',
     group: 'Per turn',
     source: 'server',
@@ -341,6 +345,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'agent.retryAttempts',
+    integer: true,
     section: 'advanced',
     group: 'Per turn',
     source: 'server',
@@ -353,6 +358,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'shell.timeout',
+    integer: true,
     section: 'advanced',
     group: 'Shell and tools',
     source: 'server',
@@ -366,6 +372,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'shell.maxOutputLines',
+    integer: true,
     section: 'advanced',
     group: 'Shell and tools',
     source: 'server',
@@ -378,6 +385,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'tools.maxOutputChars',
+    integer: true,
     section: 'advanced',
     group: 'Shell and tools',
     source: 'server',
@@ -390,6 +398,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'agent.maxOutputTokens',
+    integer: true,
     section: 'advanced',
     group: 'Model',
     source: 'server',
@@ -402,6 +411,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'agent.maxStreamOutputChars',
+    integer: true,
     section: 'advanced',
     group: 'Model',
     source: 'server',
@@ -414,6 +424,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   },
   {
     id: 'agent.maxModelRequestDurationMs',
+    integer: true,
     section: 'advanced',
     group: 'Model',
     source: 'server',

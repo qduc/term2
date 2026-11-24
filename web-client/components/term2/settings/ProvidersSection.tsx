@@ -331,13 +331,18 @@ function ProviderDetail({
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [showAllModels, setShowAllModels] = useState(false);
   const [editingConnection, setEditingConnection] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const docsUrl = docsUrlFor(provider, presets);
   const isOAuth = accounts !== undefined;
 
   /** Runs one change, then refreshes settings and the model list so the status line is current. */
-  const run = async (operation: () => Promise<string | null>, failure: string): Promise<boolean> => {
+  const run = async (
+    operation: () => Promise<string | null>,
+    failure: string,
+    startNotice: string | null = null,
+  ): Promise<boolean> => {
     setBusy(true);
-    setNotice(null);
+    setNotice(startNotice ? { tone: 'ok', text: startNotice } : null);
     try {
       const done = await operation();
       await onReload();
@@ -367,7 +372,7 @@ function ProviderDetail({
         await onModelsChanged();
       } finally {
         setBusy(false);
-        setNotice({ tone: 'ok', text: 'Checked just now.' });
+        setNotice({ tone: 'ok', text: 'Checked just now. The status line above shows the result.' });
       }
     })();
 
@@ -471,15 +476,19 @@ function ProviderDetail({
                 size="sm"
                 disabled={busy}
                 onClick={() => {
-                  setNotice({ tone: 'ok', text: `Finish signing in to ${provider.label} in the browser tab that opened…` });
-                  void run(async () => {
-                    const result = await term2Client.oauthLogin(provider.id);
-                    if (result.status !== 'completed') throw new Error('Sign-in was not completed. Try again.');
-                    return `Signed in to ${provider.label}.`;
-                  }, 'Sign-in failed.');
+                  setSigningIn(true);
+                  void run(
+                    async () => {
+                      const result = await term2Client.oauthLogin(provider.id);
+                      if (result.status !== 'completed') throw new Error('Sign-in was not completed. Try again.');
+                      return `Signed in to ${provider.label}.`;
+                    },
+                    'Sign-in failed.',
+                    `Finish signing in to ${provider.label} in the browser tab that opened…`,
+                  ).finally(() => setSigningIn(false));
                 }}
               >
-                {busy && <Loader2 className="animate-spin" />}
+                {signingIn && <Loader2 className="animate-spin" />}
                 {accounts.length === 0 ? 'Sign in' : 'Add account'}
               </Button>
             </div>
@@ -548,10 +557,7 @@ function ProviderDetail({
           (editingConnection ? (
             <ProviderForm
               mode="edit"
-              initial={{
-                name: provider.label,
-                ...presetDefaults(presets.find((preset) => preset.id === provider.id && !preset.builtinProviderId)),
-              }}
+              initial={{ name: provider.label }}
               providerTypes={providerTypes}
               onCancel={() => setEditingConnection(false)}
               onSubmit={async (draft) => {
@@ -702,7 +708,7 @@ function ProviderForm({
   onSubmit,
 }: {
   mode: 'add' | 'edit';
-  initial: { name?: string; type?: string; baseUrl?: string };
+  initial: { name?: string; type?: string; baseUrl?: string; noKey?: boolean };
   providerTypes: string[];
   docsUrl?: string;
   onCancel: () => void;
@@ -712,7 +718,11 @@ function ProviderForm({
   const [type, setType] = useState(initial.type ?? 'openai-compatible');
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
+  // Saving replaces the whole stored entry, so an empty key field would delete the saved key.
+  // Asking explicitly keeps that from happening by accident.
+  const [noKey, setNoKey] = useState(initial.noKey ?? false);
   const [saving, setSaving] = useState(false);
+  const keyMissing = !noKey && !apiKey.trim();
   const types = providerTypes.includes(type) ? providerTypes : [type, ...providerTypes];
 
   return (
@@ -720,14 +730,14 @@ function ProviderForm({
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (!name.trim() || saving) return;
+        if (!name.trim() || saving || keyMissing) return;
         setSaving(true);
         try {
           await onSubmit({
             name: name.trim(),
             type,
             ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
-            ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+            ...(!noKey && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
           });
         } finally {
           setSaving(false);
@@ -736,8 +746,8 @@ function ProviderForm({
     >
       {mode === 'edit' && (
         <p className="text-sm text-muted-foreground">
-          term2 doesn&apos;t show the saved address or key. Enter them again: saving replaces the server address, API
-          format and key together.
+          term2 doesn&apos;t show the saved API format, address or key, so enter all three again. Saving replaces them
+          together.
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -776,18 +786,25 @@ function ProviderForm({
           inputMode="url"
         />
       </label>
+      {/* Lets password managers file the key under the provider name, not the Name field. */}
+      <input type="text" name="username" value={name} readOnly autoComplete="username" hidden />
       <label className="block text-sm">
         <span className="mb-1 block font-medium text-foreground">API key</span>
         <Input
           type="password"
           autoComplete="new-password"
-          value={apiKey}
+          value={noKey ? '' : apiKey}
+          disabled={noKey}
           onChange={(event) => setApiKey(event.target.value)}
-          placeholder="Leave empty for local servers that need no key"
+          placeholder={noKey ? 'No key will be saved' : 'Paste API key'}
         />
       </label>
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Switch checked={noKey} onCheckedChange={setNoKey} aria-label="This server needs no API key" />
+        This server needs no API key
+      </label>
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Button type="submit" size="sm" disabled={saving || !name.trim()}>
+        <Button type="submit" size="sm" disabled={saving || !name.trim() || keyMissing}>
           {saving && <Loader2 className="animate-spin" />}
           {mode === 'add' ? 'Add provider' : 'Save connection'}
         </Button>
@@ -866,7 +883,7 @@ function AddProvider({
         )}
         <ProviderForm
           mode="add"
-          initial={{ name: preset?.id ?? '', ...presetDefaults(preset) }}
+          initial={{ name: preset?.id ?? '', ...presetDefaults(preset), noKey: preset?.category === 'local' }}
           providerTypes={providerTypes}
           docsUrl={preset?.docsUrl}
           onCancel={() => {

@@ -1051,9 +1051,12 @@ export function Term2SessionShell({
   // Smart auto-scroll pinning.
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
+  const lastScrollTopRef = useRef(0);
   const onScroll = () => {
     const el = scrollRef.current;
-    if (!el) return;
+    // A hidden transcript (settings page open) has no box; its scroll events say nothing.
+    if (!el || el.clientHeight === 0) return;
+    lastScrollTopRef.current = el.scrollTop;
     setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
   };
   const scrollToLatest = () => {
@@ -1067,6 +1070,15 @@ export function Term2SessionShell({
   useEffect(() => {
     setPinned(true);
   }, [sessionId]);
+  // The transcript was display:none while settings was open, which loses its scroll offset.
+  useEffect(() => {
+    if (settingsOpen) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = pinned ? el.scrollHeight : lastScrollTopRef.current;
+    // Only on closing settings; `pinned` is read, not tracked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen]);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -1326,9 +1338,10 @@ export function Term2SessionShell({
           onNotificationsChange={updateNotifications}
           showDiagnostics={showDiagnostics}
           onShowDiagnosticsChange={updateDiagnostics}
+          approvalWaiting={interactionPending}
         />
       )}
-      {/* Hidden, not unmounted, while settings is open so the chat keeps its scroll position and draft. */}
+      {/* Hidden, not unmounted, while settings is open so the chat keeps its draft and running stream. */}
       <div
         className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen ? '' : 'md:pl-2'} ${settingsOpen ? 'hidden!' : ''}`}
       >

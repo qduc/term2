@@ -101,6 +101,7 @@ export function Term2SettingsPage({
   onNotificationsChange,
   showDiagnostics,
   onShowDiagnosticsChange,
+  approvalWaiting = false,
 }: {
   section: SettingsSectionId;
   provider: string | null;
@@ -116,6 +117,8 @@ export function Term2SettingsPage({
   onNotificationsChange: (enabled: boolean) => void;
   showDiagnostics: boolean;
   onShowDiagnosticsChange: (enabled: boolean) => void;
+  /** A chat hidden behind this page is waiting for an approval. */
+  approvalWaiting?: boolean;
 }) {
   const { theme, setTheme } = useTheme();
   const [projection, setProjection] = useState<SettingsProjection | null>(null);
@@ -136,9 +139,14 @@ export function Term2SettingsPage({
   const searchRefs = useRef<Array<HTMLInputElement | null>>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const savedTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Writes run one at a time against the newest revision, so a second change made while the
+  // first is saving is not rejected as a conflict.
+  const revisionRef = useRef<string | null>(null);
+  const writeChain = useRef<Promise<void>>(Promise.resolve());
 
   const applyProjection = useCallback(
     (next: SettingsProjection) => {
+      revisionRef.current = next.revision;
       setProjection(next);
       onLoaded?.(next);
     },
@@ -259,10 +267,16 @@ export function Term2SettingsPage({
   }, [items, theme, displayMode, notificationsEnabled, showDiagnostics]);
 
   /** Saves one row's keys in a single settings write. */
-  const saveServer = async (statusId: string, changes: Change[]) => {
-    const revision = projection?.revision;
-    if (!revision) return;
+  const saveServer = (statusId: string, changes: Change[]): Promise<void> => {
     setStatus(statusId, { state: 'saving' });
+    const write = () => writeOne(statusId, changes);
+    writeChain.current = writeChain.current.then(write, write);
+    return writeChain.current;
+  };
+
+  const writeOne = async (statusId: string, changes: Change[]) => {
+    const revision = revisionRef.current;
+    if (!revision) return;
     try {
       const result = await term2Client.writeSettings({ expectedRevision: revision, changes });
       applyProjection(result.projection);
@@ -453,6 +467,7 @@ export function Term2SettingsPage({
             factor={item.factor}
             unit={item.unit}
             min={item.min}
+            integer={item.integer}
             disabled={locked || saving}
             saving={saving}
             onCommit={(next) => requestServer(item, [{ key, value: next }])}
@@ -746,6 +761,17 @@ export function Term2SettingsPage({
               section === 'providers' && !needle ? 'max-w-5xl' : 'max-w-[720px]',
             )}
           >
+            {approvalWaiting && (
+              <div
+                role="status"
+                className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100"
+              >
+                A chat is waiting for your approval.
+                <Button type="button" size="xs" variant="outline" onClick={onClose}>
+                  Back to chat
+                </Button>
+              </div>
+            )}
             {heading}
             {body}
           </div>

@@ -60,6 +60,10 @@ export function CredentialField({
     );
   }
 
+  if (!showInput && !credential.configured && !credential.writable) {
+    return <p className="text-sm text-muted-foreground">Not set, and it can’t be set from here.</p>;
+  }
+
   if (!showInput) {
     return (
       <div className="flex flex-wrap items-center justify-end gap-2">

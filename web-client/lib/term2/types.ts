@@ -211,7 +211,15 @@ export interface BrowseResult {
 }
 
 export type SettingSource = 'default' | 'config' | 'cli' | 'environment' | 'computed';
-export type SettingValue = string | number | boolean | string[] | { model: string; provider: string } | null;
+export type SettingValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | { model: string; provider: string }
+  | Array<{ model: string; provider: string; reasoningEffort?: string }>
+  | Record<string, string>
+  | null;
 export interface SecretFreeCredential {
   configured: boolean;
   required: boolean;

@@ -141,13 +141,8 @@ export type ModelCatalogEntry = {
   /** Base prices, plus higher tiers that apply once a request's input exceeds `inputTokensAbove`. */
   pricing?: ModelPrices & { tiers?: (ModelPrices & { inputTokensAbove: number })[] };
 };
-export type SafeSettingValue =
-  | string
-  | number
-  | boolean
-  | readonly string[]
-  | { model: string; provider: string }
-  | null;
+/** Value shapes defined by the web settings policy (`config/settings/web-settings-policy.ts`). */
+export type SafeSettingValue = import('../config/settings/web-settings-policy.js').WebSettingValue;
 export type ProviderPresetEntry = {
   id: string;
   name: string;

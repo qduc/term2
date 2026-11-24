@@ -21,11 +21,13 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { SettingsConflictError, Term2ApiError, term2Client } from '../../../lib/api/term2';
 import type { ModelSummary, ProviderPresetEntry, SettingsProjection } from '../../../lib/term2/types';
 import { CredentialField } from './CredentialField';
+import { FavoriteModelsControl, ModelPoolControl, NicknamesControl, RevokeListControl } from './ListSettingControls';
 import { ProvidersSection } from './ProvidersSection';
 import { NumberField, SettingRow, controlId, type CommitResult, type RowStatus } from './SettingRow';
 import {
   LOCAL_DEFAULTS,
   SECTION_KEYWORDS,
+  SERVER_DEFAULTS,
   SETTINGS_SECTIONS,
   differsFromDefault,
   itemKeys,
@@ -40,13 +42,47 @@ import {
 type DisplayMode = 'concise' | 'standard';
 type Change = { key: string; value: unknown };
 
+/** Kinds edited as a list under the description instead of a control on the right. */
+const LIST_KINDS = new Set<SettingItem['kind']>(['model-pool', 'favorites', 'nicknames', 'revoke-list']);
+
 const SECTION_DESCRIPTIONS: Record<SettingsSectionId, string> = {
   providers: 'The AI services term2 can use. Keys stay on this machine and are never sent in chat.',
-  safety: 'When term2 asks before acting, and what the local gateway enforces.',
+  models: 'Models for helper agents, the mentor and the verifier, and shortcuts in the model picker. Changes apply to new and reopened chats.',
+  safety: 'When term2 asks before acting, and what shell commands can reach. Changes apply to new and reopened chats.',
   conversation: 'Memory and how long conversations are kept within the model’s context.',
+  tools: 'What the agent is allowed to use, and how it handles long-running work. Changes apply to new and reopened chats.',
   'web-search': 'How the assistant looks things up online.',
   appearance: 'How the web app looks and behaves. Saved in this browser.',
   advanced: 'Limits that stop runaway work, and diagnostics. Most people never change these.',
+};
+
+/**
+ * Sandbox changes that widen what commands can do, with what to tell the user first.
+ * Changes the other way save without asking.
+ */
+const LOOSENING: Record<string, { value: unknown; title: string; description: string }> = {
+  'sandbox.enabled': {
+    value: false,
+    title: 'Turn off the sandbox?',
+    description:
+      'Shell commands in read & write folders will run with your full user access, outside any sandbox. Read-only folders keep using it.',
+  },
+  'sandbox.readPolicy': {
+    value: 'standard',
+    title: 'Let sandboxed commands read more?',
+    description: 'Sandboxed commands will be able to read your home folder and system settings, except credential files.',
+  },
+  'sandbox.allowNetworking': {
+    value: true,
+    title: 'Allow network access from the sandbox?',
+    description: 'term2 will offer to let a sandboxed command reach a new network address after you confirm.',
+  },
+  'shell.unattendedEscapeReview': {
+    value: true,
+    title: 'Let commands leave the sandbox in Unattended mode?',
+    description:
+      'In Unattended mode the safety reviewer will be able to approve a command that runs outside the sandbox, without asking you.',
+  },
 };
 
 /** A model request limit needs a value when "No limit" is turned off; ten minutes is a safe start. */
@@ -316,7 +352,31 @@ export function Term2SettingsPage({
       });
       return 'confirming';
     }
-    if (changes.some((change) => change.value !== null && projection?.settings.safeDefaults[change.key]?.confirmRequired)) {
+    // A reset (null) stores the default, which for these keys can be the looser side.
+    const loosening = changes
+      .map((change) => {
+        const next = change.value === null ? SERVER_DEFAULTS[change.key] : change.value;
+        return LOOSENING[change.key]?.value === next && stored(change.key) !== next ? LOOSENING[change.key] : undefined;
+      })
+      .find(Boolean);
+    if (loosening) {
+      setConfirm({
+        title: loosening.title,
+        description: loosening.description,
+        confirmLabel: 'Change setting',
+        destructive: true,
+        action: () => void saveServer(item.id, changes),
+      });
+      return 'confirming';
+    }
+    if (
+      changes.some(
+        (change) =>
+          change.value !== null &&
+          !(change.key in LOOSENING) &&
+          projection?.settings.safeDefaults[change.key]?.confirmRequired,
+      )
+    ) {
       setConfirm({
         title: `Change ${item.label.toLowerCase()}?`,
         description: 'This applies to future chats and can change how long they run, what they cost, or what tools do.',
@@ -347,7 +407,11 @@ export function Term2SettingsPage({
 
   const reset = (item: SettingItem) => {
     if (item.source === 'local') commit(item, LOCAL_DEFAULTS[item.id]);
-    else void saveServer(item.id, itemKeys(item).map((key) => ({ key, value: null })));
+    else
+      requestServer(
+        item,
+        itemKeys(item).map((key) => ({ key, value: null })),
+      );
   };
 
   const credentialControl = (item: SettingItem) => {
@@ -477,6 +541,37 @@ export function Term2SettingsPage({
     );
   };
 
+  const providerLabel = (id: string) =>
+    projection?.settings.providers.find((entry) => entry.id === id)?.label ?? id;
+
+  /** Editors for list and map values: model pools, favorites, nicknames, Docker grants. */
+  const listControl = (item: SettingItem) => {
+    if (!LIST_KINDS.has(item.kind)) return undefined;
+    const value = stored(item.id);
+    const disabled = Boolean(lockedReason(item)) || rowStatus[item.id]?.state === 'saving';
+    const save = (next: unknown) => requestServer(item, [{ key: item.id, value: next }]);
+    if (item.kind === 'model-pool')
+      return (
+        <ModelPoolControl
+          value={value}
+          max={item.max ?? 8}
+          empty={item.placeholder ?? 'None.'}
+          models={models}
+          providerLabel={providerLabel}
+          disabled={disabled}
+          // An empty pool is stored as unset, so the tier falls back to the chat's model.
+          onChange={(next) => save(next.length === 0 && SERVER_DEFAULTS[item.id] === undefined ? null : next)}
+        />
+      );
+    if (item.kind === 'favorites')
+      return (
+        <FavoriteModelsControl value={value} models={models} providerLabel={providerLabel} disabled={disabled} onChange={save} />
+      );
+    if (item.kind === 'nicknames')
+      return <NicknamesControl value={value} models={models} providerLabel={providerLabel} disabled={disabled} onChange={save} />;
+    return <RevokeListControl value={value} disabled={disabled} onChange={save} />;
+  };
+
   const safetySummary = (breadcrumb?: string) => {
     if (!projection) return null;
     const safety = projection.settings.safety;
@@ -499,7 +594,7 @@ export function Term2SettingsPage({
         {breadcrumb && <p className="mb-0.5 text-xs text-muted-foreground">{breadcrumb}</p>}
         <h3 className="text-sm font-medium text-foreground">Sandbox and network</h3>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Set by the local gateway when term2 starts; it can’t be changed here.
+          What applies right now. Change it with the settings below.
         </p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground">
           <li>{sandboxLine}</li>
@@ -525,7 +620,10 @@ export function Term2SettingsPage({
           ? compactionControl(item)
           : item.kind === 'duration-limit'
             ? durationLimitControl(item)
-            : undefined;
+            : LIST_KINDS.has(item.kind)
+              ? // The list editor sits under the description; nothing on the right.
+                <></>
+              : undefined;
     return (
       <SettingRow
         key={item.id}
@@ -538,7 +636,7 @@ export function Term2SettingsPage({
         onCommit={(value) => commit(item, value)}
         onReset={() => reset(item)}
         control={control}
-        below={item.kind === 'compaction' ? compactionThreshold(item) : undefined}
+        below={item.kind === 'compaction' ? compactionThreshold(item) : listControl(item)}
       />
     );
   };

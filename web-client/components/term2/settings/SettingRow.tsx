@@ -130,16 +130,21 @@ export function NumberField({
   );
 }
 
-/** A text value (an address) that saves on Enter or blur. Clearing it resets the setting. */
+/**
+ * A text value that saves on Enter or blur. Clearing it resets the setting. Without a
+ * placeholder it is a web address.
+ */
 function TextField({
   id,
   value,
+  placeholder,
   disabled,
   saving,
   onCommit,
 }: {
   id: string;
   value: unknown;
+  placeholder?: string;
   disabled?: boolean;
   saving?: boolean;
   onCommit: (value: string | null) => CommitResult;
@@ -161,10 +166,10 @@ function TextField({
     <Input
       id={id}
       type="text"
-      inputMode="url"
+      inputMode={placeholder ? 'text' : 'url'}
       value={draft ?? pending ?? shown}
       disabled={disabled}
-      placeholder="https://"
+      placeholder={placeholder ?? 'https://'}
       data-escape-cancels-edit
       onChange={(event) => setDraft(event.target.value)}
       onBlur={commit}
@@ -224,7 +229,7 @@ export function SettingRow({
     input = (
       <Select value={current} disabled={disabled} onValueChange={(next) => onCommit(next)}>
         <SelectTrigger id={id} size="sm" className="w-full sm:w-60">
-          <SelectValue />
+          <SelectValue placeholder={item.placeholder} />
         </SelectTrigger>
         <SelectContent>
           {current && !item.options.some((option) => option.value === current) && (
@@ -255,7 +260,16 @@ export function SettingRow({
       />
     );
   } else if (!input) {
-    input = <TextField id={id} value={value} disabled={disabled} saving={saving} onCommit={(next) => onCommit(next)} />;
+    input = (
+      <TextField
+        id={id}
+        value={value}
+        placeholder={item.placeholder}
+        disabled={disabled}
+        saving={saving}
+        onCommit={(next) => onCommit(next)}
+      />
+    );
   }
 
   return (

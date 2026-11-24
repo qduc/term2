@@ -1,6 +1,7 @@
 /** Gateway-compatible ingress validation, independent of all runtime/session persistence. */
 import type { CommandBody, SessionUpdateBody } from './server-contracts.js';
 import { ServerHttpError } from './server-errors.js';
+import { webSettingValue } from '../config/settings/web-settings-policy.js';
 export function hasDeferredModelSelectionField(body: unknown): boolean {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   return Object.keys(body as Record<string, unknown>).some((key) => ['model', 'reasoningEffort', 'mode'].includes(key));
@@ -87,29 +88,9 @@ export function isPairingRegisterBody(body: unknown): body is { publicKeyPem: st
   );
 }
 
+/** The settings policy owns which value shapes a web write may carry. */
 function isSafeSettingsValue(value: unknown): boolean {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean' ||
-    (Array.isArray(value) && value.every((item) => typeof item === 'string'))
-  ) {
-    return true;
-  }
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    return (
-      Object.keys(record).length === 2 &&
-      typeof record.model === 'string' &&
-      record.model.trim().length > 0 &&
-      record.model.length <= 512 &&
-      typeof record.provider === 'string' &&
-      record.provider.trim().length > 0 &&
-      record.provider.length <= 256
-    );
-  }
-  return false;
+  return webSettingValue(value) !== undefined;
 }
 
 export function isCredentialWriteBody(body: unknown): body is { value: string } {

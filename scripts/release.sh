@@ -154,7 +154,9 @@ changelog_has_version() {
 }
 
 release_commit_exists() {
-    git log --oneline --grep="chore(release): v$1" -n 20 2>/dev/null | grep -q .
+    local commit
+    commit=$(git log -1 --format=%H --grep="chore(release): v$1" 2>/dev/null) || return 1
+    [[ -n "$commit" ]]
 }
 
 is_published_on_npm() {

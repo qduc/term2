@@ -175,6 +175,11 @@ export function Term2SettingsPanel({
 }) {
   const { theme, setTheme } = useTheme();
   const [tab, setTab] = useState<SettingsTab>('providers');
+  const panelRef = useRef<HTMLElement>(null);
+  // Each tab starts at its top; otherwise a long tab's scroll position carries into the next one.
+  useEffect(() => {
+    panelRef.current?.closest('.overflow-y-auto')?.scrollTo({ top: 0 });
+  }, [tab]);
   const [projection, setProjection] = useState<SettingsProjection | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, string>>({});
@@ -517,8 +522,11 @@ export function Term2SettingsPanel({
   };
 
   return (
-    <section aria-label="Term2 settings" className="space-y-4">
-      <div className="flex flex-wrap gap-1 border-b border-black/[0.08] pb-2 dark:border-white/10" role="tablist">
+    <section ref={panelRef} aria-label="Term2 settings" className="space-y-4">
+      <div
+        className="sticky -top-4 z-10 -mx-5 -mt-4 flex flex-wrap gap-1 border-b border-black/[0.08] bg-popover px-5 pb-2 pt-4 sm:-top-5 sm:-mx-6 sm:-mt-5 sm:px-6 sm:pt-5 dark:border-white/10"
+        role="tablist"
+      >
         {tabs.map((item) => (
           <Button
             key={item.id}

@@ -13,6 +13,7 @@ import type {
 import type { PendingInteractionDto } from '@qduc/agent-wire';
 import type { InteractionResolveBody } from './server-contracts.js';
 import { ServerHttpError } from './server-errors.js';
+import { sanitizeApprovalReviewText } from '../shared/contracts/approval-review.js';
 
 type Choice = { id: string; label: string };
 export type ServerInteraction = PendingInteractionDto;
@@ -88,6 +89,7 @@ export class ServerInteractions {
         agentName: 'assistant',
         toolName: safeText(interaction.toolName, 256),
         argumentsText: safeText(JSON.stringify(interaction.input), 8_192),
+        ...approvalAdvisory(interaction),
       },
       choices,
       ...(questionKind
@@ -230,6 +232,32 @@ function grantLabel(grant: string): string {
   };
   return labels[grant] ?? grant;
 }
+/**
+ * The session's approval review, as the TUI's approval prompt shows it: the reviewer's verdict and
+ * reasoning, unless the review asked not to be shown. Pinned agent-wire carries reasoning, verdict,
+ * model and risk only, so a system safety block arrives as its reasoning text.
+ */
+function approvalAdvisory(interaction: WireInteraction): {
+  llmAdvisory?: PendingInteractionDto['descriptor']['llmAdvisory'];
+} {
+  const review = interaction.review;
+  if (review?.kind !== 'reviewed' || review.showReview === false) return {};
+  const { advisory } = review;
+  return {
+    llmAdvisory: {
+      // Pinned agent-wire text admits no control characters, line breaks included.
+      reasoning: sanitizeApprovalReviewText(advisory.reasoning)
+        .replace(/\s*\n\s*/g, ' ')
+        .slice(0, 2_048),
+      approved: advisory.approved,
+      model: sanitizeApprovalReviewText(advisory.model)
+        .replace(/\s*\n\s*/g, ' ')
+        .slice(0, 256),
+      ...(advisory.riskLevel ? { riskLevel: advisory.riskLevel } : {}),
+    },
+  };
+}
+
 function safeText(value: string, max: number): string {
   return value
     .replace(/[\u0000-\u001f\u007f]/g, ' ')

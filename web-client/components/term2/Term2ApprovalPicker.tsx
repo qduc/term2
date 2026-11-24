@@ -15,7 +15,7 @@ export const APPROVAL_MODES: ReadonlyArray<{
     value: 'off',
     shortLabel: 'Ask',
     label: 'Ask before tools',
-    hint: 'Prompt for your approval before running gated tools.',
+    hint: 'Prompt before gated tools. File reads of granted paths do not prompt.',
   },
   {
     value: 'auto',

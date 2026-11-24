@@ -50,7 +50,8 @@ print_usage() {
     echo "  - you are on main, 'git fetch' of the remote's main succeeds, and HEAD is"
     echo "    the remote's main or one unpushed release commit directly on top of it"
     echo "  - the tag goes only on the release commit: HEAD's subject is"
-    echo "    'chore(release): vX.Y.Z' and HEAD's package.json version is X.Y.Z"
+    echo "    'chore(release): vX.Y.Z' (optionally followed by ' (#123)') and"
+    echo "    HEAD's package.json version is X.Y.Z"
     echo "  - the tag is pushed only after main was pushed and the remote's main is"
     echo "    confirmed to be HEAD; a failed main push never pushes the tag"
 }
@@ -333,9 +334,11 @@ assert_release_base() {
 
 # R2: the tag only ever names the release commit for this version.
 assert_release_commit() {
-    local version=$1 subject head_version
+    local version=$1 subject head_version suffix
     subject=$(git log -1 --format=%s HEAD)
-    if [[ "$subject" != "chore(release): v$version" ]]; then
+    suffix=${subject#"chore(release): v$version"}
+    if [[ "$subject" != "chore(release): v$version" ]] &&
+       { [[ "$suffix" == "$subject" ]] || [[ ! "$suffix" =~ ^\ \(\#[0-9]+\)$ ]]; }; then
         echo -e "${RED}Error: HEAD is not the release commit for v$version (subject: '$subject').${NC}"
         return 1
     fi

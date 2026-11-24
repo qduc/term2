@@ -13,14 +13,12 @@ import {
   Copy,
   Folder,
   History,
-  Moon,
   PanelLeft,
   Plus,
   RotateCcw,
   Settings,
   SquarePen,
   Square,
-  Sun,
   Target,
   Wand2,
   X,
@@ -34,7 +32,6 @@ import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2SessionList } from './Term2SessionList';
 import { Term2StatusBanner } from './Term2StatusBanner';
 import { ChatHeader } from '../ChatHeader';
-import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -187,7 +184,6 @@ export function Term2SessionShell({
   const [draggingFile, setDraggingFile] = useState(false);
   const [armedSkill, setArmedSkill] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { resolvedTheme, setTheme } = useTheme();
   const [dialog, setDialog] = useState<'folder' | 'settings' | 'help' | 'rewind' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
   const [startingChat, setStartingChat] = useState(false);
@@ -1269,43 +1265,6 @@ export function Term2SessionShell({
             onNextPage={() => void loadNextSessions()}
           />
         </div>
-        <div className="flex shrink-0 items-center gap-0.5 border-t border-black/[0.06] px-2 py-1.5 dark:border-white/[0.06]">
-          {localControlEnabled && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Open settings"
-              title="Settings"
-              onClick={() => setDialog('settings')}
-              className="text-muted-foreground"
-            >
-              <Settings strokeWidth={1.75} />
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Help and shortcuts"
-            title="Help and shortcuts"
-            onClick={() => setDialog('help')}
-            className="text-muted-foreground"
-          >
-            <CircleHelp strokeWidth={1.75} />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`}
-            title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`}
-            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-            className="text-muted-foreground"
-          >
-            {resolvedTheme === 'dark' ? <Sun strokeWidth={1.75} /> : <Moon strokeWidth={1.75} />}
-          </Button>
-        </div>
       </aside>
 
       <div className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen ? '' : 'md:pl-2'}`}>
@@ -1321,10 +1280,9 @@ export function Term2SessionShell({
             onOpenFolder={localControlEnabled ? () => setDialog('folder') : undefined}
             onNewChat={!sidebarOpen && session.selectedWorkspaceId ? () => void createNewChat() : undefined}
             newChatLabel="New chat"
-            onOpenHelp={!sidebarOpen ? () => setDialog('help') : undefined}
+            onOpenHelp={() => setDialog('help')}
             onOpenSettings={() => setDialog('settings')}
-            showSettingsButton={localControlEnabled && !sidebarOpen}
-            showThemeToggle={!sidebarOpen}
+            showSettingsButton={localControlEnabled}
             onToggleLeftSidebar={() => setSidebarOpen((open) => !open)}
             showLeftSidebarButton={!sidebarOpen}
             alwaysShowLeftSidebarButton

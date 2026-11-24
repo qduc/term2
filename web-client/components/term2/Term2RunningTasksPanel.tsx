@@ -27,11 +27,13 @@ const num = (value: unknown): number | undefined => (typeof value === 'number' &
 
 /**
  * The tasks to show: every live task, plus ones that finished in the last few seconds so a
- * card doesn't vanish the instant it settles. Re-renders each second while any are shown.
+ * card doesn't vanish the instant it settles. Schedules only a one-shot timeout for grace
+ * expiry so live tasks never force root shell re-renders every second.
  */
 export function useRunningTasks(view: Term2SessionView) {
   const settledAt = useRef(new Map<string, number>());
-  const [now, setNow] = useState(() => Date.now());
+  const [tick, setTick] = useState(0);
+  const now = Date.now();
   const tasks = (view.nativeState?.tasks ?? []) as readonly Fields[];
   // A foreground shell command that reaches the network waits on the chat's network prompt; its
   // task status stays running, so mark it here as waiting on you.
@@ -41,6 +43,7 @@ export function useRunningTasks(view: Term2SessionView) {
   );
 
   const shown: RunningTask[] = [];
+  let nextExpiry: number | null = null;
   for (const task of tasks) {
     const id = str(task.id);
     if (!id) continue;
@@ -49,7 +52,9 @@ export function useRunningTasks(view: Term2SessionView) {
     if (live) settledAt.current.delete(id);
     else {
       if (!settledAt.current.has(id)) settledAt.current.set(id, num(task.completedAt) ?? now);
-      if (now - settledAt.current.get(id)! >= GRACE_MS) continue;
+      const expiry = settledAt.current.get(id)! + GRACE_MS;
+      if (now >= expiry) continue;
+      if (nextExpiry === null || expiry < nextExpiry) nextExpiry = expiry;
     }
     const blockedOnNetwork = live && networkPrompt && task.kind === 'shell' && task.mode !== 'background';
     shown.push({
@@ -60,12 +65,12 @@ export function useRunningTasks(view: Term2SessionView) {
     });
   }
 
-  const anyShown = shown.length > 0;
   useEffect(() => {
-    if (!anyShown) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [anyShown]);
+    if (nextExpiry === null) return;
+    const delay = Math.max(50, nextExpiry - Date.now());
+    const timer = window.setTimeout(() => setTick((t) => t + 1), delay);
+    return () => window.clearTimeout(timer);
+  }, [nextExpiry, tick]);
 
   return {
     shown,
@@ -161,9 +166,36 @@ export function Term2RunningTasksPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
   const [openActivity, setOpenActivity] = useState<string | null>(null);
-  const now = Date.now();
+  const [now, setNow] = useState(() => Date.now());
   const branches = Object.values(view.branches ?? {});
   const runningCount = shown.filter((entry) => entry.live).length;
+
+  useEffect(() => {
+    if (runningCount === 0) return;
+    let timer: number | null = null;
+    const start = () => {
+      if (timer !== null || document.hidden) return;
+      timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    };
+    const stop = () => {
+      if (timer === null) return;
+      window.clearInterval(timer);
+      timer = null;
+    };
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else {
+        setNow(Date.now());
+        start();
+      }
+    };
+    start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [runningCount]);
 
   const act = async (id: string, action: 'cancel' | 'background' | 'check_in') => {
     setBusy(id);

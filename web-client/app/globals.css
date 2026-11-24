@@ -160,6 +160,10 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Monaco, monospace;
+  /* Stepped low-frequency animations avoid 60/120fps GPU/compositor wakeups while waiting. */
+  --animate-spin: spin 1s steps(8, end) infinite;
+  --animate-pulse: pulse 2s steps(2, end) infinite;
+  --animate-ping: pulse 1.6s steps(2, end) infinite;
 }
 
 @layer base {
@@ -335,36 +339,28 @@ del {
   }
 }
 
-/* Light sweep across live status text ("Thinking…", "Reading …") */
+/* Subtle breathing indicator for live status text ("Thinking…", "Reading …").
+ * Uses low-frequency stepped opacity so it stays on the compositor without
+ * 60/120fps repaints or continuous GPU wakeups. */
 .t2-shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--t2-shimmer-base) 0%,
-    var(--t2-shimmer-base) 40%,
-    var(--t2-shimmer-peak) 50%,
-    var(--t2-shimmer-base) 60%,
-    var(--t2-shimmer-base) 100%
-  );
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: t2-shimmer 2.2s linear infinite;
-  --t2-shimmer-base: #a1a1aa;
-  --t2-shimmer-peak: #18181b;
+  color: var(--t2-shimmer-peak);
+  animation: t2-shimmer 2.4s steps(2, end) infinite;
+  --t2-shimmer-base: #71717a;
+  --t2-shimmer-peak: #3f3f46;
 }
 
 .dark .t2-shimmer {
-  --t2-shimmer-base: #71717a;
-  --t2-shimmer-peak: #fafafa;
+  --t2-shimmer-base: #a1a1aa;
+  --t2-shimmer-peak: #e4e4e7;
 }
 
 @keyframes t2-shimmer {
-  from {
-    background-position: 100% 0;
+  0%,
+  100% {
+    opacity: 0.6;
   }
-  to {
-    background-position: 0 0;
+  50% {
+    opacity: 1;
   }
 }
 
@@ -378,13 +374,23 @@ del {
   }
 }
 
+/* Pause infinite CSS animations when the tab is backgrounded or a panel is inert/hidden. */
+html[data-page-hidden="true"] *,
+html[data-page-hidden="true"] *::before,
+html[data-page-hidden="true"] *::after,
+[inert] *,
+[inert] *::before,
+[inert] *::after {
+  animation-play-state: paused !important;
+}
+
 ::selection {
   background: rgb(20 184 166 / 0.22);
 }
 
 /* Pulse animation for active conversation indicator */
 .pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: pulse 2s steps(2, end) infinite;
 }
 
 @keyframes pulse {

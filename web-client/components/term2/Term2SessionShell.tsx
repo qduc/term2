@@ -1039,6 +1039,19 @@ export function Term2SessionShell({
     }
   }, [interactionPending, hasStreamingTurn, session.view.status, notificationsEnabled]);
 
+  // Pause CSS animations when the tab is hidden to avoid background compositor/GPU wakeups.
+  useEffect(() => {
+    const syncVisibility = () => {
+      document.documentElement.dataset.pageHidden = document.hidden ? 'true' : 'false';
+    };
+    syncVisibility();
+    document.addEventListener('visibilitychange', syncVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', syncVisibility);
+      delete document.documentElement.dataset.pageHidden;
+    };
+  }, []);
+
   // Global Cmd/Ctrl+K quick palette shortcut. The settings page uses it for its search box.
   useEffect(() => {
     if (settingsOpen) return;

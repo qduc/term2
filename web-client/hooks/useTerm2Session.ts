@@ -234,37 +234,86 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
                   : 'connected',
             error: null,
           }));
-          await consumeSseResponse(response.data, {
-            signal,
-            expectedSessionId: id,
-            onHeartbeat: () => {
-              streamHadActivity = true;
-              delay = BACKOFF_BASE;
-            },
-            onFrame: (event) => {
-              streamHadActivity = true;
-              delay = BACKOFF_BASE;
-              if (generation !== generationRef.current || sessionIdRef.current !== id) return;
-              const enrichedEvent = event.kind === 'accepted' ? {
-                ...event,
-                changes: event.changes.map((change) => {
-                  if (change.type !== 'user_message_accepted' || typeof change.payload.clientRequestId !== 'string') return change;
-                  const requestId = change.payload.clientRequestId;
-                  const pendingText = pendingTextRef.current.get(requestId);
-                  return pendingText === undefined ? change : { ...change, payload: { ...change.payload, text: pendingText } };
-                }),
-              } : event;
-              const next = applyTerm2Event(viewRef.current, enrichedEvent);
-              for (const change of event.changes) {
-                if (change.type === 'user_message_accepted' && typeof change.payload.clientRequestId === 'string')
-                  pendingTextRef.current.delete(change.payload.clientRequestId);
+          let pendingFrameId: number | null = null;
+          let pendingHiddenTimer: ReturnType<typeof setTimeout> | null = null;
+          const flushLiveView = () => {
+            if (pendingFrameId !== null) {
+              window.cancelAnimationFrame(pendingFrameId);
+              pendingFrameId = null;
+            }
+            if (pendingHiddenTimer !== null) {
+              clearTimeout(pendingHiddenTimer);
+              pendingHiddenTimer = null;
+            }
+            if (generation === generationRef.current && sessionIdRef.current === id) {
+              setView(viewRef.current);
+            }
+          };
+          const scheduleLiveFlush = () => {
+            if (typeof document !== 'undefined' && document.hidden) {
+              if (pendingHiddenTimer === null) {
+                pendingHiddenTimer = setTimeout(flushLiveView, 500);
               }
-              viewRef.current = next;
-              setView(next);
-              cursor = next.lastAppliedSequence;
-              if (next.reloadRequired) throw new Term2ProtocolError('Accepted history replacement requires projection reload');
-            },
-          });
+              return;
+            }
+            if (pendingFrameId === null) {
+              pendingFrameId = window.requestAnimationFrame(flushLiveView);
+            }
+          };
+          const onVisibilityChange = () => {
+            if (!document.hidden && (pendingFrameId !== null || pendingHiddenTimer !== null)) {
+              flushLiveView();
+            }
+          };
+          if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', onVisibilityChange);
+          }
+          try {
+            await consumeSseResponse(response.data, {
+              signal,
+              expectedSessionId: id,
+              onHeartbeat: () => {
+                streamHadActivity = true;
+                delay = BACKOFF_BASE;
+              },
+              onFrame: (event) => {
+                streamHadActivity = true;
+                delay = BACKOFF_BASE;
+                if (generation !== generationRef.current || sessionIdRef.current !== id) return;
+                const enrichedEvent = event.kind === 'accepted' ? {
+                  ...event,
+                  changes: event.changes.map((change) => {
+                    if (change.type !== 'user_message_accepted' || typeof change.payload.clientRequestId !== 'string') return change;
+                    const requestId = change.payload.clientRequestId;
+                    const pendingText = pendingTextRef.current.get(requestId);
+                    return pendingText === undefined ? change : { ...change, payload: { ...change.payload, text: pendingText } };
+                  }),
+                } : event;
+                const next = applyTerm2Event(viewRef.current, enrichedEvent);
+                for (const change of event.changes) {
+                  if (change.type === 'user_message_accepted' && typeof change.payload.clientRequestId === 'string')
+                    pendingTextRef.current.delete(change.payload.clientRequestId);
+                }
+                viewRef.current = next;
+                cursor = next.lastAppliedSequence;
+                if (next.reloadRequired) {
+                  flushLiveView();
+                  throw new Term2ProtocolError('Accepted history replacement requires projection reload');
+                }
+                if (event.kind === 'live') {
+                  scheduleLiveFlush();
+                } else {
+                  flushLiveView();
+                }
+              },
+            });
+          } finally {
+            if (typeof document !== 'undefined') {
+              document.removeEventListener('visibilitychange', onVisibilityChange);
+            }
+            if (pendingFrameId !== null) window.cancelAnimationFrame(pendingFrameId);
+            if (pendingHiddenTimer !== null) clearTimeout(pendingHiddenTimer);
+          }
           if (signal.aborted) return;
           patchView(clearTerm2LiveEvidence);
           delay = streamHadActivity ? BACKOFF_BASE : Math.min(MAX_RECONNECT_DELAY, Math.max(BACKOFF_BASE, delay * 2));

@@ -2,7 +2,7 @@ import http from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { DirectServerTransport } from '../../../src/host/server-transport.js';
 import { agentWireV2EventStream } from '../../../src/host/server-sse.js';
 import type { DirectConnection } from '../../../src/host/in-process-direct-types.js';
@@ -173,31 +173,33 @@ it('keeps real sparse tail boundaries ahead of cursorless live observations over
   }
 });
 
-it('disconnects a backpressured live reader and releases the native attachment', async () => {
+function largeTextEvents(count: number, size: number) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (let seq = 1; seq <= count; seq++)
+        yield {
+          sessionId: 'session-1',
+          seq,
+          occurredAt: '2026-11-07T00:00:00.000Z',
+          turnId: 'turn-1',
+          type: 'text_delta',
+          payload: { messageId: 'message-1', modelStep: 1, delta: 'x'.repeat(size) },
+        } as WireEvent;
+    },
+  };
+}
+const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+it('detaches a live reader that stops reading only after the drain timeout', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'slow-v2-'));
   const socketPath = path.join(directory, 'gateway.sock');
-  let release!: () => void;
-  const closed = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  let released = false;
   const connection = {
     sessionId: 'session-1',
     snapshot: null,
-    events: {
-      async *[Symbol.asyncIterator]() {
-        for (let seq = 1; seq <= 100; seq++)
-          yield {
-            sessionId: 'session-1',
-            seq,
-            occurredAt: '2026-11-07T00:00:00.000Z',
-            turnId: 'turn-1',
-            type: 'text_delta',
-            payload: { messageId: 'message-1', modelStep: 1, delta: 'x'.repeat(256 * 1024) },
-          } as WireEvent;
-      },
-    },
+    events: largeTextEvents(100, 256 * 1024),
     close() {
-      release();
+      released = true;
     },
   } as unknown as DirectConnection;
   const interactions = new ServerInteractions();
@@ -207,23 +209,77 @@ it('disconnects a backpressured live reader and releases the native attachment',
     handler: async () => agentWireV2EventStream(connection, (event) => encodeAgentWireV2(event, interactions)),
   });
   let request: http.ClientRequest | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await transport.start();
+    // Only the drain deadline is faked; socket I/O stays real.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     request = http.get({ socketPath, path: '/', headers: { 'x-term2-assertion': 'transport-fixture' } }, (response) => {
       response.pause();
       response.on('error', () => {});
     });
     request.on('error', () => {});
-    await Promise.race([
-      closed,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('backpressure did not release attachment')), 2000);
-      }),
-    ]);
+    // Let the 25 MB burst fill the socket until the stream is waiting for drain.
+    for (let turn = 0; turn < 5_000 && vi.getTimerCount() === 0; turn++) await nextTurn();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    vi.advanceTimersByTime(9_000);
+    for (let turn = 0; turn < 20; turn++) await nextTurn();
+    expect(released).toBe(false);
+    vi.advanceTimersByTime(2_000);
+    for (let turn = 0; turn < 200 && !released; turn++) await nextTurn();
+    expect(released).toBe(true);
   } finally {
-    clearTimeout(timer);
+    vi.useRealTimers();
     request?.destroy();
+    await transport.stop();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('keeps a resumed live stream through a burst while the reader briefly stops reading', async () => {
+  // Regression: a full socket buffer during a burst disconnected the reader, and the web app
+  // showed "Connection interrupted" mid-run. Every resumed (?after=) web stream takes this path.
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'burst-v2-'));
+  const socketPath = path.join(directory, 'gateway.sock');
+  let released = false;
+  const connection = {
+    sessionId: 'session-1',
+    snapshot: null,
+    replay: { fromSeq: 0, toSeq: 0 },
+    events: largeTextEvents(12, 64 * 1024),
+    close() {
+      released = true;
+    },
+  };
+  const interactions = new ServerInteractions();
+  const transport = new DirectServerTransport({
+    socketPath,
+    authentication: { verify: () => ({ sub: 'owner', purpose: 'events_connect' } as GatewayAssertionClaims) },
+    handler: async () => agentWireV2EventStream(connection as never, (event) => encodeAgentWireV2(event, interactions)),
+  });
+  try {
+    await transport.start();
+    const raw = await new Promise<string>((resolve, reject) => {
+      const request = http.get(
+        { socketPath, path: '/', headers: { 'x-term2-assertion': 'transport-fixture' } },
+        (response) => {
+          let body = '';
+          response.setEncoding('utf8');
+          response.pause();
+          setTimeout(() => response.resume(), 300);
+          response.on('data', (chunk) => (body += chunk));
+          response.on('end', () => resolve(body));
+          response.on('error', reject);
+        },
+      );
+      request.on('error', reject);
+    });
+    const ids = raw
+      .split('\n\n')
+      .flatMap((frame) => frame.split('\n').filter((line) => line.startsWith('id: ')))
+      .map((line) => Number(line.slice(4)));
+    expect(ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(released).toBe(true);
+  } finally {
     await transport.stop();
     await rm(directory, { recursive: true, force: true });
   }

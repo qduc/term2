@@ -339,7 +339,7 @@ export function Term2SettingsPage({
     }
   };
 
-  /** Saves a server change, first asking when the gateway marks the key as needing confirmation. */
+  /** Saves a server change, first asking only for changes that loosen safety. */
   const requestServer = (item: SettingItem, changes: Change[]): CommitResult => {
     const setting = projection?.settings.safeDefaults[changes[0]?.key ?? ''];
     if (!setting) return;
@@ -366,22 +366,6 @@ export function Term2SettingsPage({
         description: loosening.description,
         confirmLabel: 'Change setting',
         destructive: true,
-        action: () => void saveServer(item.id, changes),
-      });
-      return 'confirming';
-    }
-    if (
-      changes.some(
-        (change) =>
-          change.value !== null &&
-          !(change.key in LOOSENING) &&
-          projection?.settings.safeDefaults[change.key]?.confirmRequired,
-      )
-    ) {
-      setConfirm({
-        title: `Change ${item.label.toLowerCase()}?`,
-        description: 'This applies to future chats and can change how long they run, what they cost, or what tools do.',
-        confirmLabel: 'Change setting',
         action: () => void saveServer(item.id, changes),
       });
       return 'confirming';

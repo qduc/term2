@@ -1824,14 +1824,16 @@ export function Term2SessionShell({
                             )}
                         </div>
                       )}
-                      {turn.error && (
+                      {(turn.error || turn.errorMessage) && (
                         <div className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-red-200 bg-red-50/70 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
                           <p className="flex min-w-0 flex-1 items-start gap-2">
                             <CircleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
                             <span>
-                              {turn.error === 'provider_error' || turn.error === 'runtime_error'
-                                ? 'The AI service could not reply. Check your provider settings or click Retry to try again.'
-                                : turn.error}
+                              {turn.errorMessage
+                                ? turn.errorMessage
+                                : turn.error === 'provider_error' || turn.error === 'runtime_error'
+                                  ? 'The AI service could not reply. Check your provider settings or click Retry to try again.'
+                                  : turn.error}
                             </span>
                           </p>
                           <div className="flex shrink-0 items-center gap-2">

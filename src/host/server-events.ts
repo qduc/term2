@@ -158,6 +158,7 @@ export function canonicalCandidate(
           ...identity,
           outcome: 'failed',
           reason: terminal.outcome === 'interrupted' ? 'interrupted' : errorReason(terminal.error?.kind),
+          ...(terminal.error?.message ? { errorMessage: text(terminal.error.message, 4_096) } : {}),
           ...(finalText != null ? { finalText: text(finalText, 16_384) } : {}),
           ...cause,
         },

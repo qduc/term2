@@ -151,6 +151,7 @@ export type DirectSessionState = {
     readonly finalWindow?: import('./final.js').DirectFinalWindow;
     readonly outcome: TurnOutcomeName;
     readonly messages: readonly DirectMessage[];
+    readonly error?: ModelError;
     readonly terminalCause?: string;
     readonly notice?: string;
   }[];

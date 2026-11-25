@@ -574,3 +574,127 @@ it('keeps steered queued messages at their chronological position in the turn ti
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it('preserves provider error messages on turn_failed over SSE and hydration', async () => {
+  const { DirectProjection } = await import('../../../src/protocol/projection.js');
+  const { initialDirectState } = await import('../../../src/session/state.js');
+  const { createDirectQueueState, submitDirectQueue } = await import('../../../src/session/queue.js');
+
+  const at = '2026-11-25T01:16:42.000Z';
+  const projection = new DirectProjection(
+    initialDirectState(
+      'session-1',
+      { root: '/tmp', target: 'local', access: 'read' },
+      { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' },
+    ),
+    0,
+  );
+  const events: WireEvent[] = [];
+  let seq = 0;
+  const emit = (
+    fact: Parameters<typeof projection.update>[0] extends infer U
+      ? U extends { type: 'fact'; fact: infer F }
+        ? F
+        : never
+      : never,
+  ) => {
+    seq += 1;
+    events.push(...projection.update({ type: 'fact', position: seq, seq, at, fact }));
+  };
+
+  let msgN = 0;
+  let turnN = 0;
+  const env = {
+    newMessageId: () => `msg-${++msgN}`,
+    newTurnId: () => `turn-${++turnN}` as import('../../../src/engine/index.js').TurnId,
+    now: () => at,
+    dispatchHeld: false,
+  };
+  const initial = submitDirectQueue(
+    createDirectQueueState(),
+    { clientRequestId: 'req-1', content: [{ type: 'text', text: 'Are we ready to release?' }], delivery: 'follow_up' },
+    env,
+  );
+  for (const fact of initial.facts) emit(fact);
+  emit({
+    type: 'turn_started',
+    turnId: 'turn-1' as import('../../../src/engine/index.js').TurnId,
+    input: initial.effect?.kind === 'start' ? initial.effect.input : [],
+  });
+  emit({
+    type: 'turn_ended',
+    turnId: 'turn-1' as import('../../../src/engine/index.js').TurnId,
+    outcome: 'failed',
+    error: {
+      kind: 'invalid_request',
+      message: '400 Request path cannot be relayed',
+      retryable: false,
+    },
+  });
+
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'failed-turn-v2-'));
+  const socketPath = path.join(directory, 'gateway.sock');
+  const interactions = new ServerInteractions();
+  const connection = {
+    sessionId: 'session-1',
+    events: {
+      async *[Symbol.asyncIterator]() {
+        yield* events;
+      },
+    },
+    close() {},
+  } as unknown as DirectConnection;
+  const transport = new DirectServerTransport({
+    socketPath,
+    authentication: { verify: () => ({ sub: 'owner', purpose: 'events_connect' } as GatewayAssertionClaims) },
+    handler: async () => agentWireV2EventStream(connection, (event) => encodeAgentWireV2(event, interactions)),
+  });
+  let request: http.ClientRequest | undefined;
+  try {
+    await transport.start();
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      request = http.get({ socketPath, path: '/', headers: { 'x-term2-assertion': 'transport-fixture' } }, resolve);
+      request.on('error', reject);
+    });
+    let raw = '';
+    for await (const chunk of response) raw += chunk.toString();
+    const received = raw
+      .split('\n\n')
+      .filter((frame) => frame.split('\n').some((line) => line.startsWith('id:')))
+      .map((frame) => {
+        const data = frame.split('\n').find((line) => line.startsWith('data: '))!;
+        return parseEventEnvelope(JSON.parse(data.slice(6)), 'session-1');
+      });
+
+    let view = emptyTerm2SessionView('session-1');
+    for (const envelope of received) view = applyTerm2Event(view, envelope);
+    expect(view.turns).toHaveLength(1);
+    expect(view.turns[0]?.status).toBe('failed');
+    expect(view.turns[0]?.error).toBe('runtime_error');
+    expect(view.turns[0]?.errorMessage).toBe('400 Request path cannot be relayed');
+
+    const snapshot = JSON.parse(JSON.stringify(projection.snapshot));
+    const hydrated = viewFromHydration(
+      parseSessionHydration(
+        {
+          schemaVersion: 2,
+          kind: 'snapshot',
+          sessionId: 'session-1',
+          seq: snapshot.seq,
+          earliestReplayableSequence: 1,
+          interaction: null,
+          snapshot,
+        },
+        'session-1',
+      ),
+    );
+    expect(hydrated.turns).toHaveLength(1);
+    expect(hydrated.turns[0]?.status).toBe('failed');
+    expect(hydrated.turns[0]?.error).toBe('runtime_error');
+    expect(hydrated.turns[0]?.errorMessage).toBe('400 Request path cannot be relayed');
+  } finally {
+    request?.destroy();
+    await transport.stop();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

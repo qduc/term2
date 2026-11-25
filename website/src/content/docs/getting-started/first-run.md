@@ -34,6 +34,8 @@ term2 --model
 
 Select a model **from the provider you authenticated**. Bare `--model` opens the picker in an interactive terminal with no prompt on the command line. It does not open a picker in a pipe or a non-interactive invocation.
 
+When starting the interactive terminal without an explicitly selected model, setup also opens the model picker after the provider has credentials. If the provider is not connected yet, setup opens provider management first.
+
 During a session, `/model` or `Ctrl+O` opens model selection; `/providers` manages connections and accounts. If the catalog or login fails, see [troubleshooting](/term2/troubleshooting/).
 
 ## 3. Explore before editing

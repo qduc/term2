@@ -152,6 +152,7 @@ canonical create route.
 | `POST /private/agent/v1/pairing/register` | (none; pairing only) | `200` |
 | `GET /private/agent/v1/workspaces` | `workspace_list` | `200` |
 | `POST /private/agent/v1/workspaces` | `workspace_list` compatibility alias | `200` |
+| `GET /private/agent/v1/workspaces/:workspaceId/files` | `workspace_files` (same `workspaceId`, no `sessionId`) | `200` |
 | `POST /private/agent/v1/workspace/candidates/validate` | `workspace_candidate_validate` | `200` |
 | `POST /private/agent/v1/workspace/candidates/browse` | `workspace_candidate_browse` | `200` |
 | `POST /private/agent/v1/workspace/candidates/select` | `workspace_candidate_select` | `200` |

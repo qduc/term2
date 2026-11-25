@@ -8,6 +8,7 @@ import { getGatewayConfig } from './gateway-config.js';
 
 export const ASSERTION_PURPOSES = Object.freeze([
   'workspace_list',
+  'workspace_files',
   'workspace_candidate_validate',
   'workspace_candidate_browse',
   'workspace_candidate_select',
@@ -313,7 +314,14 @@ export function createAgentAssertion({
       retryable: false,
     });
   }
-  if (purpose !== 'session_create' && !workspaceEdit && !isList && !noWorkspace && typeof sessionId !== 'string') {
+  if (
+    purpose !== 'session_create' &&
+    purpose !== 'workspace_files' &&
+    !workspaceEdit &&
+    !isList &&
+    !noWorkspace &&
+    typeof sessionId !== 'string'
+  ) {
     throw new Term2GatewayError('validation_error', 'Session binding is required', {
       statusCode: 400,
       retryable: false,

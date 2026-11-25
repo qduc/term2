@@ -1115,6 +1115,19 @@ export const term2Client = {
       signal,
     );
   },
+  listWorkspaceFiles(workspaceId: string, signal?: AbortSignal) {
+    return getJson(
+      `/agent/workspaces/${encodeURIComponent(id(workspaceId))}/files`,
+      (value): { entries: WorkspaceFileEntry[]; truncated: boolean } => {
+        const input = object(value);
+        return {
+          entries: Array.isArray(input.entries) ? (input.entries as WorkspaceFileEntry[]) : [],
+          truncated: input.truncated === true,
+        };
+      },
+      signal,
+    );
+  },
   readSessionQuota(sessionId: string, signal?: AbortSignal) {
     return getJson(
       `/agent/sessions/${encodeURIComponent(id(sessionId))}/quota`,

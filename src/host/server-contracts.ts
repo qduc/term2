@@ -6,6 +6,7 @@ import type { WireCommand, WireSnapshot } from '../protocol/wire.js';
 
 export const ASSERTION_PURPOSES = [
   'workspace_list',
+  'workspace_files',
   'workspace_candidate_validate',
   'workspace_candidate_browse',
   'workspace_candidate_select',
@@ -105,6 +106,10 @@ export type CandidateSelection = {
  */
 export interface ServerWorkspaces {
   list(principal: Principal): readonly WorkspaceAlias[] | Promise<readonly WorkspaceAlias[]>;
+  listFiles?(
+    principal: Principal,
+    workspaceId: string,
+  ): Promise<{ entries: readonly WorkspaceFileEntry[]; truncated: boolean }>;
   resolveGrant(principal: Principal, workspaceId: string): WorkspaceGrant | Promise<WorkspaceGrant>;
   validate?(principal: Principal, absolutePath: string): CandidateValidation | Promise<CandidateValidation>;
   browse?(principal: Principal, candidateId: string, child?: string): CandidateBrowse | Promise<CandidateBrowse>;

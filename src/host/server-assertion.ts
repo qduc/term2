@@ -207,6 +207,8 @@ function isClaims(value: unknown): value is GatewayAssertionClaims {
   ) {
     return candidate.workspaceId === undefined && candidate.sessionId === undefined;
   }
+  if (candidate.purpose === 'workspace_files')
+    return typeof candidate.workspaceId === 'string' && candidate.sessionId === undefined;
   if (
     candidate.purpose === 'session_create' ||
     candidate.purpose === 'workspace_remove' ||

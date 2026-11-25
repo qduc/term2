@@ -220,10 +220,8 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@anthropic-ai/sandbox-runtime@0.0.56': 7545394de6c8bf7803a7a512fa862f9bc3093d16aef959c7829fb3bf5080685a
   ink-prompt@0.4.3: 9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044
   ink@7.0.1: 6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc
-  shell-quote@1.8.4: 148d5e782bdb349d083bce53891ecec4a95235a4adc122bbf96ae38398bb9685
 
 importers:
 
@@ -242,8 +240,8 @@ importers:
         specifier: ^3.0.10
         version: 3.0.10
       '@anthropic-ai/sandbox-runtime':
-        specifier: ^0.0.56
-        version: 0.0.56(patch_hash=7545394de6c8bf7803a7a512fa862f9bc3093d16aef959c7829fb3bf5080685a)
+        specifier: 0.0.83
+        version: 0.0.83
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
@@ -521,10 +519,15 @@ packages:
     resolution: {integrity: sha512-U4+70Pc5ZS9osnCBCE5Jha/ciHM+Yp+CNMNC/7HvYbNRk1Ldd+f7qO65W5qfhu/TCv+/ozljlXXe9Nj8419DMA==}
     engines: {node: '>=10'}
 
-  '@anthropic-ai/sandbox-runtime@0.0.56':
-    resolution: {integrity: sha512-WUz+F1oZL7ISpZUwEjN5XwzmJ+IS0mfmUti6vVPXCNFieTQfs7eRIEfroBSb7z0uwVVALAzfHV2SeE0/K3EfiA==}
-    engines: {node: '>=18.0.0'}
+  '@anthropic-ai/sandbox-runtime@0.0.83':
+    resolution: {integrity: sha512-yEusORnVJrNseF/9fvjVYyk6tr79/aFbIB3T/X8p2puLZdaaiGNeYN50v0CE+1DT70v7XuzKOAnTivh1f5cksA==}
+    engines: {node: '>=22.12.0'}
     hasBin: true
+    peerDependencies:
+      '@microsoft/mxc-sdk': ^1.0.1
+    peerDependenciesMeta:
+      '@microsoft/mxc-sdk':
+        optional: true
 
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
@@ -4381,10 +4384,6 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
-  shell-quote@1.8.4:
-    resolution: {integrity: sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==}
-    engines: {node: '>= 0.4'}
-
   side-channel-list@1.0.0:
     resolution: {integrity: sha512-FCLHtRD/gnpCiCHEiJLOwdmFP+wzCmDEkc9y7NsYxeF4u7Btsn1ZuwgwJGxImImHicJArLP4R0yX4c2KCrMrTA==}
     engines: {node: '>= 0.4'}
@@ -5094,12 +5093,11 @@ snapshots:
 
   '@alloc/quick-lru@5.3.0': {}
 
-  '@anthropic-ai/sandbox-runtime@0.0.56(patch_hash=7545394de6c8bf7803a7a512fa862f9bc3093d16aef959c7829fb3bf5080685a)':
+  '@anthropic-ai/sandbox-runtime@0.0.83':
     dependencies:
       '@pondwader/socks5-server': 1.0.10
       commander: 12.1.0
       node-forge: 1.4.0
-      shell-quote: 1.8.4(patch_hash=148d5e782bdb349d083bce53891ecec4a95235a4adc122bbf96ae38398bb9685)
       zod: 3.25.76
 
   '@asamuzakjp/css-color@3.2.0':
@@ -9347,8 +9345,6 @@ snapshots:
       shebang-regex: 3.0.0
 
   shebang-regex@3.0.0: {}
-
-  shell-quote@1.8.4(patch_hash=148d5e782bdb349d083bce53891ecec4a95235a4adc122bbf96ae38398bb9685): {}
 
   side-channel-list@1.0.0:
     dependencies:

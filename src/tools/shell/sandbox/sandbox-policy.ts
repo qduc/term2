@@ -142,6 +142,15 @@ function resolveHomePath(home: string): string {
   }
 }
 
+// Realpath of `filePath` when it exists, else its resolved spelling.
+function resolveRealPath(filePath: string): string {
+  try {
+    return fs.realpathSync(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
+}
+
 function isPathProtected(target: string, home: string): boolean {
   const resolved = path.resolve(target);
   const resolvedHome = resolveHomePath(home);
@@ -232,19 +241,11 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     Boolean(socketPath),
   );
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
-  // Strict denies all of home; Term2's directories can sit outside it (TERM2_CONFIG_DIR, XDG overrides).
-  const denyRead =
-    readPolicy === 'strict'
-      ? [home, '/etc', '/var', '/root', '/private/var', ...agentCredentialPaths(home, options.env ?? process.env)]
-      : credentialFiles;
   // Docker Desktop's socket is nested under the credential-denied ~/.docker
   // tree. The sandbox runtime gives allowRead precedence over denyRead, so this
   // exact-path exception permits connecting only to the user-approved daemon
   // socket; ~/.docker config/auth files remain denied.
   const dockerSocketReadException = options.dockerSocketPath ? [options.dockerSocketPath] : [];
-  const gitPaths = resolveGitWorktreeWritePaths(workspaceRoot);
-  const gitWritePaths =
-    options.allowWrite !== false && !isPathProtected(workspaceRoot, home) ? gitPaths : { allow: [], deny: [] };
   // Re-allowed inside denied directories under `standard`. The project cache lives under Term2's settings
   // directory, which `agentCredentialPaths` denies: Linux re-binds write paths after the deny mount, but
   // macOS Seatbelt re-allows reads only for `allowRead`, so without this the cache is write-only there.
@@ -252,6 +253,36 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     ...(options.cacheDirectory ? [options.cacheDirectory] : []),
     ...dockerSocketReadException,
   ];
+  // Since sandbox-runtime 0.0.83 a `credentials.files` entry is absolute: an `allowRead`/`allowWrite`
+  // carve-out beneath it is not restored. A credential directory that holds a carve-out (the project cache
+  // under Term2's settings directory, the Docker socket under ~/.docker) is therefore denied through
+  // `denyRead` only, which hides everything in it except the carve-out. Paths are compared by realpath:
+  // the cache path is a realpath, while `home` may be reached through a symlink.
+  const carveOuts = standardReadExceptions.map(resolveRealPath);
+  const holdsCarveOut = (filePath: string): boolean => {
+    const resolved = resolveRealPath(filePath);
+    return carveOuts.some((carveOut) => carveOut === resolved || carveOut.startsWith(resolved + path.sep));
+  };
+  const absoluteCredentialFiles = credentialFiles.filter((filePath) => !holdsCarveOut(filePath));
+  const carveOutCredentialDirectories = credentialFiles.filter(holdsCarveOut);
+  // Strict denies all of home; Term2's directories can sit outside it (TERM2_CONFIG_DIR, XDG overrides).
+  // It also lists the credential directories that left `credentials.files` above: strict `allowRead` (or a
+  // user's `allowReadExtra`) can re-open home, and without their own deny those directories would open too.
+  const denyRead =
+    readPolicy === 'strict'
+      ? [
+          home,
+          '/etc',
+          '/var',
+          '/root',
+          '/private/var',
+          ...agentCredentialPaths(home, options.env ?? process.env),
+          ...carveOutCredentialDirectories,
+        ]
+      : credentialFiles;
+  const gitPaths = resolveGitWorktreeWritePaths(workspaceRoot);
+  const gitWritePaths =
+    options.allowWrite !== false && !isPathProtected(workspaceRoot, home) ? gitPaths : { allow: [], deny: [] };
   const allowRead =
     readPolicy === 'strict'
       ? [
@@ -324,7 +355,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       allowGitConfig: true,
     },
     credentials: {
-      files: credentialFiles.map((filePath) => ({ path: filePath, mode: 'deny' as const })),
+      files: absoluteCredentialFiles.map((filePath) => ({ path: filePath, mode: 'deny' as const })),
       envVars: credentialEnvVars.map((name) => ({ name, mode: 'deny' as const })),
     },
   };

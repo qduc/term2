@@ -1,6 +1,6 @@
 import { isIP } from 'node:net';
 
-/** Mirrors sandbox-runtime 0.0.56 parent-proxy isValidHost and stripBrackets. */
+/** Mirrors sandbox-runtime 0.0.83 parent-proxy isValidHost and stripBrackets (unchanged since 0.0.56). */
 export function isSandboxNetworkHost(value: unknown): value is string {
   if (typeof value !== 'string' || !value || value.length > 255) return false;
   const bare = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;

@@ -87,7 +87,9 @@ Fixes the deadlock and makes lease waits bounded. It keeps the exclusive lease.
    requested sandbox either wraps the command or refuses it.
 2. **The lease wait counts against the command's own timeout.** The wait is
    bounded by `timeout` (invocation `timeout_ms`, else `shell.timeout` or
-   `shell.backgroundTimeout`), and the process deadline gets what is left. If
+   `shell.backgroundTimeout`), and the process deadline gets what is left. The
+   budgeted wait is `acquireSandboxLeaseWithinBudget` in
+   `shell-sandbox-runner.ts`, beside the lease queue it waits on. If
    the budget runs out while waiting, the call returns a "sandbox is busy …
    The command was not run" error naming the budget but not the holder, which
    may belong to another session (shell output is session-scoped;

@@ -37,7 +37,11 @@ import {
   type SandboxAvailability,
   type ShellSandboxRunner,
 } from '../shell/sandbox/sandbox-policy.js';
-import { getDefaultShellSandboxRunner, sandboxFailure } from '../shell/sandbox/shell-sandbox-runner.js';
+import {
+  acquireSandboxLeaseWithinBudget,
+  getDefaultShellSandboxRunner,
+  sandboxFailure,
+} from '../shell/sandbox/shell-sandbox-runner.js';
 import { DETAILED_DENIED_READ_INSTRUCTION } from '../shell/sandbox/denied-read-detector.js';
 import type { DeniedReadInfo } from '../shell/sandbox/denied-read-detector.js';
 import { getProjectAllowReadStore } from '../shell/sandbox/denied-read-stores.js';
@@ -59,9 +63,6 @@ import type {
   BackgroundShellOutputBundle,
   RegisterShellOutputWatchOptions,
 } from '../shell/background-shell-watches.js';
-
-/** Largest delay Node timers honour; larger values fire after 1 ms. */
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 const READ_ONLY_REQUIRES_SANDBOX_ERROR =
   'Error: shell is unavailable in a read-only session unless it runs inside the sandbox. Enable sandbox.enabled, or use a read_write workspace. Command not executed.';
@@ -1126,44 +1127,26 @@ export function createShellToolDefinition(deps: {
         const acquireAndWrapSandbox = async (signal: AbortSignal | undefined): Promise<string | undefined> => {
           if (!sandboxRequested) return undefined;
           if (shellSandboxRunner.acquire) {
-            const waitStartedAt = Date.now();
-            // Node fires an over-range timer after 1 ms; clamp so a huge
-            // timeout_ms waits (effectively) forever instead of failing at once.
-            const budgetSignal = timeout ? AbortSignal.timeout(Math.min(timeout, MAX_TIMER_DELAY_MS)) : undefined;
-            const waitSignal =
-              budgetSignal && signal ? AbortSignal.any([signal, budgetSignal]) : budgetSignal ?? signal;
-            try {
-              sandboxLeaseRelease = await shellSandboxRunner.acquire(waitSignal);
-            } catch (error) {
-              if (!budgetSignal?.aborted || signal?.aborted) throw error;
-            }
-            const waitedMs = Date.now() - waitStartedAt;
-            const remainingMs = timeout ? timeout - waitedMs : undefined;
-            if (!sandboxLeaseRelease || (remainingMs !== undefined && remainingMs <= 0)) {
-              sandboxLeaseRelease?.();
-              sandboxLeaseRelease = undefined;
-              loggingService.warn(
-                'Shell sandbox busy; command not run',
-                withExecutionCorrelation({
-                  command: optimizedCommand.substring(0, 100),
-                  timeout,
-                  timeoutSource,
-                  waitedMs,
-                  mode: background || transferred ? 'background' : 'foreground',
-                }),
-              );
+            const lease = await acquireSandboxLeaseWithinBudget(
+              (waitSignal) => shellSandboxRunner.acquire!(waitSignal),
+              timeout,
+              signal,
+            );
+            const { waitedMs } = lease;
+            const mode = background || transferred ? 'background' : 'foreground';
+            if (lease.kind === 'busy') {
+              const fields = { command: optimizedCommand.substring(0, 100), timeout, timeoutSource, waitedMs, mode };
+              loggingService.warn('Shell sandbox busy; command not run', withExecutionCorrelation(fields));
               return (
                 `Error: The shell sandbox is busy with another sandboxed command, and waiting for it used up this ` +
                 `command's ${timeout} ms timeout. The command was not run. Retry after the other command finishes, ` +
                 'or with a larger timeout_ms.'
               );
             }
-            executionTimeout = remainingMs;
+            sandboxLeaseRelease = lease.release;
+            executionTimeout = lease.remainingMs;
             if (waitedMs >= 1000) {
-              loggingService.debug(
-                'Shell waited for the sandbox lease',
-                withExecutionCorrelation({ waitedMs, timeout, timeoutSource }),
-              );
+              loggingService.debug('Shell waited for the sandbox lease', withExecutionCorrelation({ waitedMs, mode }));
             }
           }
           try {

@@ -1,3 +1,17 @@
+## [2.1.1] - 2026-11-25
+
+### Improvements
+
+- Guide first-run provider setup in the web interface and prompt for an explicit model selection when needed in the web and terminal interfaces.
+- Reduce web interface CPU usage during running sessions and keep animations smooth.
+- Apply ordinary web settings changes without a generic confirmation, while retaining confirmations for safety-loosening changes.
+- Upgrade the shell sandbox runtime while preserving access to the project cache and approved Docker socket.
+
+### Bug Fixes
+
+- Show provider error messages when web turns fail and display sent steering messages in the conversation timeline.
+- Reduce web status flicker after fast shell commands and tool calls.
+
 ## [2.1.0] - 2026-11-24
 
 ### Features

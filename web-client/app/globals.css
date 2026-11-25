@@ -160,10 +160,6 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Monaco, monospace;
-  /* Stepped low-frequency animations avoid 60/120fps GPU/compositor wakeups while waiting. */
-  --animate-spin: spin 1s steps(8, end) infinite;
-  --animate-pulse: pulse 2s steps(2, end) infinite;
-  --animate-ping: pulse 1.6s steps(2, end) infinite;
 }
 
 @layer base {
@@ -339,12 +335,12 @@ del {
   }
 }
 
-/* Subtle breathing indicator for live status text ("Thinking…", "Reading …").
- * Uses low-frequency stepped opacity so it stays on the compositor without
- * 60/120fps repaints or continuous GPU wakeups. */
+/* Smooth breathing indicator for live status text ("Thinking…", "Reading …").
+ * Animates compositor-only opacity (avoiding main-thread background-position
+ * repaints) and pauses when the tab is hidden or a panel is inert. */
 .t2-shimmer {
   color: var(--t2-shimmer-peak);
-  animation: t2-shimmer 2.4s steps(2, end) infinite;
+  animation: t2-shimmer 2s ease-in-out infinite;
   --t2-shimmer-base: #71717a;
   --t2-shimmer-peak: #3f3f46;
 }
@@ -357,7 +353,7 @@ del {
 @keyframes t2-shimmer {
   0%,
   100% {
-    opacity: 0.6;
+    opacity: 0.5;
   }
   50% {
     opacity: 1;
@@ -390,7 +386,7 @@ html[data-page-hidden="true"] *::after,
 
 /* Pulse animation for active conversation indicator */
 .pulse {
-  animation: pulse 2s steps(2, end) infinite;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes pulse {

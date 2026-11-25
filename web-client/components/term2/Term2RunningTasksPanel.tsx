@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bot, ChevronRight, Loader2, Terminal, X } from 'lucide-react';
+import { Bot, ChevronRight, Terminal, X } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { TaskControlAction, Term2SessionView } from '../../lib/term2/types';
@@ -315,7 +316,7 @@ export function Term2RunningTasksPanel({
                 )}
               >
                 {live && !needsYou && status !== 'cancelling' && (
-                  <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
+                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
                 )}
                 <span className="min-w-0 truncate">{activity(task, now, branch?.view)}</span>
               </p>
@@ -368,7 +369,7 @@ export function Term2RunningTasksPanel({
                       Stop
                     </Button>
                   )}
-                  {busy === id && <Loader2 aria-label="Working" className="size-3.5 animate-spin text-muted-foreground" />}
+                  {busy === id && <Spinner aria-label="Working" className="size-3.5 text-muted-foreground" />}
                 </div>
               )}
               {steps > 0 && (

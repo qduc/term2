@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Session';
+import { startAnimationHeartbeat } from '../../lib/term2/animationHeartbeat';
 import { shellSandboxMachineFact } from '../../lib/term2/shell-sandbox-notice';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
 import { Term2TurnTimeline, type Term2DisplayMode } from './Term2TurnTimeline';
@@ -1081,18 +1082,45 @@ export function Term2SessionShell({
     }
   }, [interactionPending, hasStreamingTurn, session.view.status, notificationsEnabled]);
 
-  // Pause CSS animations when the tab is hidden to avoid background compositor/GPU wakeups.
+  // Pause CSS animations when the tab is hidden or the window loses focus so
+  // backgrounded and unfocused visible windows avoid compositor/GPU wakeups.
   useEffect(() => {
-    const syncVisibility = () => {
+    const syncVisibilityAndFocus = () => {
       document.documentElement.dataset.pageHidden = document.hidden ? 'true' : 'false';
+      document.documentElement.dataset.windowBlurred = document.hasFocus() ? 'false' : 'true';
     };
-    syncVisibility();
-    document.addEventListener('visibilitychange', syncVisibility);
+    const onBlur = () => {
+      document.documentElement.dataset.windowBlurred = 'true';
+    };
+    const onFocus = () => {
+      document.documentElement.dataset.windowBlurred = 'false';
+    };
+    syncVisibilityAndFocus();
+    document.addEventListener('visibilitychange', syncVisibilityAndFocus);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
     return () => {
-      document.removeEventListener('visibilitychange', syncVisibility);
+      document.removeEventListener('visibilitychange', syncVisibilityAndFocus);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
       delete document.documentElement.dataset.pageHidden;
+      delete document.documentElement.dataset.windowBlurred;
     };
   }, []);
+
+  // Drive duty-cycled smooth WAAPI breathing only while live indicators exist.
+  const hasRunningSubagent = session.view.turns.some(
+    (t) => t.subagents?.some((s) => s.status === 'running') ?? false,
+  );
+  const hasLiveAnimation =
+    hasStreamingTurn ||
+    Boolean(visibleLiveStatus) ||
+    session.view.status === 'running' ||
+    hasRunningSubagent;
+  useEffect(() => {
+    if (!hasLiveAnimation) return;
+    return startAnimationHeartbeat();
+  }, [hasLiveAnimation]);
 
   // Global Cmd/Ctrl+K quick palette shortcut. The settings page uses it for its search box.
   useEffect(() => {
@@ -1951,10 +1979,10 @@ export function Term2SessionShell({
                   >
                     {visibleLiveStatus && (
                       <>
-                        <span aria-hidden className="relative flex h-2 w-2">
-                          <span className="absolute inset-0 animate-ping rounded-full bg-teal-400/70" />
-                          <span className="relative h-2 w-2 rounded-full bg-teal-500" />
-                        </span>
+                        <span
+                          aria-hidden
+                          className="t2-heartbeat h-2 w-2 shrink-0 rounded-full bg-teal-500 ring-2 ring-teal-400/30"
+                        />
                         <span className="t2-shimmer truncate">{visibleLiveStatus}</span>
                       </>
                     )}

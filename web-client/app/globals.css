@@ -336,11 +336,11 @@ del {
 }
 
 /* Smooth breathing indicator for live status text ("Thinking…", "Reading …").
- * Animates compositor-only opacity (avoiding main-thread background-position
- * repaints) and pauses when the tab is hidden or a panel is inert. */
+ * Animated via duty-cycled finite WAAPI beats (lib/term2/animationHeartbeat.ts)
+ * so Chromium drops VSync wakeups between beats and rests cleanly at full opacity
+ * when paused or unfocused. */
 .t2-shimmer {
   color: var(--t2-shimmer-peak);
-  animation: t2-shimmer 2s ease-in-out infinite;
   --t2-shimmer-base: #71717a;
   --t2-shimmer-peak: #3f3f46;
 }
@@ -350,19 +350,9 @@ del {
   --t2-shimmer-peak: #e4e4e7;
 }
 
-@keyframes t2-shimmer {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .t2-enter,
-  .t2-shimmer {
+  .t2-spinner {
     animation: none;
   }
   .t2-shimmer {
@@ -370,10 +360,14 @@ del {
   }
 }
 
-/* Pause infinite CSS animations when the tab is backgrounded or a panel is inert/hidden. */
+/* Pause infinite CSS animations when the tab is backgrounded, the window loses
+ * focus, or a panel is inert/hidden. */
 html[data-page-hidden="true"] *,
 html[data-page-hidden="true"] *::before,
 html[data-page-hidden="true"] *::after,
+html[data-window-blurred="true"] *,
+html[data-window-blurred="true"] *::before,
+html[data-window-blurred="true"] *::after,
 [inert] *,
 [inert] *::before,
 [inert] *::after {

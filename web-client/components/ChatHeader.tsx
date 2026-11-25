@@ -12,7 +12,7 @@
  * ignored. Theme handling is unchanged; the chrome itself is a slim
  * breadcrumb bar (workspace / session title) with ghost icon buttons.
  */
-import { Sun, Moon, Settings, PanelLeft, PanelRight, Plus, CircleHelp, Folder, Loader2 } from 'lucide-react';
+import { Sun, Moon, Settings, PanelLeft, PanelRight, Plus, CircleHelp, Folder } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface ChatHeaderProps {
@@ -139,7 +139,14 @@ export function ChatHeader({
                 : 'border-black/[0.08] text-zinc-700 hover:bg-black/[0.04] dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/[0.06]'
             }`}
           >
-            {runningTasks.count > 0 && <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />}
+            {runningTasks.count > 0 && (
+              <span
+                aria-hidden
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  runningTasks.needsYou > 0 ? 'bg-amber-500' : 'bg-teal-500'
+                }`}
+              />
+            )}
             {runningTasks.needsYou > 0
               ? `${runningTasks.needsYou} needs you`
               : runningTasks.count > 0

@@ -1,5 +1,6 @@
 'use client';
-import { CircleAlert, Loader2, RotateCw } from 'lucide-react';
+import { CircleAlert, RotateCw } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import type { Term2ConnectionStatus } from '../../lib/term2/types';
 
 /** Healthy states stay announced to assistive tech but are not drawn. */
@@ -41,12 +42,12 @@ export function Term2StatusBanner({
         className={
           quiet
             ? 'sr-only'
-            : `t2-enter pointer-events-auto ${attention ? '' : '[animation-delay:700ms]'} flex max-w-full items-center gap-2 rounded-full border py-1 pl-3 text-[13px] shadow-sm backdrop-blur-md ${
+            : `t2-enter pointer-events-auto ${attention ? '' : '[animation-delay:700ms]'} flex max-w-full items-center gap-2 rounded-full border py-1 pl-3 text-[13px] shadow-sm ${
                 showRetry ? 'pr-1' : 'pr-3'
               } ${
                 attention
-                  ? 'border-red-200 bg-red-50/90 text-red-700 dark:border-red-900/60 dark:bg-red-950/70 dark:text-red-300'
-                  : 'border-black/[0.06] bg-white/85 text-zinc-600 dark:border-white/[0.08] dark:bg-zinc-900/85 dark:text-zinc-300'
+                  ? 'border-red-200 bg-red-50/95 text-red-700 dark:border-red-900/60 dark:bg-red-950/95 dark:text-red-300'
+                  : 'border-black/[0.06] bg-white/95 text-zinc-600 dark:border-white/[0.08] dark:bg-zinc-900/95 dark:text-zinc-300'
               }`
         }
       >
@@ -54,7 +55,7 @@ export function Term2StatusBanner({
           (attention ? (
             <CircleAlert aria-hidden className="h-3.5 w-3.5 shrink-0" />
           ) : BUSY.has(status) ? (
-            <Loader2 aria-hidden className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <Spinner className="h-3.5 w-3.5 shrink-0" />
           ) : null)}
         <span className="truncate">{label}</span>
         {showRetry && (

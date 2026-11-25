@@ -1,5 +1,5 @@
 'use client';
-import { Bot, ChevronRight, Loader2 } from 'lucide-react';
+import { Bot, ChevronRight } from 'lucide-react';
 import type { Term2SubagentCard as Term2SubagentCardModel } from '../../lib/term2/types';
 import { Term2Markdown } from './Term2Markdown';
 import { Term2ToolGroup } from './Term2ToolGroup';
@@ -12,11 +12,10 @@ export function Term2SubagentCard({ card }: { card: Term2SubagentCardModel }) {
     >
       <div className="flex items-center gap-2">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-400">
-          {card.status === 'running' ? (
-            <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Bot aria-hidden className="h-3.5 w-3.5" />
-          )}
+          <Bot
+            aria-hidden
+            className={`h-3.5 w-3.5 ${card.status === 'running' ? 't2-heartbeat' : ''}`}
+          />
         </span>
         <strong className="min-w-0 flex-1 truncate font-medium">{card.name || card.role}</strong>
         <span className="shrink-0 rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">

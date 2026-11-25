@@ -9,18 +9,18 @@ import { Term2SavedFolderMenu, type SavedFolderChange } from './Term2SavedFolder
 const RECENT_COUNT = 5;
 const COLLAPSED_KEY = 'term2:sidebar:collapsedFolders';
 
-/** Only live sessions get a dot; idle ones stay quiet. */
+/** Only live sessions get a dot; idle ones stay quiet. Kept static so background sessions never trigger compositor wakeups. */
 function StatusDot({ status }: { status: SessionListItem['status'] }) {
   if (status === 'awaiting_interaction') {
     return (
-      <span title="Waiting for approval" className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inset-0 animate-ping rounded-full bg-amber-400/60" />
-        <span className="relative h-2 w-2 rounded-full bg-amber-500" />
-      </span>
+      <span
+        title="Waiting for approval"
+        className="h-2 w-2 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-400/35"
+      />
     );
   }
   if (status === 'running') {
-    return <span title="Running" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-teal-500" />;
+    return <span title="Running" className="h-2 w-2 shrink-0 rounded-full bg-teal-500" />;
   }
   return null;
 }

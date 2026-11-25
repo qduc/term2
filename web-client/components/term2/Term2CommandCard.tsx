@@ -12,7 +12,6 @@ import {
   FolderSearch,
   Globe,
   ListTree,
-  Loader2,
   Minus,
   Search,
   SquareTerminal,
@@ -106,7 +105,11 @@ export function describeCommand(command: Term2Command): { verb: string; target: 
 
 export function StatusIcon({ status }: { status: Term2Command['status'] }) {
   if (status === 'running') {
-    return <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin text-teal-600 dark:text-teal-400" />;
+    return (
+      <span aria-hidden className="inline-flex h-3.5 w-3.5 items-center justify-center">
+        <span className="t2-heartbeat h-2 w-2 rounded-full bg-teal-500 ring-2 ring-teal-500/25" />
+      </span>
+    );
   }
   if (status === 'completed') return <Check aria-hidden className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />;
   if (status === 'failed') return <CircleAlert aria-hidden className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />;

@@ -72,7 +72,7 @@ export function Term2QueueBar({
       {entries.length > 0 && (
         <div
           aria-label="Queued messages"
-          className="rounded-2xl border border-black/[0.08] bg-zinc-50/95 px-3 py-2 text-xs shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-900/95"
+          className="rounded-2xl border border-black/[0.08] bg-zinc-50/95 px-3 py-2 text-xs shadow-sm dark:border-white/10 dark:bg-zinc-900/95"
         >
           <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             <span>Queued messages ({entries.length})</span>

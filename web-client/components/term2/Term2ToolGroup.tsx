@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { ChevronRight, CircleAlert, Layers, Loader2 } from 'lucide-react';
+import { ChevronRight, CircleAlert, Layers } from 'lucide-react';
 import type { Term2Command } from '../../lib/term2/types';
 import { describeCommand, Term2CommandCard } from './Term2CommandCard';
 import type { Term2DisplayMode } from './Term2TurnTimeline';
@@ -124,7 +124,9 @@ export function Term2ToolGroup({
       >
         <span className="flex h-5 shrink-0 items-center">
           {running.length > 0 ? (
-            <Loader2 aria-hidden className="h-4 w-4 animate-spin text-teal-600 dark:text-teal-400" />
+            <span aria-hidden className="flex h-4 w-4 items-center justify-center">
+              <span className="t2-heartbeat h-2 w-2 rounded-full bg-teal-500 ring-2 ring-teal-500/25" />
+            </span>
           ) : allFailed ? (
             <CircleAlert aria-hidden className="h-4 w-4 text-red-600 dark:text-red-400" />
           ) : (

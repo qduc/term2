@@ -252,6 +252,15 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
     ...(options.cacheDirectory ? [options.cacheDirectory] : []),
     ...dockerSocketReadException,
   ];
+  // Since sandbox-runtime 0.0.83 a `credentials.files` entry is absolute: an `allowRead`/`allowWrite`
+  // carve-out beneath it is not restored. A directory that holds a carve-out (the project cache under
+  // Term2's settings directory, the Docker socket under ~/.docker) therefore stays in `denyRead` only,
+  // which still hides everything in it except the carve-out.
+  const carveOuts = standardReadExceptions.map((carveOut) => path.resolve(carveOut));
+  const absoluteCredentialFiles = credentialFiles.filter((filePath) => {
+    const resolved = path.resolve(filePath);
+    return !carveOuts.some((carveOut) => carveOut === resolved || carveOut.startsWith(resolved + path.sep));
+  });
   const allowRead =
     readPolicy === 'strict'
       ? [
@@ -324,7 +333,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       allowGitConfig: true,
     },
     credentials: {
-      files: credentialFiles.map((filePath) => ({ path: filePath, mode: 'deny' as const })),
+      files: absoluteCredentialFiles.map((filePath) => ({ path: filePath, mode: 'deny' as const })),
       envVars: credentialEnvVars.map((name) => ({ name, mode: 'deny' as const })),
     },
   };

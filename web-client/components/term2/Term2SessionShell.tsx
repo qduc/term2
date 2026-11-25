@@ -706,7 +706,7 @@ export function Term2SessionShell({
         if (modelSelection) {
           const unchanged =
             sessionConfig?.providerId === modelSelection.provider && sessionConfig?.modelId === modelSelection.model;
-          if (unchanged) delete next.modelSelection;
+          if (unchanged && !requiresEmptyChatModelChoice) delete next.modelSelection;
           else next.modelSelection = modelSelection;
         }
         if (reasoningEffort) {
@@ -919,7 +919,30 @@ export function Term2SessionShell({
   const pickerNote = isDraft
     ? 'A model you pick here becomes the default for new chats.'
     : 'Changes apply when you send your next message.';
-  const pickerConfig = isDraft ? draftPickerConfig : sessionPickerConfig;
+  const lastTurn = session.view.turns[session.view.turns.length - 1];
+  const firstSend = isDraft || !lastTurn;
+  const modelDefault = settings?.settings.safeDefaults['agent.modelSelection'];
+  const implicitModel =
+    modelDefault?.source === 'default'
+      ? (modelDefault.value as { provider?: string; model?: string } | undefined)
+      : undefined;
+  // Older clients could create an empty session before the user chose a model.
+  // A draft handed off by this client has already passed the explicit-choice gate.
+  const requiresEmptyChatModelChoice = Boolean(
+    sessionId &&
+      !lastTurn &&
+      sessionConfig &&
+      implicitModel?.provider &&
+      sessionConfig.providerId === implicitModel.provider &&
+      sessionConfig.modelId === implicitModel.model &&
+      pendingFirstSend?.sessionId !== sessionId,
+  );
+  const needsModelChoice = (isDraft && !draftModel) || (requiresEmptyChatModelChoice && !stagedForChat?.modelSelection);
+  const pickerConfig = isDraft
+    ? draftPickerConfig
+    : sessionPickerConfig && needsModelChoice
+    ? { ...sessionPickerConfig, modelId: '', providerId: '' }
+    : sessionPickerConfig;
   const pickerDisabled = isDraft ? startingChat : commandDisabled;
   const providerId = sessionConfig?.providerId ?? '';
   const configuredProviderIds = useMemo(() => {
@@ -933,8 +956,6 @@ export function Term2SessionShell({
 
   const hasAnyConfiguredProvider = configuredProviderIds.size > 0;
 
-  const lastTurn = session.view.turns[session.view.turns.length - 1];
-  const firstSend = isDraft || !lastTurn;
   const selectedProvider = settings?.settings.providers.find((item) => item.id === pickerConfig?.providerId);
   const selectedCredential =
     selectedProvider?.credential ?? settings?.settings.credentials[pickerConfig?.providerId ?? ''];
@@ -942,7 +963,6 @@ export function Term2SessionShell({
   const selectedModelListed = models.some(
     (item) => item.provider === pickerConfig?.providerId && item.id === pickerConfig?.modelId,
   );
-  const needsModelChoice = isDraft && !draftModel;
   const modelUnavailable = Boolean(
     pickerConfig?.modelId &&
       (selectedProvider?.disabled || (firstSend && modelsChecked && !loadingModels && !selectedModelListed)),

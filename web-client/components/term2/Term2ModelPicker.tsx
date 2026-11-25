@@ -264,7 +264,7 @@ export function Term2ModelPicker({
               <span aria-label="Pending change" className="size-1.5 shrink-0 rounded-full bg-amber-500" />
             )}
             <span className="max-w-[8rem] shrink-0 truncate text-muted-foreground">{chipProvider}</span>
-            <span className="min-w-0 truncate">{chipName}</span>
+            <span className="min-w-0 truncate">{config.modelId ? chipName : 'Choose a model'}</span>
             {showEffortInChip && <EffortBars effort={effortValue} label={effortLabel} />}
             <ChevronDown aria-hidden className="text-muted-foreground" />
           </Button>

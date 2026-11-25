@@ -39,6 +39,7 @@ type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interac
 type TerminalProbe = { readonly background: TerminalBackground; readonly programStatus: TerminalProgramStatus };
 
 function DirectTui({
+  unconfiguredSessionId,
   app,
   persistentSettings,
   root,
@@ -56,6 +57,7 @@ function DirectTui({
   readonly remote: DirectSessionTarget['restart'];
   readonly mcp?: DirectMcp;
   readonly initial: DirectConnection;
+  readonly unconfiguredSessionId?: string;
   readonly bridge: DirectControlBridge;
   readonly restart: (plan: DirectRestartPlan) => void;
   readonly onExit: (snapshot: WireSnapshot) => void;
@@ -76,6 +78,7 @@ function DirectTui({
         remote={remote}
         mcp={mcp}
         initial={initial}
+        unconfiguredSessionId={unconfiguredSessionId}
         connection={connection}
         onConnectionChange={setConnection}
         bridge={bridge}
@@ -100,6 +103,7 @@ function ProviderBanner({
 }
 
 function DirectTuiSession({
+  unconfiguredSessionId,
   app,
   persistentSettings,
   settings,
@@ -115,6 +119,7 @@ function DirectTuiSession({
   logger,
 }: {
   readonly app: DirectApplication;
+  readonly unconfiguredSessionId?: string;
   readonly persistentSettings: ISettingsService;
   readonly settings: ISettingsService;
   readonly root: string;
@@ -137,7 +142,7 @@ function DirectTuiSession({
   const notifier = useTerminalFocusNotifier({ stdout });
   const integration: TuiIntegration = useMemo(
     () => ({
-      menus: createDirectTuiMenus({ app, persistentSettings, logger, root }),
+      menus: createDirectTuiMenus({ app, persistentSettings, logger, root, unconfiguredSessionId }),
       async shell(sessionId, command) {
         if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
         const settings = app.liveSettings(sessionId);
@@ -200,7 +205,7 @@ function DirectTuiSession({
         },
       }),
     }),
-    [app, persistentSettings, root, remote, mcp, bridge, restart, logger, onConnectionChange],
+    [app, persistentSettings, root, remote, mcp, bridge, restart, logger, onConnectionChange, unconfiguredSessionId],
   );
   return (
     <Tui
@@ -327,6 +332,11 @@ async function runTui(
               remote={target.restart}
               mcp={mcp}
               initial={initial}
+              unconfiguredSessionId={
+                sessionId === undefined && settings.getSource?.('agent.modelSelection') === 'default'
+                  ? initial.sessionId
+                  : undefined
+              }
               logger={selection.logger}
               bridge={bridge}
               restart={(plan) => {

@@ -64,6 +64,7 @@ export function useMenuStack(options: {
       get: models.get,
       onChange: menus.settings.service(sessionId).onChange,
       providerLabel: models.providerLabel,
+      requiresModelSelection: menus.requiresModelSelection?.(sessionId) ?? false,
       hasProviderCredentials: (id: string) => providers.hasCredentials(sessionId, id),
     };
   }, [menus, sessionId]);

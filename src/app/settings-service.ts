@@ -30,7 +30,7 @@ import {
   hasMissingKeys,
   loadSettingsFromFile,
   OPTIONAL_DEFAULT_KEYS,
-  omitComputedPathDefaults,
+  omitImplicitDefaults,
   quarantineCorruptSettingsFile,
   saveSettingsToFile,
   SETTINGS_FILE_VERSION,
@@ -276,11 +276,14 @@ export class SettingsService {
       });
     }
     this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
-    if (!Object.hasOwn((rawFileConfig as any)?.agent ?? {}, 'maxOutputTokens')) {
-      this.sources.set(
-        'agent.maxOutputTokens',
-        trackSettingSources(DEFAULT_SETTINGS, {}, env, cli).get('agent.maxOutputTokens') ?? 'default',
-      );
+    const launchSources = trackSettingSources(DEFAULT_SETTINGS, {}, env, cli);
+    for (const field of ['maxOutputTokens', 'modelSelection'] as const) {
+      const key = `agent.${field}`;
+      // Legacy scalar model/provider fields are migrated into an explicit selection by the file loader.
+      const rawAgent = (rawFileConfig as { agent?: Record<string, unknown> } | null)?.agent ?? {};
+      const legacyModel =
+        field === 'modelSelection' && (Object.hasOwn(rawAgent, 'model') || Object.hasOwn(rawAgent, 'provider'));
+      if (!Object.hasOwn(rawAgent, field) && !legacyModel) this.sources.set(key, launchSources.get(key) ?? 'default');
     }
 
     // Normalize profile selection so conflicting persisted state is resolved
@@ -1112,7 +1115,11 @@ export class SettingsService {
     this.runtimeOverrideSources.set(key, source);
   }
 
-  private reconcileCommittedSettings(committed: SettingsData, implicitOutputDefault = false): void {
+  private reconcileCommittedSettings(
+    committed: SettingsData,
+    implicitOutputDefault = false,
+    implicitModel = false,
+  ): void {
     if (this.resetAllAtRuntime) {
       this.settings = structuredClone(DEFAULT_SETTINGS);
       this.sources.clear();
@@ -1130,6 +1137,9 @@ export class SettingsService {
     if (next.app) next.app = { ...next.app, activeProfileId: canonicalProfileId(String(next.app.activeProfileId)) };
     this.settings = next;
     this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
+    if (implicitModel) {
+      this.sources.set('agent.modelSelection', this.getStartupOverride('agent.modelSelection') ?? 'default');
+    }
     if (implicitOutputDefault)
       this.sources.set(
         'agent.maxOutputTokens',
@@ -1159,6 +1169,7 @@ export class SettingsService {
       return { status: 'not-persisted', reason: 'disabled' };
     }
     let implicitOutputDefault = false;
+    let implicitModel = false;
     const committed = saveSettingsToFile({
       settingsDir: this.settingsDir,
       schema: SettingsSchema,
@@ -1173,7 +1184,8 @@ export class SettingsService {
           (outputIntent === 'preserve' && !Object.hasOwn((raw as any)?.agent ?? {}, 'maxOutputTokens'));
         if (implicitOutputDefault && cleaned.agent)
           delete (cleaned.agent as Partial<SettingsData['agent']>).maxOutputTokens;
-        omitComputedPathDefaults(cleaned, raw, computedDefaultIntent);
+        omitImplicitDefaults(cleaned, raw, computedDefaultIntent);
+        implicitModel = !Object.hasOwn(cleaned.agent ?? {}, 'modelSelection');
         return cleaned;
       },
       disableLogging: this.disableLogging,
@@ -1181,7 +1193,7 @@ export class SettingsService {
     });
     if (committed) {
       onCommitted?.();
-      this.reconcileCommittedSettings(committed, implicitOutputDefault);
+      this.reconcileCommittedSettings(committed, implicitOutputDefault, implicitModel);
       return { status: 'saved' };
     }
     return { status: 'not-persisted', reason: 'failed' };

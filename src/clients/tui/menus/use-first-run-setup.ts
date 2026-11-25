@@ -12,6 +12,7 @@ export type FirstRunSetupPhase = 'provider' | 'model';
 
 /** The live session settings the gate reads: legacy's SettingsService surface. */
 export type FirstRunSettings = {
+  requiresModelSelection?: boolean;
   get(key: 'agent.modelSelection'): { provider?: string | null };
   hasProviderCredentials(providerId: string): boolean;
   onChange?(listener: () => void): () => void;
@@ -58,9 +59,11 @@ export function useFirstRunSetupGate({
   const getSnapshot = useCallback(() => controller.getSnapshot(), [controller]);
   const topFrame = useSyncExternalStore(subscribe, getSnapshot, getSnapshot).stack.at(-1);
   const [initialProvider] = useState(() => (settings ? getMainProvider(settings) : 'openai'));
-  const [active, setActive] = useState(() => !hasCredentials(settings, initialProvider));
+  const [active, setActive] = useState(
+    () => Boolean(settings?.requiresModelSelection) || !hasCredentials(settings, initialProvider),
+  );
   const [phase, setPhase] = useState<FirstRunSetupPhase | null>(() =>
-    hasCredentials(settings, initialProvider) ? null : 'provider',
+    hasCredentials(settings, initialProvider) ? (settings?.requiresModelSelection ? 'model' : null) : 'provider',
   );
   const [provider, setProvider] = useState(initialProvider);
   const [settingsRevision, setSettingsRevision] = useState(0);

@@ -18,6 +18,7 @@ import { ASSERTION_PURPOSES, type AssertionPurpose } from '../../../src/host/ser
 // Independent route inventory: do not generate expected purposes from the matcher.
 const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['workspace_list', 'GET', '/workspaces'],
+  ['workspace_files', 'GET', '/workspaces/WORKSPACE/files'],
   ['workspace_candidate_validate', 'POST', '/workspace/candidates/validate'],
   ['workspace_candidate_browse', 'POST', '/workspace/candidates/browse'],
   ['workspace_candidate_select', 'POST', '/workspace/candidates/select'],
@@ -254,6 +255,7 @@ describe('term2 serve (child process)', () => {
     // Keep the workspace inside the temp HOME so cleanup removes everything.
     const workspaceRoot = path.join(tempHome, 'workspace');
     fs.mkdirSync(workspaceRoot, { recursive: true });
+    fs.writeFileSync(path.join(workspaceRoot, 'mention-target.txt'), 'draft mentions must be discoverable');
     const workspace = realpathSync(workspaceRoot);
     disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
 
@@ -363,6 +365,14 @@ describe('term2 serve (child process)', () => {
     );
     const workspaceId = selected.workspaceId as string;
     expect(workspaceId).toBeTruthy();
+    const listedFiles = await rpc(
+      'GET',
+      `/private/agent/v1/workspaces/${workspaceId}/files`,
+      undefined,
+      'workspace_files',
+      { workspaceId },
+    );
+    expect(listedFiles.entries).toContainEqual({ path: 'mention-target.txt', type: 'file' });
     const grantsPath = path.join(stateDir, 'direct-workspace-grants.json');
     expect(JSON.parse(fs.readFileSync(grantsPath, 'utf-8'))).toEqual({
       version: 1,
@@ -409,6 +419,35 @@ describe('term2 serve (child process)', () => {
           sign('other-owner', purpose, { sessionId }),
         );
         expect(otherOwner.status, `${purpose}: ${otherOwner.raw}`).toBe(404);
+      } else if (purpose === 'workspace_files') {
+        const otherOwner = await socketRequest(
+          socketPath,
+          method,
+          route,
+          {},
+          sign('other-owner', purpose, { workspaceId }),
+        );
+        expect(otherOwner.status, `${purpose}: ${otherOwner.raw}`).toBe(403);
+        expect(jsonBody(otherOwner).error.code).toBe('workspace_forbidden');
+        const mismatchedWorkspace = await socketRequest(
+          socketPath,
+          method,
+          route,
+          {},
+          sign('user-1', purpose, { workspaceId: 'different-workspace' }),
+        );
+        expect(mismatchedWorkspace.status).toBe(400);
+        expect(jsonBody(mismatchedWorkspace).error.code).toBe('protocol_conflict');
+        const missingWorkspaceBinding = await socketRequest(socketPath, method, route, {}, sign('user-1', purpose));
+        expect(missingWorkspaceBinding.status).toBe(401);
+        const unexpectedSessionBinding = await socketRequest(
+          socketPath,
+          method,
+          route,
+          {},
+          sign('user-1', purpose, { workspaceId, sessionId }),
+        );
+        expect(unexpectedSessionBinding.status).toBe(401);
       } else if (/^(settings|credential|oauth|provider|skills)_/.test(purpose)) {
         const otherOwner = await socketRequest(socketPath, method, route, {}, sign('other-owner', purpose));
         expect(otherOwner.status, purpose).toBe(403);

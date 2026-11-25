@@ -7,6 +7,7 @@ import { RequestValidationError } from './request-validation';
 
 export const rpc = {
   workspaces: '/private/agent/v1/workspaces',
+  workspaceFiles: (workspaceId: string) => `/private/agent/v1/workspaces/${workspaceId}/files`,
   workspace: (workspaceId: string) => `/private/agent/v1/workspaces/${workspaceId}`,
   workspaceAccess: (workspaceId: string) => `/private/agent/v1/workspaces/${workspaceId}/access`,
   candidatesValidate: '/private/agent/v1/workspace/candidates/validate',

@@ -289,6 +289,14 @@ export function Term2SessionShell({
   }, []);
   const session = useTerm2Session(sessionId);
   const { refreshWorkspaces, refreshSessions, loadNextSessions, setSelectedWorkspaceId } = session;
+  const currentFileScope = sessionId
+    ? `session:${sessionId}`
+    : session.selectedWorkspaceId
+    ? `workspace:${session.selectedWorkspaceId}`
+    : null;
+  const fileScopeRef = useRef(currentFileScope);
+  fileScopeRef.current = currentFileScope;
+  const fileLoadRequestRef = useRef(0);
   const prevUserIdRef = useRef(authUserId ?? null);
   const draftSessionIdRef = useRef(sessionId);
 
@@ -495,17 +503,25 @@ export function Term2SessionShell({
   }, [localControlEnabled, sessionId]);
 
   const ensureSessionFiles = useCallback(() => {
-    if (!sessionId || loadingFiles || filesLoadedFor === sessionId) return;
+    const workspaceId = session.selectedWorkspaceId;
+    const fileScope = currentFileScope;
+    if (!fileScope || loadingFiles || filesLoadedFor === fileScope) return;
+    const requestId = ++fileLoadRequestRef.current;
     setLoadingFiles(true);
-    void term2Client
-      .listSessionFiles(sessionId)
+    const request = sessionId
+      ? term2Client.listSessionFiles(sessionId)
+      : term2Client.listWorkspaceFiles(workspaceId!);
+    void request
       .then((res) => {
+        if (fileScopeRef.current !== fileScope || fileLoadRequestRef.current !== requestId) return;
         setSessionFiles(res.entries);
-        setFilesLoadedFor(sessionId);
+        setFilesLoadedFor(fileScope);
       })
       .catch(() => undefined)
-      .finally(() => setLoadingFiles(false));
-  }, [sessionId, loadingFiles, filesLoadedFor]);
+      .finally(() => {
+        if (fileLoadRequestRef.current === requestId) setLoadingFiles(false);
+      });
+  }, [currentFileScope, sessionId, session.selectedWorkspaceId, loadingFiles, filesLoadedFor]);
 
   const openSkillsMenu = () => {
     setSkillsOpen((open) => {
@@ -1197,10 +1213,10 @@ export function Term2SessionShell({
   }, [atMention, ensureSessionFiles]);
 
   const matchingFiles = useMemo(() => {
-    if (!atMention) return [];
+    if (!atMention || filesLoadedFor !== currentFileScope) return [];
     const q = atMention.query.toLowerCase();
     return sessionFiles.filter((entry) => !q || entry.path.toLowerCase().includes(q)).slice(0, 14);
-  }, [atMention, sessionFiles]);
+  }, [atMention, currentFileScope, filesLoadedFor, sessionFiles]);
 
   const insertFileMention = (entry: WorkspaceFileEntry) => {
     if (!atMention) return;

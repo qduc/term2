@@ -29,6 +29,10 @@ export class ServerGlobalRoutes {
           body: { workspaces: (await workspaces.list(principal)).slice(0, limit), nextCursor: null },
         };
       }
+      case 'workspace_files':
+        return workspaces?.listFiles
+          ? { status: 200, body: await workspaces.listFiles(principal, route.workspaceId!) }
+          : missing('workspace file listing');
       case 'workspace_candidate_validate':
         if (!validate.isWorkspaceCandidateValidateBody(body)) return invalid('workspace');
         return workspaces?.validate

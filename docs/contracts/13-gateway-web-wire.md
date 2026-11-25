@@ -33,6 +33,7 @@ purpose assertion that must equal the route's purpose. The table's "Purpose" col
 | --- | --- | --- | --- | --- |
 | `POST /private/agent/v1/pairing/register` | none — the only route that takes no assertion | `{ publicKeyPem, otp }` (`isPairingRegisterBody`; otp is exactly six digits) | `200 { paired: true, kid, fingerprint }` | `Term2GatewayClient.pair()` |
 | `GET` or `POST /private/agent/v1/workspaces` | `workspace_list` | `?limit=1..50` | `200 { workspaces: [{ workspaceId, label, access }], nextCursor: null }` | BFF route `GET /agent/workspaces` → `Term2GatewayClient.request()` (GET is canonical; POST is a tested compatibility alias) |
+| `GET /private/agent/v1/workspaces/:workspaceId/files` | `workspace_files` (assertion carries the same `workspaceId`, no `sessionId`) | — | `200 { entries: [{ path, type }], truncated }` | BFF route `GET /agent/workspaces/:workspaceId/files` → `forward`; supports file mentions in a draft before a session exists |
 | `POST /private/agent/v1/workspace/candidates/validate` | `workspace_candidate_validate` | `{ absolutePath }` | `200` validator result | BFF route `POST /term2/workspace/candidates/validate` → `createForwarder` |
 | `POST /private/agent/v1/workspace/candidates/browse` | `workspace_candidate_browse` | `{ candidateId, child? }` | `200` browse result | BFF route `POST /term2/workspace/candidates/browse` → `createForwarder` |
 | `POST /private/agent/v1/workspace/candidates/select` | `workspace_candidate_select` | `{ candidateId, access }` | `200` select result including `binding` | BFF route `POST /term2/workspace/candidates/select` → `createForwarder` |
@@ -75,8 +76,9 @@ not match the assertion (`400 protocol_conflict`), a session-scoped path whose
 path (`404 not_found`). `isClaims` in `assertion.ts` is the second gate: purposes
 `workspace_list`, the three candidate purposes, `settings_*`, `credential_*`, `oauth_*`,
 `session_list`, and `model_list` must carry **no** `workspaceId` or `sessionId`;
+`workspace_files` carries `workspaceId` and no `sessionId`;
 `session_create` must carry `workspaceId` and no `sessionId`; `session_update` must carry
-`sessionId` and may not carry `workspaceId`; every other purpose requires `sessionId`. The
+`sessionId` and may not carry `workspaceId`; remaining session operations require `sessionId`. The
 BFF mirrors both rules in `createAgentAssertion`, so its own construction throws
 `validation_error` before the request is sent.
 

@@ -16,6 +16,7 @@ import {
   saveDynamicGrants,
 } from './host-config-workspace-grants.js';
 import type { GrantRecord, WorkspaceAccess } from './host-config-workspace-grants.js';
+import { scanDirectoryEntries } from './file-service.js';
 
 export type { WorkspaceAccess, GrantRecord } from './host-config-workspace-grants.js';
 export type { CandidateBrowse, CandidateValidation } from './host-config-candidates.js';
@@ -310,6 +311,12 @@ export function serverWorkspaceAdministration(
 ): Required<ServerWorkspaces> {
   return {
     list: (principal) => grants.list(principal),
+    async listFiles(principal, workspaceId) {
+      const grant = grants.resolveGrant(principal, workspaceId);
+      const { workspace } = grants.resolveWorkspace(principal, grant);
+      const scanned = await scanDirectoryEntries(workspace.root, { maxDepth: 12, maxTotalEntries: 2_000 });
+      return { entries: scanned.entries, truncated: scanned.truncated };
+    },
     resolveGrant: (principal, workspaceId) => grants.resolveGrant(principal, workspaceId),
     validate: (principal, absolutePath) => grants.validate(principal, absolutePath),
     browse: (principal, candidateId, child) => grants.browse(principal, candidateId, child),

@@ -22,6 +22,8 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
   const workspace = pathname.match(/^\/private\/agent\/v1\/workspaces\/([A-Za-z0-9_-]{1,256})(\/access)?$/);
   if (workspace && !workspace[2] && method === 'DELETE')
     return { purpose: 'workspace_remove', workspaceId: workspace[1] };
+  const workspaceFiles = pathname.match(/^\/private\/agent\/v1\/workspaces\/([A-Za-z0-9_-]{1,256})\/files$/);
+  if (workspaceFiles && method === 'GET') return { purpose: 'workspace_files', workspaceId: workspaceFiles[1] };
   if (workspace && workspace[2] && method === 'PUT')
     return { purpose: 'workspace_access_update', workspaceId: workspace[1] };
   if (method === 'GET' && pathname === '/private/agent/v1/models') return { purpose: 'model_list' };

@@ -37,7 +37,11 @@ import {
   type SandboxAvailability,
   type ShellSandboxRunner,
 } from '../shell/sandbox/sandbox-policy.js';
-import { getDefaultShellSandboxRunner, sandboxFailure } from '../shell/sandbox/shell-sandbox-runner.js';
+import {
+  acquireSandboxLeaseWithinBudget,
+  getDefaultShellSandboxRunner,
+  sandboxFailure,
+} from '../shell/sandbox/shell-sandbox-runner.js';
 import { DETAILED_DENIED_READ_INSTRUCTION } from '../shell/sandbox/denied-read-detector.js';
 import type { DeniedReadInfo } from '../shell/sandbox/denied-read-detector.js';
 import { getProjectAllowReadStore } from '../shell/sandbox/denied-read-stores.js';
@@ -1063,79 +1067,15 @@ export function createShellToolDefinition(deps: {
             return `Error: ${error instanceof Error ? error.message : String(error)}`;
           }
         }
-        if (!sshService && sandbox === 'default' && sandboxEnabled) {
-          if (shellSandboxRunner.acquire) sandboxLeaseRelease = await shellSandboxRunner.acquire(toolSignal);
-          sandboxAvailability = await shellSandboxRunner.availability();
-          if (dockerHostControlRequested && sandboxAvailability.type !== 'available') {
-            return 'Error: Docker host control requires an available local sandbox.';
-          }
-          if (sandboxAvailability.type === 'available') {
-            try {
-              const projectAllowRead = getProjectAllowReadStore(cwd).load();
-              if (!readOnlyFilesystem) cacheDirectory = prepareSandboxProjectCache(cwd);
-              const sandboxConfig = createSandboxRuntimeConfig({
-                cwd,
-                tmpDir: SANDBOX_TEMP_DIR,
-                allowWrite: !readOnlyFilesystem,
-                readPolicy: settingsService.get('sandbox.readPolicy'),
-                allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
-                allowLocalBinding: !readOnlyFilesystem && isProjectListenerAllowed(cwd),
-                cacheDirectory,
-                dockerSocketPath: dockerHostControl?.socketPath,
-                allowReadExtra: [
-                  ...(settingsService.get('sandbox.allowReadExtra') ?? []),
-                  ...projectAllowRead,
-                  ...extraAllowReadFromOverride,
-                ],
-                onProtectedFiltered: (filtered) => {
-                  loggingService.info(
-                    'Shell sandbox removed write access to protected paths',
-                    withExecutionCorrelation({ filtered, cwd }),
-                  );
-                },
-              });
-              const wrapped = await shellSandboxRunner.wrap(commandToRun, {
-                cwd,
-                config: sandboxConfig,
-                signal: toolSignal,
-              });
-              commandToRun = wrapped.command;
-              sandboxed = true;
-              if (wrapped.diagnostics?.length) {
-                loggingService.debug(
-                  'Shell sandbox diagnostics',
-                  withExecutionCorrelation({ diagnostics: wrapped.diagnostics }),
-                );
-              }
-            } catch (error) {
-              loggingService.warn(
-                'Shell sandbox initialization failed; refusing unsandboxed fallback',
-                withExecutionCorrelation({
-                  error: error instanceof Error ? error.message : String(error),
-                  readSession,
-                }),
-              );
-              return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : sandboxFailure();
-            }
-          } else {
-            loggingService.warn(
-              'Shell sandbox unavailable; refusing unsandboxed fallback',
-              withExecutionCorrelation({
-                availability: sandboxAvailability.type,
-                reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
-                readSession,
-              }),
-            );
-            return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : sandboxFailure(sandboxAvailability);
-          }
-        }
+        const sandboxRequested = !sshService && sandbox === 'default' && sandboxEnabled;
 
         // A read-only session may only run commands the sandbox has wrapped with
         // a read-only filesystem. Without the sandbox (sandbox.enabled=false in a
         // plan-mode child, an approved unsandboxed run, or an SSH session) nothing
         // stops a command from writing the workspace, and a command-level check
-        // cannot make a general shell read-only, so refuse to run.
-        if (readOnlyFilesystem && !sandboxed) {
+        // cannot make a general shell read-only, so refuse to run. A requested
+        // sandbox either wraps the command or refuses it below.
+        if (readOnlyFilesystem && !sandboxRequested) {
           loggingService.security(
             'Shell refused: read-only session cannot run outside the sandbox',
             withExecutionCorrelation({
@@ -1148,12 +1088,123 @@ export function createShellToolDefinition(deps: {
           return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : READ_ONLY_REQUIRES_SANDBOX_ERROR;
         }
 
+        // Availability needs no lease: it checks the runtime's dependencies and
+        // the recorded initialization failure. Checking it at admission keeps a
+        // missing sandbox a tool error for background launches too.
+        if (sandboxRequested) {
+          sandboxAvailability = await shellSandboxRunner.availability();
+          if (dockerHostControlRequested && sandboxAvailability.type !== 'available') {
+            return 'Error: Docker host control requires an available local sandbox.';
+          }
+          if (sandboxAvailability.type !== 'available') {
+            loggingService.warn(
+              'Shell sandbox unavailable; refusing unsandboxed fallback',
+              withExecutionCorrelation({
+                availability: sandboxAvailability.type,
+                reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
+                readSession,
+              }),
+            );
+            return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : sandboxFailure(sandboxAvailability);
+          }
+        }
+
+        // The process deadline. Waiting for the sandbox lease spends the same
+        // budget, so a command never waits longer than its own timeout.
+        let executionTimeout = timeout;
+
+        /**
+         * Take the sandbox lease, configure the sandbox and wrap the command.
+         * Returns the refusal to report when the command must not run.
+         *
+         * The lease is process-wide and is held until the command settles, so
+         * it may be taken only by a command that is about to run: a background
+         * launch calls this from its job body, which the Session starts after
+         * the next model dispatch. Taking it at admission let a later call in
+         * the same model step wait for a body that could not start until that
+         * call returned.
+         */
+        const acquireAndWrapSandbox = async (signal: AbortSignal | undefined): Promise<string | undefined> => {
+          if (!sandboxRequested) return undefined;
+          if (shellSandboxRunner.acquire) {
+            const lease = await acquireSandboxLeaseWithinBudget(
+              (waitSignal) => shellSandboxRunner.acquire!(waitSignal),
+              timeout,
+              signal,
+            );
+            const { waitedMs } = lease;
+            const mode = background || transferred ? 'background' : 'foreground';
+            if (lease.kind === 'busy') {
+              const fields = { command: optimizedCommand.substring(0, 100), timeout, timeoutSource, waitedMs, mode };
+              loggingService.warn('Shell sandbox busy; command not run', withExecutionCorrelation(fields));
+              return (
+                `Error: The shell sandbox is busy with another sandboxed command, and waiting for it used up this ` +
+                `command's ${timeout} ms timeout. The command was not run. Retry after the other command finishes, ` +
+                'or with a larger timeout_ms.'
+              );
+            }
+            sandboxLeaseRelease = lease.release;
+            executionTimeout = lease.remainingMs;
+            if (waitedMs >= 1000) {
+              loggingService.debug('Shell waited for the sandbox lease', withExecutionCorrelation({ waitedMs, mode }));
+            }
+          }
+          try {
+            const projectAllowRead = getProjectAllowReadStore(cwd).load();
+            if (!readOnlyFilesystem) cacheDirectory = prepareSandboxProjectCache(cwd);
+            const sandboxConfig = createSandboxRuntimeConfig({
+              cwd,
+              tmpDir: SANDBOX_TEMP_DIR,
+              allowWrite: !readOnlyFilesystem,
+              readPolicy: settingsService.get('sandbox.readPolicy'),
+              allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
+              allowLocalBinding: !readOnlyFilesystem && isProjectListenerAllowed(cwd),
+              cacheDirectory,
+              dockerSocketPath: dockerHostControl?.socketPath,
+              allowReadExtra: [
+                ...(settingsService.get('sandbox.allowReadExtra') ?? []),
+                ...projectAllowRead,
+                ...extraAllowReadFromOverride,
+              ],
+              onProtectedFiltered: (filtered) => {
+                loggingService.info(
+                  'Shell sandbox removed write access to protected paths',
+                  withExecutionCorrelation({ filtered, cwd }),
+                );
+              },
+            });
+            const wrapped = await shellSandboxRunner.wrap(commandToRun, {
+              cwd,
+              config: sandboxConfig,
+              signal,
+            });
+            commandToRun = wrapped.command;
+            sandboxed = true;
+            if (wrapped.diagnostics?.length) {
+              loggingService.debug(
+                'Shell sandbox diagnostics',
+                withExecutionCorrelation({ diagnostics: wrapped.diagnostics }),
+              );
+            }
+          } catch (error) {
+            loggingService.warn(
+              'Shell sandbox initialization failed; refusing unsandboxed fallback',
+              withExecutionCorrelation({
+                error: error instanceof Error ? error.message : String(error),
+                readSession,
+              }),
+            );
+            return readSession ? READ_SESSION_SHELL_UNAVAILABLE_ERROR : sandboxFailure();
+          }
+          return undefined;
+        };
+
         const executePreparedCommand = async (
           signal: AbortSignal | undefined,
         ): Promise<BackgroundShellExecutionResult> => {
           const result = await executeShellCommandImpl(commandToRun, {
             cwd,
-            timeout,
+            timeout: executionTimeout,
             maxBuffer: 1024 * 1024, // 1MB max buffer
             // A long-running monitored background job must survive a full
             // buffer: drop from the head of the retained text instead of
@@ -1370,7 +1421,13 @@ export function createShellToolDefinition(deps: {
           try {
             const job = backgroundShellRegistry!.launch({
               command: optimizedCommand,
-              run: executePreparedCommand,
+              // The body runs after the Session's kickoff, so the lease is
+              // taken only once this job can actually start.
+              run: async (signal) => {
+                const refusal = await acquireAndWrapSandbox(signal);
+                if (refusal !== undefined) return { output: refusal, status: 'failed' };
+                return executePreparedCommand(signal);
+              },
               onStarted: (jobId) => {
                 observedJobId = jobId;
                 // Open the retained output stream (and the watch layer) for
@@ -1436,6 +1493,8 @@ export function createShellToolDefinition(deps: {
           }
         }
 
+        const refusal = await acquireAndWrapSandbox(toolSignal);
+        if (refusal !== undefined) return refusal;
         if (sandboxed) networkApproval = beginForegroundSandboxNetworkApproval(_context, toolSignal);
         const foregroundOutput = ({ status, output }: BackgroundShellExecutionResult): string =>
           status === 'failed' ? networkApproval?.annotateFailure(output) ?? output : output;

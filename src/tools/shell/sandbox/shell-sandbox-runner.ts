@@ -226,3 +226,49 @@ export function getDefaultShellSandboxRunner(): ShellSandboxRunner {
   defaultRunner ??= new AnthropicShellSandboxRunner();
   return defaultRunner;
 }
+
+/** Largest delay Node timers honour; larger values fire after 1 ms. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+export type SandboxLeaseWait =
+  | {
+      readonly kind: 'acquired';
+      readonly release: () => void;
+      /** What is left of the budget for the process deadline; undefined when unbounded. */
+      readonly remainingMs: number | undefined;
+      readonly waitedMs: number;
+    }
+  | { readonly kind: 'busy'; readonly waitedMs: number };
+
+/**
+ * Take a sandbox runner's process-wide lease within a command's own time budget.
+ *
+ * The lease is held until the holder's command settles, so a waiter can sit
+ * behind a long-running holder. Waiting spends `timeoutMs`, and `remainingMs`
+ * is what the waiter's process deadline gets. `busy` means the budget ran out
+ * before the lease arrived (or as it arrived), and nothing is held. An abort of
+ * `signal` rejects, as `acquire` does. With no timeout the wait is unbounded.
+ */
+export async function acquireSandboxLeaseWithinBudget(
+  acquire: (signal?: AbortSignal) => Promise<() => void>,
+  timeoutMs: number | undefined,
+  signal: AbortSignal | undefined,
+): Promise<SandboxLeaseWait> {
+  const startedAt = Date.now();
+  // Clamp so a huge timeout waits (effectively) forever instead of failing at once.
+  const budgetSignal = timeoutMs ? AbortSignal.timeout(Math.min(timeoutMs, MAX_TIMER_DELAY_MS)) : undefined;
+  const waitSignal = budgetSignal && signal ? AbortSignal.any([signal, budgetSignal]) : budgetSignal ?? signal;
+  let release: (() => void) | undefined;
+  try {
+    release = await acquire(waitSignal);
+  } catch (error) {
+    if (!budgetSignal?.aborted || signal?.aborted) throw error;
+  }
+  const waitedMs = Date.now() - startedAt;
+  const remainingMs = timeoutMs ? timeoutMs - waitedMs : undefined;
+  if (!release || (remainingMs !== undefined && remainingMs <= 0)) {
+    release?.();
+    return { kind: 'busy', waitedMs };
+  }
+  return { kind: 'acquired', release, remainingMs, waitedMs };
+}

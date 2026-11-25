@@ -466,6 +466,7 @@ export interface Term2TurnView {
   transientFailure?: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   error?: string;
+  errorMessage?: string;
 }
 export interface Term2SessionView {
   sessionId: string;

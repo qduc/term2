@@ -1107,6 +1107,10 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
         typeof payload.reason === 'string' && TURN_FAILURE_REASONS.has(payload.reason)
           ? payload.reason
           : 'runtime_error';
+      item.errorMessage =
+        typeof payload.errorMessage === 'string' && payload.errorMessage.trim().length > 0
+          ? text(payload.errorMessage, 4_096)
+          : undefined;
       if (typeof payload.finalText === 'string') {
         const finalText = text(payload.finalText, 16_384);
         item.text = finalText;

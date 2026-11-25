@@ -227,13 +227,43 @@ function contextTurns(context: Pick<SessionHydration['snapshot'], 'messages' | '
     // The message array itself supplies order when no mixed tool ordering is needed.
     context.messages.forEach(message);
   }
+  const hydratedErrorReason = (kind: string | undefined): string => {
+    switch (kind) {
+      case 'provider': return 'provider_error';
+      case 'network': return 'network_error';
+      case 'authentication': return 'authentication_error';
+      case 'rate_limit': return 'rate_limit';
+      case 'cancelled': return 'cancelled';
+      case 'validation': return 'validation_error';
+      case 'compaction': return 'compaction_failed';
+      case 'retry_exhausted': return 'retry_exhausted';
+      default: return 'runtime_error';
+    }
+  };
   if (Array.isArray(context.turnResults)) for (const value of context.turnResults) {
     const result = record(value);
     const item = turns.find(item => item.turnId === result.turnId);
     if (!item) continue;
     if (result.outcome === 'completed') item.status = 'completed';
     else if (result.outcome === 'cancelled' || result.outcome === 'interrupted') item.status = 'aborted';
-    else if (result.outcome === 'failed') item.status = 'failed';
+    else if (result.outcome === 'failed') {
+      item.status = 'failed';
+      const terminal = context.terminal && typeof context.terminal === 'object' && !Array.isArray(context.terminal)
+        ? (context.terminal as Record<string, unknown>)
+        : undefined;
+      const errSource =
+        result.error && typeof result.error === 'object' && !Array.isArray(result.error)
+          ? (result.error as Record<string, unknown>)
+          : terminal && terminal.turnId === result.turnId && terminal.error && typeof terminal.error === 'object' && !Array.isArray(terminal.error)
+            ? (terminal.error as Record<string, unknown>)
+            : undefined;
+      if (errSource) {
+        item.error = hydratedErrorReason(typeof errSource.kind === 'string' ? errSource.kind : undefined);
+        if (typeof errSource.message === 'string' && errSource.message.trim().length > 0) {
+          item.errorMessage = errSource.message.slice(0, 4_096);
+        }
+      }
+    }
   }
   const active = turns.find(item => item.turnId === activeTurnId);
   if (active && (status === 'running' || status === 'awaiting_interaction')) active.status = 'streaming';

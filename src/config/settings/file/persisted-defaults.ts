@@ -23,6 +23,33 @@ export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens', .
 /** Which keys a write names: an explicit set always writes a computed path default; a reset forgets it. */
 export type ComputedDefaultIntent = { set?: readonly string[]; reset?: readonly string[] | 'all' };
 
+export function implicitAgentDefaults(raw: unknown): string[] {
+  const agent = readSettingPath(raw, 'agent');
+  const keys = ['maxOutputTokens', 'modelSelection'].filter((field) => !hasSettingPath(agent, field));
+  // Older files store an explicit choice in scalar fields; the loader migrates it.
+  return keys
+    .filter(
+      (field) => field !== 'modelSelection' || (!hasSettingPath(agent, 'model') && !hasSettingPath(agent, 'provider')),
+    )
+    .map((field) => `agent.${field}`);
+}
+
+export function cleanImplicitDefaults(
+  cleaned: Partial<SettingsData>,
+  raw: unknown,
+  intent: ComputedDefaultIntent,
+  outputIntent: 'preserve' | 'explicit' | 'reset',
+): string[] {
+  if (
+    cleaned.agent &&
+    (outputIntent === 'reset' || (outputIntent === 'preserve' && !hasSettingPath(raw, 'agent.maxOutputTokens')))
+  ) {
+    delete (cleaned.agent as Partial<SettingsData['agent']>).maxOutputTokens;
+  }
+  omitImplicitDefaults(cleaned, raw, intent);
+  return implicitAgentDefaults(cleaned);
+}
+
 function hasSettingPath(target: unknown, key: string): boolean {
   let current: unknown = target;
   for (const part of key.split('.')) {
@@ -48,11 +75,7 @@ function readSettingPath(target: unknown, key: string): unknown {
  * An existing value equal to the default is kept: it cannot be told apart from a value the
  * user chose, and dropping it would move memory if XDG_DATA_HOME later changed.
  */
-export function omitImplicitDefaults(
-  cleaned: Partial<SettingsData>,
-  raw: unknown,
-  intent: ComputedDefaultIntent,
-): void {
+function omitImplicitDefaults(cleaned: Partial<SettingsData>, raw: unknown, intent: ComputedDefaultIntent): void {
   for (const key of OMIT_WHEN_IMPLICIT) {
     if (intent.set?.includes(key)) continue;
     if (!hasSettingPath(cleaned, key)) continue;

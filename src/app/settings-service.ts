@@ -27,10 +27,11 @@ import { flattenSettings, mergeSettings, trackSettingSources } from '../config/s
 import { buildSettingsWithSources } from '../config/settings/settings-sources.js';
 import { migrateLegacyAncillarySettings } from '../config/settings/ancillary-settings-migration.js';
 import {
+  cleanImplicitDefaults,
   hasMissingKeys,
+  implicitAgentDefaults,
   loadSettingsFromFile,
   OPTIONAL_DEFAULT_KEYS,
-  omitImplicitDefaults,
   quarantineCorruptSettingsFile,
   saveSettingsToFile,
   SETTINGS_FILE_VERSION,
@@ -277,14 +278,7 @@ export class SettingsService {
     }
     this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
     const launchSources = trackSettingSources(DEFAULT_SETTINGS, {}, env, cli);
-    for (const field of ['maxOutputTokens', 'modelSelection'] as const) {
-      const key = `agent.${field}`;
-      // Legacy scalar model/provider fields are migrated into an explicit selection by the file loader.
-      const rawAgent = (rawFileConfig as { agent?: Record<string, unknown> } | null)?.agent ?? {};
-      const legacyModel =
-        field === 'modelSelection' && (Object.hasOwn(rawAgent, 'model') || Object.hasOwn(rawAgent, 'provider'));
-      if (!Object.hasOwn(rawAgent, field) && !legacyModel) this.sources.set(key, launchSources.get(key) ?? 'default');
-    }
+    for (const key of implicitAgentDefaults(rawFileConfig)) this.sources.set(key, launchSources.get(key) ?? 'default');
 
     // Normalize profile selection so conflicting persisted state is resolved
     // on load, not lazily at first set() call. Legacy files without a
@@ -344,7 +338,8 @@ export class SettingsService {
 
     // Check if file config is missing any keys that exist in defaults
     // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
-    const shouldUpdateFile = configFileExisted && this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
+    const shouldUpdateFile =
+      configFileExisted && hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS, OPTIONAL_DEFAULT_KEYS);
     const shouldMigrateLegacyProviderFormat = configFileExisted && this.hasLegacyProviderFormat(rawFileConfig);
     // The loader migrated an older file version in memory; the rewrite stamps the current one.
     const migratedFileVersion = configFileExisted && fileVersion !== undefined && fileVersion < SETTINGS_FILE_VERSION;
@@ -1115,11 +1110,7 @@ export class SettingsService {
     this.runtimeOverrideSources.set(key, source);
   }
 
-  private reconcileCommittedSettings(
-    committed: SettingsData,
-    implicitOutputDefault = false,
-    implicitModel = false,
-  ): void {
+  private reconcileCommittedSettings(committed: SettingsData, implicitKeys: string[]): void {
     if (this.resetAllAtRuntime) {
       this.settings = structuredClone(DEFAULT_SETTINGS);
       this.sources.clear();
@@ -1137,15 +1128,7 @@ export class SettingsService {
     if (next.app) next.app = { ...next.app, activeProfileId: canonicalProfileId(String(next.app.activeProfileId)) };
     this.settings = next;
     this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
-    if (implicitModel) {
-      this.sources.set('agent.modelSelection', this.getStartupOverride('agent.modelSelection') ?? 'default');
-    }
-    if (implicitOutputDefault)
-      this.sources.set(
-        'agent.maxOutputTokens',
-        trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get('agent.maxOutputTokens') ??
-          'default',
-      );
+    for (const key of implicitKeys) this.sources.set(key, this.getStartupOverride(key) ?? 'default');
     for (const [key, source] of this.runtimeOverrideSources) {
       this.sources.set(key, source);
     }
@@ -1168,8 +1151,7 @@ export class SettingsService {
     if (this.disableFilePersistence) {
       return { status: 'not-persisted', reason: 'disabled' };
     }
-    let implicitOutputDefault = false;
-    let implicitModel = false;
+    let implicitKeys: string[] = [];
     const committed = saveSettingsToFile({
       settingsDir: this.settingsDir,
       schema: SettingsSchema,
@@ -1179,13 +1161,7 @@ export class SettingsService {
       },
       stripSensitiveSettings: (next, raw) => {
         const cleaned = stripSensitiveSettings(next);
-        implicitOutputDefault =
-          outputIntent === 'reset' ||
-          (outputIntent === 'preserve' && !Object.hasOwn((raw as any)?.agent ?? {}, 'maxOutputTokens'));
-        if (implicitOutputDefault && cleaned.agent)
-          delete (cleaned.agent as Partial<SettingsData['agent']>).maxOutputTokens;
-        omitImplicitDefaults(cleaned, raw, computedDefaultIntent);
-        implicitModel = !Object.hasOwn(cleaned.agent ?? {}, 'modelSelection');
+        implicitKeys = cleanImplicitDefaults(cleaned, raw, computedDefaultIntent, outputIntent);
         return cleaned;
       },
       disableLogging: this.disableLogging,
@@ -1193,16 +1169,9 @@ export class SettingsService {
     });
     if (committed) {
       onCommitted?.();
-      this.reconcileCommittedSettings(committed, implicitOutputDefault, implicitModel);
+      this.reconcileCommittedSettings(committed, implicitKeys);
       return { status: 'saved' };
     }
     return { status: 'not-persisted', reason: 'failed' };
-  }
-
-  /**
-   * Check if target object is missing any keys that exist in source
-   */
-  private hasMissingKeys(target: any, source: any, prefix: string = ''): boolean {
-    return hasMissingKeys(target, source, OPTIONAL_DEFAULT_KEYS, prefix);
   }
 }

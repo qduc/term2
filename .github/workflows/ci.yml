@@ -1,8 +1,9 @@
 name: CI
 
 # Quality runs independently of behavioral tests, including on docs-only PRs.
-# Keep all existing check names: port is a compatibility gate over the lanes
-# that now own its checks. Behavioral tiers may skip only inert PR changes.
+# Each behavioral job owns exactly one test tier and shards heavy tiers in parallel;
+# port is the aggregate gate over quality and all behavioral lanes. Behavioral tiers
+# may skip only inert PR changes.
 on:
   workflow_call:
     inputs:
@@ -85,33 +86,6 @@ jobs:
             echo "Every changed file is inert for tests; running repository policy checks only."
           fi
 
-  # Keep repository policy in an existing required check, even when all costly
-  # test work is skipped. A docs-only root report must not bypass check-root.
-  test:
-    needs: changes
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-22.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref || github.sha }}
-      - name: Check repository policy
-        run: |
-          node scripts/check-root.mjs
-          node scripts/check-no-unit-tests.mjs
-      - uses: ./.github/actions/setup-tests
-        if: needs.changes.outputs.run != 'false'
-        with:
-          ripgrep: 'true'
-          lane: test
-      - name: Run CLI integration, safety and responses provider cases
-        if: needs.changes.outputs.run != 'false'
-        # This job installs bubblewrap and socat, so the sandbox network approval test, which is opt-in
-        # because it needs them, runs here (scripts/run-ci-lane.mjs places it in this lane).
-        env:
-          RUN_SHELL_SANDBOX_INTEGRATION: '1'
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
   quality:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
@@ -174,7 +148,7 @@ jobs:
   # Explicit status handling also covers push/workflow_call's skipped changes job.
   # An unexpected skipped, failed or cancelled lane must never make this pass.
   port:
-    needs: [changes, quality, test, integration, bench, e2e, provider-black-box]
+    needs: [changes, quality, integration, bench, e2e, provider-black-box]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -186,7 +160,7 @@ jobs:
           node --input-type=module <<'NODE'
           const needs = JSON.parse(process.env.NEEDS);
           const inert = needs.changes.result === 'success' && needs.changes.outputs.run === 'false';
-          const expected = { quality: 'success', test: 'success',
+          const expected = { quality: 'success',
             integration: inert ? 'skipped' : 'success',
             bench: inert ? 'skipped' : 'success',
             e2e: inert ? 'skipped' : 'success',
@@ -213,6 +187,10 @@ jobs:
   integration:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -223,13 +201,13 @@ jobs:
         with:
           ripgrep: 'true'
           web-client: 'true'
-          lane: integration
-      - name: Run remaining integration and stateless provider cases
+          lane: integration-${{ matrix.shard }}
+      - name: Run integration shard ${{ matrix.shard }}/2
         # This job installs bubblewrap and socat, so the ACP shell cases must run their command in the
         # sandbox instead of accepting a sandbox refusal (see tests/clients/acp/v1.integration.test.ts).
         env:
           TERM2_ACP_REQUIRE_SHELL_SUCCESS: '1'
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration --shard=${{ matrix.shard }}/2
 
   # The benches and packed-tarball smoke check read only a fresh build, not test output.
   # Running the tarball smoke check here reuses this runner's build and keeps e2e under 2m.
@@ -284,7 +262,13 @@ jobs:
   e2e:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    # Ubuntu 24.04 hosted runners reject bubblewrap loopback setup with RTM_NEWADDR EPERM;
+    # sandbox-network.e2e.test.ts needs bubblewrap and socat on ubuntu-22.04.
+    runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
@@ -293,16 +277,23 @@ jobs:
       - uses: ./.github/actions/setup-tests
         id: setup
         with:
-          lane: e2e
-      - name: Run E2E process cases
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
+          ripgrep: 'true'
+          lane: e2e-${{ matrix.shard }}
+      - name: Run E2E shard ${{ matrix.shard }}/2
+        env:
+          RUN_SHELL_SANDBOX_INTEGRATION: '1'
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e --shard=${{ matrix.shard }}/2
       - name: Check golden parity
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 1 }}
         run: node parity/run.mjs check --cli dist/cli.js
 
   provider-black-box:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -311,6 +302,6 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
         with:
-          lane: provider-black-box
-      - name: Run resilience and remaining provider cases
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box
+          lane: provider-black-box-${{ matrix.shard }}
+      - name: Run provider black-box shard ${{ matrix.shard }}/2
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box --shard=${{ matrix.shard }}/2

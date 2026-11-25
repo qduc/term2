@@ -130,9 +130,10 @@ scenario is the one whose CLI never reached the state it waits for.
   separate fixture state through file isolation; cases within a file stay
   sequential. The transport entry retains the aggregate resilience ledger.
 
-CI uses `scripts/run-ci-lane.mjs` to distribute the complete tier inventories
-across the same four jobs. Each lane schedules its files through isolated Vitest
-projects using the original tier configurations and one three-worker queue.
+CI uses `scripts/run-ci-lane.mjs` so each job owns its own tier (`quality`, `integration`,
+`e2e`, `provider-black-box`), with heavy behavioral tiers sharded across parallel runners
+(`--shard=i/n`). Each shard schedules its files through isolated Vitest projects using the
+original tier configuration and one three-worker queue.
 Integration CLI launchers and provider suites use the job's freshly built,
 built CLI; standalone integration runs still prepare a private build. E2E
 retains its source and built-entry coverage. Discovery assigns new files automatically.

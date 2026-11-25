@@ -18,8 +18,7 @@ import { createTestChildEnv, spawnTerminal, testCliPath } from '../helpers/termi
 // Opt-in: runs only with RUN_SHELL_SANDBOX_INTEGRATION=1, because it needs the real sandbox: bwrap and socat
 // on PATH and a kernel with IPv6 (the sandbox's in-namespace proxy bridge is `socat TCP-LISTEN:3128`, which
 // opens an AF_INET6 socket; without IPv6 the fetch fails with "Failed to connect to localhost port 3128" and
-// the prompt never appears). CI's `test` job has those and sets the variable, and scripts/run-ci-lane.mjs
-// places this file in that lane, not in `e2e`, whose job installs no sandbox tools. It needs a PTY only for
+// the prompt never appears). CI's `e2e` job installs those and sets the variable. It needs a PTY only for
 // the approval prompt ("Allow once" / "Always allow host for this project"). The policy underneath (blocked
 // without approval, reachable after `sandbox-network allow`, closed by `allowNetworking: false` or a revoke)
 // is checked headlessly by sandbox-network.integration.test.ts; the prompt flow and the reuse across linked

@@ -74,6 +74,8 @@ const NOTIFICATIONS_KEY = 'term2.web.notifications';
 const DIAGNOSTICS_KEY = 'term2.web.diagnostics';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+/** Wait briefly before re-showing "Working…" after a tool call finishes so rapid tool-to-tool transitions don't flash. */
+const POST_TOOL_STATUS_DELAY_MS = 400;
 
 const STARTER_PROMPTS = [
   'What files are in this folder?',
@@ -1024,18 +1026,34 @@ export function Term2SessionShell({
   const liveStatus = interactionPending
     ? 'Waiting for your approval'
     : lastTurn?.transientStatus
-    ? lastTurn.transientStatus
-    : lastTurn && (lastTurn.status === 'streaming' || lastTurn.status === 'pending')
-    ? (() => {
-        // A running or waiting tool already says so on its own row, with its spinner;
-        // repeating it here showed the same words twice.
-        if (lastTurn.commands.some((c) => c.status === 'running' || c.status === 'pending')) return null;
-        const lastItem = lastTurn.items?.[lastTurn.items.length - 1];
-        if (lastItem?.kind === 'reasoning' && lastItem.streaming) return 'Thinking…';
-        if (lastItem?.kind === 'text' && lastItem.text) return null;
-        return lastTurn.text ? null : lastTurn.reasoning ? 'Thinking…' : 'Working…';
-      })()
-    : null;
+      ? lastTurn.transientStatus
+      : lastTurn && (lastTurn.status === 'streaming' || lastTurn.status === 'pending')
+        ? (() => {
+            // A running or waiting tool already says so on its own row, with its spinner;
+            // repeating it here showed the same words twice.
+            if (lastTurn.commands.some((c) => c.status === 'running' || c.status === 'pending')) return null;
+            const lastItem = lastTurn.items?.[lastTurn.items.length - 1];
+            if (lastItem?.kind === 'reasoning' && lastItem.streaming) return 'Thinking…';
+            if (lastItem?.kind === 'text' && lastItem.text) return null;
+            return lastTurn.text ? null : lastTurn.reasoning ? 'Thinking…' : 'Working…';
+          })()
+        : null;
+  const deferLiveStatus = Boolean(
+    liveStatus &&
+      !interactionPending &&
+      !lastTurn?.transientStatus &&
+      (lastTurn?.commands.length ?? 0) > 0,
+  );
+  const [delayedLiveStatus, setDelayedLiveStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deferLiveStatus || !liveStatus) {
+      setDelayedLiveStatus(null);
+      return;
+    }
+    const timer = window.setTimeout(() => setDelayedLiveStatus(liveStatus), POST_TOOL_STATUS_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [deferLiveStatus, liveStatus]);
+  const visibleLiveStatus = deferLiveStatus ? delayedLiveStatus : liveStatus;
 
   // Browser tab title badge & optional background notifications.
   const prevStatusRef = useRef(session.view.status);
@@ -1111,7 +1129,7 @@ export function Term2SessionShell({
   useEffect(() => {
     const el = scrollRef.current;
     if (pinned && el) el.scrollTop = el.scrollHeight;
-  }, [session.view.turns, session.view.pendingInteraction, liveStatus, pinned]);
+  }, [session.view.turns, session.view.pendingInteraction, visibleLiveStatus, pinned]);
   useEffect(() => {
     setPinned(true);
   }, [sessionId]);
@@ -1922,14 +1940,22 @@ export function Term2SessionShell({
                   </article>
                 ))}
 
-                {/* While a prompt is pending the card below is the status; a second line would repeat it. */}
-                {liveStatus && !interactionPending && (
-                  <p role="status" className="flex items-center gap-2.5 text-sm">
-                    <span aria-hidden className="relative flex h-2 w-2">
-                      <span className="absolute inset-0 animate-ping rounded-full bg-teal-400/70" />
-                      <span className="relative h-2 w-2 rounded-full bg-teal-500" />
-                    </span>
-                    <span className="t2-shimmer truncate">{liveStatus}</span>
+                {/* While a prompt is pending the card below is the status; a second line would repeat it.
+                    Reserve the 1-line slot during an active turn so status transitions don't bounce the transcript. */}
+                {(hasStreamingTurn || visibleLiveStatus) && !interactionPending && (
+                  <p
+                    role="status"
+                    className={`flex min-h-5 items-center gap-2.5 text-sm ${visibleLiveStatus ? '' : 'invisible'}`}
+                  >
+                    {visibleLiveStatus && (
+                      <>
+                        <span aria-hidden className="relative flex h-2 w-2">
+                          <span className="absolute inset-0 animate-ping rounded-full bg-teal-400/70" />
+                          <span className="relative h-2 w-2 rounded-full bg-teal-500" />
+                        </span>
+                        <span className="t2-shimmer truncate">{visibleLiveStatus}</span>
+                      </>
+                    )}
                   </p>
                 )}
 

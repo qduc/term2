@@ -440,6 +440,7 @@ export interface Term2SubagentCard {
   commands: Term2Command[];
 }
 export type Term2TurnItem =
+  | { kind: 'user'; id: string; text: string }
   | { kind: 'reasoning'; id: string; text: string; streaming?: boolean; modelStep?: number }
   | { kind: 'text'; id: string; text: string; draft?: boolean; modelStep?: number }
   | { kind: 'tool'; executionId: string };

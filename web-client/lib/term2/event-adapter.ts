@@ -396,6 +396,18 @@ function upsertTurnTextItem(
   }
 }
 
+function upsertTurnUserItem(turnView: Term2TurnView, messageId: string, content: string): void {
+  const items = ensureTurnItems(turnView);
+  const index = items.findIndex((entry) => entry.kind === 'user' && entry.id === messageId);
+  if (content.length === 0) {
+    if (index >= 0) turnView.items = items.filter((_, pos) => pos !== index);
+    return;
+  }
+  const next: Term2TurnItem = { kind: 'user', id: messageId, text: content };
+  if (index >= 0) items[index] = next;
+  else items.push(next);
+}
+
 function removeTurnTextIds(turnView: Term2TurnView, ids: readonly (string | undefined)[]): void {
   if (!turnView.items) return;
   const targets = new Set(ids.filter((value): value is string => Boolean(value)));
@@ -630,7 +642,21 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
         if (!item) continue;
         item.role = 'assistant';
         const users = messages.filter(message => message.role === 'user');
-        item.userText = users.length ? users.map(message => message.text).join('') : undefined;
+        if (incoming.message.turnId === turnId && incoming.message.role === 'user') {
+          if (item.userMessageId === undefined && item.userText === undefined && (item.items?.length ?? 0) === 0) {
+            item.userMessageId = incoming.message.id;
+            item.userText = incoming.message.text;
+          } else if (incoming.message.id === item.userMessageId) {
+            item.userText = incoming.message.text;
+          } else {
+            upsertTurnUserItem(item, incoming.message.id, incoming.message.text);
+          }
+        } else if (item.userMessageId !== undefined) {
+          const opening = users.find(message => message.id === item.userMessageId);
+          item.userText = opening ? opening.text : undefined;
+        } else if (users.length === 0) {
+          item.userText = undefined;
+        }
         item.text = messages
           .filter(message => message.role === 'assistant')
           .map(message => message.text)

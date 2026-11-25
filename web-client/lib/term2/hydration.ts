@@ -168,8 +168,14 @@ function contextTurns(context: Pick<SessionHydration['snapshot'], 'messages' | '
     const item = getTurn(entry.turnId);
     const msgText = text(entry.text);
     if (entry.role === 'user') {
-      item.userText = (item.userText ?? '') + msgText;
-      item.userMessageId ??= identity(entry.id);
+      const msgId = identity(entry.id);
+      if (item.userText === undefined && (item.items?.length ?? 0) === 0) {
+        item.userText = msgText;
+        item.userMessageId = msgId;
+      } else if (msgText.length > 0) {
+        item.items = item.items ?? [];
+        item.items.push({ kind: 'user', id: msgId, text: msgText });
+      }
     } else {
       item.text = item.text && msgText ? `${item.text}\n\n${msgText}` : item.text + msgText;
       if (msgText.length > 0) {

@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Term2UserContent } from './Term2UserContent';
 
 /**
  * Rewinds to just before a turn's user message and sends `text` as a new turn.
@@ -28,6 +29,7 @@ function laterTurnsNote(laterTurns: number): string {
 export function Term2UserMessage({
   turnId,
   text,
+  content,
   copied,
   onCopy,
   disabled,
@@ -36,6 +38,7 @@ export function Term2UserMessage({
 }: {
   turnId: string;
   text: string;
+  content?: readonly unknown[];
   copied: boolean;
   onCopy: () => void;
   disabled: boolean;
@@ -123,7 +126,7 @@ export function Term2UserMessage({
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="max-w-[85%] rounded-3xl bg-zinc-100 px-4 py-2.5 dark:bg-white/[0.07]">
-        <p className="whitespace-pre-wrap break-words text-[15px] leading-6">{text}</p>
+        <Term2UserContent text={text} content={content} />
       </div>
       <div className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
         <Button

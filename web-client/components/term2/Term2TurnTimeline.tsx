@@ -5,6 +5,8 @@ import { Brain, ChevronRight } from 'lucide-react';
 import type { Term2Command, Term2TurnItem, Term2TurnView } from '../../lib/term2/types';
 import { Term2Markdown } from './Term2Markdown';
 import { Term2ToolGroup } from './Term2ToolGroup';
+import { Term2UserContent } from './Term2UserContent';
+import type { NativeMessageEntry } from '../../lib/term2/native-state';
 
 /**
  * How tool activity reads, matching the TUI's `ui.displayMode`: `standard` shows one
@@ -104,9 +106,11 @@ function buildChronologicalSegments(turn: Term2TurnView): RenderSegment[] {
 export const Term2TurnTimeline = memo(function Term2TurnTimeline({
   turn,
   displayMode,
+  messages,
 }: {
   turn: Term2TurnView;
   displayMode: Term2DisplayMode;
+  messages?: readonly NativeMessageEntry[];
 }) {
   const segments = buildSegments(turn, displayMode);
   if (segments.length === 0) return null;
@@ -146,7 +150,7 @@ export const Term2TurnTimeline = memo(function Term2TurnTimeline({
           return (
             <div key={`user:${segment.id}:${index}`} className="flex flex-col items-end gap-1">
               <div className="max-w-[85%] rounded-3xl bg-zinc-100 px-4 py-2.5 dark:bg-white/[0.07]">
-                <p className="whitespace-pre-wrap break-words text-[15px] leading-6">{segment.text}</p>
+                <Term2UserContent text={segment.text} content={messages?.find(entry => entry.message.id === segment.id)?.message.content} />
               </div>
             </div>
           );

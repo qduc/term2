@@ -79,17 +79,18 @@ function providerState(
     credential.source === 'token-file'
       ? 'Connected with sign-in'
       : credential.source === 'local'
-        ? 'Connected to local server'
-        : credential.source === 'external'
-          ? 'Connected'
-          : 'Connected with API key';
+      ? 'Connected to local server'
+      : credential.source === 'external'
+      ? 'Connected'
+      : 'Connected with API key';
   if (modelCount > 0)
     return {
       tone: 'ok',
       text: `${how} · ${modelCount} model${modelCount === 1 ? '' : 's'}`,
       shortText: `${modelCount} model${modelCount === 1 ? '' : 's'}`,
     };
-  if (modelsLoading || !modelsChecked) return { tone: 'pending', text: `${how} · checking models…`, shortText: 'Checking…' };
+  if (modelsLoading || !modelsChecked)
+    return { tone: 'pending', text: `${how} · checking models…`, shortText: 'Checking…' };
   return {
     tone: 'error',
     text: "Couldn't load models. Check the key or the server address.",
@@ -122,6 +123,7 @@ export function ProvidersSection({
   onNavigate,
   onReload,
   onModelsChanged,
+  setupPath,
 }: {
   projection: SettingsProjection;
   models: ModelSummary[];
@@ -134,6 +136,7 @@ export function ProvidersSection({
   onNavigate: (provider: string | null) => void;
   onReload: () => Promise<SettingsProjection | null>;
   onModelsChanged: () => Promise<void>;
+  setupPath?: 'sign-in' | 'api-key' | 'server';
 }) {
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const providers = projection.settings.providers;
@@ -150,13 +153,7 @@ export function ProvidersSection({
 
   const sorted = useMemo(() => {
     const rank = (provider: Provider) =>
-      provider.id === defaultProvider
-        ? 0
-        : provider.disabled
-          ? 3
-          : provider.credential.configured
-            ? 1
-            : 2;
+      provider.id === defaultProvider ? 0 : provider.disabled ? 3 : provider.credential.configured ? 1 : 2;
     return [...providers].sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label, 'en'));
   }, [providers, defaultProvider]);
 
@@ -164,13 +161,13 @@ export function ProvidersSection({
     providerState(provider, provider.id in oauth, modelCounts.get(provider.id) ?? 0, modelsChecked, modelsLoading);
 
   const adding = routeProvider === ADD_PROVIDER_ROUTE;
-  const selected = adding ? null : (providers.find((p) => p.id === routeProvider) ?? (routeProvider ? null : sorted[0]));
+  const selected = adding ? null : providers.find((p) => p.id === routeProvider) ?? (routeProvider ? null : sorted[0]);
   // Narrow screens show the list until a provider is chosen, then only the detail page.
   const detailOpen = routeProvider !== null;
 
   return (
     <div className="flex min-h-0 flex-col gap-4 md:flex-row md:gap-6">
-      <div className={cn('md:w-60 md:shrink-0', detailOpen && 'hidden md:block')}>
+      <div className={cn('md:w-60 md:shrink-0', setupPath ? 'hidden' : detailOpen && 'hidden md:block')}>
         <ul aria-label="Providers" className="space-y-0.5">
           {sorted.map((provider) => {
             const state = stateOf(provider);
@@ -218,8 +215,14 @@ export function ProvidersSection({
       </div>
 
       <div className={cn('min-w-0 flex-1', !detailOpen && 'hidden md:block')}>
-        {detailOpen && (
-          <Button type="button" variant="ghost" size="sm" className="-ml-2 mb-3 md:hidden" onClick={() => onNavigate(null)}>
+        {detailOpen && !setupPath && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="-ml-2 mb-3 md:hidden"
+            onClick={() => onNavigate(null)}
+          >
             <ArrowLeft />
             All providers
           </Button>
@@ -228,6 +231,7 @@ export function ProvidersSection({
           <AddProvider
             presets={presets}
             providerTypes={providerTypes}
+            allowCustom={setupPath !== 'api-key'}
             existingIds={new Set(providers.map((p) => p.id))}
             onOpenExisting={onNavigate}
             onAdded={async (before) => {
@@ -253,6 +257,7 @@ export function ProvidersSection({
             onModelsChanged={onModelsChanged}
             onConfirm={setConfirm}
             onRemoved={() => onNavigate(null)}
+            setup={Boolean(setupPath)}
           />
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -312,6 +317,7 @@ function ProviderDetail({
   onModelsChanged,
   onConfirm,
   onRemoved,
+  setup = false,
 }: {
   provider: Provider;
   state: ProviderState;
@@ -326,6 +332,7 @@ function ProviderDetail({
   onModelsChanged: () => Promise<void>;
   onConfirm: (request: ConfirmRequest) => void;
   onRemoved: () => void;
+  setup?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -384,7 +391,7 @@ function ProviderDetail({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{provider.label}</h2>
-            {isDefault && (
+            {isDefault && !setup && (
               <Badge variant="secondary" title="The saved default model comes from this provider">
                 Default
               </Badge>
@@ -579,11 +586,17 @@ function ProviderDetail({
                   {provider.credential.source === 'local'
                     ? 'Local server, no key needed'
                     : provider.credential.configured
-                      ? `API key ${credentialSourceText(provider.credential.source)}`
-                      : 'No API key saved'}
+                    ? `API key ${credentialSourceText(provider.credential.source)}`
+                    : 'No API key saved'}
                 </p>
               </div>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setEditingConnection(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => setEditingConnection(true)}
+              >
                 Edit connection
               </Button>
             </div>
@@ -623,7 +636,7 @@ function ProviderDetail({
         </div>
       </SectionBlock>
 
-      {!provider.disabled && models.length > 0 && (
+      {!setup && !provider.disabled && models.length > 0 && (
         <SectionBlock title={`Models (${models.length})`}>
           <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
             {visibleModels.map((model) => (
@@ -833,12 +846,14 @@ function AddProvider({
   existingIds,
   onOpenExisting,
   onAdded,
+  allowCustom = true,
 }: {
   presets: ProviderPresetEntry[];
   providerTypes: string[];
   existingIds: Set<string>;
   onOpenExisting: (id: string) => void;
   onAdded: (before: Set<string>) => Promise<void>;
+  allowCustom?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<ProviderPresetEntry | 'custom' | null>(null);
@@ -854,7 +869,8 @@ function AddProvider({
         (CATEGORY_LABELS[preset.category] ?? preset.category).toLowerCase().includes(needle),
     );
     const byCategory = new Map<string, ProviderPresetEntry[]>();
-    for (const preset of matching) byCategory.set(preset.category, [...(byCategory.get(preset.category) ?? []), preset]);
+    for (const preset of matching)
+      byCategory.set(preset.category, [...(byCategory.get(preset.category) ?? []), preset]);
     return Object.keys(CATEGORY_LABELS)
       .concat([...byCategory.keys()].filter((key) => !(key in CATEGORY_LABELS)))
       .filter((key) => byCategory.has(key))
@@ -924,17 +940,19 @@ function AddProvider({
           className="pl-8"
         />
       </div>
-      <button
-        type="button"
-        onClick={() => setChosen('custom')}
-        className="mt-4 flex w-full items-center gap-3 rounded-lg border border-dashed px-3 py-3 text-left transition-colors hover:bg-muted"
-      >
-        <Server className="size-4 shrink-0 text-muted-foreground" />
-        <span>
-          <span className="block text-sm font-medium text-foreground">Custom OpenAI-compatible server</span>
-          <span className="block text-xs text-muted-foreground">Any base URL, with or without a key.</span>
-        </span>
-      </button>
+      {allowCustom && (
+        <button
+          type="button"
+          onClick={() => setChosen('custom')}
+          className="mt-4 flex w-full items-center gap-3 rounded-lg border border-dashed px-3 py-3 text-left transition-colors hover:bg-muted"
+        >
+          <Server className="size-4 shrink-0 text-muted-foreground" />
+          <span>
+            <span className="block text-sm font-medium text-foreground">Custom OpenAI-compatible server</span>
+            <span className="block text-xs text-muted-foreground">Any base URL, with or without a key.</span>
+          </span>
+        </button>
+      )}
       {groups.map((group) => (
         <div key={group.key} className="mt-5">
           <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.label}</h3>

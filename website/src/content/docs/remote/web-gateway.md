@@ -13,7 +13,7 @@ term2-web
 
 Open `http://127.0.0.1:3000`. The command starts both the browser app and its private gateway; you don't need a checkout, a separate build, or a pairing code. Press `Ctrl+C` to stop both. If port 3000 is already taken, run `term2-web --port 3001` (or `PORT=3001 term2-web`).
 
-On your first visit, follow the two-step checklist to **Connect** an AI provider (API key, OAuth sign-in, or preset/custom server) and **Browse** for a folder to work in, confirm access, and select **Start a new chat**. Use the left sidebar to switch folders, start multiple chats in the same folder, or return to an earlier chat.
+On your first visit, select **Connect**, then sign in with ChatGPT, use an API key, or connect a local or custom server. Choose a model and select **Continue setup**. Select **Browse** to choose a folder and confirm access; Term2 opens a draft for that folder. You can type a question before setup is complete, but you need a usable model to send it. A suggested question fills the draft without sending. Use the left sidebar to switch folders, start multiple chats in the same folder, or return to an earlier chat.
 
 The web app uses the same saved settings and provider credentials as the CLI. If you already set up a provider there, don't enter the key again. Start `term2-web` from the same shell environment if your CLI gets its credentials from environment variables. If a chat needs an API key that hasn't been configured, it will point you to **Settings**.
 

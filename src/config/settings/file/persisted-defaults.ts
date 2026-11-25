@@ -8,19 +8,47 @@ import { DEFAULT_SETTINGS, type SettingsData } from '../settings-schema.js';
  * Defaults computed from the machine that runs Term2 (an absolute path under its data
  * directory). settings.json holds one only when a write sets it, it differs from this
  * machine's default, or the file already held it: a dumped copy would point another
- * machine, or another XDG_DATA_HOME, at this machine's path. Every other default is
- * still written in full.
+ * machine, or another XDG_DATA_HOME, at this machine's path.
  */
 const COMPUTED_PATH_DEFAULT_KEYS = new Set<string>(['memory.directory']);
+// The schema's internal model fallback is not a user's model choice.
+const OMIT_WHEN_IMPLICIT = new Set([...COMPUTED_PATH_DEFAULT_KEYS, 'agent.modelSelection']);
 
 // Some settings with default values are optional to persist, so their absence
 // does not trigger a startup rewrite. Absence of agent.maxOutputTokens preserves
 // inherited output-allocation provenance on disk; a computed path default is
 // left out so the file stays portable.
-export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens', ...COMPUTED_PATH_DEFAULT_KEYS]);
+export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens', ...OMIT_WHEN_IMPLICIT]);
 
 /** Which keys a write names: an explicit set always writes a computed path default; a reset forgets it. */
 export type ComputedDefaultIntent = { set?: readonly string[]; reset?: readonly string[] | 'all' };
+
+export function implicitAgentDefaults(raw: unknown): string[] {
+  const agent = readSettingPath(raw, 'agent');
+  const keys = ['maxOutputTokens', 'modelSelection'].filter((field) => !hasSettingPath(agent, field));
+  // Older files store an explicit choice in scalar fields; the loader migrates it.
+  return keys
+    .filter(
+      (field) => field !== 'modelSelection' || (!hasSettingPath(agent, 'model') && !hasSettingPath(agent, 'provider')),
+    )
+    .map((field) => `agent.${field}`);
+}
+
+export function cleanImplicitDefaults(
+  cleaned: Partial<SettingsData>,
+  raw: unknown,
+  intent: ComputedDefaultIntent,
+  outputIntent: 'preserve' | 'explicit' | 'reset',
+): string[] {
+  if (
+    cleaned.agent &&
+    (outputIntent === 'reset' || (outputIntent === 'preserve' && !hasSettingPath(raw, 'agent.maxOutputTokens')))
+  ) {
+    delete (cleaned.agent as Partial<SettingsData['agent']>).maxOutputTokens;
+  }
+  omitImplicitDefaults(cleaned, raw, intent);
+  return implicitAgentDefaults(cleaned);
+}
 
 function hasSettingPath(target: unknown, key: string): boolean {
   let current: unknown = target;
@@ -41,18 +69,14 @@ function readSettingPath(target: unknown, key: string): unknown {
 }
 
 /**
- * Leave a computed path default (COMPUTED_PATH_DEFAULT_KEYS) out of the bytes written. It is
+ * Leave an implicit default (an installation-local path or an unchosen model) out of the bytes written. It is
  * written when this write sets it explicitly, when its value differs from this machine's
  * default, or when the file on disk already holds it and this write is not a reset of it.
  * An existing value equal to the default is kept: it cannot be told apart from a value the
  * user chose, and dropping it would move memory if XDG_DATA_HOME later changed.
  */
-export function omitComputedPathDefaults(
-  cleaned: Partial<SettingsData>,
-  raw: unknown,
-  intent: ComputedDefaultIntent,
-): void {
-  for (const key of COMPUTED_PATH_DEFAULT_KEYS) {
+function omitImplicitDefaults(cleaned: Partial<SettingsData>, raw: unknown, intent: ComputedDefaultIntent): void {
+  for (const key of OMIT_WHEN_IMPLICIT) {
     if (intent.set?.includes(key)) continue;
     if (!hasSettingPath(cleaned, key)) continue;
     if (JSON.stringify(readSettingPath(cleaned, key)) !== JSON.stringify(readSettingPath(DEFAULT_SETTINGS, key))) {

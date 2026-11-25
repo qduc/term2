@@ -97,6 +97,7 @@ import { displaySessionId } from '../protocol/session-id.js';
 const RECENT_CONVERSATIONS = 10;
 
 type MenuOptions = {
+  readonly unconfiguredSessionId?: string;
   readonly app: Pick<DirectApplication, 'liveSettings' | 'skills' | 'listWorkspaceSessions' | 'sessionAccount'>;
   /** The settings file; favorite, nickname and provider edits are saved there as legacy did. */
   readonly persistentSettings: ISettingsService;
@@ -214,6 +215,7 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
   const bySession = new Map<string, { live: ISettingsService; settings: TuiModelSettings }>();
   const services = new Map<string, MenuSettingsService>();
   return {
+    requiresModelSelection: (sessionId) => sessionId === options.unconfiguredSessionId,
     copy: copyToClipboard,
     skills: { list: () => [...app.skills(root)] },
     resume: {

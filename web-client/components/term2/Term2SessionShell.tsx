@@ -37,6 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Term2FolderSelector, type SelectedTerm2Workspace } from './Term2FolderSelector';
 import type { SavedFolderChange } from './Term2SavedFolderMenu';
 import { Term2SetupDialog } from './Term2SetupDialog';
+import { Term2ProviderSetup } from './Term2ProviderSetup';
 import { Term2SettingsPage } from './settings/Term2SettingsPage';
 import { parseSettingsSection, type SettingsSectionId } from './settings/settings-catalog';
 import { Term2NativeEvidence } from './Term2NativeEvidence';
@@ -49,12 +50,7 @@ import { Term2QueueBar } from './Term2QueueBar';
 import { Term2RewindDialog } from './Term2RewindDialog';
 import { Term2RetryReply, Term2UserMessage, type ResendFromTurn } from './Term2MessageActions';
 import { Term2RunningTasksPanel, useRunningTasks } from './Term2RunningTasksPanel';
-import {
-  Term2PathPopover,
-  Term2QuickPalette,
-  Term2SkillsPopover,
-  type QuickActionItem,
-} from './Term2ComposerPopovers';
+import { Term2PathPopover, Term2QuickPalette, Term2SkillsPopover, type QuickActionItem } from './Term2ComposerPopovers';
 import { Term2HelpDialog } from './Term2HelpDialog';
 import { isTerm2LocalControlEnabled } from './flags';
 import { Term2ApiError, term2Client } from '../../lib/api/term2';
@@ -205,9 +201,10 @@ export function Term2SessionShell({
   const [draggingFile, setDraggingFile] = useState(false);
   const [armedSkill, setArmedSkill] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [dialog, setDialog] = useState<'folder' | 'help' | 'rewind' | null>(null);
+  const [dialog, setDialog] = useState<'folder' | 'help' | 'rewind' | 'provider' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ turnId: string; message: string } | null>(null);
+  const [retryDraft, setRetryDraft] = useState<{ sessionId: string; turnId: string; model: ModelSummary } | null>(null);
   // The running tasks panel: which chat it is open for, and chats where the user closed it.
   /** Only the user opens or closes the running tasks panel; nothing toggles it on its own. */
   const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
@@ -243,6 +240,7 @@ export function Term2SessionShell({
   const [settings, setSettings] = useState<SettingsProjection | null>(null);
   const [models, setModels] = useState<ModelSummary[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsChecked, setModelsChecked] = useState(false);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [loadingSkills, setLoadingSkills] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
@@ -414,6 +412,7 @@ export function Term2SessionShell({
     try {
       const res = await term2Client.listModels();
       setModels(res.models);
+      setModelsChecked(true);
     } catch {
       /* model catalog may be empty before any provider is configured */
     } finally {
@@ -465,14 +464,21 @@ export function Term2SessionShell({
     setSelectedWorkspaceId(selected.workspaceId);
   }, [session.sessions, setSelectedWorkspaceId, sessionId]);
 
+  const reloadSetupSettings = useCallback(async () => {
+    try {
+      const projection = await term2Client.readSettings();
+      setSettings(projection);
+      return projection;
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!localControlEnabled) return;
-    void term2Client
-      .readSettings()
-      .then(setSettings)
-      .catch(() => setSettings(null));
+    void reloadSetupSettings();
     void reloadModels();
-  }, [localControlEnabled, reloadModels]);
+  }, [localControlEnabled, reloadSetupSettings, reloadModels]);
 
   useEffect(() => {
     setDiscoveredConfig(null);
@@ -554,12 +560,15 @@ export function Term2SessionShell({
       const toApply = draftConfig;
       if (Object.keys(toApply).length > 0) {
         const latest = await term2Client.readSessionConfig(projection.id);
-        await term2Client.updateSessionConfig(projection.id, {
+        const { result } = await term2Client.updateSessionConfig(projection.id, {
           clientRequestId: crypto.randomUUID(),
           expectedRevision: latest.configRevision,
           admission: 'idle',
           ...toApply,
         });
+        if (!result.ok || result.kind !== 'command_finished') {
+          throw new Error(!result.ok ? result.message : 'The chat settings have not taken effect.');
+        }
       }
       setPendingFirstSend({ sessionId: projection.id, delivery, overrideText });
       setDraftWorkspaceId(null);
@@ -608,7 +617,7 @@ export function Term2SessionShell({
       );
     }
     const openChatWorkspace = sessionId
-      ? (session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? session.selectedWorkspaceId)
+      ? session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? session.selectedWorkspaceId
       : null;
     if (change.kind === 'removed' && openChatWorkspace === workspaceId) {
       const params = new URLSearchParams(window.location.search);
@@ -659,7 +668,8 @@ export function Term2SessionShell({
         setConfigError(response.result.message || 'Could not update session configuration.');
         return false;
       }
-      return true;
+      setConfigError('The chat settings have not taken effect yet. Try again.');
+      return false;
     } catch (reason) {
       setConfigError(reason instanceof Error ? reason.message : 'Could not update session configuration.');
       return false;
@@ -669,9 +679,7 @@ export function Term2SessionShell({
   };
 
   /** A model or effort picked in a blank chat becomes the default for blank chats. */
-  const saveBlankChatDefault = async (
-    selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort'>,
-  ) => {
+  const saveBlankChatDefault = async (selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort'>) => {
     const changes: Array<{ key: string; value: unknown }> = [];
     if (selection.modelSelection) changes.push({ key: 'agent.modelSelection', value: selection.modelSelection });
     if (selection.reasoningEffort) changes.push({ key: 'agent.reasoningEffort', value: selection.reasoningEffort });
@@ -696,12 +704,11 @@ export function Term2SessionShell({
     const { modelSelection, reasoningEffort, ...immediate } = selection;
     if (modelSelection || reasoningEffort) {
       setStagedConfig((current) => {
-        const next: NonNullable<typeof current> =
-          current?.sessionId === sessionId ? { ...current } : { sessionId };
+        const next: NonNullable<typeof current> = current?.sessionId === sessionId ? { ...current } : { sessionId };
         if (modelSelection) {
           const unchanged =
             sessionConfig?.providerId === modelSelection.provider && sessionConfig?.modelId === modelSelection.model;
-          if (unchanged) delete next.modelSelection;
+          if (unchanged && !requiresEmptyChatModelChoice) delete next.modelSelection;
           else next.modelSelection = modelSelection;
         }
         if (reasoningEffort) {
@@ -783,10 +790,10 @@ export function Term2SessionShell({
   const composerDisabled = isDraft
     ? startingChat
     : !sessionId ||
-    session.view.sessionId !== sessionId ||
-    !canSubmitSessionMessage(session.view.status) ||
-    interactionPending ||
-    aborting;
+      session.view.sessionId !== sessionId ||
+      !canSubmitSessionMessage(session.view.status) ||
+      interactionPending ||
+      aborting;
   const commandDisabled =
     !sessionId ||
     session.commandPending ||
@@ -807,6 +814,7 @@ export function Term2SessionShell({
   ) => {
     const text = (overrideText ?? input).trim();
     if (!text && attachments.length === 0) return;
+    if (sendBlocked) return;
     if (isDraft) {
       await startDraftChat(delivery, overrideText);
       return;
@@ -821,7 +829,9 @@ export function Term2SessionShell({
     const effectiveDelivery = delivery ?? (hasStreamingTurn ? 'steer' : 'auto');
     const accepted = await session.submit(text, {
       delivery: effectiveDelivery,
-      ...(effectiveDelivery === 'steer' && activeStreamingTurn ? { expectedSteerTurnId: activeStreamingTurn.turnId } : {}),
+      ...(effectiveDelivery === 'steer' && activeStreamingTurn
+        ? { expectedSteerTurnId: activeStreamingTurn.turnId }
+        : {}),
       ...(armedSkill && !options?.textOnly ? { skill: armedSkill } : {}),
       ...(attachments.length > 0 && !options?.textOnly
         ? {
@@ -862,35 +872,29 @@ export function Term2SessionShell({
 
   // The blank-chat default model. It is never swapped for another model behind the
   // user's back: when it isn't available, the draft keeps it and says so.
-  const draftModel = useMemo((): {
-    selection: { provider: string; model: string };
-    unavailable?: boolean;
-  } | null => {
+  const draftModel = useMemo(() => {
     if (!isDraft || !settings) return null;
+    const savedModel = settings.settings.safeDefaults['agent.modelSelection'];
     const selection =
       draftConfig.modelSelection ??
-      (settings.settings.safeDefaults['agent.modelSelection']?.value as
-        | { provider: string; model: string }
-        | undefined);
-    if (!selection?.provider || !selection.model) return null;
-    const providerOff = Boolean(settings.settings.providers.find((item) => item.id === selection.provider)?.disabled);
-    const notListed =
-      models.length > 0 && !models.some((m) => m.provider === selection.provider && m.id === selection.model);
-    return { selection, unavailable: providerOff || notListed };
-  }, [isDraft, settings, draftConfig.modelSelection, models]);
+      (savedModel?.source !== 'default'
+        ? (savedModel?.value as { provider: string; model: string } | undefined)
+        : undefined);
+    return selection?.provider && selection.model ? selection : null;
+  }, [isDraft, settings, draftConfig.modelSelection]);
 
   // A draft's model, effort and approval picks start from the saved defaults and are
   // applied to the session when the first message creates it.
   const draftPickerConfig = useMemo((): SessionConfigRecord | null => {
-    if (!isDraft || !settings || !draftModel) return null;
+    if (!isDraft || !settings) return null;
     const defaults = settings.settings.safeDefaults;
     const savedEffort = defaults['agent.reasoningEffort']?.value;
     const savedApproval = defaults['shell.autoApproveMode']?.value;
     return {
       configRevision: 'draft',
       defaultsRevision: settings.defaultsRevision,
-      providerId: draftModel.selection.provider,
-      modelId: draftModel.selection.model,
+      providerId: draftModel?.provider ?? '',
+      modelId: draftModel?.model ?? '',
       reasoningEffort: draftConfig.reasoningEffort ?? (typeof savedEffort === 'string' ? savedEffort : 'default'),
       mode: 'standard',
       approvalMode:
@@ -917,88 +921,108 @@ export function Term2SessionShell({
   const pickerNote = isDraft
     ? 'A model you pick here becomes the default for new chats.'
     : 'Changes apply when you send your next message.';
-  const pickerWarning =
-    isDraft && draftModel?.unavailable
-      ? `${draftModel.selection.model} isn't available right now (its provider is off or didn't list it). Pick another model, or send anyway to try it.`
+  const lastTurn = session.view.turns[session.view.turns.length - 1];
+  const firstSend = isDraft || !lastTurn;
+  const modelDefault = settings?.settings.safeDefaults['agent.modelSelection'];
+  const implicitModel =
+    modelDefault?.source === 'default'
+      ? (modelDefault.value as { provider?: string; model?: string } | undefined)
       : undefined;
-  const pickerConfig = isDraft ? draftPickerConfig : sessionPickerConfig;
+  // Older clients could create an empty session before the user chose a model.
+  // A draft handed off by this client has already passed the explicit-choice gate.
+  const requiresEmptyChatModelChoice = Boolean(
+    sessionId &&
+      !lastTurn &&
+      sessionConfig &&
+      implicitModel?.provider &&
+      sessionConfig.providerId === implicitModel.provider &&
+      sessionConfig.modelId === implicitModel.model &&
+      pendingFirstSend?.sessionId !== sessionId,
+  );
+  const needsModelChoice = (isDraft && !draftModel) || (requiresEmptyChatModelChoice && !stagedForChat?.modelSelection);
+  const pickerConfig = isDraft
+    ? draftPickerConfig
+    : sessionPickerConfig && needsModelChoice
+    ? { ...sessionPickerConfig, modelId: '', providerId: '' }
+    : sessionPickerConfig;
   const pickerDisabled = isDraft ? startingChat : commandDisabled;
   const providerId = sessionConfig?.providerId ?? '';
-  const chatProvider = settings?.settings.providers.find((provider) => provider.id === providerId);
-  const providerLabel = chatProvider?.label ?? (providerId === 'openai' ? 'OpenAI' : providerId);
-  const credential = chatProvider?.credential ?? settings?.settings.credentials[providerId];
-  const needsProviderSetup = Boolean(credential?.required && !credential.configured && credential.writable);
-
   const configuredProviderIds = useMemo(() => {
     const ids = new Set<string>();
     if (!settings) return ids;
     for (const p of settings.settings.providers) {
       if (!p.disabled && p.credential.configured) ids.add(p.id);
     }
-    for (const [provider, accounts] of Object.entries(settings.settings.oauthAccounts)) {
-      if (accounts.length > 0) ids.add(provider);
-    }
     return ids;
   }, [settings]);
 
-  const hasAnyConfiguredProvider = useMemo(() => {
-    if (!settings) return true; // Avoid flashing warning before settings finish loading.
-    return configuredProviderIds.size > 0 || models.length > 0;
-  }, [settings, configuredProviderIds.size, models.length]);
+  const hasAnyConfiguredProvider = configuredProviderIds.size > 0;
 
-  const fallbackConfiguredModel = useMemo(
-    () => models.find((m) => configuredProviderIds.has(m.provider)) ?? null,
-    [models, configuredProviderIds],
+  const selectedProvider = settings?.settings.providers.find((item) => item.id === pickerConfig?.providerId);
+  const selectedCredential =
+    selectedProvider?.credential ?? settings?.settings.credentials[pickerConfig?.providerId ?? ''];
+  const missingCredential = Boolean(selectedCredential?.required && !selectedCredential.configured);
+  const selectedModelListed = models.some(
+    (item) => item.provider === pickerConfig?.providerId && item.id === pickerConfig?.modelId,
+  );
+  const modelUnavailable = Boolean(
+    pickerConfig?.modelId &&
+      (selectedProvider?.disabled || (firstSend && modelsChecked && !loadingModels && !selectedModelListed)),
+  );
+  const modelBlocked = localControlEnabled && Boolean(pickerConfig) && (missingCredential || modelUnavailable);
+  const sendBlocked =
+    configBusy ||
+    (localControlEnabled &&
+      !hasStreamingTurn &&
+      (needsModelChoice ||
+        modelBlocked ||
+        (firstSend && (!settings || !pickerConfig || (loadingModels && !selectedModelListed)))));
+  const pickerWarning = modelBlocked
+    ? `${pickerConfig?.modelId} isn’t ready to reply. Choose another model or check its connection.`
+    : undefined;
+  const suggestedModel = models.find(
+    (item) =>
+      configuredProviderIds.has(item.provider) &&
+      (item.provider !== pickerConfig?.providerId || item.id !== pickerConfig.modelId),
   );
 
-  // If a brand-new empty chat inherits an unconfigured default provider (e.g. OpenAI before any key is added)
-  // while the user already configured another provider (Anthropic, Ollama, OpenRouter, custom), switch automatically.
-  const autoAlignedSessionRef = useRef<string | null>(null);
-  const willAutoAlign = Boolean(
-    sessionId &&
-      sessionConfig &&
-      needsProviderSetup &&
-      fallbackConfiguredModel &&
-      session.view.turns.length === 0 &&
-      autoAlignedSessionRef.current !== sessionId,
-  );
-  useEffect(() => {
-    if (!willAutoAlign || !sessionId || !sessionConfig || !fallbackConfiguredModel || configBusy) {
-      return;
+  const openProviderSetup = () => {
+    if (settings && !hasAnyConfiguredProvider) setDialog('provider');
+    else openSettings('providers', pickerConfig?.providerId ?? null);
+  };
+
+  const retryLastTurn = async (model?: ModelSummary) => {
+    if (commandDisabled || configBusy || !lastTurn || !['failed', 'aborted'].includes(lastTurn.status)) return;
+    if (!model && modelBlocked) return;
+    const modelSelection = model ? { provider: model.provider, model: model.id } : stagedForChat?.modelSelection;
+    const reasoningEffort = stagedForChat?.reasoningEffort;
+    if (modelSelection || reasoningEffort) {
+      if (!(await applySessionConfig({ modelSelection, reasoningEffort }))) {
+        const replacement =
+          model ??
+          models.find((item) => item.provider === modelSelection?.provider && item.id === modelSelection.model);
+        if (sessionId && replacement && lastTurn.userText)
+          setRetryDraft({ sessionId, turnId: lastTurn.turnId, model: replacement });
+        return;
+      }
+      setStagedConfig(null);
     }
-    autoAlignedSessionRef.current = sessionId;
-    setConfigBusy(true);
-    void term2Client
-      .updateSessionConfig(sessionId, {
-        clientRequestId: crypto.randomUUID(),
-        expectedRevision: sessionConfig.configRevision,
-        admission: 'idle',
-        modelSelection: { provider: fallbackConfiguredModel.provider, model: fallbackConfiguredModel.id },
-      })
-      .then(async (response) => {
-        if (response.result.ok && response.result.kind === 'command_finished') {
-          const refreshed = await term2Client.readSessionConfig(sessionId);
-          setDiscoveredConfig(refreshed);
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => setConfigBusy(false));
-  }, [willAutoAlign, sessionId, sessionConfig, fallbackConfiguredModel, configBusy]);
+    setRetryDraft(null);
+    await session.invokeCommand('retry-turn');
+  };
 
-  // Send a draft's first message once its new session is loaded and any automatic
-  // provider alignment has finished.
+  // Send a draft's first message only after its new session and selected model are ready.
   useEffect(() => {
     if (!pendingFirstSend || sessionId !== pendingFirstSend.sessionId) return;
-    if (!sessionConfig || willAutoAlign || configBusy) return;
+    if (!sessionConfig || sendBlocked) return;
     if (session.view.sessionId !== sessionId || !canSubmitSessionMessage(session.view.status)) return;
     const pending = pendingFirstSend;
     setPendingFirstSend(null);
     void submitMessage(pending.delivery, pending.overrideText);
     // submitMessage reads the current composer state; it is intentionally not a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingFirstSend, sessionId, sessionConfig, willAutoAlign, configBusy, session.view.sessionId, session.view.status]);
+  }, [pendingFirstSend, sessionId, sessionConfig, session.view.sessionId, session.view.status, sendBlocked]);
 
-  const lastTurn = session.view.turns[session.view.turns.length - 1];
   const liveStatus = interactionPending
     ? 'Waiting for your approval'
     : lastTurn?.transientStatus
@@ -1147,9 +1171,7 @@ export function Term2SessionShell({
   const matchingFiles = useMemo(() => {
     if (!atMention) return [];
     const q = atMention.query.toLowerCase();
-    return sessionFiles
-      .filter((entry) => !q || entry.path.toLowerCase().includes(q))
-      .slice(0, 14);
+    return sessionFiles.filter((entry) => !q || entry.path.toLowerCase().includes(q)).slice(0, 14);
   }, [atMention, sessionFiles]);
 
   const insertFileMention = (entry: WorkspaceFileEntry) => {
@@ -1170,9 +1192,8 @@ export function Term2SessionShell({
   };
 
   // Slash / Cmd+K Quick Actions Palette
-  const slashQuery = !atMention && input.startsWith('/') && !input.includes('\n') && !input.includes(' ')
-    ? input.slice(1)
-    : null;
+  const slashQuery =
+    !atMention && input.startsWith('/') && !input.includes('\n') && !input.includes(' ') ? input.slice(1) : null;
   const showQuickPalette = paletteOpen || slashQuery !== null;
   const quickActions: QuickActionItem[] = useMemo(() => {
     const clearPalette = () => {
@@ -1219,10 +1240,10 @@ export function Term2SessionShell({
         label: 'Retry failed turn',
         hint: 'Regenerate the last failed reply',
         icon: RotateCcw,
-        disabled: commandDisabled,
+        disabled: commandDisabled || sendBlocked || !lastTurn || !['failed', 'aborted'].includes(lastTurn.status),
         run: () => {
           clearPalette();
-          void session.invokeCommand('retry-turn');
+          void retryLastTurn();
         },
       },
       {
@@ -1259,8 +1280,20 @@ export function Term2SessionShell({
       },
     ];
     const needle = (slashQuery ?? '').toLowerCase();
-    return needle ? items.filter((item) => item.label.toLowerCase().includes(needle) || item.id.includes(needle)) : items;
-  }, [commandDisabled, createNewChat, localControlEnabled, session, slashQuery, startingChat]);
+    return needle
+      ? items.filter((item) => item.label.toLowerCase().includes(needle) || item.id.includes(needle))
+      : items;
+  }, [
+    commandDisabled,
+    createNewChat,
+    lastTurn,
+    localControlEnabled,
+    retryLastTurn,
+    sendBlocked,
+    session,
+    slashQuery,
+    startingChat,
+  ]);
 
   const activeGoal = session.view.nativeState?.goal;
   const activeVerification = session.view.nativeState?.verification;
@@ -1273,12 +1306,13 @@ export function Term2SessionShell({
         return first.length > 80 ? `${first.slice(0, 80)}…` : first;
       })()
     : isDraft
-      ? 'New chat'
-      : 'Welcome';
+    ? 'New chat'
+    : 'Welcome';
 
   // Edit and Retry: rewind to just before the turn's message, then send `text` as a new turn.
   const resendFromTurn: ResendFromTurn = async (turnId, text) => {
     if (!sessionId) return 'This chat is not open.';
+    if (sendBlocked) return 'Choose a model that can reply before resending.';
     setRetryError(null);
     let targets: RewindTargetSummary[];
     let messageId = session.view.turns.find((item) => item.turnId === turnId)?.userMessageId;
@@ -1302,7 +1336,8 @@ export function Term2SessionShell({
     // The chat is already rewound and this turn is gone, so say so at the message box,
     // where the text is kept.
     setInput(text);
-    if (!session.submitError) setResendNotice('The chat was rewound, but the message wasn’t sent. Send it again from here.');
+    if (!session.submitError)
+      setResendNotice('The chat was rewound, but the message wasn’t sent. Send it again from here.');
     return null;
   };
 
@@ -1324,7 +1359,9 @@ export function Term2SessionShell({
         aria-label="Chat history and folders"
         inert={!sidebarOpen ? true : undefined}
         aria-hidden={!sidebarOpen ? 'true' : undefined}
-        className={`${settingsOpen ? 'hidden! ' : ''}fixed inset-y-0 left-0 z-[70] flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
+        className={`${
+          settingsOpen ? 'hidden! ' : ''
+        }fixed inset-y-0 left-0 z-[70] flex w-[17.5rem] flex-col bg-[#f7f7f8] shadow-2xl transition-[transform,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:bg-zinc-950 md:relative md:z-auto md:shadow-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full invisible pointer-events-none md:-ml-[17.5rem]'
         }`}
       >
@@ -1416,7 +1453,9 @@ export function Term2SessionShell({
       )}
       {/* Hidden, not unmounted, while settings is open so the chat keeps its draft and running stream. */}
       <div
-        className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen ? '' : 'md:pl-2'} ${settingsOpen ? 'hidden!' : ''}`}
+        className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen ? '' : 'md:pl-2'} ${
+          settingsOpen ? 'hidden!' : ''
+        }`}
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-zinc-900 md:rounded-2xl md:border md:border-black/[0.06] md:shadow-[0_1px_3px_rgba(0,0,0,0.04)] md:dark:border-white/[0.06]">
           <ChatHeader
@@ -1468,7 +1507,9 @@ export function Term2SessionShell({
             <div
               ref={scrollRef}
               onScroll={onScroll}
-              className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin sm:px-6 ${sessionId || isDraft ? 'pb-60' : 'pb-12'}`}
+              className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin sm:px-6 ${
+                sessionId || isDraft ? 'pb-60' : 'pb-12'
+              }`}
             >
               <div className="mx-auto w-full max-w-[46rem] space-y-6">
                 {!sessionId && !isDraft && (
@@ -1498,12 +1539,18 @@ export function Term2SessionShell({
                             </span>
                             <div>
                               <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                {hasAnyConfiguredProvider ? 'AI provider connected' : 'Connect an AI provider'}
+                                {!settings
+                                  ? 'AI connection'
+                                  : hasAnyConfiguredProvider
+                                  ? 'AI provider connected'
+                                  : 'Connect an AI service'}
                               </h3>
                               <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                {hasAnyConfiguredProvider
+                                {!settings
+                                  ? 'Checking for saved connections…'
+                                  : hasAnyConfiguredProvider
                                   ? 'You can switch models or add more providers anytime in Settings.'
-                                  : 'Add an API key (OpenAI, Anthropic, Gemini, OpenRouter), sign in with OAuth, or connect a local server.'}
+                                  : 'Sign in with ChatGPT, use an API key, or connect your own server.'}
                               </p>
                             </div>
                           </div>
@@ -1511,7 +1558,8 @@ export function Term2SessionShell({
                             type="button"
                             size="sm"
                             variant={hasAnyConfiguredProvider ? 'outline' : 'default'}
-                            onClick={() => openSettings()}
+                            onClick={openProviderSetup}
+                            disabled={!settings}
                           >
                             {hasAnyConfiguredProvider ? 'Manage' : 'Connect'}
                           </Button>
@@ -1538,7 +1586,11 @@ export function Term2SessionShell({
                               </h3>
                               <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
                                 {session.selectedWorkspaceId
-                                  ? `${selectedWorkspaceInfo.access === 'read_write' ? 'Read & write access' : 'Read-only access'} · only files inside this folder are visible to Term2.`
+                                  ? `${
+                                      selectedWorkspaceInfo.access === 'read_write'
+                                        ? 'Read & write access'
+                                        : 'Read-only access'
+                                    } · only files inside this folder are visible to Term2.`
                                   : 'Pick a local folder so Term2 can read and answer questions about your files.'}
                               </p>
                             </div>
@@ -1571,7 +1623,8 @@ export function Term2SessionShell({
                                 <SelectItem value={NO_WORKSPACE}>Choose a saved folder…</SelectItem>
                                 {session.workspaces.map((workspace) => (
                                   <SelectItem value={workspace.workspaceId} key={workspace.workspaceId}>
-                                    {workspace.label} ({workspace.access === 'read_write' ? 'read & write' : 'read only'})
+                                    {workspace.label} (
+                                    {workspace.access === 'read_write' ? 'read & write' : 'read only'})
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -1618,8 +1671,8 @@ export function Term2SessionShell({
                         {typeof activeGoal.outcome === 'string'
                           ? activeGoal.outcome
                           : typeof activeGoal.text === 'string'
-                            ? activeGoal.text
-                            : JSON.stringify(activeGoal)}
+                          ? activeGoal.text
+                          : JSON.stringify(activeGoal)}
                       </p>
                       {activeVerification && (
                         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -1630,59 +1683,66 @@ export function Term2SessionShell({
                   </div>
                 )}
 
-                {sessionId && needsProviderSetup && !willAutoAlign && !configBusy && (
+                {(modelBlocked || (needsModelChoice && settings)) && (
                   <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-100">
-                    <h2 className="font-semibold">Connect {providerLabel} to get replies</h2>
-                    <p className="mt-1 text-sm">
-                      This chat is using {providerLabel}. Paste an API key in Settings, or switch to another configured
-                      model using the model picker below.
-                    </p>
+                    <h2 className="font-semibold">
+                      {needsModelChoice
+                        ? hasAnyConfiguredProvider
+                          ? 'Choose a model to send'
+                          : 'Connect an AI service to send'
+                        : missingCredential
+                        ? 'Connect an AI service to send'
+                        : 'This model isn’t ready to reply'}
+                    </h2>
+                    <p className="mt-1">{pickerWarning} You can keep drafting your message.</p>
                     <div className="mt-2.5 flex flex-wrap gap-2">
-                      {fallbackConfiguredModel && (
+                      {!needsModelChoice && suggestedModel && (
                         <Button
                           type="button"
-                          onClick={() =>
-                            void handleUpdateSessionConfig({
-                              modelSelection: {
-                                provider: fallbackConfiguredModel.provider,
-                                model: fallbackConfiguredModel.id,
-                              },
-                            })
-                          }
+                          disabled={pickerDisabled || configBusy}
+                          onClick={() => {
+                            if (lastTurn?.status === 'failed') void retryLastTurn(suggestedModel);
+                            else
+                              void handleUpdateSessionConfig({
+                                modelSelection: { provider: suggestedModel.provider, model: suggestedModel.id },
+                              });
+                          }}
                           size="sm"
                         >
-                          Switch to {fallbackConfiguredModel.name ?? fallbackConfiguredModel.id}
+                          {lastTurn?.status === 'failed' ? 'Switch and retry with' : 'Use'}{' '}
+                          {suggestedModel.name ?? suggestedModel.id}
                         </Button>
                       )}
-                      <Button
-                        type="button"
-                        onClick={() => openSettings('providers', providerId || null)}
-                        variant="outline" size="sm"
-                      >
-                        Open provider settings
+                      <Button type="button" onClick={openProviderSetup} variant="outline" size="sm">
+                        {hasAnyConfiguredProvider ? 'Open provider settings' : 'Connect an AI service'}
                       </Button>
                     </div>
                   </div>
                 )}
 
-                {((sessionId && session.view.turns.length === 0 && (!needsProviderSetup || willAutoAlign || configBusy)) ||
-                  isDraft) && (
+                {((sessionId && session.view.turns.length === 0) || isDraft) && (
                   <div className="rounded-2xl border border-black/[0.06] bg-zinc-50/70 p-5 dark:border-white/[0.07] dark:bg-white/[0.02]">
                     <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                       What would you like help with in {selectedWorkspaceInfo.displayName || 'this folder'}?
                     </h2>
                     <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      Click a suggestion to try it, type <code className="font-mono">@</code> to mention a file, or
-                      paste an image.
+                      Click a suggestion to add it to your message, type <code className="font-mono">@</code> to mention
+                      a file, or paste an image.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {STARTER_PROMPTS.map((prompt) => (
                         <Button
                           key={prompt}
                           type="button"
-                          disabled={composerDisabled}
-                          onClick={() => void submitMessage('auto', prompt)}
-                          variant="outline" size="sm" className="rounded-full"
+                          disabled={composerDisabled || Boolean(input.trim())}
+                          onClick={() => {
+                            setInput(prompt);
+                            setCursorPos(prompt.length);
+                            composerRef.current?.focus();
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
                         >
                           {prompt}
                         </Button>
@@ -1726,19 +1786,42 @@ export function Term2SessionShell({
                             {turn.transientFailure
                               ? 'Live connection error (reload to check saved state)'
                               : turn.status === 'aborted'
-                                ? 'Stopped'
-                                : `Turn ${turn.status}`}
+                              ? 'Stopped'
+                              : `Turn ${turn.status}`}
                           </span>
-                          {(turn.status === 'failed' || turn.status === 'aborted') && !turn.error && !commandDisabled && (
-                            <Button
-                              type="button"
-                              onClick={() => void session.invokeCommand('retry-turn')}
-                              variant="outline" size="xs" className="rounded-full"
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Retry turn
-                            </Button>
-                          )}
+                          {turn === lastTurn &&
+                            (turn.status === 'failed' || turn.status === 'aborted') &&
+                            !turn.error &&
+                            !commandDisabled &&
+                            !sendBlocked && (
+                              <Button
+                                type="button"
+                                onClick={() => void retryLastTurn()}
+                                variant="outline"
+                                size="xs"
+                                className="rounded-full"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                Retry turn
+                              </Button>
+                            )}
+                          {turn === lastTurn &&
+                            turn.status === 'failed' &&
+                            !turn.error &&
+                            suggestedModel &&
+                            !modelBlocked &&
+                            !commandDisabled &&
+                            !configBusy &&
+                            retryDraft?.turnId !== turn.turnId && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                onClick={() => void retryLastTurn(suggestedModel)}
+                              >
+                                Switch and retry with {suggestedModel.name ?? suggestedModel.id}
+                              </Button>
+                            )}
                         </div>
                       )}
                       {turn.error && (
@@ -1752,11 +1835,29 @@ export function Term2SessionShell({
                             </span>
                           </p>
                           <div className="flex shrink-0 items-center gap-2">
-                            {!commandDisabled && (
+                            {turn === lastTurn &&
+                              turn.status === 'failed' &&
+                              suggestedModel &&
+                              !modelBlocked &&
+                              retryDraft?.turnId !== turn.turnId &&
+                              !commandDisabled &&
+                              !configBusy &&
+                              (turn.error === 'provider_error' || turn.error === 'runtime_error') && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => void retryLastTurn(suggestedModel)}
+                                >
+                                  Switch and retry with {suggestedModel.name ?? suggestedModel.id}
+                                </Button>
+                              )}
+                            {turn === lastTurn && !commandDisabled && !sendBlocked && (
                               <Button
                                 type="button"
-                                onClick={() => void session.invokeCommand('retry-turn')}
-                                variant="destructive" size="xs"
+                                onClick={() => void retryLastTurn()}
+                                variant="destructive"
+                                size="xs"
                               >
                                 Retry
                               </Button>
@@ -1765,7 +1866,8 @@ export function Term2SessionShell({
                               <Button
                                 type="button"
                                 onClick={() => openSettings('providers', providerId || null)}
-                                variant="outline" size="xs"
+                                variant="outline"
+                                size="xs"
                               >
                                 Settings
                               </Button>
@@ -1779,7 +1881,9 @@ export function Term2SessionShell({
                             type="button"
                             aria-label="Copy reply"
                             title="Copy reply"
-                            variant="ghost" size="icon-xs" className="text-muted-foreground"
+                            variant="ghost"
+                            size="icon-xs"
+                            className="text-muted-foreground"
                             onClick={() => copyTurn(turn.turnId, turn.text)}
                           >
                             {copiedTurn === turn.turnId ? (
@@ -1810,6 +1914,28 @@ export function Term2SessionShell({
                           {retryError.message}
                         </p>
                       )}
+                      {retryDraft?.sessionId === sessionId && retryDraft.turnId === turn.turnId && turn.userText && (
+                        <div className="space-y-2 text-sm text-muted-foreground">
+                          <p>
+                            This chat couldn’t switch models. You can copy the last prompt into a new draft without
+                            changing this chat.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const { provider, id: model } = retryDraft.model;
+                              void createNewChat();
+                              setDraftConfig({ modelSelection: { provider, model } });
+                              setInput(turn.userText ?? '');
+                              setRetryDraft(null);
+                            }}
+                          >
+                            Open a new draft with {retryDraft.model.name ?? retryDraft.model.id}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </article>
                 ))}
@@ -1835,16 +1961,16 @@ export function Term2SessionShell({
 
                 {session.view.pendingInteraction?.state === 'pending' && (
                   <div id="term2-pending-interaction" className="scroll-mt-4">
-                  <Term2InteractionPanel
-                    key={`${session.view.pendingInteraction.interaction.interactionId}:${
-                      session.view.pendingInteraction.interaction.revision
-                    }:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
-                    interaction={session.view.pendingInteraction.interaction}
-                    subagent={session.view.pendingInteraction.subagent}
-                    shellSandboxNotice={shellSandboxMachineFact(settings?.shellSandboxNotice) ?? undefined}
-                    onResolve={session.resolveInteraction}
-                    disabled={aborting}
-                  />
+                    <Term2InteractionPanel
+                      key={`${session.view.pendingInteraction.interaction.interactionId}:${
+                        session.view.pendingInteraction.interaction.revision
+                      }:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
+                      interaction={session.view.pendingInteraction.interaction}
+                      subagent={session.view.pendingInteraction.subagent}
+                      shellSandboxNotice={shellSandboxMachineFact(settings?.shellSandboxNotice) ?? undefined}
+                      onResolve={session.resolveInteraction}
+                      disabled={aborting}
+                    />
                   </div>
                 )}
                 {session.view.pendingInteraction?.state === 'recovered' && (
@@ -1855,7 +1981,6 @@ export function Term2SessionShell({
                     onResolve={session.resolveInteraction}
                   />
                 )}
-
 
                 {showDiagnostics && sessionId && (session.view.turns.length > 0 || Boolean(session.view.error)) && (
                   <details className="pt-2 text-xs text-zinc-400 dark:text-zinc-500">
@@ -1887,7 +2012,9 @@ export function Term2SessionShell({
                     <Button
                       type="button"
                       aria-label="Jump to latest"
-                      variant="outline" size="icon" className="t2-enter pointer-events-auto rounded-full shadow-md"
+                      variant="outline"
+                      size="icon"
+                      className="t2-enter pointer-events-auto rounded-full shadow-md"
                       onClick={scrollToLatest}
                     >
                       <ArrowDown className="h-4 w-4" />
@@ -1972,11 +2099,7 @@ export function Term2SessionShell({
                           key={img.id}
                           className="relative flex items-center gap-1.5 rounded-xl border border-black/[0.08] bg-zinc-50 p-1 pr-2 dark:border-white/10 dark:bg-zinc-900"
                         >
-                          <img
-                            src={img.previewUrl}
-                            alt={img.name}
-                            className="h-9 w-9 rounded-lg object-cover"
-                          />
+                          <img src={img.previewUrl} alt={img.name} className="h-9 w-9 rounded-lg object-cover" />
                           <span className="max-w-[7rem] truncate text-xs text-zinc-600 dark:text-zinc-300">
                             {img.name}
                           </span>
@@ -2102,8 +2225,8 @@ export function Term2SessionShell({
                       interactionPending
                         ? 'Respond to the approval prompt above to continue…'
                         : hasStreamingTurn
-                          ? 'Steer (Enter) or queue follow-up (Alt+Enter)…'
-                          : 'Ask about your files… (@ files, / actions)'
+                        ? 'Steer (Enter) or queue follow-up (Alt+Enter)…'
+                        : 'Ask about your files… (@ files, / actions)'
                     }
                   />
                   <input
@@ -2252,7 +2375,7 @@ export function Term2SessionShell({
                           aria-label="Send message"
                           title="Send (Enter) · new line (Shift+Enter)"
                           className="rounded-full"
-                          disabled={composerDisabled || (!input.trim() && attachments.length === 0)}
+                          disabled={composerDisabled || sendBlocked || (!input.trim() && attachments.length === 0)}
                           onClick={() => void submitMessage()}
                         >
                           <ArrowUp strokeWidth={2.25} />
@@ -2285,11 +2408,29 @@ export function Term2SessionShell({
               onControlTask={session.controlTask}
               onClose={closeTasksPanel}
               onGoToQuestion={() =>
-                document.getElementById('term2-pending-interaction')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                document
+                  .getElementById('term2-pending-interaction')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
               }
             />
           </aside>
         </>
+      )}
+      {dialog === 'provider' && settings && (
+        <Term2ProviderSetup
+          projection={settings}
+          models={models}
+          modelsLoading={loadingModels}
+          onReload={reloadSetupSettings}
+          onModelsChanged={reloadModels}
+          onContinue={(model) => {
+            const selection = { modelSelection: { provider: model.provider, model: model.id } };
+            if (sessionId || isDraft) void handleUpdateSessionConfig(selection);
+            else void saveBlankChatDefault(selection);
+            setDialog(null);
+          }}
+          onClose={() => setDialog(null)}
+        />
       )}
       {dialog === 'folder' && (
         <Term2SetupDialog title="Choose a folder" wide onClose={() => setDialog(null)}>

@@ -9,15 +9,19 @@ export function Term2SetupDialog({
   title,
   onClose,
   wide = false,
+  fixedHeight = false,
   children,
 }: {
   title: string;
   onClose: () => void;
   wide?: boolean;
+  fixedHeight?: boolean;
   children: ReactNode;
 }) {
   // There is no DialogTrigger, so Radix has nothing to refocus on close; return focus to the opener.
-  const [opener] = useState(() => (typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null)));
+  const [opener] = useState(() =>
+    typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null),
+  );
   return (
     <Dialog
       open
@@ -37,6 +41,7 @@ export function Term2SetupDialog({
         }}
         className={cn(
           'flex max-h-[90dvh] flex-col gap-0 p-0',
+          fixedHeight && 'h-[min(36rem,90dvh)]',
           wide ? 'sm:max-w-2xl' : 'sm:max-w-xl',
         )}
       >

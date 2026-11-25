@@ -14,4 +14,9 @@ export {
 } from './settings-persistence.js';
 export { quarantineCorruptSettingsFile } from './settings-file-recovery.js';
 export { SETTINGS_FILE_VERSION } from './settings-file-version.js';
-export { OPTIONAL_DEFAULT_KEYS, omitComputedPathDefaults, type ComputedDefaultIntent } from './persisted-defaults.js';
+export {
+  OPTIONAL_DEFAULT_KEYS,
+  cleanImplicitDefaults,
+  implicitAgentDefaults,
+  type ComputedDefaultIntent,
+} from './persisted-defaults.js';

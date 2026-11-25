@@ -220,6 +220,7 @@ export type MenuConversationEntry = {
  * legacy services. Each group replaces the service calls of one ported menu.
  */
 export interface TuiMenus {
+  readonly requiresModelSelection?: (sessionId: string) => boolean;
   readonly schema: TuiSettingsSchema;
   /** The app's logging service, for the warnings legacy menus log instead of printing. */
   readonly logger: MenuLogger;

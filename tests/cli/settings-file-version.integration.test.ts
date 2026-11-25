@@ -61,13 +61,13 @@ function expectNothingLost(saved: unknown, now: unknown, where = 'settings.json'
 }
 
 describe('settings.json version', () => {
-  it('a fresh install writes the current version and no machine-specific memory directory', async () => {
+  it('a fresh install leaves the memory directory and model choice unset on disk', async () => {
     const result = await run(LIST_MODELS);
     expect(result.stderr, describeRun(result)).not.toMatch(/settings/i);
 
     const written = readSettings();
     expect(written.version).toBe(CURRENT_VERSION);
-    // Defaults are still written in full; only the computed absolute path is left out.
+    expect(written.agent).not.toHaveProperty('modelSelection');
     expect(written.memory).toEqual({
       enabled: true,
       contextBudgetChars: 8000,
@@ -75,6 +75,8 @@ describe('settings.json version', () => {
       searchMaxLimit: 50,
     });
     expect(fs.readFileSync(settingsFile, 'utf8')).not.toContain(world.home);
+    await run(LIST_MODELS);
+    expect(readSettings().agent).not.toHaveProperty('modelSelection');
   });
 
   it('migrates an unversioned 1.4.0 file to the current version and keeps every saved value', async () => {

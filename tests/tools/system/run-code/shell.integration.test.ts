@@ -487,7 +487,9 @@ describe('shell inside run_code through the wrapped tool graph', () => {
  */
 function exclusiveSandboxFixture() {
   let tail: Promise<void> = Promise.resolve();
-  const runner: ShellSandboxRunner = {
+  let waiting = 0;
+  const runner: ShellSandboxRunner & { waiting(): number } = {
+    waiting: () => waiting,
     availability: async () => ({ type: 'available' }),
     acquire: (signal) => {
       const previous = tail;
@@ -495,8 +497,10 @@ function exclusiveSandboxFixture() {
       tail = new Promise<void>((resolve) => {
         release = resolve;
       });
+      waiting += 1;
       return new Promise<() => void>((resolve, reject) => {
         const abort = () => {
+          waiting -= 1;
           // Keep the queue intact behind the earlier holder, as the real runner does.
           void previous.then(release);
           reject(signal?.reason);
@@ -505,7 +509,9 @@ function exclusiveSandboxFixture() {
         signal?.addEventListener('abort', abort, { once: true });
         void previous.then(() => {
           signal?.removeEventListener('abort', abort);
-          if (!signal?.aborted) resolve(release);
+          if (signal?.aborted) return;
+          waiting -= 1;
+          resolve(release);
         });
       });
     },
@@ -581,5 +587,52 @@ describe('sandbox lease ordering', () => {
     expect(value?.output).toContain('sandbox is busy');
     expect(existsSync(target)).toBe(false);
     release();
+  });
+
+  it('stops waiting for the sandbox when a foreground call is aborted, without running it', async () => {
+    const runner = exclusiveSandboxFixture();
+    const h = await harness({ sandboxRunner: runner });
+    const shell = h.registry.get('shell')!;
+    const release = await runner.acquire!();
+    const controller = new AbortController();
+    const target = join(h.cwd, 'must-not-exist.txt');
+    const pending = shell.execute(
+      shell.parse({ command: `printf unexpected > ${quote(target)}`, timeout_ms: 5000 }),
+      h.context(controller.signal),
+    );
+    await waitUntil(() => runner.waiting() === 1);
+    controller.abort();
+    await expect(pending).rejects.toBeDefined();
+    expect(existsSync(target)).toBe(false);
+
+    // The aborted waiter must not wedge the queue behind the holder.
+    release();
+    const context = h.context(new AbortController().signal);
+    const after = await shell.execute(shell.parse({ command: 'printf queue-moved', timeout_ms: 3000 }), context);
+    expect(after.output).toContain('queue-moved');
+  });
+
+  it('cancels a background job stopped while it waits for the sandbox, without running it', async () => {
+    const runner = exclusiveSandboxFixture();
+    const h = await harness({ sandboxRunner: runner });
+    const shell = h.registry.get('shell')!;
+    const context = h.context(new AbortController().signal);
+    const release = await runner.acquire!();
+    const target = join(h.cwd, 'must-not-exist.txt');
+    const launch = await shell.execute(
+      shell.parse({ command: `printf unexpected > ${quote(target)}`, background: true, timeout_ms: 5000 }),
+      context,
+    );
+    const { jobId } = JSON.parse(String(launch.output)) as { jobId: string };
+    h.tasks.releaseParent('test-turn');
+    // Stop the job only once its body is queued for the lease, not before kickoff.
+    await waitUntil(() => runner.waiting() === 1);
+    expect(h.tasks.requestStop(jobId).ok).toBe(true);
+    await waitUntil(() => h.tasks.get(jobId)?.status === 'cancelled');
+    expect(existsSync(target)).toBe(false);
+
+    release();
+    const after = await shell.execute(shell.parse({ command: 'printf queue-moved', timeout_ms: 3000 }), context);
+    expect(after.output).toContain('queue-moved');
   });
 });

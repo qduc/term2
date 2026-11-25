@@ -98,9 +98,12 @@ Guard contract for step 2:
 - **Harm prevented:** a shell call waiting without limit for a lease held by
   another command, ignoring its own `timeout_ms` (8 minutes against 120 s in
   the incident).
-- **Class:** containment budget. **Action:** reject before start. The holder is
-  untouched and the waiting command never runs, so there is no partial work to
-  settle and nothing to replay.
+- **Class:** containment budget. **Action:** reject before start when the
+  budget is spent before the lease arrives. The holder is untouched and the
+  waiting command never runs, so there is no partial work to settle and nothing
+  to replay. When the lease arrives with budget left, the command runs with the
+  remainder and, if that is too short, ends as an ordinary deadline timeout. No
+  minimum is enforced: any floor would be a number with no evidence behind it.
 - **Enforcement owner:** `createShellToolDefinition`. **Recovery:** the model
   retries, after the holder finishes or with a larger `timeout_ms`.
 - **Configuration:** no new setting and no default change; the budget is the
@@ -218,7 +221,8 @@ Permanent unit tests are not allowed under the evidence-driven experiment.
   foreground call finishes and the background body runs only after release.
   With the lease held elsewhere, a foreground call and a background job each
   fail with the busy error once their `timeout_ms` is spent, without running.
-  These tests do not exercise the real `AnthropicShellSandboxRunner` or a real
+  A foreground call aborted, or a background job stopped, while queued for the
+  lease ends without running, and the queue still moves on. These tests do not exercise the real `AnthropicShellSandboxRunner` or a real
   provider turn.
 - Phase 2: two sessions in one gateway process run overlapping sandboxed
   commands with no lease wait. A network ask from session A prompts only in A

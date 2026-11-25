@@ -14,6 +14,12 @@ type Observation = { kind?: string; at?: number; toolName?: string; attempt?: nu
 const LIVE = new Set(['running', 'awaiting_interaction', 'cancelling']);
 /** Same as the TUI tasks panel: a finished task stays this long, then leaves. */
 const GRACE_MS = 5_000;
+/**
+ * Foreground shell commands that finish quickly (ls, git status, single-file checks)
+ * already show on their inline tool row; wait before surfacing them in the header pill
+ * and running-tasks panel so everyday commands don't flicker chrome.
+ */
+export const SHELL_SHOW_DELAY_MS = 1_500;
 
 export type RunningTask = {
   id: string;
@@ -26,12 +32,16 @@ const str = (value: unknown): string | undefined => (typeof value === 'string' &
 const num = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
 
 /**
- * The tasks to show: every live task, plus ones that finished in the last few seconds so a
- * card doesn't vanish the instant it settles. Schedules only a one-shot timeout for grace
- * expiry so live tasks never force root shell re-renders every second.
+ * The tasks to show: every live task (after a short grace delay for foreground shell
+ * commands so sub-second runs don't flicker the header pill or panel), plus shown ones
+ * that finished in the last few seconds so a card doesn't vanish the instant it settles.
+ * Schedules only a single one-shot timeout for the next show/expiry boundary so live
+ * tasks never force root shell re-renders every second.
  */
 export function useRunningTasks(view: Term2SessionView) {
   const settledAt = useRef(new Map<string, number>());
+  const firstSeenAt = useRef(new Map<string, number>());
+  const everShown = useRef(new Set<string>());
   const [tick, setTick] = useState(0);
   const now = Date.now();
   const tasks = (view.nativeState?.tasks ?? []) as readonly Fields[];
@@ -42,35 +52,73 @@ export function useRunningTasks(view: Term2SessionView) {
     pending && !pending.subagent && pending.interaction.descriptor.toolName === 'sandbox_network_access',
   );
 
+  const activeIds = new Set<string>();
   const shown: RunningTask[] = [];
-  let nextExpiry: number | null = null;
+  let nextWakeup: number | null = null;
+  const scheduleWakeup = (at: number) => {
+    if (nextWakeup === null || at < nextWakeup) nextWakeup = at;
+  };
+
   for (const task of tasks) {
     const id = str(task.id);
     if (!id) continue;
+    activeIds.add(id);
     const status = String(task.status ?? '');
     const live = LIVE.has(status);
-    if (live) settledAt.current.delete(id);
-    else {
+    const blockedOnNetwork = live && networkPrompt && task.kind === 'shell' && task.mode !== 'background';
+    const needsYou = status === 'awaiting_interaction' || blockedOnNetwork;
+    const foregroundShell = task.kind === 'shell' && task.mode !== 'background';
+
+    if (live) {
+      settledAt.current.delete(id);
+      if (foregroundShell && !needsYou && !everShown.current.has(id)) {
+        let seen = firstSeenAt.current.get(id);
+        if (seen === undefined) {
+          seen = now;
+          firstSeenAt.current.set(id, seen);
+        }
+        const started = num(task.startedAt);
+        const anchor = started !== undefined ? Math.min(started, seen) : seen;
+        const showAt = anchor + SHELL_SHOW_DELAY_MS;
+        if (now < showAt) {
+          scheduleWakeup(showAt);
+          continue;
+        }
+      }
+      everShown.current.add(id);
+    } else {
+      // A fast foreground shell command that finished before ever being shown shouldn't
+      // pop into the panel as a dimmed "Finished" card for the grace window.
+      if (foregroundShell && !everShown.current.has(id)) continue;
       if (!settledAt.current.has(id)) settledAt.current.set(id, num(task.completedAt) ?? now);
       const expiry = settledAt.current.get(id)! + GRACE_MS;
       if (now >= expiry) continue;
-      if (nextExpiry === null || expiry < nextExpiry) nextExpiry = expiry;
+      scheduleWakeup(expiry);
     }
-    const blockedOnNetwork = live && networkPrompt && task.kind === 'shell' && task.mode !== 'background';
     shown.push({
       id,
       task: blockedOnNetwork ? { ...task, status: 'awaiting_interaction' } : task,
       live,
-      needsYou: status === 'awaiting_interaction' || blockedOnNetwork,
+      needsYou,
     });
   }
 
+  for (const id of firstSeenAt.current.keys()) {
+    if (!activeIds.has(id)) firstSeenAt.current.delete(id);
+  }
+  for (const id of everShown.current) {
+    if (!activeIds.has(id)) everShown.current.delete(id);
+  }
+  for (const id of settledAt.current.keys()) {
+    if (!activeIds.has(id)) settledAt.current.delete(id);
+  }
+
   useEffect(() => {
-    if (nextExpiry === null) return;
-    const delay = Math.max(50, nextExpiry - Date.now());
+    if (nextWakeup === null) return;
+    const delay = Math.max(50, nextWakeup - Date.now());
     const timer = window.setTimeout(() => setTick((t) => t + 1), delay);
     return () => window.clearTimeout(timer);
-  }, [nextExpiry, tick]);
+  }, [nextWakeup, tick]);
 
   return {
     shown,

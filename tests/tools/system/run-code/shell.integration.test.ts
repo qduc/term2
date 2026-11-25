@@ -480,3 +480,106 @@ describe('shell inside run_code through the wrapped tool graph', () => {
     expect(h.tasks.list().filter((task) => task.mode === 'background')).toMatchObject([{ status: 'completed' }]);
   });
 });
+
+/**
+ * A runner whose lease is exclusive, like `AnthropicShellSandboxRunner`'s
+ * process-wide queue, so tests can observe who holds it and when.
+ */
+function exclusiveSandboxFixture() {
+  let tail: Promise<void> = Promise.resolve();
+  const runner: ShellSandboxRunner = {
+    availability: async () => ({ type: 'available' }),
+    acquire: (signal) => {
+      const previous = tail;
+      let release!: () => void;
+      tail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return new Promise<() => void>((resolve, reject) => {
+        const abort = () => {
+          // Keep the queue intact behind the earlier holder, as the real runner does.
+          void previous.then(release);
+          reject(signal?.reason);
+        };
+        if (signal?.aborted) return abort();
+        signal?.addEventListener('abort', abort, { once: true });
+        void previous.then(() => {
+          signal?.removeEventListener('abort', abort);
+          if (!signal?.aborted) resolve(release);
+        });
+      });
+    },
+    wrap: async (command) => ({ command }),
+    annotateFailure: (_command, stderr) => stderr,
+  };
+  return runner;
+}
+
+describe('sandbox lease ordering', () => {
+  it('runs a sandboxed call that follows a background launch in the same model step', async () => {
+    // One model response: a background sandboxed shell, then a foreground one.
+    // The background body is kickoff-gated until the next model dispatch, so it
+    // must not hold the sandbox lease while it waits for that dispatch.
+    const h = await harness({ sandboxRunner: exclusiveSandboxFixture() });
+    const shell = h.registry.get('shell')!;
+    const context = h.context(new AbortController().signal);
+    const marker = join(h.cwd, 'background-ran');
+    const launch = await shell.execute(
+      shell.parse({ command: `printf ran > ${quote(marker)}`, background: true }),
+      context,
+    );
+    expect(launch.output).toContain('jobId');
+
+    const foreground = await shell.execute(
+      shell.parse({ command: 'printf foreground-done', timeout_ms: 3000 }),
+      context,
+    );
+    expect(foreground.output).toContain('foreground-done');
+    expect(existsSync(marker)).toBe(false);
+
+    h.tasks.releaseParent('test-turn');
+    await waitUntil(() => existsSync(marker));
+  });
+
+  it('counts the wait for a busy sandbox against the foreground timeout and does not run the command', async () => {
+    const runner = exclusiveSandboxFixture();
+    const h = await harness({ sandboxRunner: runner });
+    const shell = h.registry.get('shell')!;
+    const context = h.context(new AbortController().signal);
+    const release = await runner.acquire!();
+    const target = join(h.cwd, 'must-not-exist.txt');
+    const startedAt = Date.now();
+    const busy = await shell.execute(
+      shell.parse({ command: `printf unexpected > ${quote(target)}`, timeout_ms: 300 }),
+      context,
+    );
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+    expect(busy.output).toContain('sandbox is busy');
+    expect(busy.output).toContain('The command was not run');
+    expect(existsSync(target)).toBe(false);
+
+    release();
+    const after = await shell.execute(shell.parse({ command: 'printf after-release', timeout_ms: 3000 }), context);
+    expect(after.output).toContain('after-release');
+  });
+
+  it('fails a background job whose sandbox wait outlasts its timeout without running it', async () => {
+    const runner = exclusiveSandboxFixture();
+    const h = await harness({ sandboxRunner: runner });
+    const shell = h.registry.get('shell')!;
+    const context = h.context(new AbortController().signal);
+    const release = await runner.acquire!();
+    const target = join(h.cwd, 'must-not-exist.txt');
+    const launch = await shell.execute(
+      shell.parse({ command: `printf unexpected > ${quote(target)}`, background: true, timeout_ms: 300 }),
+      context,
+    );
+    const { jobId } = JSON.parse(String(launch.output)) as { jobId: string };
+    h.tasks.releaseParent('test-turn');
+    await waitUntil(() => h.tasks.get(jobId)?.status === 'failed');
+    const value = h.tasks.get(jobId)?.result?.value as { output?: string } | undefined;
+    expect(value?.output).toContain('sandbox is busy');
+    expect(existsSync(target)).toBe(false);
+    release();
+  });
+});

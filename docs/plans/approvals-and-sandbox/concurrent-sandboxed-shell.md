@@ -1,7 +1,8 @@
 # Concurrent sandboxed shell commands
 
-**Status:** proposed design, not implemented. Phase 1 fixes a deadlock;
-Phase 2 lets sandboxed commands from different sessions run at the same time.
+**Status:** Phase 1 (deadlock fix, bounded lease wait) lands in the same change
+as this document. Phase 2 (sessions running sandboxed commands at the same time)
+is not implemented and waits on the decisions listed below.
 
 ## Problem
 
@@ -71,22 +72,60 @@ The lease guards real process-global state, so it cannot simply be deleted.
 
 Fixes the deadlock and makes lease waits bounded. It keeps the exclusive lease.
 
-1. **Acquire inside the job body.** For background launches, move
-   `acquire()`, `createSandboxRuntimeConfig` and `wrap()` out of the tool call
-   and into the job's `run` (`executePreparedCommand`). Admission then takes no
-   lease, and the body acquires one only after kickoff. Foreground calls are
-   unchanged: they are not kickoff-gated. `availability()` stays at admission:
+1. **Acquire inside the job body.** `acquireAndWrapSandbox` in
+   `createShellToolDefinition` (`shell.ts`) takes the lease, builds the sandbox
+   config and wraps the command. A foreground call runs it inline, since
+   foreground calls are not kickoff-gated. A background launch runs it as the
+   first step of the job's `run`, so admission takes no lease and the body
+   takes one only after kickoff. `availability()` stays at admission for both:
    it only loads the runtime, checks dependencies and reads the recorded
-   initialization failure, so it does not need the lease. A wrap failure after
-   admission becomes a failed job carrying the existing `sandboxFailure()`
-   text, where today the tool call returns it.
-2. **The lease wait counts against the command's own timeout.** Start the
-   command's deadline when the tool starts waiting, not at spawn. If it expires
-   while waiting, return a "sandbox busy, command not run" error. Do not name
-   the holder when it belongs to another session: shell output is
-   session-scoped (`scopedWatches` in `src/app/shell-tools.ts`). This bounds
-   waits behind long holders, such as a background dev server, to the budget
-   the caller chose. Use the `guard-design` skill when implementing it.
+   initialization failure, so it needs no lease, and a missing sandbox is still
+   a tool error rather than a failed job. A wrap failure inside a background
+   body becomes a failed job carrying the same `sandboxFailure()` text the tool
+   call used to return. The read-only refusal now keys on whether a sandbox was
+   requested; that is equivalent to the old check on `sandboxed`, because a
+   requested sandbox either wraps the command or refuses it.
+2. **The lease wait counts against the command's own timeout.** The wait is
+   bounded by `timeout` (invocation `timeout_ms`, else `shell.timeout` or
+   `shell.backgroundTimeout`), and the process deadline gets what is left. If
+   the budget runs out while waiting, the call returns a "sandbox is busy …
+   The command was not run" error naming the budget but not the holder, which
+   may belong to another session (shell output is session-scoped;
+   `scopedWatches` in `src/app/shell-tools.ts`).
+
+Guard contract for step 2:
+
+- **Harm prevented:** a shell call waiting without limit for a lease held by
+  another command, ignoring its own `timeout_ms` (8 minutes against 120 s in
+  the incident).
+- **Class:** containment budget. **Action:** reject before start. The holder is
+  untouched and the waiting command never runs, so there is no partial work to
+  settle and nothing to replay.
+- **Enforcement owner:** `createShellToolDefinition`. **Recovery:** the model
+  retries, after the holder finishes or with a larger `timeout_ms`.
+- **Configuration:** no new setting and no default change; the budget is the
+  command's existing effective timeout. A missing or zero timeout leaves the
+  wait unbounded, as the executor already treats it as no deadline.
+- **Legitimate work with the same signal:** a short command queued behind a
+  long but healthy holder, such as a sandboxed dev server. It is refused once
+  its budget is spent instead of being stuck for the holder's whole lifetime.
+- **Unchanged constraints** (guard ledger, "Shell repair constraints"):
+  network-approval pauses stay excluded from the budget, because they are
+  accounted inside `executeShellCommand` after spawn.
+- **Observability:** `Shell sandbox busy; command not run` (warn) carries
+  `timeout`, `timeoutSource`, `waitedMs` and `mode`. A wait of 1 s or more
+  that then runs is logged at debug as `Shell waited for the sandbox lease`.
+- **Timer range:** Node fires an `AbortSignal.timeout` or `setTimeout` longer
+  than 2^31-1 ms after 1 ms, and `timeout_ms` has no upper bound in the
+  schema. The lease wait clamps to that maximum. The executor's own deadline
+  timer in `executeShellCommandUnleased` has the same overflow already; that is
+  not changed here.
+- **Rollback:** revert this change; no persisted state or settings are involved.
+
+The integration tests are in the `sandbox lease ordering` block of
+`tests/tools/system/run-code/shell.integration.test.ts`, using an exclusive fake
+runner. All three hung until the 10 s test timeout on the code before this
+change.
 
 After Phase 1 the incident sequence runs as follows. The `git diff` takes the
 free lease and finishes, the step ends and the request is dispatched. Then the
@@ -172,11 +211,15 @@ the same network policy, running at the same time.
 This touches the security boundary, so it needs an independent verifier.
 Permanent unit tests are not allowed under the evidence-driven experiment.
 
-- Phase 1: an integration test in which a scripted provider returns one response
-  with a background sandboxed shell followed by a foreground sandboxed shell.
-  The foreground call must finish, and then the background job must run.
-  Another test checks that a lease wait longer than `timeout_ms` returns the
-  busy error without running the command.
+- Phase 1 (done): integration tests drive `shell` through the live Session
+  task adapter (`DirectBackgroundTasks` + `directShellTasks`), with
+  `releaseParent` standing in for the next model dispatch. A background
+  sandboxed launch followed by a foreground sandboxed call in the same step: the
+  foreground call finishes and the background body runs only after release.
+  With the lease held elsewhere, a foreground call and a background job each
+  fail with the busy error once their `timeout_ms` is spent, without running.
+  These tests do not exercise the real `AnthropicShellSandboxRunner` or a real
+  provider turn.
 - Phase 2: two sessions in one gateway process run overlapping sandboxed
   commands with no lease wait. A network ask from session A prompts only in A
   and pauses only A's process. An ask presented with a finished command's id is

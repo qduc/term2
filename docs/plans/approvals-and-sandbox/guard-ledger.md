@@ -2127,7 +2127,10 @@ a cancelled command is presented as `cancelled`, not `timeout`. Timeout
 results carry a bounded explanation (effective budget, partial effects, no
 automatic replay). See
 [docs/plans/approvals-and-sandbox/evidence-backed-shell-timeouts.md](evidence-backed-shell-timeouts.md)
-for the September 6, 2026 receipts.
+for the September 6, 2026 receipts. Since November 2026 the wait for the
+process-wide sandbox lease spends the same `timeout_ms` before spawn and is
+refused, unrun, when the budget runs out; the contract and the deadlock that
+motivated it are in [concurrent-sandboxed-shell.md](concurrent-sandboxed-shell.md).
 
 ### Background shell live observation before retention eviction
 

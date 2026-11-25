@@ -55,31 +55,31 @@ production build lacks `act`.
 - Everything else: the evidence the `verification` skill asks for. Running tiers that don't
   touch your change is not evidence.
 
-CI runs the independent `quality` job on every pull request and push to `main`: production
-typechecking, architecture and repository guards, the static Vitest guards, and review approval
-for golden changes. It does not wait for behavioral lanes. Every behavioral tier also runs,
-unless every changed file in a pull request is inert (the `changes` job in
-`.github/workflows/ci.yml` defines inert); then only the expensive test work skips. The required
-`test` job still checks the root allowlist and rejects committed unit tests before dependency
-setup. The `bench` job owns `bench/headless.mjs` and `bench/hops.mts` on its own runner (they need
-only a build, and after the integration cases they lengthened the slowest job); `e2e` owns golden parity.
+CI runs the independent `quality` job on every pull request and push to `main`: repository
+policy (`check-root`, `check-no-unit-tests`), production typechecking, architecture and
+repository guards, the static Vitest guards, generated verification, and review approval
+for golden/CI-budget changes. It does not wait for behavioral lanes. Every behavioral tier
+also runs, unless every changed file in a pull request is inert (the `changes` job in
+`.github/workflows/ci.yml` defines inert); then only the expensive test work skips.
+Each behavioral job owns exactly one test tier (`integration`, `e2e`, `provider-black-box`)
+and shards its inventory across two parallel runners via `scripts/run-ci-lane.mjs <lane>
+--shard=i/2` (deterministic round-robin over the sorted file list so every file runs in
+exactly one shard). `bench` owns `bench/headless.mjs`, `bench/hops.mts`, and packed-tarball
+smoke; `e2e` shard 1 owns golden parity.
 `bench/headless.mjs` runs its isolated rows through a core-sized pool (`HEADLESS_CONCURRENCY=1`
-for serial debugging); serially it added ~30 s to the integration lane's critical path. The
-heaviest e2e files run in the `test` lane (`owner()` in `scripts/run-ci-lane.mjs`); rebalance
-there when one lane finishes well after the others. Do not move PTY-driven e2e files onto
-`provider-black-box`: two of them took that lane from ~62 s to 94 s locally and tipped a heavy
-provider case past its ~40 s deadline, the same timeout class that already flakes there in CI.
+for serial debugging); serially it added ~30 s to the integration lane's critical path.
 The setup action installs only `@qduc/term2` and its workspace dependencies unless a job passes
-`web-client: 'true'`; only `integration` does, for the gateway cases that import web-client
-server modules. A new case that imports web-client must run in that lane.
-Each behavioral job restores its lane's Vitest results cache (`lane` input of the setup action),
-and `vitest.ci.config.ts` orders every file by recorded duration across projects. Without it, a
-30 s sleeping Discord download case started late and a later-named project waited behind the
-others, adding ~11 s to the integration lane. A new long file runs early from its second run on.
-`port` is a compatibility aggregate requiring quality and test success, plus successful behavioral
-lanes or skips justified by an inert pull request. Known docs/evidence formats may skip tests;
-unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure
-through to a passing run or a blocker someone clearly owns.
+`web-client: 'true'`; only `integration` and `bench` do, for gateway cases that import
+web-client server modules and the packed web UI smoke check.
+Each behavioral shard restores its own Vitest results cache (`lane: <tier>-<shard>`),
+and `vitest.ci.config.ts` orders its files by recorded duration (longest first). Without it, a
+30 s sleeping Discord download case started late and added ~11 s to the integration lane. A new
+long file runs early from its second run on.
+`port` is the aggregate gate requiring `quality` success, successful behavioral lanes (or skips
+justified by an inert pull request), and that every lane/shard stays within `scripts/ci-budget.json`.
+Known docs/evidence formats may skip tests; unknown extensions and executable scripts under
+`docs/` run every tier. Follow any late CI failure through to a passing run or a blocker someone
+clearly owns.
 Never claim a test, build, or check passed unless you ran it and it succeeded. For long runs, set an
 explicit finite timeout and wait for the completion notification rather than polling.
 

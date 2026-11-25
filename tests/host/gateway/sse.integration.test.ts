@@ -15,6 +15,8 @@ const browserModule = (name: string) =>
   import(new URL(`../../../web-client/lib/term2/${name}.ts`, import.meta.url).href);
 const { parseEventEnvelope } = await browserModule('types');
 const { applyTerm2Event, emptyTerm2SessionView } = await browserModule('event-adapter');
+const { parseSessionHydration, viewFromHydration } = await browserModule('hydration');
+const { readQueueEntries } = await browserModule('queue');
 
 it('establishes an idle v2 stream before any event and closes its attachment on browser disconnect', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'idle-v2-'));
@@ -391,6 +393,181 @@ it('carries native orchestrator question lifecycle through HTTP SSE and the pinn
     expect(notified.nativeState?.notifications?.notices).toEqual([notice]);
     expect(notified.lastAppliedSequence).toBe(3);
     expect(closed).toBe(true);
+  } finally {
+    request?.destroy();
+    await transport.stop();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('keeps steered queued messages at their chronological position in the turn timeline over SSE and hydration', async () => {
+  const { DirectProjection } = await import('../../../src/protocol/projection.js');
+  const { initialDirectState } = await import('../../../src/session/state.js');
+  const { createDirectQueueState, planDirectQueue, submitDirectQueue } = await import('../../../src/session/queue.js');
+
+  const at = '2026-11-25T00:00:00.000Z';
+  const projection = new DirectProjection(
+    initialDirectState(
+      'session-1',
+      { root: '/tmp', target: 'local', access: 'read' },
+      { provider: 'openai', model: 'gpt-5' },
+    ),
+    0,
+  );
+  const events: WireEvent[] = [];
+  let seq = 0;
+  const emit = (
+    fact: Parameters<typeof projection.update>[0] extends infer U
+      ? U extends { type: 'fact'; fact: infer F }
+        ? F
+        : never
+      : never,
+  ) => {
+    seq += 1;
+    events.push(...projection.update({ type: 'fact', position: seq, seq, at, fact }));
+  };
+
+  let msgN = 0;
+  let turnN = 0;
+  const env = {
+    newMessageId: () => `msg-${++msgN}`,
+    newTurnId: () => `turn-${++turnN}` as import('../../../src/engine/index.js').TurnId,
+    now: () => at,
+    dispatchHeld: false,
+  };
+  let queue = createDirectQueueState();
+  const initial = submitDirectQueue(
+    queue,
+    { clientRequestId: 'req-1', content: [{ type: 'text', text: 'first prompt' }], delivery: 'follow_up' },
+    env,
+  );
+  queue = initial.state;
+  for (const fact of initial.facts) emit(fact);
+  emit({
+    type: 'turn_started',
+    turnId: 'turn-1' as import('../../../src/engine/index.js').TurnId,
+    input: initial.effect?.kind === 'start' ? initial.effect.input : [],
+  });
+  emit({
+    type: 'item',
+    turnId: 'turn-1' as import('../../../src/engine/index.js').TurnId,
+    modelStep: 1,
+    item: {
+      type: 'assistant_message',
+      id: 'asst-1' as import('../../../src/model/index.js').ItemId,
+      content: [{ type: 'text', text: 'working on it' }],
+    },
+  });
+
+  const steered = submitDirectQueue(
+    queue,
+    { clientRequestId: 'req-2', content: [{ type: 'text', text: 'also check this' }], delivery: 'steer' },
+    { ...env, dispatchHeld: true },
+    'turn-1' as import('../../../src/engine/index.js').TurnId,
+  );
+  queue = steered.state;
+  for (const fact of steered.facts) emit(fact);
+
+  const boundary = planDirectQueue(
+    queue,
+    { kind: 'boundary', turnId: 'turn-1' as import('../../../src/engine/index.js').TurnId },
+    env,
+  );
+  queue = boundary.state;
+  for (const fact of boundary.facts) emit(fact);
+
+  emit({
+    type: 'item',
+    turnId: 'turn-1' as import('../../../src/engine/index.js').TurnId,
+    modelStep: 2,
+    item: {
+      type: 'assistant_message',
+      id: 'asst-2' as import('../../../src/model/index.js').ItemId,
+      content: [{ type: 'text', text: 'checked it' }],
+    },
+  });
+  emit({
+    type: 'turn_ended',
+    turnId: 'turn-1' as import('../../../src/engine/index.js').TurnId,
+    outcome: 'completed',
+  });
+
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'steer-v2-'));
+  const socketPath = path.join(directory, 'gateway.sock');
+  const interactions = new ServerInteractions();
+  const connection = {
+    sessionId: 'session-1',
+    events: {
+      async *[Symbol.asyncIterator]() {
+        yield* events;
+      },
+    },
+    close() {},
+  } as unknown as DirectConnection;
+  const transport = new DirectServerTransport({
+    socketPath,
+    authentication: { verify: () => ({ sub: 'owner', purpose: 'events_connect' } as GatewayAssertionClaims) },
+    handler: async () => agentWireV2EventStream(connection, (event) => encodeAgentWireV2(event, interactions)),
+  });
+  let request: http.ClientRequest | undefined;
+  try {
+    await transport.start();
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      request = http.get({ socketPath, path: '/', headers: { 'x-term2-assertion': 'transport-fixture' } }, resolve);
+      request.on('error', reject);
+    });
+    let raw = '';
+    for await (const chunk of response) raw += chunk.toString();
+    const received = raw
+      .split('\n\n')
+      .filter((frame) => frame.split('\n').some((line) => line.startsWith('id:')))
+      .map((frame) => {
+        const data = frame.split('\n').find((line) => line.startsWith('data: '))!;
+        return parseEventEnvelope(JSON.parse(data.slice(6)), 'session-1');
+      });
+
+    let view = emptyTerm2SessionView('session-1');
+    let sawQueuedSteer = false;
+    for (const envelope of received) {
+      view = applyTerm2Event(view, envelope);
+      if (readQueueEntries(view).some((entry: { text: string }) => entry.text === 'also check this')) {
+        sawQueuedSteer = true;
+      }
+    }
+    expect(sawQueuedSteer).toBe(true);
+    expect(readQueueEntries(view)).toEqual([]);
+    expect(view.turns).toHaveLength(1);
+    expect(view.turns[0]?.userText).toBe('first prompt');
+    expect(view.turns[0]?.userMessageId).toBe('msg-1');
+    expect(view.turns[0]?.items).toEqual([
+      { kind: 'text', id: 'asst-1', text: 'working on it', modelStep: 1 },
+      { kind: 'user', id: 'msg-2', text: 'also check this' },
+      { kind: 'text', id: 'asst-2', text: 'checked it', modelStep: 2 },
+    ]);
+
+    const snapshot = JSON.parse(JSON.stringify(projection.snapshot));
+    const hydrated = viewFromHydration(
+      parseSessionHydration(
+        {
+          schemaVersion: 2,
+          kind: 'snapshot',
+          sessionId: 'session-1',
+          seq: snapshot.seq,
+          earliestReplayableSequence: 1,
+          interaction: null,
+          snapshot,
+        },
+        'session-1',
+      ),
+    );
+    expect(hydrated.turns).toHaveLength(1);
+    expect(hydrated.turns[0]?.userText).toBe('first prompt');
+    expect(hydrated.turns[0]?.userMessageId).toBe('msg-1');
+    expect(hydrated.turns[0]?.items).toEqual([
+      { kind: 'text', id: 'asst-1', text: 'working on it', modelStep: 1 },
+      { kind: 'user', id: 'msg-2', text: 'also check this' },
+      { kind: 'text', id: 'asst-2', text: 'checked it', modelStep: 2 },
+    ]);
   } finally {
     request?.destroy();
     await transport.stop();

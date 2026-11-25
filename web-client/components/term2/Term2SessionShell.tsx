@@ -1785,6 +1785,7 @@ export function Term2SessionShell({
                       <Term2UserMessage
                         turnId={turn.turnId}
                         text={turn.userText}
+                        content={session.view.nativeState?.messages?.find(entry => entry.message.id === turn.userMessageId)?.message.content}
                         copied={copiedTurn === `${turn.turnId}:user`}
                         onCopy={() => copyTurn(`${turn.turnId}:user`, turn.userText ?? '')}
                         disabled={commandDisabled}
@@ -1793,7 +1794,7 @@ export function Term2SessionShell({
                       />
                     )}
                     <div className="min-w-0 space-y-4">
-                      <Term2TurnTimeline turn={turn} displayMode={displayMode} />
+                      <Term2TurnTimeline turn={turn} displayMode={displayMode} messages={session.view.nativeState?.messages} />
                       {(turn.subagents ?? []).length > 0 && (
                         <div className="space-y-2">
                           {(turn.subagents ?? [])

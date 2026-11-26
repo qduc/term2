@@ -6,27 +6,13 @@ export interface QueueEntry {
   delivery: string;
 }
 
-/** The latest native queue projection, falling back to the hydration cut. */
+/** The Session's queue, as the snapshot holds it. */
 export function readQueueEntries(view: Term2SessionView): QueueEntry[] {
-  const fromChanges = [...(view.nativeChanges ?? [])].reverse().find((c) => c.type === 'queue_changed');
-  const rawList =
-    fromChanges && Array.isArray(fromChanges.payload.entries)
-      ? fromChanges.payload.entries
-      : Array.isArray(view.hydration?.snapshot.queue)
-        ? (view.hydration?.snapshot.queue as unknown[])
-        : [];
-  const entries: QueueEntry[] = [];
-  for (const item of rawList) {
-    if (!item || typeof item !== 'object') continue;
-    const record = item as Record<string, unknown>;
-    if (typeof record.messageId !== 'string') continue;
-    entries.push({
-      messageId: record.messageId,
-      text: typeof record.text === 'string' ? record.text : '',
-      delivery: typeof record.delivery === 'string' ? record.delivery : 'follow_up',
-    });
-  }
-  return entries;
+  return (view.session?.queue ?? []).map((entry) => ({
+    messageId: entry.messageId,
+    text: typeof entry.text === 'string' ? entry.text : '',
+    delivery: typeof entry.delivery === 'string' ? entry.delivery : 'follow_up',
+  }));
 }
 
 /**
@@ -35,22 +21,9 @@ export function readQueueEntries(view: Term2SessionView): QueueEntry[] {
  * the agent for a task that finishes while the chat is idle.
  */
 export function undeliveredBackgroundNoticeIds(view: Term2SessionView): string[] {
-  const notifications = view.nativeState?.notifications;
-  const delivered = new Set(
-    (notifications?.deliveries ?? []).flatMap((item) =>
-      Array.isArray(item.notificationIds) ? (item.notificationIds as string[]) : [],
-    ),
-  );
-  return (notifications?.notices ?? [])
-    .map((item) => item.id)
-    .filter((id): id is string => typeof id === 'string' && !delivered.has(id));
-}
-
-/** The Session's queue state: the latest live queue projection, else the hydration cut. */
-function queueState(view: Term2SessionView): unknown {
-  const latest = [...(view.nativeChanges ?? [])].reverse().find((c) => c.type === 'queue_changed');
-  if (latest && latest.payload.state !== undefined) return latest.payload.state;
-  return view.hydration?.snapshot.queueState ?? view.rootEvidence?.queueState;
+  const notifications = view.session?.notifications;
+  const delivered = new Set((notifications?.deliveries ?? []).flatMap((item) => item.notificationIds));
+  return (notifications?.notices ?? []).map((item) => item.id).filter((id) => !delivered.has(id));
 }
 
 const LIVE_STATUSES = new Set<Term2SessionView['status']>(['connected', 'running', 'awaiting_interaction']);
@@ -65,7 +38,7 @@ const LIVE_STATUSES = new Set<Term2SessionView['status']>(['connected', 'running
 export function readyForBackgroundDrain(view: Term2SessionView): boolean {
   const interaction = view.pendingInteraction;
   const rootInteraction = interaction !== null && !(interaction.state === 'pending' && interaction.subagent);
-  const state = queueState(view);
+  const state = view.session?.queueState;
   return (
     LIVE_STATUSES.has(view.status) &&
     !rootInteraction &&

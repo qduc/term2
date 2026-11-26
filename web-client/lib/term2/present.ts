@@ -306,12 +306,58 @@ function presentedInteraction(snapshot: WireSnapshot, interactions: PresentInter
   return interactions.get(request.requestId) ?? { state: 'unavailable', requestId: request.requestId, turnId: request.turnId };
 }
 
+type Branch = NonNullable<WireSnapshot['branches']>[number];
+const branchMemo = new WeakMap<Branch, readonly Term2TurnView[]>();
+
+/** A subagent branch's turns, with the same rules as the root's; a branch with no terminal yet is running. */
+function branchTurns(root: WireSnapshot, branch: Branch): readonly Term2TurnView[] {
+  const known = branchMemo.get(branch);
+  if (known) return known;
+  const scratch: WireSnapshot = {
+    ...root,
+    status: branch.terminal ? 'idle' : 'running',
+    activeTurnId: branch.terminal ? null : branch.turnId,
+    liveReasoning: undefined,
+    thinking: false,
+    retry: undefined,
+    notices: [],
+    messages: branch.messages,
+    tools: branch.tools,
+    timeline: branch.timeline,
+    turnResults: branch.turnResults,
+    terminal: branch.terminal,
+    reasoningBlocks: [],
+    turnUsage: [],
+  };
+  const results = new Map(branch.turnResults.map((result) => [result.turnId, result]));
+  const turns = [...groupEntries(scratch).turns].map(([turnId, entries]) =>
+    presentTurn(
+      turnId,
+      {
+        entries,
+        result: results.get(turnId),
+        blocks: [],
+        usage: undefined,
+        active: scratch.activeTurnId === turnId,
+        interruptedLast: false,
+        live: [],
+      },
+      scratch,
+    ),
+  );
+  branchMemo.set(branch, turns);
+  return turns;
+}
+
 /** The slices of the snapshot the panels read; components never read the snapshot itself. */
 function sessionFacts(snapshot: WireSnapshot): Term2SessionFacts {
-  const branchesByTask = new Map<string, WireSnapshot['branches'] extends readonly (infer B)[] | undefined ? B : never>();
+  const branchesByTask = new Map<string, Branch>();
   for (const branch of snapshot.branches ?? []) branchesByTask.set(branch.taskId, branch);
   return {
-    tasks: snapshot.tasks.map((task) => ({ ...task, branch: branchesByTask.get(task.id) ?? null })),
+    tasks: snapshot.tasks.map((task) => {
+      const branch = branchesByTask.get(task.id) ?? null;
+      return { ...task, branch, branchTurns: branch ? branchTurns(snapshot, branch) : [] };
+    }),
     queue: snapshot.queue,
     queueState: snapshot.queueState,
     queuePauseReason: snapshot.queuePauseReason ?? null,

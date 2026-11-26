@@ -1,4 +1,3 @@
-import { parseSessionHydration } from '../term2/hydration';
 import { parseAgentConfigureResultV2, type AgentConfigureResultV2 } from '@qduc/agent-wire';
 import { httpClient, HttpError, type HttpResponse } from '../http';
 import {
@@ -953,18 +952,7 @@ export const term2Client = {
   createSession(workspaceId: string, signal?: AbortSignal) {
     return postJson('/agent/sessions', { workspaceId }, validateSession, signal);
   },
-  async hydrateSession(sessionId: string, signal?: AbortSignal) {
-    try {
-      const response = await httpClient.get<unknown>(`/agent/sessions/${encodeURIComponent(id(sessionId))}?format=${TERM2_WIRE_PROTOCOL}`, { signal, skipAuth: true, skipRetry: true });
-      if (response.headers.get('x-term2-hydration-format') !== TERM2_WIRE_PROTOCOL || response.headers.get('x-term2-hydration') !== 'current-accepted') throw new Term2ApiError(503, 'Native accepted hydration was not negotiated');
-      return parseSessionHydration(response.data, sessionId);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') throw error;
-      if (error instanceof Term2ProtocolError) throw error;
-      throw apiError(error);
-    }
-  },
-  submitMessage(
+    submitMessage(
     sessionId: string,
     text: string,
     clientRequestId: string,
@@ -1198,23 +1186,7 @@ export const term2Client = {
       throw apiError(error);
     }
   },
-  async openEvents(sessionId: string, after: number, signal?: AbortSignal): Promise<HttpResponse<Response>> {
-    try {
-      return await httpClient.get<Response>(
-        `/agent/sessions/${encodeURIComponent(sessionId)}/events?format=${TERM2_WIRE_PROTOCOL}${after > 0 ? `&after=${encodeURIComponent(String(after))}` : ''}`,
-        {
-          signal,
-          skipAuth: true,
-          skipRetry: true,
-          headers: { Accept: 'text/event-stream', ...(after > 0 ? { 'Last-Event-ID': String(after) } : {}) },
-        },
-      );
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') throw error;
-      throw apiError(error);
-    }
-  },
-};
+  };
 
 function validateSettingsWrite(value: unknown): SettingsWriteResult {
   const input = object(value);

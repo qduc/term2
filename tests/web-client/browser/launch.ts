@@ -21,9 +21,15 @@ const STOP_TIMEOUT_MS = 10_000;
  * `hold` streams its first chunk (the text, or nothing for a call) and then waits until the flow calls
  * `release(hold)` before it finishes, so a flow can act while a turn is visibly running.
  */
+/** Token counts a step reports in its final chunk, as an OpenAI-compatible provider does. */
+export type StepUsage = { readonly input: number; readonly output: number };
 export type ModelStep =
-  | { readonly text: string; readonly hold?: string }
-  | { readonly call: { readonly tool: string; readonly args: Record<string, unknown> }; readonly hold?: string }
+  | { readonly text: string; readonly hold?: string; readonly usage?: StepUsage }
+  | {
+      readonly call: { readonly tool: string; readonly args: Record<string, unknown> };
+      readonly hold?: string;
+      readonly usage?: StepUsage;
+    }
   | { readonly error: { readonly status: number; readonly message: string } };
 
 type WireMessage = { role: string; content?: unknown };
@@ -126,6 +132,15 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
         `data: ${JSON.stringify({
           id,
           choices: [{ delta: {}, finish_reason: 'call' in step ? 'tool_calls' : 'stop' }],
+          ...(step.usage
+            ? {
+                usage: {
+                  prompt_tokens: step.usage.input,
+                  completion_tokens: step.usage.output,
+                  total_tokens: step.usage.input + step.usage.output,
+                },
+              }
+            : {}),
         })}`,
         'data: [DONE]',
         '',

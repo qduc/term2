@@ -1,4 +1,5 @@
-import type { NativeRequestCost } from './native-state';
+/** A request receipt as the snapshot carries it; only these record fields are read. */
+type Receipt = { readonly record: { readonly requestId: string; readonly [field: string]: unknown } };
 
 /** Pricing of the supplied receipt set only, never historical billing coverage. */
 export interface ReceiptCostSummary {
@@ -19,7 +20,7 @@ export interface ReceiptCostSummary {
  * import checks BigInt literals against the browser's ES2017 target. No source
  * runtime or type dependency is pulled into this browser module.
  */
-export function summarizeReceiptCosts(receipts: readonly NativeRequestCost[] | undefined): ReceiptCostSummary | undefined {
+export function summarizeReceiptCosts(receipts: readonly Receipt[] | undefined): ReceiptCostSummary | undefined {
   if (receipts === undefined) return undefined;
   const latest = new Map(receipts.map(receipt => [receipt.record.requestId, receipt.record]));
   let knownUsdMicros = 0;
@@ -27,7 +28,7 @@ export function summarizeReceiptCosts(receipts: readonly NativeRequestCost[] | u
   let unpricedRequests = 0;
   let anyEstimated = false;
   for (const record of latest.values()) {
-    if (record.usdMicros !== undefined) {
+    if (typeof record.usdMicros === 'number') {
       knownUsdMicros += record.usdMicros;
       pricedRequests++;
       if (record.source === 'catalog') anyEstimated = true;

@@ -8,9 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // runtime boundary so the root NodeNext project does not recompile that tree.
 const browserModule = (name: string) =>
   import(new URL(`../../../web-client/lib/term2/${name}.ts`, import.meta.url).href);
-const { consumeSseResponse } = await browserModule('sse');
-const { applyTerm2Event, emptyTerm2SessionView } = await browserModule('event-adapter');
-const { parseSessionHydration, viewFromHydration } = await browserModule('hydration');
+const { present } = await browserModule('present');
 
 // A real HTTP boundary exercises browser API response validation and SSE decoding.
 // The upstream is a controlled public-wire fixture, not native-runtime acceptance.
@@ -179,23 +177,7 @@ describe('browser consumer over HTTP', () => {
     }
   });
 
-  it('checkpoints complete sparse batches once and never dispatches an EOF-truncated batch', async () => {
-    let view = emptyTerm2SessionView('session-1');
-    const delivered: number[] = [];
-    await consumeSseResponse(await fetch(`${baseUrl}/events`), {
-      expectedSessionId: 'session-1',
-      onFrame(frame: { kind: string; seq: number }) {
-        if (frame.kind === 'accepted') delivered.push(frame.seq);
-        view = applyTerm2Event(view, frame);
-      },
-    });
-    expect(delivered).toEqual([3, 3]);
-    expect(view.lastAppliedSequence).toBe(3);
-    expect(view.turns).toEqual([]); // Live evidence is separate from accepted history.
-    expect(view.liveChanges).toHaveLength(1);
-  });
-
-  it('hydrates a result-only timeline slot without fabricating a named tool or turn', async () => {
+  it('presents a result-only timeline slot without fabricating a named tool or turn', async () => {
     const snapshot = {
       protocolVersion: 1,
       sessionId: 'session-1',
@@ -224,20 +206,11 @@ describe('browser consumer over HTTP', () => {
       terminal: null,
       reasoning: '',
     };
-    // Round-trip the same public snapshot through an HTTP response before parsing.
-    hydrationResponse = {
-      schemaVersion: 2,
-      kind: 'snapshot',
-      sessionId: 'session-1',
-      seq: 5,
-      earliestReplayableSequence: 1,
-      interaction: null,
-      snapshot,
-    };
+    // Round-trip the same public snapshot through an HTTP response before presenting it.
+    hydrationResponse = snapshot;
     const wire = await fetch(`${baseUrl}/hydration`);
-    const view = viewFromHydration(parseSessionHydration(await wire.json(), 'session-1'));
+    const view = present('session-1', await wire.json(), new Map(), { phase: 'live', error: null });
     expect(view.lastAppliedSequence).toBe(5);
     expect(view.turns).toEqual([]);
-    expect(view.hydration?.snapshot.unmatchedToolResults).toEqual(snapshot.unmatchedToolResults);
   });
 });

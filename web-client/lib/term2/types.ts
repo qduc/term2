@@ -1,6 +1,4 @@
 import type { WireBranchSnapshot, WireSnapshot, WireTask } from './generated/wire-fold.js';
-import type { NativeState } from './native-state';
-import type { SessionHydration, NativeBranchHydration } from './hydration';
 export const TERM2_CONTRACT_VERSION = 2 as const;
 /**
  * Digest of the immutable v1 (P105) identity choices. The M4 event additions
@@ -476,7 +474,11 @@ export interface Term2TurnView {
 /** The parts of a session snapshot the panels read, filled by present.ts; components never read the snapshot. */
 export interface Term2SessionFacts {
   /** Each task with its subagent branch (steps, turns, usage) when it has one. */
-  tasks: readonly (WireTask & { readonly branch: WireBranchSnapshot | null })[];
+  tasks: readonly (WireTask & {
+    readonly branch: WireBranchSnapshot | null;
+    /** The branch's turns, presented like the root's (the running-tasks panel's activity). */
+    readonly branchTurns: readonly Term2TurnView[];
+  })[];
   queue: WireSnapshot['queue'];
   queueState: WireSnapshot['queueState'];
   queuePauseReason: NonNullable<WireSnapshot['queuePauseReason']> | null;
@@ -498,25 +500,13 @@ export interface Term2SessionView {
   sessionId: string;
   /** Filled by present.ts from the snapshot; absent before the first one. */
   session?: Term2SessionFacts;
-  hydration?: SessionHydration;
-  nativeBranch?: NativeBranchHydration;
-  rootEvidence?: Readonly<Record<string, unknown>>;
-  nativeState?: NativeState;
   turns: Term2TurnView[];
   pendingInteraction: InteractionProjection;
   status: Term2ConnectionStatus;
   lastAppliedSequence: number;
   error: string | null;
   reloadRequired: boolean;
-  /** Actual branch ownership; branch streams never mutate the root transcript. */
   replayMode?: 'atomic' | 'unavailable';
-  retiredTurns?: Term2TurnView[];
-  branches?: Record<string, { identity: AgentBranchV2; view: Term2SessionView }>;
-  /** Native evidence retained verbatim, separate from model usage totals. */
-  nativeChanges?: readonly Term2AcceptedChange[];
-  /** Connection-local UI observations only; never persisted or replay-checkpointed. */
-  liveChanges?: readonly Term2LiveChange[];
-
 }
 
 export const INTERACTION_OUTCOMES = new Set<InteractionOutcome>(['approved', 'rejected', 'cancelled', 'continued']);

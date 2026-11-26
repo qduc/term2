@@ -279,3 +279,51 @@ test('a message steered into a running turn stays in that turn after a reload', 
   await expectSameTranscriptAfterReload(page, await transcript(page));
   expect(app.model.unscripted()).toEqual([]);
 });
+
+test('per-reply token counts and the session total read the same before and after a reload', async ({
+  page,
+  launch,
+}) => {
+  const first = 'read the notes and count tokens';
+  const second = 'say one more thing';
+  const usage = { input: 1000, output: 234 }; // 1,234 tokens per provider request
+  const app = await launch({
+    files: { 'notes.txt': 'hello notes\n' },
+    scripts: {
+      [first]: [
+        { call: { tool: 'read_file', args: { path: 'notes.txt' } }, usage },
+        { text: 'Read them.', usage },
+      ],
+      [second]: [{ text: 'One more thing.', usage }],
+    },
+  });
+  // The page loads a chat from its event stream alone: no separate hydration request.
+  const hydrationReads: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (/^\/api\/agent\/sessions\/[^/]+$/u.test(url.pathname) && url.searchParams.has('format'))
+      hydrationReads.push(request.url());
+  });
+
+  await openDraftChat(page, app);
+  await send(page, first);
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  await send(page, second);
+  await expect(turns(page).nth(1).getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  expect(app.model.turn(first)).toHaveLength(2);
+  expect(app.model.turn(second)).toHaveLength(1);
+
+  // Each reply shows its turn's last reported usage; the chip shows the session's total of three requests.
+  await expect(turns(page)).toHaveCount(2);
+  for (const index of [0, 1]) await expect(turns(page).nth(index)).toContainText('1,234 tokens');
+  const chip = page.getByRole('button', { name: 'Session usage and context' });
+  await expect(chip).toContainText('3.7k tok');
+  const before = await transcript(page);
+
+  await expectSameTranscriptAfterReload(page, before);
+  await expect(chip).toContainText('3.7k tok');
+  expect(hydrationReads).toEqual([]);
+  expect(app.model.unscripted()).toEqual([]);
+});

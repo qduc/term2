@@ -114,9 +114,10 @@ export class Term2SessionStore {
     this.#overlay = { ...this.#overlay, ...overlay };
     this.#publish(true);
   }
-  /** A multi-question step answered: the server sent the request's next DTO. */
-  replaceInteraction(requestId: string, entry: PendingEntry): void {
-    this.#interactions.set(requestId, entry);
+  /** A multi-question step answered: the server sent the same request's next DTO. */
+  replaceInteractionById(interactionId: string, entry: PendingEntry): void {
+    for (const [requestId, known] of this.#interactions)
+      if (known.interaction.interactionId === interactionId) this.#interactions.set(requestId, entry);
     this.#publish(true);
   }
 

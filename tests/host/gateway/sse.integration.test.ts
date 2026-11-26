@@ -13,10 +13,13 @@ import type { WireEvent } from '../../../src/protocol/wire.js';
 import type { DirectTaskId } from '../../../src/session/background-types.js';
 const browserModule = (name: string) =>
   import(new URL(`../../../web-client/lib/term2/${name}.ts`, import.meta.url).href);
+// agent-wire-v2 is still served (frozen) for the external consumer: frames are checked with the shared parser.
 const { parseEventEnvelope } = await browserModule('types');
-const { applyTerm2Event, emptyTerm2SessionView } = await browserModule('event-adapter');
-const { parseSessionHydration, viewFromHydration } = await browserModule('hydration');
-const { readQueueEntries } = await browserModule('queue');
+// The browser presents the shared fold's snapshot (which is what the projection holds) with present().
+const { present } = await browserModule('present');
+const live = { phase: 'live', error: null };
+const describeItems = (items: readonly Record<string, unknown>[]) =>
+  items.map(({ kind, id, text, modelStep }) => ({ kind, id, text, ...(modelStep === undefined ? {} : { modelStep }) }));
 
 it('establishes an idle v2 stream before any event and closes its attachment on browser disconnect', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'idle-v2-'));
@@ -154,21 +157,22 @@ it('keeps real sparse tail boundaries ahead of cursorless live observations over
     expect(frames[2]).toContain('event: live\ndata:');
     expect(frames[2]).not.toMatch(/^id:/m);
     expect(raw).not.toContain('event: snapshot');
-    let view = emptyTerm2SessionView('session-1');
-    for (const frame of frames) {
-      const value = JSON.parse(
-        frame
-          .split('\n')
-          .find((line) => line.startsWith('data: '))!
-          .slice(6),
-      );
-      view = applyTerm2Event(view, parseEventEnvelope(value, 'session-1'));
-    }
-    expect(view.lastAppliedSequence).toBe(9);
-    expect(view.turns).toMatchObject([
-      { turnId: 'turn-1', userText: 'accepted input', text: 'accepted text', status: 'completed' },
+    const envelopes = frames.map((frame) =>
+      parseEventEnvelope(
+        JSON.parse(
+          frame
+            .split('\n')
+            .find((line) => line.startsWith('data: '))!
+            .slice(6),
+        ),
+        'session-1',
+      ),
+    );
+    expect(envelopes.map((envelope: { kind: string; seq?: number }) => [envelope.kind, envelope.seq])).toEqual([
+      ['accepted', 3],
+      ['accepted', 9],
+      ['live', undefined],
     ]);
-    expect(view.nativeState?.messages).toMatchObject([{ message: { id: 'real-user-id', turnId: 'turn-1' } }]);
   } finally {
     await transport.stop();
     await rm(directory, { recursive: true, force: true });
@@ -379,19 +383,6 @@ it('carries native orchestrator question lifecycle through HTTP SSE and the pinn
     expect(received[1].changes[0].payload.task).not.toHaveProperty('pendingQuestion');
     expect(received[1].changes[0].payload.task.status).toBe('running');
     expect(received.map((event) => event.seq)).toEqual([1, 2, 3]);
-    const opened = applyTerm2Event(emptyTerm2SessionView('session-1'), received[0]);
-    expect(opened.nativeState?.tasks).toMatchObject([
-      { ...task, status: 'awaiting_interaction', pendingQuestion: pending },
-    ]);
-    const settled = applyTerm2Event(opened, received[1]);
-    expect(settled.nativeState?.tasks).toHaveLength(1);
-    expect(settled.nativeState?.tasks?.[0]).not.toHaveProperty('pendingQuestion');
-    expect(settled.nativeState?.tasks?.[0].status).toBe('running');
-    expect(settled.nativeState?.tasks?.[0]).toMatchObject(task);
-    expect(settled.lastAppliedSequence).toBe(2);
-    const notified = applyTerm2Event(settled, received[2]);
-    expect(notified.nativeState?.notifications?.notices).toEqual([notice]);
-    expect(notified.lastAppliedSequence).toBe(3);
     expect(closed).toBe(true);
   } finally {
     request?.destroy();
@@ -400,7 +391,7 @@ it('carries native orchestrator question lifecycle through HTTP SSE and the pinn
   }
 });
 
-it('keeps steered queued messages at their chronological position in the turn timeline over SSE and hydration', async () => {
+it('keeps steered queued messages at their chronological position in the presented turn', async () => {
   const { DirectProjection } = await import('../../../src/protocol/projection.js');
   const { initialDirectState } = await import('../../../src/session/state.js');
   const { createDirectQueueState, planDirectQueue, submitDirectQueue } = await import('../../../src/session/queue.js');
@@ -526,44 +517,23 @@ it('keeps steered queued messages at their chronological position in the turn ti
         return parseEventEnvelope(JSON.parse(data.slice(6)), 'session-1');
       });
 
-    let view = emptyTerm2SessionView('session-1');
-    let sawQueuedSteer = false;
-    for (const envelope of received) {
-      view = applyTerm2Event(view, envelope);
-      if (readQueueEntries(view).some((entry: { text: string }) => entry.text === 'also check this')) {
-        sawQueuedSteer = true;
-      }
-    }
-    expect(sawQueuedSteer).toBe(true);
-    expect(readQueueEntries(view)).toEqual([]);
+    // The steer waits in the queue on the wire, then lands in the turn.
+    const queued = received.some(
+      (envelope: { changes: { type: string; payload: { entries?: { text?: string }[] } }[] }) =>
+        envelope.changes.some(
+          (change) =>
+            change.type === 'queue_changed' &&
+            change.payload.entries?.some((entry) => entry.text === 'also check this'),
+        ),
+    );
+    expect(queued).toBe(true);
+
+    const view = present('session-1', JSON.parse(JSON.stringify(projection.snapshot)), new Map(), live);
+    expect(view.session?.queue).toEqual([]);
     expect(view.turns).toHaveLength(1);
     expect(view.turns[0]?.userText).toBe('first prompt');
     expect(view.turns[0]?.userMessageId).toBe('msg-1');
-    expect(view.turns[0]?.items).toEqual([
-      { kind: 'text', id: 'asst-1', text: 'working on it', modelStep: 1 },
-      { kind: 'user', id: 'msg-2', text: 'also check this' },
-      { kind: 'text', id: 'asst-2', text: 'checked it', modelStep: 2 },
-    ]);
-
-    const snapshot = JSON.parse(JSON.stringify(projection.snapshot));
-    const hydrated = viewFromHydration(
-      parseSessionHydration(
-        {
-          schemaVersion: 2,
-          kind: 'snapshot',
-          sessionId: 'session-1',
-          seq: snapshot.seq,
-          earliestReplayableSequence: 1,
-          interaction: null,
-          snapshot,
-        },
-        'session-1',
-      ),
-    );
-    expect(hydrated.turns).toHaveLength(1);
-    expect(hydrated.turns[0]?.userText).toBe('first prompt');
-    expect(hydrated.turns[0]?.userMessageId).toBe('msg-1');
-    expect(hydrated.turns[0]?.items).toEqual([
+    expect(describeItems(view.turns[0]?.items ?? [])).toEqual([
       { kind: 'text', id: 'asst-1', text: 'working on it', modelStep: 1 },
       { kind: 'user', id: 'msg-2', text: 'also check this' },
       { kind: 'text', id: 'asst-2', text: 'checked it', modelStep: 2 },
@@ -575,7 +545,7 @@ it('keeps steered queued messages at their chronological position in the turn ti
   }
 });
 
-it('preserves provider error messages on turn_failed over SSE and hydration', async () => {
+it('preserves provider error messages on a failed turn, on the v2 wire and in the presented turn', async () => {
   const { DirectProjection } = await import('../../../src/protocol/projection.js');
   const { initialDirectState } = await import('../../../src/session/state.js');
   const { createDirectQueueState, submitDirectQueue } = await import('../../../src/session/queue.js');
@@ -666,32 +636,14 @@ it('preserves provider error messages on turn_failed over SSE and hydration', as
         return parseEventEnvelope(JSON.parse(data.slice(6)), 'session-1');
       });
 
-    let view = emptyTerm2SessionView('session-1');
-    for (const envelope of received) view = applyTerm2Event(view, envelope);
+    // The v2 wire carries the provider's words on the failed turn.
+    expect(JSON.stringify(received)).toContain('400 Request path cannot be relayed');
+
+    const view = present('session-1', JSON.parse(JSON.stringify(projection.snapshot)), new Map(), live);
     expect(view.turns).toHaveLength(1);
     expect(view.turns[0]?.status).toBe('failed');
     expect(view.turns[0]?.error).toBe('runtime_error');
     expect(view.turns[0]?.errorMessage).toBe('400 Request path cannot be relayed');
-
-    const snapshot = JSON.parse(JSON.stringify(projection.snapshot));
-    const hydrated = viewFromHydration(
-      parseSessionHydration(
-        {
-          schemaVersion: 2,
-          kind: 'snapshot',
-          sessionId: 'session-1',
-          seq: snapshot.seq,
-          earliestReplayableSequence: 1,
-          interaction: null,
-          snapshot,
-        },
-        'session-1',
-      ),
-    );
-    expect(hydrated.turns).toHaveLength(1);
-    expect(hydrated.turns[0]?.status).toBe('failed');
-    expect(hydrated.turns[0]?.error).toBe('runtime_error');
-    expect(hydrated.turns[0]?.errorMessage).toBe('400 Request path cannot be relayed');
   } finally {
     request?.destroy();
     await transport.stop();

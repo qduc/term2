@@ -111,7 +111,9 @@ export function Term2ToolGroup({
     : pending > 0
       ? `${pending} ${pending === 1 ? 'action' : 'actions'} waiting to start`
       : asSentence(summarizeCompletedTools(commands));
-  const failures = running.length === 0 && pending === 0 ? describeFailures(commands) : null;
+  // Keep any failure summary steady once a call in the run has failed so it doesn't
+  // toggle the row height on and off as subsequent tools in the same run start and finish.
+  const failures = describeFailures(commands);
   const open = userOpen;
 
   return (
@@ -119,7 +121,7 @@ export function Term2ToolGroup({
       <button
         type="button"
         aria-expanded={open}
-        className="group/tg -ml-2 flex max-w-full items-start gap-2 rounded-lg px-2 py-1 text-left text-muted-foreground transition-colors hover:bg-black/[0.035] hover:text-foreground dark:hover:bg-white/[0.04]"
+        className="group/tg -ml-2 flex min-h-7 max-w-full items-start gap-2 rounded-lg px-2 py-1 text-left text-muted-foreground transition-colors hover:bg-black/[0.035] hover:text-foreground dark:hover:bg-white/[0.04]"
         onClick={() => setUserOpen(!open)}
       >
         <span className="flex h-5 shrink-0 items-center">
@@ -134,7 +136,7 @@ export function Term2ToolGroup({
           )}
         </span>
         <span className="min-w-0">
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 leading-5">
             <span className={`truncate ${running.length > 0 ? 't2-shimmer' : ''}`}>{summary}</span>
             <ChevronRight
               aria-hidden
@@ -143,7 +145,7 @@ export function Term2ToolGroup({
           </span>
           {failures && (
             <span
-              className={`block truncate text-xs ${allFailed ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+              className={`block truncate text-xs leading-4 ${allFailed ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
             >
               {failures}
             </span>

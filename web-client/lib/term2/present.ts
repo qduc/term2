@@ -246,8 +246,19 @@ function presentTurn(turnId: string, inputs: TurnInputs, snapshot: WireSnapshot)
       ...(block.modelStep !== null ? { modelStep: block.modelStep } : {}),
     });
   const liveReasoning = active ? snapshot.liveReasoning ?? '' : '';
-  if (active && (liveReasoning.length > 0 || (snapshot.thinking && blocks.length === 0)))
-    items.push({ kind: 'reasoning', id: `live-reasoning:${turnId}`, text: cap(liveReasoning, TEXT_CAP), streaming: true });
+  if (active && (liveReasoning.length > 0 || (snapshot.thinking && blocks.length === 0))) {
+    const liveItem: Term2TurnItem = {
+      kind: 'reasoning',
+      id: `live-reasoning:${turnId}`,
+      text: cap(liveReasoning, TEXT_CAP),
+      streaming: Boolean(snapshot.thinking),
+    };
+    // Live reasoning preceded the draft text of the same step; place it before a trailing draft so
+    // accepting the reasoning block does not move it from below the reply to above it.
+    const last = items.at(-1);
+    if (last?.kind === 'text' && last.draft) items.splice(items.length - 1, 0, liveItem);
+    else items.push(liveItem);
+  }
 
   // Rule 6. A retried turn's outcome belongs to the turn that retried it, so its own failure or stop is not shown.
   const status: Term2TurnView['status'] = result

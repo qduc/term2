@@ -1,22 +1,32 @@
 'use client';
 
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import { useChatFacts, useSessionView, useShell, useShellEnv, useShellState } from './ShellContext';
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 type ScrollRefs = { scrollRef: RefObject<HTMLDivElement | null>; lastScrollTopRef: RefObject<number> };
 
 /** Smart auto-scroll pinning: the transcript follows new output while the reader is at its end. */
 export function useTranscriptScroll() {
-  const { dispatch } = useShell();
+  const { dispatch, store } = useShell();
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollTopRef = useRef(0);
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     // A hidden transcript (settings page open) has no box; its scroll events say nothing.
     if (!el || el.clientHeight === 0) return;
+    const prevTop = lastScrollTopRef.current;
     lastScrollTopRef.current = el.scrollTop;
-    dispatch({ type: 'SCROLLED', pinned: el.scrollHeight - el.scrollTop - el.clientHeight < 80 });
-  }, [dispatch]);
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    // Only unpin when the reader actually scrolls up; streaming growth between frames must not
+    // falsely unpin and flash the "Jump to latest" button.
+    if (atBottom) {
+      dispatch({ type: 'SCROLLED', pinned: true });
+    } else if (!store.get().pinned || el.scrollTop < prevTop) {
+      dispatch({ type: 'SCROLLED', pinned: false });
+    }
+  }, [dispatch, store]);
   const scrollToLatest = useCallback(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     dispatch({ type: 'SCROLLED', pinned: true });
@@ -31,16 +41,21 @@ export function TranscriptPin({ scrollRef, lastScrollTopRef }: ScrollRefs) {
   const turns = useSessionView((v) => v.turns);
   const pendingInteraction = useSessionView((v) => v.pendingInteraction);
   const visibleLiveStatus = useChatFacts((f) => f.visibleLiveStatus);
-  useEffect(() => {
+  // Pin before browser paint so streaming growth doesn't flash at the old scrollTop for one frame.
+  useIsomorphicLayoutEffect(() => {
     const el = scrollRef.current;
-    if (pinned && el) el.scrollTop = el.scrollHeight;
-  }, [turns, pendingInteraction, visibleLiveStatus, pinned, scrollRef]);
+    if (pinned && el) {
+      el.scrollTop = el.scrollHeight;
+      lastScrollTopRef.current = el.scrollTop;
+    }
+  }, [turns, pendingInteraction, visibleLiveStatus, pinned, scrollRef, lastScrollTopRef]);
   // The transcript was display:none while settings was open, which loses its scroll offset.
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (settingsOpen) return;
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = pinned ? el.scrollHeight : lastScrollTopRef.current;
+    lastScrollTopRef.current = el.scrollTop;
     // Only on closing settings; `pinned` is read, not tracked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsOpen]);

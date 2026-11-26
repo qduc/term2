@@ -109,6 +109,31 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
 - **Independent verifier, round three** (on `53ec5fff`): **phase 2 accepted**, with no deviation blocking. Its one
   suggestion, a 401/403/404 arriving while a history replacement is held stays hidden, is fixed (the store releases
   the hold on a terminal error).
+- **Phase 3, slice 1 (selection and draft), done on `claude/optimistic-brown-2d0lrp`** (stacked on the phases 0-2
+  branch): `web-client/lib/term2/shell-machine.ts` holds the open chat (from `URL_CHANGED` only), the draft and its
+  picks, the first send, the open chat's config and the staged model/effort. Commands run in one place in the
+  shell; every result carries the `{ sessionId, generation }` it was issued under and a stale one is dropped. The
+  effects at the old TSX 492 (config load), 885 (draft end) and 1032 (first send) and the refs
+  `pendingFirstSendIdRef`'s setter, `draftSessionIdRef`'s draft role and the discovered-config state are gone; the
+  page feeds `READY_TO_SEND` when the open chat is configured, unblocked and live.
+  - Hazards, reproduced first in `tests/web-client/browser/shell-hazards.flow.ts`:
+    1. **Reproduced:** an approval change for chat A that resolved after switching to chat B replaced B's config
+       with A's, and B's model and approval chips disappeared. Fixed by the tag rule; red with it off.
+    2. **Reproduced:** a first send whose settings write failed left its created chat behind, and sending again
+       created a second chat. The draft now keeps the chat it created and a retry reuses it; red without that.
+    3. **Not reproduced:** a chat list requested before the first send did not hide the created chat. The flow stays
+       as a guard; no change was made for it.
+  - `shell.machine-rules` (generated, `--target shell`): stale results change nothing, the shown config is the open
+    chat's, `createSession` is for the chosen folder, a folder's unopened created chat is never followed by a second
+    one, a created chat only joins a draft for its own folder, and a first message is sent once, only when ready.
+    It found two more defects while it was written, both fixed: New chat during a first send dropped the created
+    chat, and a draft discarded mid-send let its late result attach to the next draft (the generation now also moves
+    on a new or discarded draft). The guard "no New chat while a first send runs" is now a second layer: removing it
+    no longer shows in the property, because the late result is dropped as stale.
+  - Rule flows: a new chat opens in the folder just chosen while another chat is open (#389); nothing can be sent
+    before the chat's stream attaches (`a9de6e9`). Each red on a seeded regression. #375 is the existing first-send flow.
+  - Not in this slice: `selectedWorkspaceId` still lives in the hook and the folder auto-select/alignment effects
+    (old TSX 458, 465) and the composer reset (342) remain; they belong to the composer and panels slices.
 - **Phase L (reminder, owner's decision 2026-11-26), done on this branch:** `scripts/gates/architecture-rules.mjs`
   (called from `check-rules.mjs`, reasons in `gates/rules.mjs`) holds the four rules: `fold-boundary` (moved here),
   `web-fold-imports`, `browser-owns-no-reducer` and `wire-fold-api-current`. `docs/contracts/wire-fold.api.txt` is
@@ -118,8 +143,53 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   `architecture-change` label on a changed or removed report line, a deleted or emptied `wire.mjs`, `shell.mjs` or
   browser flow, or any change to the rules module; each case was exercised against a local base. `check-rules.mjs`
   now takes about six seconds (it builds a TypeScript program for the report).
-- **Next:** phase 3 (shell state machine), and phase L once the owner has made its two settings and the spike runs
-  on a throwaway pull request. CI has not yet run any of this branch: the `web-browser` job's time budget is
+- **Phase 3, slice 2 (composer), done on `claude/optimistic-brown-2d0lrp`:** the machine now also holds the message
+  box (`input`, attachments, armed skill, history position, palette), its notices (resend, config, attachment), the
+  message on its way, the transcript pin, the user's chosen folder, the delayed post-tool status and the
+  background-notice drain. Gone: the composer reset effect (old TSX 342), the folder auto-select and alignment
+  effects (458, 465; the folder in use is derived: an open chat's own folder, else the chosen one, else the first
+  saved), the pin reset, the status-delay timer effect and the hook's drain effect (hook 563, now `BOUNDARY` fed
+  from the shell). `selectedWorkspaceId` left the hook. A send is fixed when Send is pressed (`SEND_REQUESTED`):
+  staged picks apply first unless a turn is running, then one `submit`; its outcome comes back tagged.
+  - Hazards, reproduced first in `shell-hazards.flow.ts`:
+    1. **Reproduced:** an Edit whose send answered after switching to chat B put chat A's text into B's message box
+       with "the chat was rewound, but the message wasn't sent", although the server had accepted it for A. Fixed
+       by the tag rule; the flow was red before the change.
+    2. **Reproduced:** a rewind that restores its prompt, answering after Back to chat B, put A's prompt into B's
+       message box. Fixed the same way.
+  - `shell.machine-rules` gained: a chat change empties the composer and notices and drops a send in flight, except
+    the handoff, which keeps the first message; staged picks apply before a message that starts a turn; one message
+    on its way at a time, each submitted once, only to the open chat; a refused Edit or Retry gets its text back in
+    its own chat; a stale image read or restored prompt changes nothing; a boundary is drained at most twice, the
+    second only after a busy answer; a deferred status shows only after its own timer. Eight seeded regressions,
+    each red (settling is weighted so the drain's retry chain is reached; a seed dropping only the `SUBMIT_SETTLED`
+    tag check stays green because a chat change already drops the send, so that check is a second layer).
+  - Flow: the post-tool status appears after its delay (#415), red with the timer command not run.
+  - Behaviour changes, each deliberate: clicking the chat already open no longer clears the message box; a new or
+    discarded draft also clears attachments and skill (before, only the text); signing in as another user also
+    discards the draft; leaving a chat opened by URL (not from the list) falls back to the chosen or first saved
+    folder rather than that chat's.
+  - Not covered by a flow: the drain end to end (no flow has a background task finishing while idle; the property
+    covers the rule and the command is the old request unchanged). The rewind dialog stays open across a Back to
+    another chat; that is the panels slice.
+- **Phase 3, slice 3 (panels), done on `claude/optimistic-brown-2d0lrp`:** the running tasks panel, sidebar, dialog
+  and skills picker are machine state. Only `TASKS_PANEL_TOGGLED`/`TASKS_PANEL_CLOSED` move the tasks panel and
+  only `SIDEBAR_SET` moves the sidebar; a change of chat or draft closes the rewind dialog and the skills picker.
+  The rewind dialog's `initialTurnId` was only ever null and is no longer passed.
+  - **Reproduced first:** after Back to chat B, chat A's rewind dialog stayed open over B (found while writing the
+    slice 2 rewind flow, which had to press Escape). Now closed by the chat change; the flow was red before.
+  - #394/#396 flow: a background subagent starting does not open the panel, the user opens it, the subagent
+    finishing leaves it open on "Nothing is running.", and the user closes it. It passed before the change (the
+    fixes already held); it is red with an auto-open effect seeded back in.
+  - `shell.machine-rules` gained: no action but the user's moves the tasks panel or the sidebar; a change of what
+    the page shows leaves no rewind dialog or skills picker open. Three seeded regressions, each red.
+- **Phase 3 done.** `Term2SessionShell.tsx` has 16 effects (20 at `6fcad34`) and `useTerm2Session.ts` 2 (3): every
+  effect that copied or reset state, or turned state into a command, is gone. Four new ones only report facts to
+  the machine (`URL_CHANGED`, `READY_TO_SEND`, `BOUNDARY`, `LIVE_STATUS`). The browser suite is 18 flows, about
+  45-55 s locally; the `web-browser` job's 120 s budget is still unproven on GitHub.
+- **Next:** the owner opens the PR(s): phases 0-2 and L on `claude/beautiful-planck-2aliiz`, phase 3 stacked on
+  `claude/optimistic-brown-2d0lrp`. Phase 3 is medium risk in the plan's table; no independent verifier ran on it.
+  CI has not yet run any of this branch: the `web-browser` job's time budget is
   unproven. The acceptance example's steer is not in the stream integration test (it needs real queue state); the
   browser steer flow covers it end to end. The second example (a background subagent) was added in `c7bf7333`.
   Phase 3 is independent of 1 and 2.

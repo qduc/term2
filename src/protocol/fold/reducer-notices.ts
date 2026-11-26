@@ -1,5 +1,5 @@
 /** Legacy's live notice lines for compaction and retries, folded into the snapshot. */
-import type { WireEvent, WireNotice, WireSnapshot } from './wire.js';
+import type { WireEvent, WireNotice, WireSnapshot } from './wire-types.js';
 
 export const COMPACTION_NOTICE = 'context_compaction';
 export const COMPACTING = 'Compacting context...';

@@ -11,6 +11,8 @@
 //   6. Fixed sleeps: integration, e2e and provider black-box tests wait for conditions; a sleep needs a
 //      `// sleep-ok: <observed>; <why long enough>` comment or a per-file ceiling in rule-baseline.json
 //      (shapes detected are listed in scripts/gates/fixed-sleeps.mjs).
+//   7. Fold boundary: nothing under src/protocol/fold/ imports from outside that folder, packages and inline
+//      `import('...')` types included.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +30,7 @@ const projection = add('one-projection');
 const jobNames = add('names-are-jobs');
 const unused = add('unused-exports');
 const fold = add('one-fold');
+const foldBoundary = add('fold-boundary');
 
 const walk = (dir) =>
   fs
@@ -47,13 +50,13 @@ const parse = (file) => ts.createSourceFile(file, texts.get(file), ts.ScriptTarg
 const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart()).line + 1;
 
 // 1. WireEvent construction.
-const eventsText = fs.readFileSync(path.join(src, 'protocol/wire-events.ts'), 'utf8');
+const eventsText = fs.readFileSync(path.join(src, 'protocol/fold/wire-events.ts'), 'utf8');
 const payloads = eventsText.slice(
   eventsText.indexOf('export type WireEventPayloads'),
   eventsText.indexOf('export type WireEventType'),
 );
 const wireTypes = new Set([...payloads.matchAll(/^ {2}([a-z_]+):/gm)].map((match) => match[1]));
-if (wireTypes.size < 20) projection('rule-check: could not read WireEventPayloads from protocol/wire-events.ts');
+if (wireTypes.size < 20) projection('rule-check: could not read WireEventPayloads from protocol/fold/wire-events.ts');
 const wireAllowed = exceptionKeys(
   baseline.wireEventOutsideProtocol.map((entry) => ({ key: `${entry.file} ${entry.type}`, reason: entry.reason })),
   'key',
@@ -264,6 +267,38 @@ for (const [file, ceiling] of sleepCeilings) {
     sleeps(
       `rule-baseline.json fixedSleeps ${file}: ${now} unjustified sleeps now, ${ceiling} recorded; lower the count`,
     );
+}
+
+// 7. Fold boundary: every module specifier under protocol/fold/ resolves inside protocol/fold/.
+const foldDir = path.join(src, 'protocol', 'fold');
+for (const file of files.filter((file) => file.startsWith(foldDir + path.sep))) {
+  const sf = parse(file);
+  const check = (node, specifier) => {
+    const inside =
+      specifier.startsWith('./') && path.resolve(path.dirname(file), specifier).startsWith(foldDir + path.sep);
+    if (!inside) foldBoundary(`${rel(file)}:${lineOf(sf, node)}: imports '${specifier}' from outside protocol/fold/`);
+  };
+  const visit = (node) => {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    )
+      check(node, node.moduleSpecifier.text);
+    if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal))
+      check(node, node.argument.literal.text);
+    if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+    ) {
+      const [first] = node.arguments;
+      check(node, first && ts.isStringLiteralLike(first) ? first.text : '<computed>');
+    }
+    if (ts.isModuleDeclaration(node) && ts.isStringLiteral(node.name)) check(node, node.name.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
 }
 
 reportAndExit(

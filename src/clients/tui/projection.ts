@@ -7,7 +7,7 @@ import type {
   WireTool,
   WireUsage,
 } from '../../protocol/wire.js';
-import { historyReplacedMessage } from '../../protocol/reducer-nested.js';
+import { historyReplacedMessage } from '../../protocol/fold/reducer-nested.js';
 import { formatReferenceCost, formatSessionCost, summarizeCost } from '../../shared/cost/model-cost.js';
 import { subscriptionReferenceCost } from '../../protocol/costs.js';
 import { type InteractionView, type Message, type TaskView, type ToolView, type TuiState } from './state.js';

@@ -10,5 +10,7 @@
   "src/session/import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
   "src/session/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
   "src/shared/utils/worker-cwd-preload.cts": "Loaded by path, not imported: shared/utils/worker-bootstrap.ts passes it to workers with --require.",
-  "src/tools/shell/sandbox/ssh-proxy-command.ts": "OpenSSH starts the emitted file in a separate sandboxed Node process through ProxyCommand. The runner resolves its path by URL to isolate the TCP stream and proxy credentials from the main CLI. Remove this entry when the upstream macOS SSH transport supports authenticated proxying."
+  "src/tools/shell/sandbox/ssh-proxy-command.ts": "OpenSSH starts the emitted file in a separate sandboxed Node process through ProxyCommand. The runner resolves its path by URL to isolate the TCP stream and proxy credentials from the main CLI. Remove this entry when the upstream macOS SSH transport supports authenticated proxying.",
+  "src/protocol/fold-browser.ts": "Entry of the web client's fold bundle: scripts/build-web-fold.mjs bundles it into web-client/lib/term2/generated/wire-fold.js. The CLI folds through protocol/reducer.ts instead.",
+  "src/protocol/fold/index.ts": "Public surface of the shared fold, read by the browser bundle (via protocol/fold-browser.ts) and by the type declarations scripts/build-web-fold.mjs emits; graduates as the package entry. term2's own code imports the fold's files through protocol/wire.ts and protocol/reducer.ts."
 }

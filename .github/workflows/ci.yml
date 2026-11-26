@@ -207,7 +207,9 @@ jobs:
       # lane only compiles it as a side effect of packing. This lane already installs its workspace.
       - name: Typecheck web client
         if: matrix.shard == 1
-        run: pnpm --dir web-client exec tsc --noEmit
+        run: |
+          node scripts/build-web-fold.mjs
+          pnpm --dir web-client exec tsc --noEmit
       - name: Run integration shard ${{ matrix.shard }}/2
         # This job installs bubblewrap and socat, so the ACP shell cases must run their command in the
         # sandbox instead of accepting a sandbox refusal (see tests/clients/acp/v1.integration.test.ts).

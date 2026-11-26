@@ -46,6 +46,10 @@ seed "new unused export" src/app/settings.ts $'\nexport function seededUnusedExp
 seed "leaf reducer imported outside foldFact" src/app/settings.ts $'\nimport { reduceDirectQueue } from "../session/queue-state.js";\nexport const seededFold = reduceDirectQueue;\n' '\[one-fold\]' node scripts/check-rules.mjs
 seed "leaf-reducer module namespace-imported outside foldFact" src/app/settings.ts $'\nimport * as q from "../session/queue-state.js";\nexport const seededFold = q;\n' '\[one-fold\]' node scripts/check-rules.mjs
 seed "leaf-reducer module dynamically imported outside foldFact" src/app/settings.ts $'\nexport const seededFold = import("../session/queue-state.js");\n' '\[one-fold\]' node scripts/check-rules.mjs
+seed "fold imports session code" src/protocol/fold/wire-fold.ts $'\nimport "../../session/state.js";\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold names an outside type inline" src/protocol/fold/wire-types.ts $'\nexport type SeededOutside = import("../../model/index.js").CodexWeeklyQuota;\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold imports a package" src/protocol/fold/reducer-notices.ts $'\nimport "node:fs";\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold imports dynamically" src/protocol/fold/review.ts $'\nexport const seededLoad = () => import("../json.js");\n' '\[fold-boundary\]' node scripts/check-rules.mjs
 seed "app/ reads a session log" src/app/settings.ts $'\nexport const seededReader = readFactLines;\n' '\[log-readers\]' node scripts/check-layers.mjs
 seed "engine imports app (layer direction)" src/engine/turn.ts $'\nimport "../app/settings.js";\n' '\[layer-direction\]' node scripts/check-layers.mjs
 seed "duplicate basename" src/app/turn.ts $'export const seededTurn = 1;\n' '\[duplicate-basenames\]' node scripts/check-rules.mjs

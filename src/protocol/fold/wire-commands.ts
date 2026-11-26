@@ -14,7 +14,7 @@ import type {
   WireNotice,
   WireOrigin,
   WireRewindTarget,
-} from './wire.js';
+} from './wire-types.js';
 
 /** Selectable reasoning values for the configure command, including provider default. */
 export const WIRE_REASONING_SELECTIONS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;

@@ -37,7 +37,7 @@ import type {
   WireTurnResult,
   WireUsage,
   WireVerification,
-} from './wire.js';
+} from './wire-types.js';
 
 /** seq is a durable cursor, never the Session's private publication position.
  * null means no durable cursor is available (for example a transient-only state).
@@ -60,7 +60,7 @@ export type WireSnapshot = {
   readonly unmatchedToolResults?: readonly WireToolResult[];
   readonly pendingInteractions: readonly WireInteraction[];
   /** Live only: approvals under review, not yet open; absent means none. */
-  readonly reviewingApprovals?: readonly import('./wire.js').WireReviewingApproval[];
+  readonly reviewingApprovals?: readonly import('./wire-types.js').WireReviewingApproval[];
   readonly pendingBudgets?: readonly WireBudgetRequest[];
   readonly turnResults?: readonly WireTurnResult[];
   readonly requestCosts?: readonly WireRequestCost[];
@@ -72,8 +72,8 @@ export type WireSnapshot = {
   readonly usage: WireUsage;
   readonly lastUsage?: WireUsage;
   readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
-  readonly codexQuota?: import('../model/index.js').CodexWeeklyQuota;
-  readonly codexFiveHourQuota?: import('../model/index.js').CodexWeeklyQuota;
+  readonly codexQuota?: import('./wire-types.js').WireCodexQuota;
+  readonly codexFiveHourQuota?: import('./wire-types.js').WireCodexQuota;
   /** Live backoff before a retry the user is told about; cleared by the next output or terminal. */
   readonly retry?: {
     readonly id: number;
@@ -162,8 +162,8 @@ export type WireEventPayloads = {
   reasoning_started: Record<string, never>;
   reasoning_delta: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null };
   codex_quota: {
-    readonly quota: import('../model/index.js').CodexWeeklyQuota | null;
-    readonly fiveHourQuota?: import('../model/index.js').CodexWeeklyQuota | null;
+    readonly quota: import('./wire-types.js').WireCodexQuota | null;
+    readonly fiveHourQuota?: import('./wire-types.js').WireCodexQuota | null;
   };
   message: { readonly message: WireMessage; readonly replacesDraftId?: string };
   /** Live-only source-measured cumulative count; no execution or persisted tool item. */
@@ -183,7 +183,7 @@ export type WireEventPayloads = {
   /** Live only: the session started or settled reviewing an approval before anyone is asked. */
   approval_review: {
     readonly phase: 'started' | 'settled';
-    readonly approval: import('./wire.js').WireReviewingApproval;
+    readonly approval: import('./wire-types.js').WireReviewingApproval;
   };
   interaction_resolved: {
     readonly taskId?: string;
@@ -263,7 +263,7 @@ export type WireEventPayloads = {
     readonly kind: 'text' | 'tool_progress' | 'activity';
     readonly chunk: string;
     readonly executionId?: string;
-    readonly observation?: import('./wire.js').WireTaskObservation;
+    readonly observation?: import('./wire-types.js').WireTaskObservation;
   };
   subagent: {
     readonly agentId: string;

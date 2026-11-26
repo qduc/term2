@@ -1,16 +1,11 @@
 /** Accepted turn answers survive queue settlement and reconnect after their message frame. */
 import type { DirectSessionState } from '../session/facade-types.js';
 import { contentText, publicContent, publicTerminal } from './public.js';
-import type { WireMessage, WireTerminal, WireTurnResult } from './wire.js';
+import type { WireMessage, WireTurnResult } from './wire.js';
+import { completedFinalText } from './fold/final-text.js';
 
-/** Neither a streamed draft nor a withdrawn attempt is an accepted completed assistant answer. */
-export function completedFinalText(outcome: WireTerminal['outcome'], messages: readonly WireMessage[]): string | null {
-  return outcome === 'completed'
-    ? messages
-        .filter((message) => message.role === 'assistant' && !message.draft && message.presentation?.withdrawn !== true)
-        .at(-1)?.text ?? null
-    : null;
-}
+export { completedFinalText };
+
 /** Use the native historical result window, not the current turn or queue disappearance. */
 export function publicTurnResults(state: DirectSessionState, known: readonly WireMessage[]): readonly WireTurnResult[] {
   const knownById = new Map<string, WireMessage>();

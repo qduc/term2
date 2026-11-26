@@ -363,9 +363,11 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: test-playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
-      # A restored browser skips the download; the system libraries still come from apt.
-      - name: Install Chromium and its system libraries
-        run: pnpm exec playwright install --with-deps chromium
+      # A restored browser skips the download. No --with-deps: the ubuntu-22.04 image ships Google Chrome and the
+      # libraries it needs, and the apt step that flag adds (mostly fonts) took 116 s on a 190 kB/s mirror in the
+      # lane's first run, more than the lane's whole budget.
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium
       - name: Run browser flows
         env:
           TERM2_WEB_FLOW_OUTPUT: ${{ runner.temp }}/term2-web-flows

@@ -193,3 +193,119 @@ test('a message cannot be sent before the chat is connected', async ({ page, lau
   await expect(turns(page).nth(1).getByRole('button', { name: 'Copy reply' })).toBeVisible();
   expect(app.model.turn(prompt)).toHaveLength(1);
 });
+
+/** Two finished chats, `chat a` then `chat b`, with chat A open again (so Back returns to B). Returns A's id. */
+async function twoChatsWithAOpen(page: Page, app: Parameters<typeof openDraftChat>[1]) {
+  await openDraftChat(page, app);
+  await send(page, 'chat a');
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  const chatA = new URL(page.url()).searchParams.get('agentSession')!;
+  await page
+    .getByRole('button', { name: `New chat in ${app.workspaceName}` })
+    .first()
+    .click();
+  await send(page, 'chat b');
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  await page
+    .getByRole('button', { name: /^chat a,/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'chat a' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  return chatA;
+}
+
+test('an edited message whose send resolves after switching chats does not land in the other chat', async ({
+  page,
+  launch,
+}) => {
+  const app = await launch({
+    scripts: {
+      'chat a': [{ text: 'reply a' }],
+      'chat b': [{ text: 'reply b' }],
+      'edited a': [{ text: 'reply edited' }],
+    },
+  });
+  const chatA = await twoChatsWithAOpen(page, app);
+  await turns(page).first().getByRole('button', { name: 'Edit message' }).click();
+  await page.getByRole('textbox', { name: 'Edit message' }).fill('edited a');
+  // Hold the resent message at the boundary; switch to chat B before it answers.
+  const held = await hold(
+    page,
+    (url, method) => method === 'POST' && url.pathname === `/api/agent/sessions/${chatA}/messages`,
+  );
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await held.arrived;
+  await page
+    .getByRole('button', { name: /^chat b,/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'chat b' })).toBeVisible();
+  held.release();
+  await page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/agent/sessions/${chatA}/messages`,
+  );
+  await expectNoRunningTurn(page);
+  // Chat B's message box is its own: A's text and A's notice stay out of it.
+  await expect(page.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+  await expect(page.getByText('The chat was rewound, but the message wasn’t sent.')).toHaveCount(0);
+});
+
+test('a rewind that restores its prompt after switching chats does not put it in the other chat', async ({
+  page,
+  launch,
+}) => {
+  const app = await launch({ scripts: { 'chat a': [{ text: 'reply a' }], 'chat b': [{ text: 'reply b' }] } });
+  const chatA = await twoChatsWithAOpen(page, app);
+  await page.getByRole('textbox', { name: 'Message' }).fill('/rewind');
+  await page
+    .getByRole('listbox', { name: 'Quick actions' })
+    .getByRole('option', { name: /Rewind conversation/ })
+    .click();
+  await page
+    .getByRole('radio', { name: /chat a/ })
+    .first()
+    .click();
+  const held = await hold(
+    page,
+    (url, method) => method === 'POST' && url.pathname === `/api/agent/sessions/${chatA}/rewind`,
+  );
+  await page.getByRole('button', { name: 'Rewind & edit prompt' }).click();
+  await held.arrived;
+  // The dialog covers the page; the browser's Back button still switches chats.
+  await page.goBack();
+  await expect.poll(() => new URL(page.url()).searchParams.get('agentSession')).not.toBe(chatA);
+  held.release();
+  await page.waitForResponse((response) => new URL(response.url()).pathname === `/api/agent/sessions/${chatA}/rewind`);
+  // The dialog hides the rest of the page from assistive technology until it closes.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1, name: 'chat b' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  await expect(page.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+});
+
+test('after a tool row finishes, the status line appears once the short delay has passed (#415)', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'read then think';
+  const app = await launch({
+    files: { 'notes.txt': 'the quick brown fox\n' },
+    scripts: {
+      // The step after the tool holds before any text, so the turn waits with a finished tool row.
+      [prompt]: [{ call: { tool: 'read_file', args: { path: 'notes.txt' } } }, { text: '', hold: 'after-tool' }],
+    },
+  });
+  await openDraftChat(page, app);
+  await send(page, prompt);
+  await app.model.held('after-tool');
+  await expect(turns(page).first().getByRole('button', { name: 'Read 1 file' })).toBeVisible();
+  // The status that follows a tool row is held back briefly (the machine's timer), then shown.
+  await expect(page.getByRole('status').filter({ hasText: 'Working…' })).toBeVisible();
+  app.model.release('after-tool');
+  await expectNoRunningTurn(page);
+  await expect(page.getByRole('status').filter({ hasText: 'Working…' })).toHaveCount(0);
+});

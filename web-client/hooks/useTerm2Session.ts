@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { term2Client, Term2ApiError } from '../lib/api/term2';
-import { readyForBackgroundDrain, undeliveredBackgroundNoticeIds } from '../lib/term2/queue';
 import { Term2SessionStore } from '../lib/term2/session-store';
 import type {
   InteractionResolveRequest,
@@ -18,7 +17,6 @@ import type {
   WorkspacePage,
 } from '../lib/term2/types';
 
-const BACKGROUND_DRAIN_RETRY_MS = 2_000;
 const DIAGNOSTICS_KEY = 'term2.web.diagnostics';
 
 /** The view of no session at all. */
@@ -106,8 +104,6 @@ export interface UseTerm2SessionResult {
   sessions: SessionPage['sessions'];
   workspaceCursor: string | null;
   sessionCursor: string | null;
-  selectedWorkspaceId: string | null;
-  setSelectedWorkspaceId: (id: string | null) => void;
   refreshWorkspaces: () => Promise<void>;
   refreshSessions: () => Promise<void>;
   loadNextSessions: () => Promise<void>;
@@ -149,7 +145,6 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   const [sessions, setSessions] = useState<SessionPage['sessions']>([]);
   const [workspaceCursor, setWorkspaceCursor] = useState<string | null>(null);
   const [sessionCursor, setSessionCursor] = useState<string | null>(null);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [submitErrorState, setSubmitErrorState] = useState<{ sessionId: string; message: string } | null>(null);
   const [commandState, setCommandState] = useState<{
     sessionId: string;
@@ -192,7 +187,6 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
 
   const createSession = useCallback(async (workspaceId: string) => {
     const projection = await term2Client.createSession(workspaceId);
-    setSelectedWorkspaceId(workspaceId);
     setSessions((current) => [
       {
         id: projection.id,
@@ -316,41 +310,6 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     }
   }, []);
 
-  // A background task that finishes while the chat is idle only records a notice; the Session
-  // admits the silent turn that tells the agent once an attached client asks it to drain (the TUI
-  // does the same). Ask once per accepted boundary; the Session dedupes concurrent asks from other
-  // tabs. A busy answer is normally reconsidered at the next boundary, but the Session can also be
-  // busy while a finished turn's completion is held, which ends without a new event, so a busy or
-  // failed ask gets exactly one delayed re-ask for the same boundary.
-  const drainAttemptRef = useRef<string | null>(null);
-  const drainRetriedRef = useRef<string | null>(null);
-  const [drainRetry, setDrainRetry] = useState<string | null>(null);
-  useEffect(() => {
-    const id = sessionIdRef.current;
-    if (!id || view.sessionId !== id || !readyForBackgroundDrain(view)) return;
-    const pending = undeliveredBackgroundNoticeIds(view);
-    if (!pending.length) return;
-    const boundary = `${id}:${view.lastAppliedSequence}:${pending.join(',')}`;
-    const attempt = drainRetry === boundary ? `${boundary}:retry` : boundary;
-    if (drainAttemptRef.current === attempt || (attempt === boundary && drainAttemptRef.current === `${boundary}:retry`))
-      return;
-    drainAttemptRef.current = attempt;
-    const retry = () => {
-      if (drainRetriedRef.current === boundary) return;
-      drainRetriedRef.current = boundary;
-      setTimeout(() => setDrainRetry(boundary), BACKGROUND_DRAIN_RETRY_MS);
-    };
-    term2Client
-      .controlTask(id, { action: 'drain_notifications', clientRequestId: `drain_${crypto.randomUUID()}` })
-      .then((result) => {
-        if (result.drain === 'busy') retry();
-      })
-      .catch((error: unknown) => {
-        console.warn('Background notice drain failed', error);
-        retry();
-      });
-  }, [view, drainRetry]);
-
   const controlTask = useCallback(async (action: TaskControlAction) => {
     const id = sessionIdRef.current;
     if (!id) return false;
@@ -469,8 +428,6 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     sessions,
     workspaceCursor,
     sessionCursor,
-    selectedWorkspaceId,
-    setSelectedWorkspaceId,
     refreshWorkspaces,
     refreshSessions,
     loadNextSessions,

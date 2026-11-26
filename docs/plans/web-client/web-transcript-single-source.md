@@ -143,7 +143,36 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   `architecture-change` label on a changed or removed report line, a deleted or emptied `wire.mjs`, `shell.mjs` or
   browser flow, or any change to the rules module; each case was exercised against a local base. `check-rules.mjs`
   now takes about six seconds (it builds a TypeScript program for the report).
-- **Next:** phase 3 slices 2 (composer) and 3 (panels).
+- **Phase 3, slice 2 (composer), done on `claude/optimistic-brown-2d0lrp`:** the machine now also holds the message
+  box (`input`, attachments, armed skill, history position, palette), its notices (resend, config, attachment), the
+  message on its way, the transcript pin, the user's chosen folder, the delayed post-tool status and the
+  background-notice drain. Gone: the composer reset effect (old TSX 342), the folder auto-select and alignment
+  effects (458, 465; the folder in use is derived: an open chat's own folder, else the chosen one, else the first
+  saved), the pin reset, the status-delay timer effect and the hook's drain effect (hook 563, now `BOUNDARY` fed
+  from the shell). `selectedWorkspaceId` left the hook. A send is fixed when Send is pressed (`SEND_REQUESTED`):
+  staged picks apply first unless a turn is running, then one `submit`; its outcome comes back tagged.
+  - Hazards, reproduced first in `shell-hazards.flow.ts`:
+    1. **Reproduced:** an Edit whose send answered after switching to chat B put chat A's text into B's message box
+       with "the chat was rewound, but the message wasn't sent", although the server had accepted it for A. Fixed
+       by the tag rule; the flow was red before the change.
+    2. **Reproduced:** a rewind that restores its prompt, answering after Back to chat B, put A's prompt into B's
+       message box. Fixed the same way.
+  - `shell.machine-rules` gained: a chat change empties the composer and notices and drops a send in flight, except
+    the handoff, which keeps the first message; staged picks apply before a message that starts a turn; one message
+    on its way at a time, each submitted once, only to the open chat; a refused Edit or Retry gets its text back in
+    its own chat; a stale image read or restored prompt changes nothing; a boundary is drained at most twice, the
+    second only after a busy answer; a deferred status shows only after its own timer. Eight seeded regressions,
+    each red (settling is weighted so the drain's retry chain is reached; a seed dropping only the `SUBMIT_SETTLED`
+    tag check stays green because a chat change already drops the send, so that check is a second layer).
+  - Flow: the post-tool status appears after its delay (#415), red with the timer command not run.
+  - Behaviour changes, each deliberate: clicking the chat already open no longer clears the message box; a new or
+    discarded draft also clears attachments and skill (before, only the text); signing in as another user also
+    discards the draft; leaving a chat opened by URL (not from the list) falls back to the chosen or first saved
+    folder rather than that chat's.
+  - Not covered by a flow: the drain end to end (no flow has a background task finishing while idle; the property
+    covers the rule and the command is the old request unchanged). The rewind dialog stays open across a Back to
+    another chat; that is the panels slice.
+- **Next:** phase 3 slice 3 (panels: `tasksPanelOpen`, `sidebarOpen`, `dialog`, `skillsOpen`).
   CI has not yet run any of this branch: the `web-browser` job's time budget is
   unproven. The acceptance example's steer is not in the stream integration test (it needs real queue state); the
   browser steer flow covers it end to end. The second example (a background subagent) was added in `c7bf7333`.

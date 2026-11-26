@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
-import { initialShellState, isCurrentTag, step } from '../../web-client/lib/term2/shell-machine.ts';
+import {
+  EMPTY_COMPOSER,
+  NO_NOTICES,
+  initialShellState,
+  isCurrentTag,
+  step,
+} from '../../web-client/lib/term2/shell-machine.ts';
 
 /*
- * shell.machine-rules: the chat shell's selection and draft policy (web-client/lib/term2/shell-machine.ts) under
- * random user actions and results that arrive late, out of order or not at all. A pending command is resolved,
- * failed or left hanging at random, so a result can name a chat the user has since left.
+ * shell.machine-rules: the chat shell's policy (web-client/lib/term2/shell-machine.ts) under random user actions
+ * and results that arrive late, out of order or not at all. A pending command or late result is resolved, failed
+ * or left hanging at random, so a result can name a chat the user has since left.
  *
  * Bounds: at most 30 steps per case; no React, network or browser.
  */
@@ -17,23 +23,50 @@ const user = fc.oneof(
   fc.record({ kind: fc.constant('url'), sessionId: fc.constantFrom(null, ...CHATS) }),
   fc.record({ kind: fc.constant('new_draft'), workspaceId: fc.constantFrom(...FOLDERS) }),
   fc.record({ kind: fc.constant('pick'), approvalMode: fc.constantFrom('ask', 'smart') }),
-  fc.record({ kind: fc.constant('send') }),
+  fc.record({ kind: fc.constant('type'), input: fc.constantFrom('', 'hello', 'more') }),
+  fc.record({ kind: fc.constant('stage'), model: fc.constantFrom(null, 'model-a') }),
+  fc.record({
+    kind: fc.constant('send'),
+    running: fc.boolean(),
+    delivery: fc.constantFrom(undefined, 'follow_up'),
+    edit: fc.boolean(),
+  }),
   fc.record({ kind: fc.constant('discard') }),
   fc.record({ kind: fc.constant('ready') }),
-  // Resolve or fail one of the pending commands, picked by index.
-  fc.record({ kind: fc.constant('settle'), index: fc.nat(5), ok: fc.boolean() }),
+  // A late result that started from what is shown now: an image read, a rewound prompt put back.
+  fc.record({ kind: fc.constant('attach') }),
+  fc.record({ kind: fc.constant('restore') }),
+  // The same accepted boundary reported again, or a later one (a boundary's sequence only grows).
+  fc.record({ kind: fc.constant('boundary'), next: fc.boolean() }),
+  fc.record({
+    kind: fc.constant('status'),
+    text: fc.constantFrom(null, 'Working…', 'Thinking…'),
+    defer: fc.boolean(),
+  }),
+  // Resolve or fail one of the pending commands, picked by index. Weighted so chains of results (a retry's timer,
+  // then its second answer) are reached.
+  { arbitrary: fc.record({ kind: fc.constant('settle'), index: fc.nat(7), ok: fc.boolean() }), weight: 6 },
 );
 const script = fc.array(user, { minLength: 1, maxLength: 30, size: 'max' });
 
 function run(actions) {
   let state = initialShellState(null);
-  const pending = []; // commands waiting for a result
+  const pending = []; // commands and late results waiting to resolve
   let created = 0;
+  let requests = 0;
   // A chat a draft's first send created and that has not been opened yet: { folder, sessionId }. Creating
   // another chat in that folder before it is opened (or the user discards the draft or changes folder) would
   // leave it behind.
   let unopened = null;
   let readyFor = null; // the chat READY_TO_SEND was last fed for
+  const runningAt = new Map(); // requestId → whether a turn was running when it was sent
+  const submitted = new Set(); // requestIds submitted
+  const firstSends = []; // chats a first message was submitted to
+  const drains = new Map(); // `${generation}|${boundary}` → asks
+  const retryAnswered = new Set(); // `${generation}|${boundary}` whose ask was answered busy
+  let firedTimer = null; // the last status timer that fired while current
+  let boundaries = 0;
+
   const dispatch = (action) => {
     const before = state;
     const { state: next, commands } = step(state, action);
@@ -43,6 +76,24 @@ function run(actions) {
     state = next;
     // The config shown is always the open chat's.
     if (state.config) assert.equal(state.config.sessionId, state.openChat, 'config of another chat is shown');
+    if (action.type === 'URL_CHANGED' && action.sessionId !== before.openChat) {
+      if (before.pendingFirstSend?.sessionId === action.sessionId)
+        // A draft handing off to the chat it created keeps what the user wrote for its first message.
+        assert.equal(state.composer, before.composer, 'the handoff lost the first message');
+      else {
+        // Any other change of chat empties the message box and its notices and drops a send in flight.
+        assert.deepEqual(state.composer, EMPTY_COMPOSER, 'the message box survived a chat change');
+        assert.deepEqual(state.notices, NO_NOTICES, 'a notice survived a chat change');
+        assert.equal(state.sending, null, 'a send survived a chat change');
+      }
+    }
+    if (action.type === 'STATUS_TIMER_FIRED' && action.timer === before.liveStatus.timer) firedTimer = action.timer;
+    // A deferred status shows only once its own timer fired; a shown status is always the current one.
+    if (state.liveStatus.shown !== null) {
+      assert.equal(state.liveStatus.shown, state.liveStatus.text, 'an old status is shown');
+      if (state.liveStatus.defer)
+        assert.equal(firedTimer, state.liveStatus.timer, 'a deferred status was shown before its delay');
+    }
     if (action.type === 'SESSION_CREATED' && state.draft?.createdSessionId === action.sessionId)
       unopened = { folder: state.draft.workspaceId, sessionId: action.sessionId };
     // Opening any chat ends it: opening the created chat is the handoff, and opening another one is the user
@@ -60,20 +111,42 @@ function run(actions) {
           'a second chat was created in a folder whose unopened chat was left behind',
         );
       }
-      if (command.type === 'submitFirst') {
-        assert.equal(action.type, 'READY_TO_SEND', 'a first message was sent before the chat was ready');
-        assert.equal(command.sessionId, state.openChat, 'a first message was sent to another chat');
-        assert.equal(readyFor, state.openChat);
+      if (command.type === 'applyStaged' || (command.type === 'submit' && action.type !== 'STAGED_APPLIED')) {
+        // One message at a time: nothing else was on its way.
+        assert.equal(before.sending, null, 'a second message started while one was on its way');
+      }
+      if (command.type === 'submit') {
+        const { requestId } = command.message;
+        assert.equal(command.tag.sessionId, state.openChat, 'a message was sent to a chat that is not open');
+        assert.ok(!submitted.has(requestId), 'a message was submitted twice');
+        submitted.add(requestId);
+        // Staged picks apply before a message that starts a turn; a steer or queued message leaves them staged.
+        if (!runningAt.get(requestId)) assert.equal(state.staged, null, 'a message was sent before its staged picks');
+        if (action.type === 'READY_TO_SEND') {
+          assert.equal(readyFor, state.openChat, 'a first message was sent before the chat was ready');
+          firstSends.push(state.openChat);
+        } else assert.ok(action.type === 'SEND_REQUESTED' || action.type === 'STAGED_APPLIED');
+      }
+      if (command.type === 'drainNotifications') {
+        assert.equal(command.tag.sessionId, state.openChat, 'a drain was asked for a chat that is not open');
+        const key = `${command.tag.generation}|${command.boundary}`;
+        const asks = (drains.get(key) ?? 0) + 1;
+        drains.set(key, asks);
+        // Once per boundary, and one re-ask only after a busy or failed answer.
+        assert.ok(asks <= 2, 'a boundary was drained more than twice');
+        if (asks === 2) assert.ok(retryAnswered.has(key), 'a boundary was re-asked without a busy answer');
       }
       if (command.type === 'navigate') {
         // The address bar changes; the page reports it back.
         dispatch({ type: 'URL_CHANGED', sessionId: command.sessionId });
         continue;
       }
-      if (command.type !== 'submitFirst') pending.push(command);
+      if (command.type === 'rememberPrompt') continue;
+      pending.push(command);
     }
   };
-  const submits = [];
+
+  const sendContext = (running) => ({ runningTurnId: running ? 'turn-running' : null });
   for (const action of actions) {
     switch (action.kind) {
       case 'url':
@@ -85,53 +158,130 @@ function run(actions) {
       case 'pick':
         dispatch({ type: 'DRAFT_CONFIG_PICKED', selection: { approvalMode: action.approvalMode } });
         break;
-      case 'send':
-        dispatch({ type: 'DRAFT_SEND_REQUESTED' });
+      case 'type':
+        dispatch({ type: 'COMPOSER_EDITED', patch: { input: action.input } });
         break;
+      case 'stage':
+        if (state.openChat)
+          dispatch({
+            type: 'STAGED_CHANGED',
+            staged: action.model ? { modelSelection: { provider: 'p', model: action.model } } : null,
+          });
+        break;
+      case 'send': {
+        const requestId = `request-${++requests}`;
+        runningAt.set(requestId, action.running);
+        dispatch({
+          type: 'SEND_REQUESTED',
+          requestId,
+          context: sendContext(action.running),
+          ...(action.delivery ? { delivery: action.delivery } : {}),
+          ...(action.edit ? { overrideText: 'edited', textOnly: true } : {}),
+        });
+        break;
+      }
       case 'discard':
         dispatch({ type: 'DRAFT_DISCARDED' });
         break;
-      case 'ready':
+      case 'ready': {
         if (!state.openChat) break;
         readyFor = state.openChat;
-        {
-          const { commands } = step(state, { type: 'READY_TO_SEND', sessionId: state.openChat });
-          submits.push(...commands.filter((command) => command.type === 'submitFirst'));
-        }
-        dispatch({ type: 'READY_TO_SEND', sessionId: state.openChat });
+        const requestId = `request-${++requests}`;
+        runningAt.set(requestId, false);
+        dispatch({ type: 'READY_TO_SEND', sessionId: state.openChat, requestId, context: sendContext(false) });
+        break;
+      }
+      case 'attach':
+        pending.push({ type: 'attachRead', tag: { sessionId: state.openChat, generation: state.generation } });
+        break;
+      case 'restore':
+        pending.push({ type: 'restore', tag: { sessionId: state.openChat, generation: state.generation } });
+        break;
+      case 'boundary':
+        if (!state.openChat) break;
+        if (action.next || boundaries === 0) boundaries += 1;
+        dispatch({ type: 'BOUNDARY', sessionId: state.openChat, boundary: `${state.openChat}:${boundaries}` });
+        break;
+      case 'status':
+        dispatch({ type: 'LIVE_STATUS', text: action.text, defer: action.defer });
         break;
       case 'settle': {
         if (pending.length === 0) break;
         const [command] = pending.splice(action.index % pending.length, 1);
-        if (command.type === 'createSession') {
-          const sessionId = `new-${++created}`;
-          dispatch(
-            action.ok
-              ? { type: 'SESSION_CREATED', tag: command.tag, sessionId }
-              : { type: 'DRAFT_START_FAILED', tag: command.tag, message: 'create failed' },
-          );
-          // A created chat is only ever taken by a draft for the folder it was created in.
-          if (state.draft?.createdSessionId === sessionId)
-            assert.equal(
-              state.draft.workspaceId,
-              command.workspaceId,
-              "a chat created in one folder became another folder's draft chat",
+        switch (command.type) {
+          case 'createSession': {
+            const sessionId = `new-${++created}`;
+            dispatch(
+              action.ok
+                ? { type: 'SESSION_CREATED', tag: command.tag, sessionId }
+                : { type: 'DRAFT_START_FAILED', tag: command.tag, message: 'create failed' },
             );
-        } else if (command.type === 'applyDraftConfig')
-          dispatch(
-            action.ok
-              ? { type: 'DRAFT_CONFIG_APPLIED', tag: command.tag, sessionId: command.sessionId }
-              : { type: 'DRAFT_START_FAILED', tag: command.tag, message: 'settings failed' },
-          );
-        else if (command.type === 'loadConfig' && command.tag.sessionId)
-          dispatch({ type: 'CONFIG_LOADED', tag: command.tag, config: { sessionId: command.tag.sessionId } });
+            // A created chat is only ever taken by a draft for the folder it was created in.
+            if (state.draft?.createdSessionId === sessionId)
+              assert.equal(
+                state.draft.workspaceId,
+                command.workspaceId,
+                "a chat created in one folder became another folder's draft chat",
+              );
+            break;
+          }
+          case 'applyDraftConfig':
+            dispatch(
+              action.ok
+                ? { type: 'DRAFT_CONFIG_APPLIED', tag: command.tag, sessionId: command.sessionId }
+                : { type: 'DRAFT_START_FAILED', tag: command.tag, message: 'settings failed' },
+            );
+            break;
+          case 'loadConfig':
+            if (command.tag.sessionId)
+              dispatch({ type: 'CONFIG_LOADED', tag: command.tag, config: { sessionId: command.tag.sessionId } });
+            break;
+          case 'applyStaged':
+            dispatch({ type: 'STAGED_APPLIED', tag: command.tag, requestId: command.requestId, ok: action.ok });
+            break;
+          case 'submit': {
+            const before = state;
+            dispatch({
+              type: 'SUBMIT_SETTLED',
+              tag: command.tag,
+              requestId: command.message.requestId,
+              accepted: action.ok,
+            });
+            // A refused Edit or Retry puts its text back, and only in the chat it was sent from.
+            if (!action.ok && command.message.restoreOnFailure && isCurrentTag(before, command.tag))
+              assert.equal(state.composer.input, command.message.text, 'a refused resend lost its text');
+            break;
+          }
+          case 'drainNotifications': {
+            const key = `${command.tag.generation}|${command.boundary}`;
+            if (!action.ok && isCurrentTag(state, command.tag) && state.drain?.boundary === command.boundary)
+              retryAnswered.add(key);
+            dispatch({ type: 'DRAIN_ANSWERED', tag: command.tag, boundary: command.boundary, retry: !action.ok });
+            break;
+          }
+          case 'later':
+            dispatch(command.action);
+            break;
+          case 'attachRead':
+            dispatch({
+              type: 'ATTACHMENTS_ADDED',
+              tag: command.tag,
+              images: [
+                { id: `image-${requests}`, name: 'i', previewUrl: '', type: 'image', mediaType: 'image/png', data: '' },
+              ],
+              error: null,
+            });
+            break;
+          case 'restore':
+            dispatch({ type: 'TEXT_RESTORED', tag: command.tag, text: 'restored' });
+            break;
+        }
         break;
       }
     }
   }
   // Each first message is sent once: no chat receives two.
-  const targets = submits.map((command) => command.sessionId);
-  assert.equal(new Set(targets).size, targets.length, 'a first message was sent twice');
+  assert.equal(new Set(firstSends).size, firstSends.length, 'a first message was sent twice');
 }
 
 export const shellProperties = [

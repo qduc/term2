@@ -5,7 +5,10 @@ import {
   initialShellState,
   isCurrentTag,
   step,
+  type Composer,
+  type ComposerImage,
   type DraftConfig,
+  type NoticeKey,
   type ShellAction,
   type ShellCommand,
   type ShellState,
@@ -37,6 +40,7 @@ import {
 } from 'lucide-react';
 import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Session';
 import { startAnimationHeartbeat } from '../../lib/term2/animationHeartbeat';
+import { readyForBackgroundDrain, undeliveredBackgroundNoticeIds } from '../../lib/term2/queue';
 import { shellSandboxMachineFact } from '../../lib/term2/shell-sandbox-notice';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
 import { Term2TurnTimeline, type Term2DisplayMode } from './Term2TurnTimeline';
@@ -88,19 +92,12 @@ const DIAGNOSTICS_KEY = 'term2.web.diagnostics';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 /** Wait briefly before re-showing "Working…" after a tool call finishes so rapid tool-to-tool transitions don't flash. */
-const POST_TOOL_STATUS_DELAY_MS = 400;
 
 const STARTER_PROMPTS = [
   'What files are in this folder?',
   'Summarize how this project is organized',
   'Find any TODOs or potential issues here',
 ];
-
-interface DraftImage extends ImageAttachmentPayload {
-  id: string;
-  name: string;
-  previewUrl: string;
-}
 
 function Wordmark() {
   return (
@@ -142,7 +139,7 @@ function readPromptHistory(): string[] {
   }
 }
 
-function fileToDraftImage(file: File): Promise<DraftImage> {
+function fileToDraftImage(file: File): Promise<ComposerImage> {
   return new Promise((resolve, reject) => {
     if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
       reject(new Error(`Unsupported image type (${file.type || 'unknown'}). Use PNG, JPEG, WebP, or GIF.`));
@@ -221,11 +218,32 @@ export function Term2SessionShell({
   }, [initialSessionId, dispatchShell]);
   const sessionId = shell.openChat;
 
-  const [input, setInput] = useState('');
-  const [attachments, setAttachments] = useState<DraftImage[]>([]);
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  // The message box and its notices live in the machine: a chat change resets them in one transition, and a late
+  // result (a send's outcome, a restored prompt, an image read) carries a tag and is dropped once stale.
+  const { input, attachments, armedSkill, historyIndex, paletteOpen } = shell.composer;
+  const editComposer = useCallback(
+    (patch: Partial<Composer>) => dispatchShell({ type: 'COMPOSER_EDITED', patch }),
+    [dispatchShell],
+  );
+  const setInput = useCallback(
+    (next: string | ((current: string) => string)) =>
+      editComposer({ input: typeof next === 'function' ? next(shellRef.current.composer.input) : next }),
+    [editComposer],
+  );
+  const setArmedSkill = (armed: string | null) => editComposer({ armedSkill: armed });
+  const setHistoryIndex = (index: number | null) => editComposer({ historyIndex: index });
+  const setPaletteOpen = useCallback(
+    (next: boolean | ((open: boolean) => boolean)) =>
+      editComposer({ paletteOpen: typeof next === 'function' ? next(shellRef.current.composer.paletteOpen) : next }),
+    [editComposer],
+  );
+  /** Sets a notice for what the page shows now; `tag` names an earlier screen for a result that arrives late. */
+  const setNotice = (key: NoticeKey, message: string | null, tag: Tag = currentTag(shellRef.current)) =>
+    dispatchShell({ type: 'NOTICE', tag, key, message });
+  const { attachment: attachmentError, config: configError, resend: resendNotice } = shell.notices;
+  const setAttachmentError = (message: string | null) => setNotice('attachment', message);
+  const setConfigError = (message: string | null) => setNotice('config', message);
   const [draggingFile, setDraggingFile] = useState(false);
-  const [armedSkill, setArmedSkill] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dialog, setDialog] = useState<'folder' | 'help' | 'rewind' | 'provider' | null>(null);
   const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
@@ -234,7 +252,6 @@ export function Term2SessionShell({
   // The running tasks panel: which chat it is open for, and chats where the user closed it.
   /** Only the user opens or closes the running tasks panel; nothing toggles it on its own. */
   const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
-  const [resendNotice, setResendNotice] = useState<string | null>(null);
   const startingChat = shell.starting;
   // "New chat" opens a draft: a folder and a composer, but no gateway session
   // until the first message is sent, so clicking around leaves no empty chats.
@@ -246,8 +263,6 @@ export function Term2SessionShell({
   // leaving the chat discards them, so browsing never changes a conversation's model.
   const stagedConfig = shell.staged && sessionId ? { sessionId, ...shell.staged } : null;
   const setStagedConfig = (staged: StagedConfig | null) => dispatchShell({ type: 'STAGED_CHANGED', staged });
-  const pendingFirstSendIdRef = useRef<string | null>(null);
-  pendingFirstSendIdRef.current = pendingFirstSend?.sessionId ?? null;
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -258,7 +273,6 @@ export function Term2SessionShell({
     [dispatchShell],
   );
   const [configBusy, setConfigBusy] = useState(false);
-  const [configError, setConfigError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsProjection | null>(null);
   const [models, setModels] = useState<ModelSummary[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -271,12 +285,10 @@ export function Term2SessionShell({
   const [filesLoadedFor, setFilesLoadedFor] = useState<string | null>(null);
   const [cursorPos, setCursorPos] = useState(0);
   const [popoverIndex, setPopoverIndex] = useState(0);
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<Term2DisplayMode>('concise');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const savedDraftRef = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const skillPickedRef = useRef(false);
@@ -309,17 +321,25 @@ export function Term2SessionShell({
     window.history.replaceState({}, '', settingsUrl(null));
   }, []);
   const session = useTerm2Session(sessionId);
-  const { refreshWorkspaces, refreshSessions, loadNextSessions, setSelectedWorkspaceId } = session;
+  const { refreshWorkspaces, refreshSessions, loadNextSessions } = session;
+  // The folder in use, derived: an open chat's own folder; otherwise the user's choice, else the first saved one.
+  const openChatFolder = sessionId ? session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? null : null;
+  const selectedWorkspaceId = sessionId
+    ? openChatFolder ?? shell.chosenFolder
+    : shell.chosenFolder ?? session.workspaces[0]?.workspaceId ?? null;
+  const setSelectedWorkspaceId = useCallback(
+    (workspaceId: string | null) => dispatchShell({ type: 'FOLDER_CHOSEN', workspaceId }),
+    [dispatchShell],
+  );
   const currentFileScope = sessionId
     ? `session:${sessionId}`
-    : session.selectedWorkspaceId
-    ? `workspace:${session.selectedWorkspaceId}`
+    : selectedWorkspaceId
+    ? `workspace:${selectedWorkspaceId}`
     : null;
   const fileScopeRef = useRef(currentFileScope);
   fileScopeRef.current = currentFileScope;
   const fileLoadRequestRef = useRef(0);
   const prevUserIdRef = useRef(authUserId ?? null);
-  const draftSessionIdRef = useRef(sessionId);
 
   // Open sidebar by default on desktop screens and load saved UI preferences.
   useEffect(() => {
@@ -360,20 +380,6 @@ export function Term2SessionShell({
     }
   };
 
-  useEffect(() => {
-    if (draftSessionIdRef.current === sessionId) return;
-    draftSessionIdRef.current = sessionId;
-    // A draft that just became this session keeps its composer text, images and skill for the first send.
-    if (sessionId && pendingFirstSendIdRef.current === sessionId) return;
-    setInput('');
-    setAttachments([]);
-    setAttachmentError(null);
-    setArmedSkill(null);
-    setConfigError(null);
-    setHistoryIndex(null);
-    setPaletteOpen(false);
-  }, [sessionId]);
-
   const getWorkspaceInfo = useCallback(
     (workspaceId: string | null) => {
       if (!workspaceId) return { displayName: '', fullPath: '', access: 'read' };
@@ -407,8 +413,8 @@ export function Term2SessionShell({
   );
 
   const selectedWorkspaceInfo = useMemo(
-    () => getWorkspaceInfo(session.selectedWorkspaceId),
-    [getWorkspaceInfo, session.selectedWorkspaceId],
+    () => getWorkspaceInfo(selectedWorkspaceId),
+    [getWorkspaceInfo, selectedWorkspaceId],
   );
 
   const firstMessages = useMemo(() => {
@@ -426,13 +432,14 @@ export function Term2SessionShell({
     const currentUserId = authUserId ?? null;
     if (prevUserIdRef.current !== currentUserId) {
       prevUserIdRef.current = currentUserId;
-      setInput('');
       const url = new URL(window.location.href);
       if (url.searchParams.has('agentSession')) {
         url.searchParams.delete('agentSession');
         window.history.replaceState(null, '', url.toString());
       }
       dispatchShell({ type: 'URL_CHANGED', sessionId: null });
+      // Another user: no draft and an empty message box either.
+      dispatchShell({ type: 'DRAFT_DISCARDED' });
     }
   }, [authUserId, dispatchShell]);
 
@@ -475,25 +482,6 @@ export function Term2SessionShell({
     void reloadControlPlane();
   }, [reloadControlPlane]);
 
-  // Auto-select the first saved workspace if none is selected yet (less friction for returning users).
-  useEffect(() => {
-    if (!session.selectedWorkspaceId && session.workspaces.length > 0 && !sessionId) {
-      setSelectedWorkspaceId(session.workspaces[0].workspaceId);
-    }
-  }, [session.selectedWorkspaceId, session.workspaces, sessionId, setSelectedWorkspaceId]);
-
-  const alignmentRef = useRef<{ sessionId: string | null; aligned: boolean }>({ sessionId: null, aligned: false });
-  useEffect(() => {
-    if (alignmentRef.current.sessionId !== sessionId) {
-      alignmentRef.current = { sessionId, aligned: false };
-    }
-    if (!sessionId || alignmentRef.current.aligned) return;
-    const selected = session.sessions.find((item) => item.id === sessionId);
-    if (!selected) return;
-    alignmentRef.current.aligned = true;
-    setSelectedWorkspaceId(selected.workspaceId);
-  }, [session.sessions, setSelectedWorkspaceId, sessionId]);
-
   const reloadSetupSettings = useCallback(async () => {
     try {
       const projection = await term2Client.readSettings();
@@ -512,7 +500,7 @@ export function Term2SessionShell({
 
 
   const ensureSessionFiles = useCallback(() => {
-    const workspaceId = session.selectedWorkspaceId;
+    const workspaceId = selectedWorkspaceId;
     const fileScope = currentFileScope;
     if (!fileScope || loadingFiles || filesLoadedFor === fileScope) return;
     const requestId = ++fileLoadRequestRef.current;
@@ -530,7 +518,7 @@ export function Term2SessionShell({
       .finally(() => {
         if (fileLoadRequestRef.current === requestId) setLoadingFiles(false);
       });
-  }, [currentFileScope, sessionId, session.selectedWorkspaceId, loadingFiles, filesLoadedFor]);
+  }, [currentFileScope, sessionId, selectedWorkspaceId, loadingFiles, filesLoadedFor]);
 
   const openSkillsMenu = () => {
     setSkillsOpen((open) => {
@@ -549,7 +537,7 @@ export function Term2SessionShell({
 
   const effectiveAllowWrite = allowWrite || settings?.settings.safety.workspaceAccess === 'read_write';
 
-  const chooseWorkspace = (workspaceId: string) => session.setSelectedWorkspaceId(workspaceId || null);
+  const chooseWorkspace = (workspaceId: string) => setSelectedWorkspaceId(workspaceId || null);
 
   const leaveSession = useCallback(() => {
     const url = new URL(window.location.href);
@@ -562,24 +550,15 @@ export function Term2SessionShell({
   /** Opens an empty draft chat in a folder; the gateway session is created on first send. */
   const createNewChat = useCallback(
     async (workspaceOverride?: string) => {
-      const targetWorkspace = workspaceOverride ?? session.selectedWorkspaceId;
+      const targetWorkspace = workspaceOverride ?? selectedWorkspaceId;
       if (!targetWorkspace || startingChat) return;
       setLoadError(null);
-      session.setSelectedWorkspaceId(targetWorkspace);
-      setInput('');
       dispatchShell({ type: 'NEW_DRAFT', workspaceId: targetWorkspace });
       if (window.innerWidth < 768) setSidebarOpen(false);
       window.setTimeout(() => composerRef.current?.focus(), 50);
     },
-    [dispatchShell, session, startingChat],
+    [dispatchShell, selectedWorkspaceId, startingChat],
   );
-
-  /** A draft's first send: the machine creates the chat, applies the draft's picks, then sends (runShellCommand). */
-  const startDraftChat = async (delivery?: 'auto' | 'steer' | 'follow_up', overrideText?: string) => {
-    if (!draftWorkspaceId || startingChat) return;
-    setLoadError(null);
-    dispatchShell({ type: 'DRAFT_SEND_REQUESTED', ...(delivery ? { delivery } : {}), ...(overrideText !== undefined ? { overrideText } : {}) });
-  };
 
   const onFolderSelected = (folder: SelectedTerm2Workspace) => {
     setWorkspaceMetadata((current) => ({
@@ -610,7 +589,7 @@ export function Term2SessionShell({
       );
     }
     const openChatWorkspace = sessionId
-      ? session.sessions.find((item) => item.id === sessionId)?.workspaceId ?? session.selectedWorkspaceId
+      ? openChatFolder ?? selectedWorkspaceId
       : null;
     if (change.kind === 'removed' && openChatWorkspace === workspaceId) {
       const params = new URLSearchParams(window.location.search);
@@ -625,13 +604,12 @@ export function Term2SessionShell({
       setLoadError('Could not refresh saved folders.');
     }
     // Clear only after the list no longer has the folder, or the auto-select would pick it again.
-    if (change.kind === 'removed' && session.selectedWorkspaceId === workspaceId) setSelectedWorkspaceId(null);
+    if (change.kind === 'removed' && shellRef.current.chosenFolder === workspaceId) setSelectedWorkspaceId(null);
   };
 
   const selectSession = (id: string) => {
     const selected = session.sessions.find((item) => item.id === id);
-    if (selected) session.setSelectedWorkspaceId(selected.workspaceId);
-    setInput('');
+    if (selected) setSelectedWorkspaceId(selected.workspaceId);
     session.selectSession(id);
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
@@ -639,13 +617,14 @@ export function Term2SessionShell({
   /** Applies a change to the open chat now. Returns whether it took effect. */
   const applySessionConfig = async (
     selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>,
+    tag: Tag = currentTag(shellRef.current),
   ): Promise<boolean> => {
     if (!sessionId || !discoveredConfig || configBusy) return false;
     // Results apply only while this chat is still open (the tag); a late answer for another chat is dropped.
-    const tag = currentTag(shellRef.current);
     const stillOpen = () => isCurrentTag(shellRef.current, tag);
+    const configNotice = (message: string | null) => setNotice('config', message, tag);
     setConfigBusy(true);
-    setConfigError(null);
+    configNotice(null);
     try {
       const latest = await term2Client.readSessionConfig(sessionId);
       configLoaded(tag, latest);
@@ -660,15 +639,14 @@ export function Term2SessionShell({
         configLoaded(tag, refreshed);
         return stillOpen();
       }
-      if (!stillOpen()) return false;
       if (!response.result.ok) {
-        setConfigError(response.result.message || 'Could not update session configuration.');
+        configNotice(response.result.message || 'Could not update session configuration.');
         return false;
       }
-      setConfigError('The chat settings have not taken effect yet. Try again.');
+      configNotice('The chat settings have not taken effect yet. Try again.');
       return false;
     } catch (reason) {
-      if (stillOpen()) setConfigError(reason instanceof Error ? reason.message : 'Could not update session configuration.');
+      configNotice(reason instanceof Error ? reason.message : 'Could not update session configuration.');
       return false;
     } finally {
       setConfigBusy(false);
@@ -739,23 +717,24 @@ export function Term2SessionShell({
   };
 
   const addImageFiles = async (files: FileList | File[]) => {
+    const tag = currentTag(shellRef.current);
     setAttachmentError(null);
     const list = Array.from(files);
     if (attachments.length + list.length > 4) {
       setAttachmentError('You can attach up to 4 images per message.');
       return;
     }
-    const added: DraftImage[] = [];
+    const added: ComposerImage[] = [];
+    let error: string | null = null;
     for (const file of list) {
       try {
         added.push(await fileToDraftImage(file));
       } catch (err) {
-        setAttachmentError(err instanceof Error ? err.message : 'Could not attach image.');
+        error = err instanceof Error ? err.message : 'Could not attach image.';
       }
     }
-    if (added.length > 0) {
-      setAttachments((current) => [...current, ...added].slice(0, 4));
-    }
+    // Images read for one chat never join another chat's message (the tag).
+    dispatchShell({ type: 'ATTACHMENTS_ADDED', tag, images: added, error });
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -804,60 +783,44 @@ export function Term2SessionShell({
   );
   const hasStreamingTurn = Boolean(activeStreamingTurn);
 
-  const submitMessage = async (
+  // A send's outcome for the caller that asked (an Edit keeps its box busy until then), by request id.
+  const sendWaitersRef = useRef(new Map<string, (accepted: boolean) => void>());
+  const sendSettled = (requestId: string, accepted: boolean) => {
+    const waiter = sendWaitersRef.current.get(requestId);
+    sendWaitersRef.current.delete(requestId);
+    waiter?.(accepted);
+  };
+  /**
+   * Sends the message box (or `overrideText`). The machine fixes the message now, applies staged picks first when
+   * no turn is running, and puts an Edit or Retry's text back if it is refused. In a draft it creates the chat.
+   */
+  const submitMessage = (
     delivery?: 'auto' | 'steer' | 'follow_up',
     overrideText?: string,
     // Edit and Retry resend one message's text without the composer's attachments or skill.
     options?: { textOnly?: boolean },
-  ) => {
-    const text = (overrideText ?? input).trim();
-    if (!text && attachments.length === 0) return;
-    if (sendBlocked) return;
+  ): Promise<boolean> => {
+    if (sendBlocked) return Promise.resolve(false);
+    const requestId = crypto.randomUUID();
+    const action: ShellAction = {
+      type: 'SEND_REQUESTED',
+      requestId,
+      context: { runningTurnId: activeStreamingTurn?.turnId ?? null },
+      ...(delivery ? { delivery } : {}),
+      ...(overrideText !== undefined ? { overrideText } : {}),
+      ...(options?.textOnly ? { textOnly: true } : {}),
+    };
     if (isDraft) {
-      await startDraftChat(delivery, overrideText);
-      return;
+      setLoadError(null);
+      dispatchShell(action);
+      return Promise.resolve(false);
     }
-    // A staged model or effort applies to the next turn this message starts; a steer or
-    // queued message during a running turn leaves it staged.
-    if (!hasStreamingTurn && stagedConfig && stagedConfig.sessionId === sessionId) {
-      const { sessionId: _staged, ...changes } = stagedConfig;
-      if (!(await applySessionConfig(changes))) return;
-      setStagedConfig(null);
-    }
-    const effectiveDelivery = delivery ?? (hasStreamingTurn ? 'steer' : 'auto');
-    const accepted = await session.submit(text, {
-      delivery: effectiveDelivery,
-      ...(effectiveDelivery === 'steer' && activeStreamingTurn
-        ? { expectedSteerTurnId: activeStreamingTurn.turnId }
-        : {}),
-      ...(armedSkill && !options?.textOnly ? { skill: armedSkill } : {}),
-      ...(attachments.length > 0 && !options?.textOnly
-        ? {
-            attachments: attachments.map(({ type, mediaType, data }) => ({ type, mediaType, data })),
-          }
-        : {}),
+    return new Promise((resolve) => {
+      sendWaitersRef.current.set(requestId, resolve);
+      dispatchShell(action);
+      // Nothing to send, or a message already on its way.
+      if (shellRef.current.sending?.requestId !== requestId) sendSettled(requestId, false);
     });
-    if (accepted) {
-      if (overrideText === undefined) {
-        setInput((current) => (current.trim() === text ? '' : current));
-        setAttachments([]);
-        setAttachmentError(null);
-        setArmedSkill(null);
-        setHistoryIndex(null);
-        if (text) {
-          setPromptHistory((prev) => {
-            const next = prev[prev.length - 1] === text ? prev : [...prev.slice(-49), text];
-            try {
-              window.localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(next));
-            } catch {
-              /* ignore */
-            }
-            return next;
-          });
-        }
-      }
-    }
-    return accepted;
   };
 
   /** A draft's first send failed; the machine keeps any chat it already created for the retry. */
@@ -910,8 +873,59 @@ export function Term2SessionShell({
         })().catch((error: unknown) => failDraftStart(tag, error));
         return;
       }
-      case 'submitFirst':
-        void submitMessage(command.delivery, command.overrideText);
+      case 'applyStaged': {
+        const { tag, requestId, changes } = command;
+        void applySessionConfig(changes, tag).then((ok) => {
+          dispatchShell({ type: 'STAGED_APPLIED', tag, requestId, ok });
+          if (shellRef.current.sending?.requestId !== requestId) sendSettled(requestId, false);
+        });
+        return;
+      }
+      case 'submit': {
+        const { tag, message } = command;
+        void session
+          .submit(message.text, {
+            delivery: message.delivery,
+            ...(message.expectedSteerTurnId ? { expectedSteerTurnId: message.expectedSteerTurnId } : {}),
+            ...(message.skill ? { skill: message.skill } : {}),
+            ...(message.attachments
+              ? { attachments: message.attachments.map(({ type, mediaType, data }) => ({ type, mediaType, data })) }
+              : {}),
+          })
+          .then((accepted) => {
+            dispatchShell({ type: 'SUBMIT_SETTLED', tag, requestId: message.requestId, accepted });
+            sendSettled(message.requestId, accepted);
+          });
+        return;
+      }
+      case 'rememberPrompt':
+        setPromptHistory((prev) => {
+          const next = prev[prev.length - 1] === command.text ? prev : [...prev.slice(-49), command.text];
+          try {
+            window.localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(next));
+          } catch {
+            /* ignore */
+          }
+          return next;
+        });
+        return;
+      case 'drainNotifications': {
+        const { tag, boundary } = command;
+        if (!tag.sessionId) return;
+        term2Client
+          .controlTask(tag.sessionId, {
+            action: 'drain_notifications',
+            clientRequestId: `drain_${crypto.randomUUID()}`,
+          })
+          .then((answer) => dispatchShell({ type: 'DRAIN_ANSWERED', tag, boundary, retry: answer.drain === 'busy' }))
+          .catch((error: unknown) => {
+            console.warn('Background notice drain failed', error);
+            dispatchShell({ type: 'DRAIN_ANSWERED', tag, boundary, retry: true });
+          });
+        return;
+      }
+      case 'later':
+        window.setTimeout(() => dispatchShell(command.action), command.ms);
         return;
     }
   };
@@ -1069,10 +1083,29 @@ export function Term2SessionShell({
       session.view.sessionId === sessionId &&
       canSubmitSessionMessage(session.view.status),
   );
+  const runningTurnId = activeStreamingTurn?.turnId ?? null;
   useEffect(() => {
     if (readyToSend && sessionId && pendingFirstSend?.sessionId === sessionId)
-      dispatchShell({ type: 'READY_TO_SEND', sessionId });
-  }, [readyToSend, sessionId, pendingFirstSend, dispatchShell]);
+      dispatchShell({
+        type: 'READY_TO_SEND',
+        sessionId,
+        requestId: crypto.randomUUID(),
+        context: { runningTurnId },
+      });
+  }, [readyToSend, sessionId, pendingFirstSend, runningTurnId, dispatchShell]);
+
+  // A background task that finishes while the chat is idle only records a notice; the Session admits the silent
+  // turn that tells the agent once an attached client asks it to drain (the TUI does the same). The machine asks
+  // once per accepted boundary, with one delayed re-ask after a busy or failed answer.
+  const drainBoundary = useMemo(() => {
+    const view = session.view;
+    if (!sessionId || view.sessionId !== sessionId || !readyForBackgroundDrain(view)) return null;
+    const pending = undeliveredBackgroundNoticeIds(view);
+    return pending.length ? `${sessionId}:${view.lastAppliedSequence}:${pending.join(',')}` : null;
+  }, [session.view, sessionId]);
+  useEffect(() => {
+    if (drainBoundary && sessionId) dispatchShell({ type: 'BOUNDARY', sessionId, boundary: drainBoundary });
+  }, [drainBoundary, sessionId, dispatchShell]);
 
   const liveStatus = interactionPending
     ? 'Waiting for your approval'
@@ -1095,16 +1128,16 @@ export function Term2SessionShell({
       !lastTurn?.transientStatus &&
       (lastTurn?.commands.length ?? 0) > 0,
   );
-  const [delayedLiveStatus, setDelayedLiveStatus] = useState<string | null>(null);
+  // A status that follows a tool row waits POST_TOOL_STATUS_DELAY_MS (the machine's timer) so a quick next step
+  // does not flash it. Until the machine has seen this status, a deferred one stays hidden.
   useEffect(() => {
-    if (!deferLiveStatus || !liveStatus) {
-      setDelayedLiveStatus(null);
-      return;
-    }
-    const timer = window.setTimeout(() => setDelayedLiveStatus(liveStatus), POST_TOOL_STATUS_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [deferLiveStatus, liveStatus]);
-  const visibleLiveStatus = deferLiveStatus ? delayedLiveStatus : liveStatus;
+    dispatchShell({ type: 'LIVE_STATUS', text: liveStatus, defer: deferLiveStatus });
+  }, [liveStatus, deferLiveStatus, dispatchShell]);
+  const visibleLiveStatus = !deferLiveStatus
+    ? liveStatus
+    : shell.liveStatus.text === liveStatus && shell.liveStatus.defer
+    ? shell.liveStatus.shown
+    : null;
 
   // Browser tab title badge & optional background notifications.
   const prevStatusRef = useRef(session.view.status);
@@ -1190,7 +1223,8 @@ export function Term2SessionShell({
 
   // Smart auto-scroll pinning.
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [pinned, setPinned] = useState(true);
+  const pinned = shell.pinned;
+  const setPinned = (next: boolean) => dispatchShell({ type: 'SCROLLED', pinned: next });
   const lastScrollTopRef = useRef(0);
   const onScroll = () => {
     const el = scrollRef.current;
@@ -1207,9 +1241,6 @@ export function Term2SessionShell({
     const el = scrollRef.current;
     if (pinned && el) el.scrollTop = el.scrollHeight;
   }, [session.view.turns, session.view.pendingInteraction, visibleLiveStatus, pinned]);
-  useEffect(() => {
-    setPinned(true);
-  }, [sessionId]);
   // The transcript was display:none while settings was open, which loses its scroll offset.
   useEffect(() => {
     if (settingsOpen) return;
@@ -1283,7 +1314,7 @@ export function Term2SessionShell({
         label: 'New chat',
         hint: 'Start a fresh conversation in the selected folder',
         icon: Plus,
-        disabled: !session.selectedWorkspaceId || startingChat,
+        disabled: !selectedWorkspaceId || startingChat,
         run: () => {
           clearPalette();
           void createNewChat();
@@ -1403,12 +1434,8 @@ export function Term2SessionShell({
     if (!target) return 'This message can no longer be edited or retried. It may have been compacted away.';
     if ((target.imageCount ?? 0) > 0) return 'Messages with images can’t be edited or retried yet.';
     if (!(await session.rewind(target.targetId, undefined, { forResend: true }))) return 'Could not rewind the chat.';
-    if (await submitMessage('auto', text, { textOnly: true })) return null;
-    // The chat is already rewound and this turn is gone, so say so at the message box,
-    // where the text is kept.
-    setInput(text);
-    if (!session.submitError)
-      setResendNotice('The chat was rewound, but the message wasn’t sent. Send it again from here.');
+    // If it is refused, the machine puts the text back in this chat's message box with the resend notice.
+    await submitMessage('auto', text, { textOnly: true });
     return null;
   };
 
@@ -1417,9 +1444,11 @@ export function Term2SessionShell({
   const closeTasksPanel = () => setTasksPanelOpen(false);
 
   const handleRewind = async (target: RewindTargetSummary, restoreText: boolean) => {
+    const tag = currentTag(shellRef.current);
     const ok = await session.rewind(target.targetId);
-    if (ok && restoreText && target.text) {
-      setInput(target.text);
+    // The prompt goes back into the message box of the chat that was rewound, if it is still the one shown.
+    if (ok && restoreText && target.text && isCurrentTag(shellRef.current, tag)) {
+      dispatchShell({ type: 'TEXT_RESTORED', tag, text: target.text });
       window.setTimeout(() => composerRef.current?.focus(), 50);
     }
   };
@@ -1448,7 +1477,7 @@ export function Term2SessionShell({
             <Wordmark />
           </button>
           <div className="flex items-center gap-0.5">
-            {session.selectedWorkspaceId && (
+            {selectedWorkspaceId && (
               <Button
                 type="button"
                 variant="ghost"
@@ -1481,15 +1510,12 @@ export function Term2SessionShell({
           <Term2SessionList
             sessions={session.sessions}
             selected={sessionId}
-            selectedWorkspaceId={session.selectedWorkspaceId}
+            selectedWorkspaceId={selectedWorkspaceId}
             workspaces={session.workspaces}
             workspaceMetadata={workspaceMetadata}
             firstMessages={firstMessages}
             onSelect={selectSession}
-            onCreate={(workspaceId) => {
-              session.setSelectedWorkspaceId(workspaceId);
-              void createNewChat(workspaceId);
-            }}
+            onCreate={(workspaceId) => void createNewChat(workspaceId)}
             onAddFolder={localControlEnabled ? () => setDialog('folder') : undefined}
             onSavedFolderChanged={localControlEnabled ? (change) => void onSavedFolderChanged(change) : undefined}
             allowWrite={effectiveAllowWrite}
@@ -1534,7 +1560,7 @@ export function Term2SessionShell({
             subtitle={selectedWorkspaceInfo.displayName || undefined}
             subtitleTooltip={selectedWorkspaceInfo.fullPath || undefined}
             onOpenFolder={localControlEnabled ? () => setDialog('folder') : undefined}
-            onNewChat={!sidebarOpen && session.selectedWorkspaceId ? () => void createNewChat() : undefined}
+            onNewChat={!sidebarOpen && selectedWorkspaceId ? () => void createNewChat() : undefined}
             newChatLabel="New chat"
             onOpenHelp={() => setDialog('help')}
             onOpenSettings={() => openSettings()}
@@ -1638,21 +1664,21 @@ export function Term2SessionShell({
                           <div className="flex items-start gap-3">
                             <span
                               className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                                session.selectedWorkspaceId
+                                selectedWorkspaceId
                                   ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                                   : 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
                               }`}
                             >
-                              {session.selectedWorkspaceId ? <CheckCircle2 className="h-4 w-4" /> : '2'}
+                              {selectedWorkspaceId ? <CheckCircle2 className="h-4 w-4" /> : '2'}
                             </span>
                             <div>
                               <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                {session.selectedWorkspaceId
+                                {selectedWorkspaceId
                                   ? `Folder ready: ${selectedWorkspaceInfo.displayName}`
                                   : 'Choose a folder to work in'}
                               </h3>
                               <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                {session.selectedWorkspaceId
+                                {selectedWorkspaceId
                                   ? `${
                                       selectedWorkspaceInfo.access === 'read_write'
                                         ? 'Read & write access'
@@ -1666,10 +1692,10 @@ export function Term2SessionShell({
                             <Button
                               type="button"
                               size="sm"
-                              variant={!session.selectedWorkspaceId && hasAnyConfiguredProvider ? 'default' : 'outline'}
+                              variant={!selectedWorkspaceId && hasAnyConfiguredProvider ? 'default' : 'outline'}
                               onClick={() => setDialog('folder')}
                             >
-                              {session.selectedWorkspaceId ? 'Change' : 'Browse'}
+                              {selectedWorkspaceId ? 'Change' : 'Browse'}
                             </Button>
                           )}
                         </div>
@@ -1680,7 +1706,7 @@ export function Term2SessionShell({
                               Saved folders
                             </label>
                             <Select
-                              value={session.selectedWorkspaceId ?? NO_WORKSPACE}
+                              value={selectedWorkspaceId ?? NO_WORKSPACE}
                               onValueChange={(value) => chooseWorkspace(value === NO_WORKSPACE ? '' : value)}
                             >
                               <SelectTrigger id="landing-workspace" size="sm" className="w-full">
@@ -1706,7 +1732,7 @@ export function Term2SessionShell({
                         Loading folders…
                       </p>
                     ) : (
-                      session.selectedWorkspaceId && (
+                      selectedWorkspaceId && (
                         <Button
                           type="button"
                           size="lg"
@@ -2158,7 +2184,9 @@ export function Term2SessionShell({
                           <button
                             type="button"
                             aria-label={`Remove ${img.name}`}
-                            onClick={() => setAttachments((cur) => cur.filter((a) => a.id !== img.id))}
+                            onClick={() =>
+                              editComposer({ attachments: attachments.filter((a) => a.id !== img.id) })
+                            }
                             className="rounded-full p-0.5 text-zinc-400 hover:bg-black/[0.06] hover:text-zinc-800 dark:hover:bg-white/10"
                           >
                             <X className="h-3 w-3" />
@@ -2180,7 +2208,7 @@ export function Term2SessionShell({
                       setPopoverIndex(0);
                       setHistoryIndex(null);
                       if (session.submitError) session.clearSubmitError();
-                      setResendNotice(null);
+                      if (resendNotice) setNotice('resend', null);
                     }}
                     onClick={(event) => setCursorPos(event.currentTarget.selectionStart ?? input.length)}
                     onKeyUp={(event) => setCursorPos(event.currentTarget.selectionStart ?? input.length)}
@@ -2490,7 +2518,7 @@ export function Term2SessionShell({
             homeFolder={homeFolder}
             allowWrite={effectiveAllowWrite}
             savedWorkspaces={session.workspaces}
-            selectedWorkspaceId={session.selectedWorkspaceId}
+            selectedWorkspaceId={selectedWorkspaceId}
             onSelectExisting={(workspaceId) => {
               setDialog(null);
               void createNewChat(workspaceId);

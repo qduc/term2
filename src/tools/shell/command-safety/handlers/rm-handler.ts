@@ -2,7 +2,7 @@ import path from 'node:path';
 import type { Command } from 'unbash';
 import { getActiveWorkspaceRoot } from '../../../workspace/active-workspace-root.js';
 import { SafetyStatus, SYSTEM_PATHS } from '../constants.js';
-import { SANDBOX_TEMP_DIR } from '../../../../shared/utils/shell/temp-dir.js';
+import { isConcreteScratchPath } from '../scratch-path.js';
 import type { CommandHandler, CommandHandlerHelpers, CommandHandlerResult } from './types.js';
 
 const SENSITIVE_SEGMENTS = new Set([
@@ -29,7 +29,7 @@ function isDangerousTarget(target: string): boolean {
 
 export const rmHandler: CommandHandler = {
   handle(node: Command, helpers: CommandHandlerHelpers): CommandHandlerResult {
-    const { extractWordText, isSessionCreatedFile } = helpers;
+    const { extractWordText, isSessionCreatedFile, resolvePathText } = helpers;
     const reasons: string[] = [];
     const suffix = node.suffix ?? [];
 
@@ -59,6 +59,7 @@ export const rmHandler: CommandHandler = {
 
     for (const target of pathArgs) {
       const trimmed = target.trim();
+      const resolvedText = resolvePathText(trimmed) ?? trimmed;
       if (!trimmed || isDangerousTarget(trimmed)) {
         return {
           status: SafetyStatus.RED,
@@ -66,7 +67,9 @@ export const rmHandler: CommandHandler = {
         };
       }
 
-      const resolvedTarget = path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(cwd, trimmed);
+      const resolvedTarget = path.isAbsolute(resolvedText)
+        ? path.normalize(resolvedText)
+        : path.resolve(cwd, resolvedText);
 
       // Block deletion of root or root-level system paths
       if (SYSTEM_PATHS.some((sys) => resolvedTarget === sys || resolvedTarget.startsWith(sys + path.sep))) {
@@ -85,9 +88,8 @@ export const rmHandler: CommandHandler = {
         };
       }
 
-      // Check if target is inside SANDBOX_TEMP_DIR
-      const isInsideSandboxTemp =
-        resolvedTarget === SANDBOX_TEMP_DIR || resolvedTarget.startsWith(SANDBOX_TEMP_DIR + path.sep);
+      // Inside SANDBOX_TEMP_DIR only as concrete text: expansions left in it can point anywhere.
+      const isInsideSandboxTemp = isConcreteScratchPath(resolvedText);
 
       // Check if target was created in this session
       const isCreatedInSession = isSessionCreatedFile?.(resolvedTarget) ?? false;

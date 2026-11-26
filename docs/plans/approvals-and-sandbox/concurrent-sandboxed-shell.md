@@ -155,9 +155,11 @@ the same network policy, running at the same time.
    (`getDefaultShellSandboxRunner`), so an instance flag set by one holder
    would let any other caller's `wrap()` skip the lock.
 3. **Per-command identity.** Give each wrap a fresh 128-bit `commandId`
-   (`WrapWithSandboxOptions`). It also fixes violation attribution, which today
-   keys on command text: `annotateStderrWithSandboxFailures` would then use the
-   id. Record "Allow once" grants with
+   (`WrapWithSandboxOptions`). Violation attribution today passes the command
+   text as `commandId` (the runtime keys on its first 100 characters, so the
+   `NO_PROXY` setup prefix had made every lookup miss) and clears the violation
+   store after each command; that is enough only while one command holds the
+   lease. With a fresh id the reports attribute correctly under a shared lease. Record "Allow once" grants with
    `registerCommandNetworkLists(commandId, …)` instead of the in-memory
    `allowed` set, and unregister them when the command exits.
 4. **Attributed asks.** Replace `activeCommand` and `activePauseController`

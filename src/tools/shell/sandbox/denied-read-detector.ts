@@ -175,17 +175,47 @@ function suggestStableParent(p: string): string {
  */
 const MACOS_READ_DENY_REGEXES: readonly RegExp[] = [/deny(?:\(\d+\))?\s+file-read\S*\s+(\/\S+)/];
 
-function extractMacosViolationPath(stderr: string): string | null {
+/**
+ * Whether a `<sandbox_violations>` block explains the failure: a network denial, or a denied path that the
+ * command or the tool's own error names. A failed run also reports incidental denials (a credential file a
+ * tool probes, a system service lookup); those alone do not mean the sandbox stopped the command.
+ */
+export function violationsExplainFailure(command: string, annotatedStderr: string): boolean {
+  const start = annotatedStderr.indexOf('<sandbox_violations>');
+  const end = annotatedStderr.indexOf('</sandbox_violations>');
+  if (start === -1 || end === -1) return false;
+  const named = `${command}\n${annotatedStderr.slice(0, start)}`;
+  return annotatedStderr
+    .slice(start, end)
+    .split('\n')
+    .some((line) => {
+      if (/\bnetwork/.test(line)) return true;
+      const deniedPath = /deny(?:\(\d+\))?\s+file-\S+\s+(\/\S+)/.exec(line)?.[1];
+      return deniedPath !== undefined && isNamedBy(named, deniedPath);
+    });
+}
+
+/** The kernel reports `/private/var/...` for a path the command may spell `/var/...`, and either may be a prefix. */
+function isNamedBy(text: string, deniedPath: string): boolean {
+  const spellings = [deniedPath, deniedPath.replace(/^\/private(?=\/(?:var|tmp|etc)(?:\/|$))/, '')];
+  return spellings.some((spelling) => spelling.length > 1 && text.includes(spelling));
+}
+
+function extractMacosViolationPath(command: string, stderr: string): string | null {
   const violationsStart = stderr.indexOf('<sandbox_violations>');
   const violationsEnd = stderr.indexOf('</sandbox_violations>');
   if (violationsStart === -1 || violationsEnd === -1) return null;
   const block = stderr.slice(violationsStart, violationsEnd);
+  // The monitor reports every read the run was refused, including incidental ones (python probing /etc,
+  // curl reading openssl.cnf) that did not cause the failure. Only a path the command or the tool's own
+  // error names explains it; otherwise the failure is reported as it is.
+  const named = `${command}\n${stderr.slice(0, violationsStart)}`;
   const lines = block.split('\n');
   for (const line of lines) {
     if (!line.includes('deny')) continue;
     for (const regex of MACOS_READ_DENY_REGEXES) {
       const match = regex.exec(line);
-      if (match?.[1]) {
+      if (match?.[1] && isNamedBy(named, match[1])) {
         return resolvePathSafely(match[1]);
       }
     }
@@ -269,9 +299,9 @@ function hasNetworkOnlyDenial(stderr: string): boolean {
  * Linux (bwrap): parses common tool error patterns (Permission denied / Operation not permitted),
  *   since bwrap does not emit structured annotation events.
  */
-export function detectDeniedRead(_command: string, stderr: string): DeniedReadInfo | null {
+export function detectDeniedRead(command: string, stderr: string): DeniedReadInfo | null {
   // macOS structured violations block takes precedence.
-  const macosPath = extractMacosViolationPath(stderr);
+  const macosPath = extractMacosViolationPath(command, stderr);
   const candidate = macosPath ?? extractLinuxPermissionPath(stderr) ?? extractLinuxHiddenExistingPath(stderr);
   if (!candidate) {
     // If the only denials are network, this is not a read denial.

@@ -56,6 +56,48 @@ export function sandboxFailure(availability?: Exclude<SandboxAvailability, { typ
   );
 }
 
+/** Denials every sandboxed shell produces that never explain a failure. */
+const BENIGN_VIOLATION = /\) deny\(\d+\) (?:sysctl-read|system-info) /;
+/** The kernel log reaches the monitor shortly after the command exits. */
+const VIOLATION_SETTLE_POLL_MS = 50;
+const VIOLATION_SETTLE_MAX_MS = 400;
+const MAX_REPORTED_VIOLATIONS = 12;
+
+async function annotateWithViolations(
+  manager: typeof RuntimeSandboxManager,
+  command: string,
+  stderr: string,
+): Promise<string> {
+  const store = manager.getSandboxViolationStore();
+  // Only macOS has the kernel log monitor, and its reports arrive after the command exits. Every sandboxed
+  // shell logs a few harmless denials first, so once any report for this command has arrived and the count
+  // holds for one poll, the rest are in; a command whose reports never arrive waits the cap.
+  if (process.platform === 'darwin') {
+    let seen = store.getViolationsForCommand(command).length;
+    for (let waited = 0; waited < VIOLATION_SETTLE_MAX_MS; waited += VIOLATION_SETTLE_POLL_MS) {
+      await new Promise((resolve) => setTimeout(resolve, VIOLATION_SETTLE_POLL_MS));
+      const now = store.getViolationsForCommand(command).length;
+      if (seen > 0 && now === seen) break;
+      seen = now;
+    }
+  }
+  const relevantLines = () => [
+    ...new Set(
+      store
+        .getViolationsForCommand(command)
+        .map((violation) => violation.line)
+        .filter((line) => !BENIGN_VIOLATION.test(line)),
+    ),
+  ];
+  const lines = relevantLines();
+  if (lines.length === 0) return stderr;
+  // The denial that ended the command is usually among the last; keep those.
+  const shown = lines.slice(-MAX_REPORTED_VIOLATIONS);
+  const omitted = lines.length - shown.length;
+  const body = [...(omitted > 0 ? [`(${omitted} earlier denials omitted)`] : []), ...shown].join('\n');
+  return `${stderr}\n<sandbox_violations>\n${body}\n</sandbox_violations>`;
+}
+
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   // The shell holds a lease through execution because SandboxManager owns a
   // process-wide policy and proxy. Wrapping-only callers take a short lock.
@@ -117,7 +159,11 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       await this.#initialize(options.cwd, config);
       const SandboxManager = await sandboxManager();
       const wrapped = await withRuntimeTempDir(() =>
-        SandboxManager.wrapWithSandbox(`${setup} ${command}`, undefined, undefined, options.signal),
+        // Violations are looked up by the command the caller annotates, not the executed
+        // string: with the setup prefix the runtime's 100-character key never matched it.
+        SandboxManager.wrapWithSandbox(`${setup} ${command}`, undefined, undefined, options.signal, {
+          commandId: command,
+        }),
       );
       const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
       return { command: wrapped, diagnostics };
@@ -164,6 +210,8 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   async cleanupAfterCommand(): Promise<void> {
     try {
       loadedManager?.cleanupAfterCommand();
+      // reset() keeps the store; a rerun of the same command must not inherit the last run's denials.
+      loadedManager?.getSandboxViolationStore().clear();
       // Revoke this command's proxy credential even if a descendant survived.
       if (AnthropicShellSandboxRunner.#initializedForKey) await loadedManager?.reset();
     } finally {
@@ -171,8 +219,11 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     }
   }
 
-  annotateFailure(command: string, stderr: string): string {
-    const annotated = loadedManager ? loadedManager.annotateStderrWithSandboxFailures(command, stderr) : stderr;
+  async annotateFailure(command: string, stderr: string, exitCode?: number | null): Promise<string> {
+    // Only a failed command is annotated: every sandboxed shell logs a few harmless denials, and an
+    // annotation makes the failure classifier report the command as blocked by the sandbox.
+    const annotated =
+      loadedManager && exitCode !== 0 ? await annotateWithViolations(loadedManager, command, stderr) : stderr;
     // A write to plain /tmp fails on the sandbox's read-only mount; say where scratch files go instead.
     const hint = /Read-only file system/.test(stderr) ? scratchDirectoryHint(`${command}\n${stderr}`) : undefined;
     return hint ? `${annotated}\n${hint}` : annotated;
@@ -195,7 +246,9 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       const sandboxAskCallback = async ({ host, port }: { host: string; port?: number }): Promise<boolean> => {
         return requestSandboxNetworkApproval({ host, port }, cwd);
       };
-      await SandboxManager.initialize(config, sandboxAskCallback);
+      // The log monitor reports each denied operation and path; without it a failed command shows
+      // only the tool's own error, which may not name the path (pnpm's lock error does not).
+      await SandboxManager.initialize(config, sandboxAskCallback, process.platform === 'darwin');
       AnthropicShellSandboxRunner.#initializedForKey = initializationKey;
       AnthropicShellSandboxRunner.#initializationFailure = undefined;
     } catch (error) {

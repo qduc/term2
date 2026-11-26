@@ -3,6 +3,7 @@ import path from 'path';
 import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
 import type { ILoggingService } from '../../../shared/service-interfaces.js';
 import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
+import { isConcreteScratchPath } from './scratch-path.js';
 import {
   SafetyStatus,
   SYSTEM_PATHS,
@@ -298,8 +299,10 @@ export function analyzePathRisk(
       normalizedCandidate.startsWith('/tmp' + path.sep) ||
       normalizedCandidate === '/private/tmp' ||
       normalizedCandidate.startsWith('/private/tmp' + path.sep);
+    // Term2's scratch area (the child's $TMPDIR) is inside the wall like the workspace.
+    const isScratchDir = isConcreteScratchPath(candidate);
 
-    if (!isWithinProject && !isTempDir) {
+    if (!isWithinProject && !isTempDir && !isScratchDir) {
       // Absolute paths outside project are suspicious -> audit
       logger.security('Path risk: absolute non-system path', { path: candidate });
       return SafetyStatus.YELLOW;

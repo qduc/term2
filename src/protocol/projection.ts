@@ -1,5 +1,5 @@
 import { approvalReviewEvent, reviewedInteraction } from './review-projection.js';
-import { rotationConfiguration, branchSnapshots, projectItem, projectTextDelta } from './projection-parts.js';
+import { rotationConfiguration, projectItem, projectTextDelta } from './projection-parts.js';
 /** One translation from accepted direct Session updates to wire events.
  * Session alone commits/answers; this class only maintains the public read model.
  */
@@ -31,6 +31,7 @@ import {
 } from './public.js';
 import { runtimeDirectError, snapshotDirectState } from './state.js';
 import { reduceWireEvent } from './reducer.js';
+import { withRootShares } from './fold/branch-fold.js';
 
 /** The published native update vocabulary, including original accepted timestamps. */
 export type DirectProtocolUpdate = DirectSessionUpdate;
@@ -39,21 +40,21 @@ export class DirectProjection {
   #state: WireSnapshot;
   #queue: DirectQueueState;
   #workspace: DirectSessionState['workspace'];
+  /** Translators only (branch facts to child events); the branch state clients read is the fold's. */
   #branches = new Map<
     string,
     {
       readonly projection: DirectProjection;
       readonly taskId: string;
       readonly turnId: string;
-      acceptedSeq: number;
-      hasAcceptedUsage: boolean;
       readonly parentTurnId?: string;
       readonly rootTurnId?: string;
       readonly role?: string;
     }
   >();
   constructor(state: DirectSessionState & { readonly queue?: DirectQueueState }, seq: number | null = null) {
-    this.#state = { ...snapshotDirectState(state), seq };
+    // Every published snapshot has carried `branches`, [] without subagents; the fold fills it from here.
+    this.#state = { ...snapshotDirectState(state), seq, branches: [] };
     this.#workspace = state.workspace;
     this.#queue = state.queue ?? createDirectQueueState();
   }
@@ -63,9 +64,9 @@ export class DirectProjection {
     projection.#state = { ...projection.#state, timeline: [] };
     return projection;
   }
-  /** One public root/branch cut; no log read or second clock is introduced. */
+  /** One public root/branch cut, exactly what the shared fold holds; no log read or second clock is introduced. */
   get snapshot(): WireSnapshot {
-    return { ...this.#state, branches: branchSnapshots(this.#branches, this.#state) };
+    return this.#state;
   }
 
   /** Updates arrive once in Session publication order; never called from a tool body. */
@@ -145,9 +146,10 @@ export class DirectProjection {
       ...(freshError && this.#state.activeTurnId
         ? [this.#event('turn_ended', { outcome: 'failed', error }, null, this.#state.activeTurnId)]
         : []),
+      // Branch state is not Session state: keep what the fold holds, with its shares of the new root re-selected.
       this.#event(
         'snapshot',
-        { snapshot: { ...snapshot, branches: branchSnapshots(this.#branches, snapshot) } },
+        { snapshot: withRootShares(this.#state, { ...snapshot, branches: this.#state.branches ?? [] }) },
         null,
         null,
       ),
@@ -311,8 +313,6 @@ export class DirectProjection {
           projection,
           taskId: fact.taskId,
           turnId: fact.turnId,
-          acceptedSeq: seq,
-          hasAcceptedUsage: false,
           ...(parentTurnId !== undefined ? { parentTurnId } : {}),
           ...(fact.rootTurnId !== undefined ? { rootTurnId: fact.rootTurnId } : {}),
           ...(task?.role ? { role: task.role } : {}),
@@ -479,8 +479,6 @@ export class DirectProjection {
     // The wrapper is the accepted outer boundary for a branch fact. Preserve its
     // real accepted timestamp; nested child frames keep the existing null root cursor.
     const events = branch.projection.update({ type: 'fact', position: 0, seq, at, fact });
-    branch.acceptedSeq = seq;
-    if (fact.type === 'usage') branch.hasAcceptedUsage = true;
     return events.map((event) => ({
       ...this.#event(
         'subagent',

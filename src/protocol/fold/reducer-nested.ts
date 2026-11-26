@@ -1,7 +1,6 @@
 /** Scoped subagent presentation and the id-keyed replace both use. */
-import { formatToolCommand } from './json.js';
 import { appendedNotice } from './reducer-notices.js';
-import type { WireEvent, WireSnapshot, WireTask } from './wire.js';
+import type { WireEvent, WireSnapshot, WireTask } from './wire-types.js';
 
 type Identified = { readonly id: string };
 export function replace<T extends Identified>(items: readonly T[], next: T): readonly T[] {
@@ -15,7 +14,11 @@ export function replace<T extends Identified>(items: readonly T[], next: T): rea
  * tool and turn markers) updates the agent's task, whose row and completion already
  * report progress, rather than adding one line per event to the conversation.
  */
-export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent, { type: 'subagent' }>): WireSnapshot {
+export function nestedPresentation(
+  state: WireSnapshot,
+  event: Extract<WireEvent, { type: 'subagent' }>,
+  formatToolLabel: (toolName: string, input: unknown) => string,
+): WireSnapshot {
   const { agentId, role, event: child } = event.payload;
   const previous = state.tasks.find((task) => task.id === agentId);
   let task: WireSnapshot['tasks'][number] = previous ?? { id: agentId, agentId, role, status: 'running' };
@@ -38,7 +41,7 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
       task = {
         ...task,
         lastToolName: toolName,
-        lastTool: { label: formatToolCommand(toolName, input), state: 'running' },
+        lastTool: { label: formatToolLabel(toolName, input), state: 'running' },
         toolCounts: known
           ? counts.map((entry) => (entry.toolName === toolName ? { ...entry, count: entry.count + 1 } : entry))
           : [...counts, { toolName, count: 1 }],

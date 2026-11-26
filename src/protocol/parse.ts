@@ -1,5 +1,5 @@
 /** Runtime command decoding shared by local and remote transports. Invalid input has no effect. */
-import { WIRE_REASONING_SELECTIONS } from './wire-commands.js';
+import { WIRE_REASONING_SELECTIONS } from './fold/wire-commands.js';
 import type {
   WireAnswerProvenance,
   WireBudgetDecision,

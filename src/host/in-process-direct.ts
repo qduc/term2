@@ -105,7 +105,9 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
         return view.snapshot;
       },
       ...('replay' in view ? { replay: view.replay } : {}),
+      ...('cut' in view ? { cut: view.cut } : {}),
       events: view.events,
+      batches: () => view.events.batches(),
       async send(command: WireCommand): Promise<import('../protocol/wire.js').WireCommandResult> {
         if (closed || disposed || view.events.closed)
           return { ok: false, code: 'closed', message: 'Connection is closed.' };

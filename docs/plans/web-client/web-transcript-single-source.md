@@ -10,10 +10,15 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
 - **On the branch:**
   - The dead v1 view path (`viewFromProjection`, `applyProjectionEvent`) and its unrun example test are deleted.
   - The `integration` CI lane typechecks `web-client` (shown failing on a seeded type error).
-  - Three browser flows in `tests/web-client/browser/` (first send, tool call, failed turn), each comparing the
-    transcript's accessibility tree before and after a reload. Run with
-    `pnpm build && node scripts/build-web.mjs && pnpm test:web-browser`. They pass locally (about 9 s) and went red
-    on a seeded reload-only regression in `Term2TurnTimeline.tsx`.
+  - Six browser flows in `tests/web-client/browser/` (first send, tool call, failed turn, approval, reload
+    mid-turn, steer), each comparing the transcript's accessibility tree before and after a reload. Run with
+    `pnpm build && node scripts/build-web.mjs && pnpm test:web-browser`. They pass locally (about 14 s). The first
+    three went red on a seeded reload-only regression in `Term2TurnTimeline.tsx`; each of the last three went red
+    on its own seeded reload-only regression in `hydration.ts` (steered user item dropped, draft text dropped,
+    pending interaction dropped).
+  - The model double can hold a step (`hold` / `held()` / `release()`) so a flow acts while a turn runs, and it
+    keys a steered message on the user's words, not the runtime's steering preamble. Steering only enters the
+    running turn at a tool boundary: steered during a text-only reply, the message runs as the next turn.
   - A `web-browser` CI job, required by `port`. **It has never run on GitHub.** Its counted steps may exceed the
     120 s lane budget in `scripts/ci-budget.json`; if they do, shorten the lane first, and raise the budget only
     through the guard's own route.
@@ -23,8 +28,92 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   a reload that text is gone. After two turns (three provider requests) the composer chip shows 2.5k live and 3.7k
   after reload. The three flows stay green only because the double sends no usage. Keep them that way in the
   required lane; add the usage flow when phase 2 makes it pass.
-- **Next:** the approval, reload-mid-turn and steer flows; settle the six unrun test files; then phase 1. Phases
-  are in order; 3 is independent of 1 and 2 and can be scheduled separately.
+- **The six unrun `node:test` files under `web-client/lib/` are gone** and `check-no-unit-tests.mjs` scans
+  `web-client/` (shown red on a seeded file). Where their rules went:
+  - Host, Origin and content-type guards, body validation (exact fields, opaque IDs, 16,384-character text, control
+    characters), event and page cursors, and the settings-conflict details: `tests/web-client/browser/bff-guards.flow.ts`,
+    against the real packaged BFF over raw HTTP. Red on four seeded regressions (packaged Host check off, Origin
+    check off, text cap raised, conflict details dropped).
+  - Aborting a stream before headers closes the gateway connection: `tests/host/gateway/bff-stream-abort.integration.test.ts`,
+    over a real Unix socket. Red (timeout) with `req.destroy()` removed from the abort handler.
+  - Dropped, with reasons: `chooseListenHost` and the `TERM2_WEB_CLIENT_ALLOWED_HOSTS` LAN opt-in only run under
+    `pnpm dev` / `start` inside `web-client/`; the shipped `term2-web` binds `127.0.0.1` and clears the list
+    (`scripts/build-web.mjs` launcher). The browser API client's normalizers (`validateCandidate`,
+    `validateSelectedCandidate`, `validateSettings`) and `skipAuth` / `skipRetry` are exercised by every flow's
+    folder pick and page load; their rejection of a malformed gateway reply is not checked anywhere now. Hiding
+    `details` on non-conflict gateway errors is not checked either: no route can make the gateway return one.
+- **Phase 1, done on the branch** (each item shown red on a seeded regression before it was trusted):
+  - The fold lives in `src/protocol/fold/` (`wire-fold.ts`, `wire-types.ts`, `wire-events.ts`, `branch-fold.ts`, ...;
+    the spec's `reducer.ts`/`wire.ts` were renamed because `check-rules` forbids duplicate basenames; `wire.ts`,
+    `reducer.ts`, `review-projection.ts` and `turn-results.ts` stay as shims at the old paths, while the few
+    importers of `reducer-nested`, `reducer-notices`, `wire-events` and `wire-commands` were pointed at the fold). The `fold-boundary` rule in `check-rules.mjs` fails on any import leaving it (four seeds in
+    `prove-checks.sh`). Host-owned detail types are augmentation slots narrowed in `src/protocol/wire.ts`.
+  - `scripts/build-web-fold.mjs` bundles `src/protocol/fold-browser.ts` (31 KB) with its `.d.ts` into
+    `web-client/lib/term2/generated/`; `build-web.mjs`, the CI web typecheck and the CI generated-verification step
+    run it. Nothing in the browser imports it yet.
+  - Branch state is in the fold (`branch-fold.ts`): `DirectProjection` keeps its nested projections only to
+    translate branch facts, and its snapshot is the fold's state. Before the old `branchSnapshots` was deleted,
+    `wire.frames-round-trip` compared it with the new fold at every frame: 8,000 cases, equal. Parity goldens 9/9,
+    `subagent-batch` included.
+  - `direct-wire-v2`: `DirectEventQueue` carries one batch per publication (with an ordinal; `cut()` reads the
+    snapshot and the last ordinal it contains together), `server-sse.ts` frames it, `server.ts` and the BFF events
+    route accept it. The property caught a real bug while it was written: the opening snapshot frame was dropped as
+    "already contained" by its own cut.
+  - `wire.frames-round-trip` and `wire.snapshot-is-fold` in `scripts/generated-verification/wire.mjs`, green at
+    seed 424242 (about 2 s and 4 s per 1,000 cases); `tests/host/gateway/direct-wire-v2.integration.test.ts` runs
+    the acceptance example over real HTTP, including a publication between connect and the stream's cut.
+  - Spec 2.3 (b) to (d): `reasoningBlocks`, `liveReasoning` and `turnUsage` in the fold (`fold/turn-detail.ts`),
+    each carried over by `snapshotDirectState` (blocks while Session's timeline still has the reasoning entry,
+    usage while the turn is known, live reasoning as is; all three start afresh on rotation).
+    `wire.snapshot-is-fold` went red on the missing carry-over of each before it was added.
+- **Independent verifier, phase 1: rejected** (on `87a5eef1`), with three defects, all fixed since:
+  1. `eventStream`'s pre-live buffer counted every event since connect instead of what was still waiting, so a v1
+     or agent-wire-v2 reader draining its opening snapshot under backpressure was dropped early. Fixed; a temporary
+     probe (blocked opening write, 200 events, 150 drained, 100 more) disconnects before and not after. No
+     persistent check covers this path.
+  2. A branch's `acceptedSeq` no longer moves on a branch fact that projects to no event (a fold cannot see it).
+     Nothing reads it; the contract (`wire-events.ts`, `protocol/mapping.md`) now says so.
+  3. Session's timeline keeps reasoning entries through a rewind, so reasoning blocks of rewound turns survived a
+     resync. `snapshotDirectState` now also requires the block's turn to still have messages. The generator now
+     rewinds, and `wire.snapshot-is-fold` checks that rule after every rewind (red on the unfixed code).
+  Also from the review: `fold-boundary` now catches `import x = require(...)` and triple-slash references (two more
+  seeds), and the gateway test has the second example (a background subagent: branch values at two cuts, the
+  panel's steps), red on the reviewer's seed "branch usage always shown", which nothing caught before.
+- **Phase 2, done on the branch:** `session-store.ts` and `present.ts` behind `useTerm2Session` (same return
+  shape); `event-adapter.ts`, `native-state.ts` and `hydration.ts` deleted; panels read `view.session`;
+  `web.present-reuse` green (it found the fold rebuilding every tool object per tool event, fixed). All eight
+  browser flows pass, including the new usage flow (per-reply counts and session total equal after a reload, no
+  hydration request), which phase 0 had found red.
+- **Independent verifier, second round** (on `c7bf7333`): phase 1 fixes accepted; phase 2 rejected with three
+  findings, all fixed since:
+  1. Reasoning drawn at the top of multi-step turns. A step's reasoning item arrives at completion, after the
+     step's text streamed as a draft, so its anchor was the draft, which the final message then replaced. The fold
+     now anchors before the step's own drafts and moves any anchor naming a replaced draft to its final message.
+     `web.present-reuse` checks step order (a step's reasoning after earlier steps' text, before its own); red on the
+     unfixed fold.
+  2. A runtime fault (Session interrupted with an error, no accepted terminal) no longer reached the transcript.
+     `present()` now shows it on the turn it interrupted: `failed`, the error's reason and message,
+     `interruptedByFault` (rule 6 reads "aborted" only without such an error). Gateway test: a writer fault over
+     the stream; red without it. The dead `transientFailure`/`subagents` reads are gone; the heartbeat's running
+     subagent check reads `view.session.tasks`.
+  3. Unit-style tests: the result-only case (a fixture fetched and passed to `present()`) is gone; an orphan
+     result is now part of the stream test's acceptance script. The agent-wire-v2 steer and error tests keep their
+     wire assertions only; the browser flows cover both views over `direct-wire-v2`.
+  Also: the generator publishes Session state after each rewind, so `wire.snapshot-is-fold` compares again after
+  it, and frames include mid-stream snapshots.
+- **Known deviations, recorded:** accepted frames publish at once (as the old hook did), live deltas at most once
+  per animation frame; while a history replacement is held, connection phases are not published either; the
+  submit/abort overlays clear on any accepted frame; a pending request with no DTO shows the status line only, no
+  card; a cancelled turn's running command reads `unknown`, because the fold settles `started` to `unknown` at turn
+  end (as the old reload view did). No persistent check covers the pre-live SSE buffer path.
+- **Independent verifier, round three** (on `53ec5fff`): **phase 2 accepted**, with no deviation blocking. Its one
+  suggestion, a 401/403/404 arriving while a history replacement is held stays hidden, is fixed (the store releases
+  the hold on a terminal error).
+- **Next:** phase 3 (shell state machine), and phase L once the owner has made its two settings and the spike runs
+  on a throwaway pull request. CI has not yet run any of this branch: the `web-browser` job's time budget is
+  unproven. The acceptance example's steer is not in the stream integration test (it needs real queue state); the
+  browser steer flow covers it end to end. The second example (a background subagent) was added in `c7bf7333`.
+  Phase 3 is independent of 1 and 2.
 - **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
   lockfile lines; use the pinned version for dependency changes.
 
@@ -39,6 +128,7 @@ Owner, 2026-11-26:
 - This session designs and plans; another session builds.
 
 - Once the architecture is settled, CI guards it so agents cannot break it without the owner's approval.
+- Widen `scripts/check-no-unit-tests.mjs` to scan `web-client/`.
 
 Designer, following from the first one:
 
@@ -64,7 +154,7 @@ Designer, following from the first one:
   `server/`): for each, check whether an integration test, release smoke or a browser flow already covers the
   behaviour; move what is uncovered and matters (the Host/Origin guard, cursor and request validation) into the
   gateway integration suite; then delete the files and make `scripts/check-no-unit-tests.mjs` scan `web-client/`.
-  Deleting them without that check would drop the only written statement of those rules.
+  Deleting them without that check would drop the only written statement of those rules. (Done; see "Resume here".)
 
 ## What the code shows (2026-11-26, `main` at `6fcad34`)
 
@@ -92,7 +182,7 @@ Each line is labelled **verified** (ran it or read the named symbol) or **inferr
    `Term2SessionShell.tsx` / `useTerm2Session.ts`. *Verified by reading each diff.*
 5. **CI does not look at the web client.** No explicit typecheck, no lint, no browser. It is compiled only as a
    side effect of `pnpm pack` in the `bench` lane; release smoke checks that the page and one API route answer.
-   Seven `node:test` files under `web-client/` are run by nothing. *Verified.*
+   Seven `node:test` files under `web-client/` were run by nothing (all removed since). *Verified.*
 6. **The shared fold fits in the browser.** `esbuild --bundle` of `src/protocol/reducer.ts` tree-shakes to 33 KB
    with no Node built-ins. A browser-platform build fails only at resolve time, because `reducer-nested.ts`
    imports `formatToolCommand` through `protocol/json.ts`, which also re-exports pricing code. *Verified.*
@@ -186,4 +276,3 @@ in this document with the evidence, keep the assertion, and do not land it in a 
 ## Open, for the owner
 
 - Whether the external consumer should move to the graduated library or stay on v2. Nothing here depends on it.
-- Whether `check-no-unit-tests.mjs` may be widened to `web-client/` (it tightens a repository guard).

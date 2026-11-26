@@ -1,5 +1,11 @@
 # Browser/BFF wire versions
 
+**Status (2026-11-26):** the browser no longer consumes agent-wire-v2. It reads the `direct-wire-v2` stream
+(native events, folded with the shared fold; see SOURCE.md, "Internal ownership"). The server still serves
+agent-wire-v2 unchanged for the external consumer, so the v2 sections below describe that output; statements
+about browser modules that consumed it (`parseSessionHydration`, `consumeSseResponse`, `applyTerm2Event`) are
+historical: those modules were removed.
+
 This is an **implementation target, not activated or verified support**. M6's
 combined migration gates remain closed. This checkout still pins the historical
 0.1.0 artifact; named v2 imports require the packaging owner's local 0.2.0

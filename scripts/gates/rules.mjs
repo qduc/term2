@@ -89,6 +89,18 @@ export const RULES = {
     avoid: 'Do not re-implement a reducer locally to avoid importing it.',
     exceptions: null,
   },
+  'fold-boundary': {
+    title: 'The shared fold imports nothing outside itself',
+    why:
+      'src/protocol/fold/ is the one fold the server, the TUI and the browser all run, and it is meant to move into ' +
+      '@qduc/agent-wire as a dependency-free library. One import of session, model or tool code ties every client ' +
+      'to term2 internals and makes that move impossible; the browser bundle stops building first.',
+    fix:
+      'Pass what the fold needs as a parameter (see WireFoldOptions), declare a structural type in the folder and ' +
+      'assert it against the original outside it (see src/protocol/wire.ts), or keep the code outside the folder.',
+    avoid: 'Do not move the outside module into the folder unless it is itself part of the fold.',
+    exceptions: null,
+  },
   reachability: {
     title: 'Every file is reached from src/app/cli.ts',
     why:

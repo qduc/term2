@@ -1,5 +1,4 @@
-import type { NativeState } from './native-state';
-import type { SessionHydration, NativeBranchHydration } from './hydration';
+import type { WireBranchSnapshot, WireSnapshot, WireTask } from './generated/wire-fold.js';
 export const TERM2_CONTRACT_VERSION = 2 as const;
 /**
  * Digest of the immutable v1 (P105) identity choices. The M4 event additions
@@ -163,6 +162,8 @@ export interface Term2SubagentIdentity {
 
 export type InteractionProjection =
   | null
+  /** A request is pending but no answerable DTO reached this client; shown as pending, never as nothing. */
+  | { state: 'unavailable'; requestId: string; turnId: string }
   | {
       state: 'pending';
       interaction: PendingInteraction;
@@ -440,7 +441,7 @@ export interface Term2SubagentCard {
   commands: Term2Command[];
 }
 export type Term2TurnItem =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; content?: readonly unknown[] }
   | { kind: 'reasoning'; id: string; text: string; streaming?: boolean; modelStep?: number }
   | { kind: 'text'; id: string; text: string; draft?: boolean; modelStep?: number }
   | { kind: 'tool'; executionId: string };
@@ -453,6 +454,8 @@ export interface Term2TurnView {
    * `turnId`; live turns use the message id as their `turnId`, so this is unset there.
    */
   userMessageId?: string;
+  /** The opening message's content parts (text and images), as accepted. */
+  userContent?: readonly unknown[];
   text: string;
   reasoning: string;
   status: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted' | 'rejected' | 'unknown';
@@ -462,33 +465,48 @@ export interface Term2TurnView {
   subagents?: Term2SubagentCard[];
   /** Transient turn-level note (retry/compaction); cleared on terminal events. */
   transientStatus?: string;
-  /** Presentation overlay only, never installed as an accepted terminal. */
-  transientFailure?: boolean;
+  /** The session stopped on a runtime fault during this turn (no accepted terminal); `error` says which. */
+  interruptedByFault?: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   error?: string;
   errorMessage?: string;
 }
+/** The parts of a session snapshot the panels read, filled by present.ts; components never read the snapshot. */
+export interface Term2SessionFacts {
+  /** Each task with its subagent branch (steps, turns, usage) when it has one. */
+  tasks: readonly (WireTask & {
+    readonly branch: WireBranchSnapshot | null;
+    /** The branch's turns, presented like the root's (the running-tasks panel's activity). */
+    readonly branchTurns: readonly Term2TurnView[];
+  })[];
+  queue: WireSnapshot['queue'];
+  queueState: WireSnapshot['queueState'];
+  queuePauseReason: NonNullable<WireSnapshot['queuePauseReason']> | null;
+  notifications: NonNullable<WireSnapshot['notifications']>;
+  requestCosts: NonNullable<WireSnapshot['requestCosts']>;
+  usage: WireSnapshot['usage'];
+  lastUsage: NonNullable<WireSnapshot['lastUsage']> | null;
+  cost: WireSnapshot['cost'];
+  goal: WireSnapshot['goal'];
+  verification: WireSnapshot['verification'];
+  notices: WireSnapshot['notices'];
+  /** Rule 13: a session-level fault, shown once instead of a live-only overlay. */
+  lastError: WireSnapshot['lastError'];
+  /** Rule 2: the snapshot has tools but no timeline, so no order can be shown. */
+  unorderedTranscript: boolean;
+}
+
 export interface Term2SessionView {
   sessionId: string;
-  hydration?: SessionHydration;
-  nativeBranch?: NativeBranchHydration;
-  rootEvidence?: Readonly<Record<string, unknown>>;
-  nativeState?: NativeState;
+  /** Filled by present.ts from the snapshot; absent before the first one. */
+  session?: Term2SessionFacts;
   turns: Term2TurnView[];
   pendingInteraction: InteractionProjection;
   status: Term2ConnectionStatus;
   lastAppliedSequence: number;
   error: string | null;
   reloadRequired: boolean;
-  /** Actual branch ownership; branch streams never mutate the root transcript. */
   replayMode?: 'atomic' | 'unavailable';
-  retiredTurns?: Term2TurnView[];
-  branches?: Record<string, { identity: AgentBranchV2; view: Term2SessionView }>;
-  /** Native evidence retained verbatim, separate from model usage totals. */
-  nativeChanges?: readonly Term2AcceptedChange[];
-  /** Connection-local UI observations only; never persisted or replay-checkpointed. */
-  liveChanges?: readonly Term2LiveChange[];
-
 }
 
 export const INTERACTION_OUTCOMES = new Set<InteractionOutcome>(['approved', 'rejected', 'cancelled', 'continued']);

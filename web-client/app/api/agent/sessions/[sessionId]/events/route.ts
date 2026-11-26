@@ -1,4 +1,7 @@
 import { TERM2_WIRE_PROTOCOL } from '@/lib/term2/types';
+
+/** Event formats the gateway streams and this route passes through unchanged. */
+const EVENT_FORMATS = new Set<string>([TERM2_WIRE_PROTOCOL, 'direct-wire-v2']);
 import { Readable } from 'node:stream';
 import { term2GatewayClient } from '@/lib/server/term2-gateway-client.js';
 import { LOCAL_OWNER_USER_ID } from '@/lib/server/gateway-config.js';
@@ -18,16 +21,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ sess
     if ('response' in resolved) return resolved.response;
 
     const url = new URL(request.url);
-    if (url.searchParams.get('format') !== TERM2_WIRE_PROTOCOL) throw new LocalValidationError('agent-wire-v2 negotiation required');
+    const format = url.searchParams.get('format');
+    if (format === null || !EVENT_FORMATS.has(format)) throw new LocalValidationError('Event format negotiation required');
     const headerFormat = request.headers.get('x-term2-event-format');
-    if (headerFormat !== null && headerFormat !== TERM2_WIRE_PROTOCOL) throw new LocalValidationError('Conflicting event format');
+    if (headerFormat !== null && headerFormat !== format) throw new LocalValidationError('Conflicting event format');
     const queryCursor = url.searchParams.get('after');
     const headerCursor = request.headers.get('last-event-id');
     if (queryCursor !== null && headerCursor !== null && queryCursor !== headerCursor) throw new LocalValidationError('Conflicting event cursors');
     let after = queryCursor ?? headerCursor;
     after = validateEventCursor(after);
     if (after !== null && (!Number.isSafeInteger(Number(after)) || Number(after) <= 0)) throw new LocalValidationError('Invalid accepted cursor');
-    const query = `?format=${TERM2_WIRE_PROTOCOL}${after ? `&after=${after}` : ''}`;
+    const query = `?format=${format}${after ? `&after=${after}` : ''}`;
 
     const upstreamPromise = term2GatewayClient.stream({
       userId: LOCAL_OWNER_USER_ID,
@@ -39,9 +43,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ sess
       signal: request.signal,
     });
     const upstream = await upstreamPromise;
-    if (upstream.headers['x-term2-event-format'] !== TERM2_WIRE_PROTOCOL) {
+    if (upstream.headers['x-term2-event-format'] !== format) {
       upstream.destroy();
-      throw new LocalValidationError('Upstream did not negotiate agent-wire-v2');
+      throw new LocalValidationError(`Upstream did not negotiate ${format}`);
     }
     const replayHeaders: Record<string, string> = {};
     for (const key of ['x-term2-event-format', 'x-term2-event-mode', 'x-term2-replay', 'x-term2-replay-from', 'x-term2-replay-to']) {

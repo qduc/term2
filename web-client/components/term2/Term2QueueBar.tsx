@@ -17,7 +17,7 @@ export function Term2QueueBar({
   const [busy, setBusy] = useState(false);
 
   const entries = readQueueEntries(view);
-  const queueState = view.hydration?.snapshot.queueState;
+  const queueState = view.session?.queueState;
   const paused = queueState === 'paused';
 
   if (entries.length === 0 && !paused) return null;

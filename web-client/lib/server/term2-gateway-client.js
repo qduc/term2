@@ -654,7 +654,7 @@ export class Term2GatewayClient {
       });
     assertOpaqueId(workspaceId, 'workspace ID');
     assertOpaqueId(sessionId, 'session ID');
-    if (typeof query !== 'string' || !/^(?:|\?after=\d{1,16}|\?format=agent-wire-v2(?:&after=\d{1,16})?)$/u.test(query))
+    if (typeof query !== 'string' || !/^(?:|\?after=\d{1,16}|\?format=(?:agent-wire-v2|direct-wire-v2)(?:&after=\d{1,16})?)$/u.test(query))
       throw new Term2GatewayError('validation_error', 'Invalid gateway operation', {
         statusCode: 400,
         retryable: false,

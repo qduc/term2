@@ -6,7 +6,6 @@ import type { Term2Command, Term2TurnItem, Term2TurnView } from '../../lib/term2
 import { Term2Markdown } from './Term2Markdown';
 import { Term2ToolGroup } from './Term2ToolGroup';
 import { Term2UserContent } from './Term2UserContent';
-import type { NativeMessageEntry } from '../../lib/term2/native-state';
 
 /**
  * How tool activity reads, matching the TUI's `ui.displayMode`: `standard` shows one
@@ -16,7 +15,7 @@ import type { NativeMessageEntry } from '../../lib/term2/native-state';
 export type Term2DisplayMode = 'concise' | 'standard';
 
 type RenderSegment =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; content?: readonly unknown[] }
   | { kind: 'reasoning'; id: string; text: string; streaming?: boolean }
   | { kind: 'text'; id: string; text: string }
   | { kind: 'tools'; key: string; commands: Term2Command[] };
@@ -71,7 +70,7 @@ function buildChronologicalSegments(turn: Term2TurnView): RenderSegment[] {
         segments.push({ kind: 'reasoning', id: entry.id, text: entry.text, streaming: entry.streaming });
       } else if (entry.kind === 'user') {
         if (!entry.text) continue;
-        segments.push({ kind: 'user', id: entry.id, text: entry.text });
+        segments.push({ kind: 'user', id: entry.id, text: entry.text, content: entry.content });
       } else if (entry.kind === 'text') {
         if (!entry.text) continue;
         segments.push({ kind: 'text', id: entry.id, text: entry.text });
@@ -106,11 +105,9 @@ function buildChronologicalSegments(turn: Term2TurnView): RenderSegment[] {
 export const Term2TurnTimeline = memo(function Term2TurnTimeline({
   turn,
   displayMode,
-  messages,
 }: {
   turn: Term2TurnView;
   displayMode: Term2DisplayMode;
-  messages?: readonly NativeMessageEntry[];
 }) {
   const segments = buildSegments(turn, displayMode);
   if (segments.length === 0) return null;
@@ -150,7 +147,7 @@ export const Term2TurnTimeline = memo(function Term2TurnTimeline({
           return (
             <div key={`user:${segment.id}:${index}`} className="flex flex-col items-end gap-1">
               <div className="max-w-[85%] rounded-3xl bg-zinc-100 px-4 py-2.5 dark:bg-white/[0.07]">
-                <Term2UserContent text={segment.text} content={messages?.find(entry => entry.message.id === segment.id)?.message.content} />
+                <Term2UserContent text={segment.text} content={segment.content} />
               </div>
             </div>
           );

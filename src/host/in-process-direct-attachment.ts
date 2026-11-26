@@ -2,7 +2,7 @@
 import type { DirectSession, DirectSessionUpdate } from '../session/facade-types.js';
 import { DirectProjection } from '../protocol/projection.js';
 import { DirectProtocolError } from '../protocol/errors.js';
-import { DirectEventQueue } from './in-process-direct-queue.js';
+import { DirectEventQueue, directBatch } from './in-process-direct-queue.js';
 
 export class DirectAttachment {
   readonly session: DirectSession;
@@ -10,6 +10,8 @@ export class DirectAttachment {
   readonly #unsubscribe: () => void;
   readonly #projection: DirectProjection;
   #position: number;
+  /** Publications applied to the projection so far; a batch carries the ordinal it was published at. */
+  #ordinal = 0;
   #failure: Error | null = null;
   #closed = false;
 
@@ -39,7 +41,11 @@ export class DirectAttachment {
     for (const update of pending) this.#update(update);
   }
   /** Snapshot and live subscription are taken synchronously at this public-state cut. */
-  connect(): { readonly snapshot: DirectProjection['snapshot']; readonly events: DirectEventQueue } {
+  connect(): {
+    readonly snapshot: DirectProjection['snapshot'];
+    readonly events: DirectEventQueue;
+    readonly cut: () => { readonly snapshot: DirectProjection['snapshot']; readonly ordinal: number };
+  } {
     if (this.#failure) throw this.#failure;
     if (this.#closed) throw new DirectProtocolError('closed', 'Session attachment is closed.');
     const events = new DirectEventQueue(() => this.#queues.delete(events));
@@ -50,6 +56,8 @@ export class DirectAttachment {
         return projection.snapshot;
       },
       events,
+      // Read together, synchronously: the snapshot contains every batch published at or before the ordinal.
+      cut: () => ({ snapshot: projection.snapshot, ordinal: this.#ordinal }),
     };
   }
   #update(update: DirectSessionUpdate): void {
@@ -58,9 +66,8 @@ export class DirectAttachment {
       if (!Number.isSafeInteger(update.position) || update.position <= this.#position)
         throw new Error('Session publication position is not strictly increasing');
       this.#position = update.position;
-      for (const event of this.#projection.update(update)) {
-        for (const queue of this.#queues) queue.push(event);
-      }
+      const batch = directBatch(update, this.#projection.update(update), ++this.#ordinal);
+      for (const queue of this.#queues) queue.push(batch);
     } catch {
       // Presentation failures must not propagate into Session's durable acceptance path.
       this.#failure = new DirectProtocolError('internal_error', 'Session projection failed.');

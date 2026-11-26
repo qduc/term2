@@ -1,5 +1,14 @@
-import { expect, test as base, type Locator, type Page } from '@playwright/test';
-import { launchWebApp, type WebApp } from './launch.js';
+import { expect } from '@playwright/test';
+import {
+  expectNoRunningTurn,
+  expectSameTranscriptAfterReload,
+  openDraftChat,
+  send,
+  sessionIds,
+  test,
+  transcript,
+  turns,
+} from './flow-helpers.js';
 
 /**
  * Browser flows for the web transcript: each one drives the built page against the real gateway and a
@@ -9,88 +18,6 @@ import { launchWebApp, type WebApp } from './launch.js';
  * If a reload comparison fails, the product shows two different transcripts for one conversation. Report
  * it; do not relax the comparison.
  */
-
-const test = base.extend<{ launch: typeof launchWebApp }>({
-  // eslint-disable-next-line no-empty-pattern -- Playwright reads fixture names from this pattern.
-  launch: async ({}, provide, testInfo) => {
-    const apps: WebApp[] = [];
-    await provide(async (options) => {
-      const app = await launchWebApp(options);
-      apps.push(app);
-      return app;
-    });
-    for (const app of apps) {
-      if (testInfo.status !== testInfo.expectedStatus) {
-        await testInfo.attach('term2-web output', { body: app.output(), contentType: 'text/plain' });
-      }
-      await app.close();
-    }
-  },
-});
-
-const conversation = (page: Page): Locator => page.getByRole('log', { name: 'Conversation' });
-
-/** One element per turn. A tool card is an `article` too, nested in its turn; it belongs to that turn. */
-const turns = (page: Page): Locator => conversation(page).locator('article:not(article article)');
-
-/**
- * What the reader is shown, turn by turn: the accessibility tree of each turn (text, tool rows, failure
- * notes and the per-message actions), in page order. All turns come from one snapshot of the
- * conversation, so the result is the page at one moment and never a mix of two renders.
- */
-async function transcript(page: Page): Promise<string[]> {
-  // Before a chat is open (and while a reloaded page is still loading) there is no conversation region.
-  if ((await conversation(page).count()) === 0) return [];
-  const lines = (await conversation(page).ariaSnapshot()).split('\n');
-  // The region's direct children sit at two spaces: the status line, one `article` per turn, the composer.
-  const children: string[][] = [];
-  for (const line of lines.slice(1)) {
-    if (line.startsWith('  - ')) children.push([]);
-    children.at(-1)?.push(line.slice(2));
-  }
-  return children.filter((child) => child[0]!.startsWith('- article')).map((child) => child.join('\n'));
-}
-
-/** Opens the page and picks the launch's folder, which leaves an unsent draft chat. */
-async function openDraftChat(page: Page, app: WebApp): Promise<void> {
-  await page.goto(app.origin);
-  await page.getByRole('button', { name: 'Browse' }).click();
-  await page
-    .getByRole('dialog', { name: 'Choose a folder' })
-    .getByRole('button', { name: `Select ${app.workspaceName}` })
-    .click();
-  await expect(page.getByRole('heading', { level: 1, name: 'New chat' })).toBeVisible();
-}
-
-async function send(page: Page, prompt: string): Promise<void> {
-  await page.getByRole('textbox', { name: 'Message' }).fill(prompt);
-  await page.getByRole('button', { name: 'Send message' }).click();
-}
-
-/** The composer offers Stop only while a turn runs; its absence is the page's own "turn over" signal. */
-async function expectNoRunningTurn(page: Page): Promise<void> {
-  await expect(page.getByRole('button', { name: 'Stop agent turn' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
-}
-
-async function sessionIds(page: Page, app: WebApp): Promise<string[]> {
-  const response = await page.request.get(`${app.origin}/api/agent/sessions?limit=20`);
-  expect(response.ok()).toBe(true);
-  const body = (await response.json()) as { sessions: { id: string }[] };
-  return body.sessions.map((session) => session.id);
-}
-
-/** Reloads, then requires the transcript recorded before the reload. */
-async function expectSameTranscriptAfterReload(page: Page, before: string[]): Promise<void> {
-  expect(before.length).toBeGreaterThan(0);
-  await page.reload();
-  await expect
-    .poll(() => transcript(page), { message: 'transcript after reload must equal the one shown before it' })
-    .toEqual(before);
-  await expectNoRunningTurn(page);
-  // Still equal once the reloaded page reports no running turn, not only at some moment while loading.
-  expect(await transcript(page)).toEqual(before);
-}
 
 test('first send creates the chat, and its transcript survives a reload', async ({ page, launch }) => {
   const prompt = 'say the first flow reply';
@@ -205,5 +132,198 @@ test('a failed turn shows the provider error before and after a reload', async (
   await expectSameTranscriptAfterReload(page, await transcript(page));
   await expect(turns(page).first()).toContainText(providerMessage);
   await expect(turns(page).first().getByText('Turn failed')).toBeVisible();
+  expect(app.model.unscripted()).toEqual([]);
+});
+
+test('a tool waiting for approval shows the same prompt after a reload, and the approved turn too', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'run the approval command';
+  const reply = 'The approved command printed its line.';
+  const app = await launch({
+    // An unsandboxed shell command always asks first, whether or not this machine can sandbox.
+    scripts: {
+      [prompt]: [
+        {
+          call: {
+            tool: 'shell',
+            args: { command: 'echo approved-by-flow', sandbox: 'unsandboxed', description: 'Print a line' },
+          },
+        },
+        { text: reply },
+      ],
+    },
+  });
+
+  await openDraftChat(page, app);
+  await send(page, prompt);
+  const approval = page.getByRole('region', { name: 'Run this command?' });
+  await expect(approval).toBeVisible();
+  await expect(approval).toContainText('echo approved-by-flow');
+  const waiting = await transcript(page);
+
+  // While the tool waits for the user, a reload shows the same turn and the same question.
+  await page.reload();
+  await expect.poll(() => transcript(page)).toEqual(waiting);
+  await expect(approval).toBeVisible();
+  await expect(approval).toContainText('echo approved-by-flow');
+
+  // Approving from the reloaded page runs the command and the turn finishes.
+  await approval.getByRole('button', { name: 'Run unsandboxed once' }).click();
+  const turn = turns(page).first();
+  await expect(turn.getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  await expect(approval).toHaveCount(0);
+  const requests = app.model.turn(prompt);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]!.messages.at(-1)).toMatchObject({
+    role: 'tool',
+    content: expect.stringContaining('approved-by-flow'),
+  });
+  await expect(turns(page)).toHaveCount(1);
+  await expect(turn.getByRole('region', { name: 'Tool calls' })).toBeVisible();
+  await expect(turn).toContainText(reply);
+
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  await expect(page.getByRole('region', { name: 'Run this command?' })).toHaveCount(0);
+  expect(app.model.unscripted()).toEqual([]);
+});
+
+test('a reload while a reply is streaming shows the same partial reply, then the same finished turn', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'start a slow reply';
+  const partial = 'The first half of a slow reply';
+  const app = await launch({ scripts: { [prompt]: [{ text: partial, hold: 'slow-reply' }] } });
+
+  await openDraftChat(page, app);
+  await send(page, prompt);
+  await app.model.held('slow-reply');
+  const turn = turns(page).first();
+  await expect(turn).toContainText(partial);
+  await expect(page.getByRole('button', { name: 'Stop agent turn' })).toBeVisible();
+  const streaming = await transcript(page);
+
+  // Mid-turn, a reload reconnects to the running turn: same partial reply, still running.
+  await page.reload();
+  await expect
+    .poll(() => transcript(page), { message: 'a reload mid-turn must show the partial reply shown before it' })
+    .toEqual(streaming);
+  await expect(page.getByRole('button', { name: 'Stop agent turn' })).toBeVisible();
+
+  // The reloaded page follows the turn to its end.
+  app.model.release('slow-reply');
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  await expect(turns(page)).toHaveCount(1);
+  await expect(turns(page).first()).toMatchAriaSnapshot(`
+    - article:
+      - paragraph: ${prompt}
+      - button "Copy message"
+      - button "Edit message"
+      - paragraph: ${partial}
+      - button "Copy reply"
+      - button "Retry reply"
+  `);
+
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  expect(app.model.turn(prompt)).toHaveLength(1);
+  expect(app.model.unscripted()).toEqual([]);
+});
+
+test('a message steered into a running turn stays in that turn after a reload', async ({ page, launch }) => {
+  const prompt = 'read the notes, slowly';
+  const steer = 'also say how long the notes are';
+  const reply = 'The notes are one short line.';
+  const app = await launch({
+    files: { 'notes.txt': 'hello notes\n' },
+    scripts: {
+      // The call is held, so the turn is running when the steer is sent; it reaches the model at the
+      // next step, after the tool result, inside the same turn.
+      [prompt]: [{ call: { tool: 'read_file', args: { path: 'notes.txt' } }, hold: 'before-tool' }],
+      [steer]: [{ text: reply }],
+    },
+  });
+
+  await openDraftChat(page, app);
+  await send(page, prompt);
+  await app.model.held('before-tool');
+  await page.getByRole('textbox', { name: 'Message' }).fill(steer);
+  await page.getByRole('button', { name: 'Steer' }).click();
+  await expect(page.getByRole('listitem').filter({ hasText: steer })).toBeVisible();
+
+  app.model.release('before-tool');
+  const turn = turns(page).first();
+  await expect(turn.getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+
+  // One turn: prompt, the tool row, the steered message, then the reply.
+  await expect(turns(page)).toHaveCount(1);
+  await expect(turn).toMatchAriaSnapshot(`
+    - article:
+      - paragraph: ${prompt}
+      - button "Copy message"
+      - button "Edit message"
+      - region "Tool calls":
+        - button "Read 1 file"
+      - paragraph: ${steer}
+      - paragraph: ${reply}
+      - button "Copy reply"
+      - button "Retry reply"
+  `);
+  expect(app.model.turn(prompt)).toHaveLength(1);
+  expect(app.model.turn(steer)).toHaveLength(1);
+
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  expect(app.model.unscripted()).toEqual([]);
+});
+
+test('per-reply token counts and the session total read the same before and after a reload', async ({
+  page,
+  launch,
+}) => {
+  const first = 'read the notes and count tokens';
+  const second = 'say one more thing';
+  const usage = { input: 1000, output: 234 }; // 1,234 tokens per provider request
+  const app = await launch({
+    files: { 'notes.txt': 'hello notes\n' },
+    scripts: {
+      [first]: [
+        { call: { tool: 'read_file', args: { path: 'notes.txt' } }, usage },
+        { text: 'Read them.', usage },
+      ],
+      [second]: [{ text: 'One more thing.', usage }],
+    },
+  });
+  // The page loads a chat from its event stream alone: no separate hydration request.
+  const hydrationReads: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (/^\/api\/agent\/sessions\/[^/]+$/u.test(url.pathname) && url.searchParams.has('format'))
+      hydrationReads.push(request.url());
+  });
+
+  await openDraftChat(page, app);
+  await send(page, first);
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  await send(page, second);
+  await expect(turns(page).nth(1).getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  expect(app.model.turn(first)).toHaveLength(2);
+  expect(app.model.turn(second)).toHaveLength(1);
+
+  // Each reply shows its turn's last reported usage; the chip shows the session's total of three requests.
+  await expect(turns(page)).toHaveCount(2);
+  for (const index of [0, 1]) await expect(turns(page).nth(index)).toContainText('1,234 tokens');
+  const chip = page.getByRole('button', { name: 'Session usage and context' });
+  await expect(chip).toContainText('3.7k tok');
+  const before = await transcript(page);
+
+  await expectSameTranscriptAfterReload(page, before);
+  await expect(chip).toContainText('3.7k tok');
+  expect(hydrationReads).toEqual([]);
   expect(app.model.unscripted()).toEqual([]);
 });

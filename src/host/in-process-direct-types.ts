@@ -3,19 +3,27 @@ import type { DirectSession, DirectSessionState, DirectSessionStore } from '../s
 import type { Principal, WorkspaceGrant } from './index.js';
 import type { WireCommand, WireCommandResult, WireEvent, WireSnapshot } from '../protocol/wire.js';
 import type { DirectCommandCapabilities } from '../protocol/capabilities.js';
+import type { WireEventBatch } from './in-process-direct-queue.js';
 
 export type { Principal, WorkspaceGrant } from './index.js';
 export interface DirectConnection {
   readonly sessionId: string;
   readonly snapshot: WireSnapshot;
   readonly events: AsyncIterable<WireEvent>;
+  /**
+   * The same stream as `events`, one batch per Session publication, for the direct-wire-v2 format. A connection
+   * has one consumer: `events` or this. Hosts that cannot report publication boundaries omit it.
+   */
+  readonly batches?: () => AsyncIterable<WireEventBatch>;
+  /** The current snapshot and the last publication it contains, read together. Omitted where `batches` is. */
+  readonly cut?: () => { readonly snapshot: WireSnapshot; readonly ordinal: number };
   send(command: WireCommand): Promise<WireCommandResult>;
   /** Unsubscribe only; closing a connection never cancels or closes the Session. */
   close(): void;
 }
 /** Reconnect retains client state at replay.fromSeq. Consume tail, cut-state sync, then live.
  * snapshot is null because no current snapshot may be applied BEFORE the tail. */
-export type DirectReplayConnection = Omit<DirectConnection, 'snapshot'> & {
+export type DirectReplayConnection = Omit<DirectConnection, 'snapshot' | 'cut'> & {
   readonly snapshot: null;
   readonly replay: { readonly fromSeq: number; readonly toSeq: number };
 };

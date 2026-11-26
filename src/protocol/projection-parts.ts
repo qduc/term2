@@ -1,9 +1,7 @@
 import type { DirectSessionRotationFact } from '../session/session-rotation.js';
 import type { Fact } from '../session/facts.js';
 import { directDraftId } from '../session/state.js';
-import type { DirectProjection } from './projection.js';
 import type {
-  WireBranchSnapshot,
   WireConfiguration,
   WireEvent,
   WireEventPayloads,
@@ -13,16 +11,6 @@ import type {
 } from './wire.js';
 import { publicJson, publicMessage, publicToolContent } from './public.js';
 
-type Branch = {
-  readonly projection: DirectProjection;
-  readonly taskId: string;
-  readonly turnId: string;
-  acceptedSeq: number;
-  hasAcceptedUsage: boolean;
-  readonly parentTurnId?: string;
-  readonly rootTurnId?: string;
-  readonly role?: string;
-};
 type EventFactory = <K extends WireEventType>(
   type: K,
   payload: WireEventPayloads[K],
@@ -40,39 +28,6 @@ export function rotationConfiguration(
     ...(fact.configuration.reasoning !== undefined ? { reasoning: fact.configuration.reasoning } : {}),
     ...(fact.configuration.temperature !== undefined ? { temperature: fact.configuration.temperature } : {}),
   };
-}
-
-export function branchSnapshots(
-  branches: ReadonlyMap<string, Branch>,
-  root: WireSnapshot,
-): readonly WireBranchSnapshot[] {
-  return [...branches].map(([branchId, branch]) => {
-    const child = branch.projection.snapshot;
-    return {
-      branchId,
-      taskId: branch.taskId,
-      turnId: branch.turnId,
-      ...(branch.parentTurnId !== undefined ? { parentTurnId: branch.parentTurnId } : {}),
-      ...(branch.rootTurnId !== undefined ? { rootTurnId: branch.rootTurnId } : {}),
-      acceptedSeq: branch.acceptedSeq,
-      messages: child.messages,
-      tools: child.tools,
-      unmatchedToolResults: child.unmatchedToolResults ?? [],
-      timeline: child.timeline,
-      pendingInteractions: root.pendingInteractions.filter(
-        (request) => request.taskId === branch.taskId && request.turnId === branch.turnId,
-      ),
-      pendingBudgets: child.pendingBudgets ?? [],
-      turnResults: child.turnResults ?? [],
-      usage: branch.hasAcceptedUsage ? child.usage : null,
-      reasoning: child.reasoningIdentity ? child.reasoning : null,
-      reasoningIdentity: child.reasoningIdentity ?? null,
-      terminal: child.terminal,
-      notices: child.notices,
-      requestCosts: (root.requestCosts ?? []).filter((cost) => cost.turnId === branch.turnId),
-      queue: null,
-    };
-  });
 }
 
 export function projectItem(

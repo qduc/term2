@@ -190,6 +190,8 @@ export function Term2SettingsPage({
   const reload = useCallback(async () => {
     try {
       const latest = await data.settings.refresh();
+      // A store still empty (that newer read failed) takes ours, so writes have a revision to go against.
+      if (latest && data.settings.get().data === null) data.settings.set(latest);
       setOwnRead({ read: latest, storeAtAnswer: data.settings.get().data });
       setOpening('ready');
       return latest;

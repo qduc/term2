@@ -810,3 +810,13 @@ What the build did beyond or differently from the sections above, and what it fo
     `contexts/` and `app/` folders are outside `web-shell-requests`' scan (none exist today); presets are now asked
     for before settings when the settings page opens (independent reads).
 
+- **Independent verifier, round two (on `41c3456d`): rejected**, with one blocking defect, now fixed:
+  - **Own read answered, start-up read failed: the page showed settings but refused every change** ("Not saved:
+    Settings are not loaded."). The own read was kept for display only, so the store stayed empty and the settings
+    writer had no revision. Before this change the page copied its read into the shell and the write saved. The page
+    now installs its read when the store is still empty at the moment it answers; a newer read still in flight wins
+    when it settles, and a value already installed is never overwritten.
+  - New flow "a settings page whose own read answered still saves when the start-up read failed"
+    (`settings.flow.ts`, the second settings GET answered with a 500): red without the fix, green with it.
+  - Confirmed fixed: the flash (8 of 8 direct loads clean), N1-N3, and section 7, item 7. `useLoadOnOpen` has no
+    counterpart of the defect: none of its three screens writes through what it shows.

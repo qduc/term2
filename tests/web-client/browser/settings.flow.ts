@@ -76,3 +76,29 @@ test('opening the settings page by its address never shows its load error on the
     expect(await page.evaluate(() => (window as unknown as { __settingsError: boolean }).__settingsError)).toBe(false);
   }
 });
+
+test('a settings page whose own read answered still saves when the start-up read failed', async ({ page, launch }) => {
+  const app = await launch({ scripts: {} });
+  // On a direct load the page's own read goes first and the start-up read second; the second fails.
+  let gets = 0;
+  await page.route('**/api/term2/settings', async (route) => {
+    if (route.request().method() === 'GET' && ++gets === 2) {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: '{"error":{"code":"internal","message":"start-up read failed"}}',
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto(`${app.origin}/?settings=conversation`);
+  const memory = page.getByRole('switch', { name: 'Personal memory' });
+  await expect(memory).toBeVisible();
+  await expect.poll(() => gets).toBe(2);
+  const before = await memory.getAttribute('aria-checked');
+  await memory.click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  await page.reload();
+  await expect(memory).not.toHaveAttribute('aria-checked', before ?? '');
+});

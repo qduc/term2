@@ -216,10 +216,12 @@ wins. The reviewer confirmed rules 1 to 4, 6 and 7 match `contextTurns`.
 6. Turn status: the turn's `turnResults` entry gives `completed`, `aborted` (`cancelled` or `interrupted`) or
    `failed`; otherwise `streaming` if it is `activeTurnId` and the session is `running` or
    `awaiting_interaction`; otherwise `aborted` if the session is `interrupted` and it is the last turn; otherwise
-   `unknown`.
+   `unknown`. An entry marked `retried` (a turn or tool retry replaced history after it ended) is `completed`: the
+   retrying turn carries the outcome, so the user does not see a failure the retry recovered from.
 7. A failed turn shows `error` from one table mapping `WireError.kind` to the display reason (the table now
    duplicated in `hydratedErrorReason` and in the server's `errorReason`) and `errorMessage` from
-   `error.message`, falling back to `terminal.error` when `terminal.turnId` matches.
+   `error.message`, falling back to `terminal.error` when `terminal.turnId` matches. A `retried` turn shows no
+   error.
 8. Reasoning: each `reasoningBlocks` entry of the turn is a `reasoning` item placed directly after its `after`
    anchor, or first in the turn when the anchor is null or not in this turn. Non-empty `liveReasoning`, or
    `thinking` with nothing yet, is one streaming reasoning item at the end of the active turn.

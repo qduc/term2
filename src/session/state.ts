@@ -190,6 +190,10 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         messages,
         drafts: state.drafts.filter((draft) => retained.has(draft.id)),
         timeline: state.timeline.filter((entry) => entry.kind !== 'message' || messageIds.has(entry.id)),
+        // A retry continues from the most recently ended turn, so that turn's failure or stop is no longer the outcome.
+        ...(fact.reason === 'retry_turn' || fact.reason === 'retry_tool'
+          ? { turnResults: markLastRetried(state.turnResults) }
+          : {}),
       };
     }
     case 'budget_opened':
@@ -440,6 +444,11 @@ export function interruptedDirectState(state: DirectPublicState): DirectPublicSt
       tool.status === 'started' ? { ...tool, status: 'unknown', phase: 'unknown' } : tool,
     ),
   };
+}
+
+function markLastRetried(results: DirectPublicState['turnResults']): DirectPublicState['turnResults'] {
+  const last = results.at(-1);
+  return last && !last.retried ? [...results.slice(0, -1), { ...last, retried: true }] : results;
 }
 
 function messageFor(item: {

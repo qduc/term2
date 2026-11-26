@@ -154,6 +154,8 @@ export type DirectSessionState = {
     readonly error?: ModelError;
     readonly terminalCause?: string;
     readonly notice?: string;
+    /** A turn or tool retry replaced history after this turn ended; the retrying turn carries the outcome. */
+    readonly retried?: true;
   }[];
 };
 /** Position is a private live publication ordinal, never a durable fact sequence. */

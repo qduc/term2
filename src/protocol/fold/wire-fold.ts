@@ -11,7 +11,7 @@ import {
   ENDS_RETRY,
   retrying,
 } from './reducer-notices.js';
-import type { WireEvent, WireSnapshot } from './wire-types.js';
+import type { WireEvent, WireSnapshot, WireTurnResult } from './wire-types.js';
 import { commandReceipts, delta, message, timeline, withNotice } from './transcript.js';
 import { reduceBranch, withRootShares } from './branch-fold.js';
 import { withAnchorsMoved, withoutLiveReasoning, withReasoningBlock, withTurnUsage } from './turn-detail.js';
@@ -29,6 +29,12 @@ function replaceTool(tools: WireSnapshot['tools'], next: WireSnapshot['tools'][n
 }
 
 /** Reject cross-session input; seq only advances on actual durable event references. */
+/** A retry continues from the most recently ended turn; that turn's failure or stop is no longer the outcome. */
+function markLastRetried(results: readonly WireTurnResult[]): readonly WireTurnResult[] {
+  const last = results.at(-1);
+  return last && !last.retried ? [...results.slice(0, -1), { ...last, retried: true }] : results;
+}
+
 export function reduceWireEvent(state: WireSnapshot, event: WireEvent, options: WireFoldOptions = {}): WireSnapshot {
   if (event.sessionId !== state.sessionId) throw new Error('Wire event belongs to a different session');
   const reduced = withRootShares(state, reducePayload(state, event, options));
@@ -291,6 +297,9 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
       return {
         ...withNotice(state, 'history_replaced', historyReplacedMessage(event.payload.reason)),
         ...(event.payload.retainTranscript ? {} : { lastUsage: undefined, lastSpeed: undefined }),
+        ...(event.payload.reason === 'retry_turn' || event.payload.reason === 'retry_tool'
+          ? { turnResults: markLastRetried(state.turnResults ?? []) }
+          : {}),
       };
     // An accepted response boundary is not an aggregate settled cost or a terminal.
     case 'model_response_completed':

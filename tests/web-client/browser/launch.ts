@@ -24,9 +24,10 @@ const STOP_TIMEOUT_MS = 10_000;
 /** Token counts a step reports in its final chunk, as an OpenAI-compatible provider does. */
 export type StepUsage = { readonly input: number; readonly output: number };
 export type ModelStep =
-  | { readonly text: string; readonly hold?: string; readonly usage?: StepUsage }
+  | { readonly text: string; readonly reasoning?: string; readonly hold?: string; readonly usage?: StepUsage }
   | {
       readonly call: { readonly tool: string; readonly args: Record<string, unknown> };
+      readonly reasoning?: string;
       readonly hold?: string;
       readonly usage?: StepUsage;
     }
@@ -150,16 +151,24 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
         'data: [DONE]',
         '',
       ].join('\n\n');
+      const reasoningChunk =
+        step.reasoning !== undefined
+          ? `data: ${JSON.stringify({
+              id,
+              choices: [{ delta: { role: 'assistant', reasoning_content: step.reasoning } }],
+            })}\n\n`
+          : '';
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       if (!step.hold) {
-        res.end(`data: ${JSON.stringify({ id, choices: [{ delta }] })}\n\n${finish}`);
+        res.end(`${reasoningChunk}data: ${JSON.stringify({ id, choices: [{ delta }] })}\n\n${finish}`);
         return;
       }
-      // A held text step streams its text now; a held call sends its call only when released, so the
-      // turn is visibly waiting on the model rather than running a tool.
+      // A held text step streams its reasoning + text now; a held call streams any reasoning now and sends
+      // its call only when released, so the turn is visibly thinking or waiting on the model.
       const held = gate(step.hold);
+      if (reasoningChunk) res.write(reasoningChunk);
       if (!('call' in step)) res.write(`data: ${JSON.stringify({ id, choices: [{ delta }] })}\n\n`);
-      else res.flushHeaders();
+      else if (!reasoningChunk) res.flushHeaders();
       held.reached();
       void held.openP.then(() => {
         if ('call' in step) res.write(`data: ${JSON.stringify({ id, choices: [{ delta }] })}\n\n`);

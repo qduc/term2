@@ -321,7 +321,7 @@ export const SETTING_ITEMS: SettingItem[] = [
       {
         value: 'concise',
         label: 'Concise',
-        hint: 'Each run of tool calls folds into one line; finished reasoning is hidden.',
+        hint: 'Each run of tool calls folds into one line; reasoning is hidden.',
       },
       { value: 'standard', label: 'Standard', hint: 'One row per tool call.' },
     ],

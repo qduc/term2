@@ -137,13 +137,17 @@ export function Term2CommandCard({ command }: { command: Term2Command }) {
       <button
         type="button"
         aria-expanded={open}
-        className="group/row flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-black/[0.035] dark:hover:bg-white/[0.04]"
+        className="group/row flex min-h-8 w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left leading-5 transition-colors hover:bg-black/[0.035] dark:hover:bg-white/[0.04]"
         onClick={() => setOpen(!open)}
       >
         <span className="flex h-4 w-4 shrink-0 items-center justify-center">
           <ToolIcon command={command} />
         </span>
-        <span className={`font-medium text-zinc-700 dark:text-zinc-300 ${detail ? 'min-w-0 shrink truncate' : 'shrink-0'}`}>
+        <span
+          className={`font-medium text-zinc-700 dark:text-zinc-300 ${
+            detail ? 'min-w-0 shrink truncate' : 'shrink-0 whitespace-nowrap'
+          }`}
+        >
           {verb}
         </span>
         {detail && !(command.status === 'failed' && errorLine && !open) && (
@@ -167,17 +171,17 @@ export function Term2CommandCard({ command }: { command: Term2Command }) {
         )}
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {meta && command.status === 'completed' && (
-            <span className="rounded bg-black/[0.045] px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">
+            <span className="rounded bg-black/[0.045] px-1.5 py-0.5 font-mono text-[11px] leading-4 tabular-nums text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">
               {meta}
             </span>
           )}
           {command.status === 'failed' && !errorLine && (
-            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-xs font-medium leading-4 text-red-600 dark:text-red-400">
               failed
             </span>
           )}
           {(command.status === 'aborted' || command.status === 'unknown') && (
-            <span className="text-xs text-zinc-500">{command.status}</span>
+            <span className="text-xs leading-4 text-zinc-500">{command.status}</span>
           )}
           <ChevronRight
             aria-hidden

@@ -354,3 +354,153 @@ test('per-reply token counts and the session total read the same before and afte
   expect(hydrationReads).toEqual([]);
   expect(app.model.unscripted()).toEqual([]);
 });
+
+const LONG_REASONING = Array.from(
+  { length: 12 },
+  (_, i) => `Step ${i + 1}: checking the workspace files and comparing the candidate implementation details.`,
+).join('\n\n');
+
+test('concise mode keeps turn height monotonic across thinking, tool calls, and completion', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'inspect two files concisely';
+  const reply = 'Both files were read cleanly.';
+  const app = await launch({
+    files: { 'a.txt': 'alpha\n', 'b.txt': 'beta\n' },
+    scripts: {
+      [prompt]: [
+        { reasoning: LONG_REASONING, call: { tool: 'read_file', args: { path: 'a.txt' } }, hold: 'think-1' },
+        { reasoning: LONG_REASONING, call: { tool: 'read_file', args: { path: 'b.txt' } }, hold: 'think-2' },
+        { reasoning: LONG_REASONING, text: reply, hold: 'think-3' },
+      ],
+    },
+  });
+
+  await openDraftChat(page, app);
+  await send(page, prompt);
+
+  const turn = turns(page).first();
+  const status = page.getByRole('log', { name: 'Conversation' }).locator('p[role="status"]');
+  const turnHeight = () => turn.evaluate((el) => Math.round(el.getBoundingClientRect().height));
+  const tailBottom = () =>
+    page.getByRole('log', { name: 'Conversation' }).evaluate((log) => {
+      const article = log.querySelector('article:not(article article)');
+      const statusEl = log.querySelector('p[role="status"]');
+      const a = article?.getBoundingClientRect().bottom ?? 0;
+      const s = statusEl?.getBoundingClientRect().bottom ?? 0;
+      return Math.round(Math.max(a, s));
+    });
+
+  await app.model.held('think-1');
+  await expect(status).toContainText('Thinking…');
+  await expect(turn.locator('details')).toHaveCount(0);
+  const h1 = await turnHeight();
+
+  app.model.release('think-1');
+  await app.model.held('think-2');
+  await expect(turn.getByRole('button', { name: 'Read 1 file' })).toBeVisible();
+  await expect(status).toContainText('Thinking…');
+  await expect(turn.locator('details')).toHaveCount(0);
+  const h2 = await turnHeight();
+  expect(h2).toBeGreaterThanOrEqual(h1);
+
+  app.model.release('think-2');
+  await app.model.held('think-3');
+  await expect(turn.getByRole('button', { name: 'Read 2 files' })).toBeVisible();
+  await expect(turn).toContainText(reply);
+  await expect(turn.locator('details')).toHaveCount(0);
+  const h3 = await turnHeight();
+  const bottomWhileStreaming = await tailBottom();
+  expect(h3).toBeGreaterThanOrEqual(h2);
+
+  app.model.release('think-3');
+  await expect(turn.getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  const hDone = await turnHeight();
+  const bottomWhenDone = await tailBottom();
+  expect(hDone).toBeGreaterThanOrEqual(h3);
+  // The reserved status tail matches the finished action bar height so completion does not bounce the layout.
+  expect(bottomWhenDone).toBe(bottomWhileStreaming);
+
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  expect(app.model.unscripted()).toEqual([]);
+});
+
+test('standard mode keeps thinking blocks collapsed by default, preserves user-opened state, and keeps reply position stable', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'inspect two files in standard mode';
+  const reply = 'Both files were read in standard mode.';
+  const app = await launch({
+    files: { 'a.txt': 'alpha\n', 'b.txt': 'beta\n' },
+    scripts: {
+      [prompt]: [
+        { reasoning: LONG_REASONING, call: { tool: 'read_file', args: { path: 'a.txt' } }, hold: 'think-1' },
+        { reasoning: LONG_REASONING, call: { tool: 'read_file', args: { path: 'b.txt' } }, hold: 'think-2' },
+        { reasoning: LONG_REASONING, text: reply, hold: 'think-3' },
+      ],
+    },
+  });
+
+  await openDraftChat(page, app);
+  await page.evaluate(() => window.localStorage.setItem('term2.web.displayMode', 'standard'));
+  await page.reload();
+  await page
+    .getByRole('button', { name: `New chat in ${app.workspaceName}` })
+    .first()
+    .click();
+  await send(page, prompt);
+
+  const turn = turns(page).first();
+  const status = page.getByRole('log', { name: 'Conversation' }).locator('p[role="status"]');
+
+  // Step 1 thinking: collapsed by default (no auto-expansion) and no duplicate status line.
+  await app.model.held('think-1');
+  const firstReasoning = turn.locator('details').first();
+  await expect(firstReasoning.locator('summary')).toHaveText('Thinking…');
+  expect(await firstReasoning.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(false);
+  await expect(status).not.toContainText('Thinking…');
+
+  // If the reader explicitly opens a streaming thinking block, it stays open when accepted and scrolls in a bounded box.
+  await firstReasoning.locator('summary').click();
+  expect(await firstReasoning.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(true);
+  const openedHeight = await firstReasoning.evaluate((el) => Math.round(el.getBoundingClientRect().height));
+  expect(openedHeight).toBeLessThanOrEqual(340);
+
+  app.model.release('think-1');
+  await app.model.held('think-2');
+  await expect(firstReasoning.locator('summary')).toHaveText('Thought process');
+  expect(await firstReasoning.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(true);
+  // Step 2 thinking stays collapsed by default.
+  const secondReasoning = turn.locator('details').nth(1);
+  await expect(secondReasoning.locator('summary')).toHaveText('Thinking…');
+  expect(await secondReasoning.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(false);
+  const secondHeightWhileThinking = await secondReasoning.evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height),
+  );
+
+  // Close the user-opened first reasoning block before checking reload parity.
+  await firstReasoning.locator('summary').click();
+
+  app.model.release('think-2');
+  await app.model.held('think-3');
+  await expect(secondReasoning.locator('summary')).toHaveText('Thought process');
+  expect(await secondReasoning.evaluate((el) => Math.round(el.getBoundingClientRect().height))).toBe(
+    secondHeightWhileThinking,
+  );
+  const replyParagraph = turn.getByText(reply);
+  await expect(replyParagraph).toBeVisible();
+  const replyTopWhileStreaming = await replyParagraph.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+
+  app.model.release('think-3');
+  await expect(turn.getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  // Accepting the third reasoning block must not teleport it from below the reply to above it.
+  const replyTopWhenDone = await replyParagraph.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+  expect(replyTopWhenDone).toBe(replyTopWhileStreaming);
+
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  expect(app.model.unscripted()).toEqual([]);
+});

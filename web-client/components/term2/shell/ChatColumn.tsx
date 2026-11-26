@@ -51,7 +51,7 @@ export function ChatColumn() {
           <div
             ref={scrollRef}
             onScroll={onScroll}
-            className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin sm:px-6 ${
+            className={`flex-1 overflow-y-auto px-4 pt-6 scrollbar-thin [scrollbar-gutter:stable] sm:px-6 ${
               sessionId || isDraft ? 'pb-60' : 'pb-12'
             }`}
           >

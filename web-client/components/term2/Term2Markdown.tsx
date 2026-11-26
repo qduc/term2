@@ -50,9 +50,9 @@ export function Term2CodeBlock({ code, language }: { code: string; language?: st
       </div>
       <pre className="overflow-x-auto px-4 pb-3.5 pt-0.5 text-[13px] leading-[1.6]">
         {html ? (
-          <code className="hljs md-code" dangerouslySetInnerHTML={{ __html: html }} />
+          <code className="hljs md-code block" dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
-          <code className="md-code">{code}</code>
+          <code className="md-code block">{code}</code>
         )}
       </pre>
     </div>

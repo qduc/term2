@@ -10,24 +10,34 @@ import { useChatFacts, useSessionView, useShell, useShellEnv } from './ShellCont
 
 /** The live status line under the last turn. */
 export function LiveStatusLine() {
+  const shell = useShell();
+  const displayMode = useStoreSelector(shell.prefs, (p) => p.displayMode);
   const hasStreamingTurn = useChatFacts((f) => f.hasStreamingTurn);
   const visibleLiveStatus = useChatFacts((f) => f.visibleLiveStatus);
   const interactionPending = useChatFacts((f) => f.interactionPending);
+  const lastTurn = useChatFacts((f) => f.lastTurn);
   // While a prompt is pending the card below is the status; a second line would repeat it.
-  // Reserve the 1-line slot during an active turn so status transitions don't bounce the transcript.
+  // Reserve the 1-line slot during an active turn (matching the 40px reply action bar slot:
+  // 16px gap + 24px height) so status transitions and turn completion don't bounce the transcript.
   if (!((hasStreamingTurn || visibleLiveStatus) && !interactionPending)) return null;
+  // In standard mode, a streaming reasoning block with text already renders its own "Thinking…" row.
+  const reasoningRowShown =
+    displayMode === 'standard' &&
+    visibleLiveStatus === 'Thinking…' &&
+    Boolean(lastTurn?.items?.some((item) => item.kind === 'reasoning' && item.streaming && item.text.trim()));
+  const shownStatus = reasoningRowShown ? null : visibleLiveStatus;
   return (
     <p
       role="status"
-      className={`flex min-h-5 items-center gap-2.5 text-sm ${visibleLiveStatus ? '' : 'invisible'}`}
+      className={`-mt-2 flex h-6 items-center gap-2.5 text-sm ${shownStatus ? '' : 'invisible'}`}
     >
-      {visibleLiveStatus && (
+      {shownStatus && (
         <>
           <span
             aria-hidden
             className="t2-heartbeat h-2 w-2 shrink-0 rounded-full bg-teal-500 ring-2 ring-teal-400/30"
           />
-          <span className="t2-shimmer truncate">{visibleLiveStatus}</span>
+          <span className="t2-shimmer truncate">{shownStatus}</span>
         </>
       )}
     </p>

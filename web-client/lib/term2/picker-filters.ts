@@ -119,6 +119,20 @@ export function filterFileMentions<T extends PathEntryLike>(entries: readonly T[
   return filterPathEntries(entries, query, MAX_FILE_MENTION_RESULTS);
 }
 
+/** Rank named entries browsed inside `parent`, as the folder dialog does. */
+export function filterNamedEntries<T extends { readonly name: string }>(
+  entries: readonly T[],
+  parent: string,
+  query: string,
+): T[] {
+  const joined = (name: string) => (parent === '/' ? `/${name}` : `${parent.replace(/\/+$/u, '')}/${name}`);
+  return filterPathEntries(
+    entries.map((entry) => ({ entry, path: joined(entry.name) })),
+    query,
+    entries.length,
+  ).map(({ entry }) => entry);
+}
+
 const providerOf = (labels: ReadonlyMap<string, string>, model: ModelEntryLike): string =>
   labels.get(model.provider) ?? model.provider;
 

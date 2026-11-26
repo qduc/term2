@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { term2Client, Term2ApiError } from '../../lib/api/term2';
-import { filterPathEntries } from '../../lib/term2/picker-filters';
+import { filterNamedEntries } from '../../lib/term2/picker-filters';
 import type { BrowseEntry, CandidateValidation, WorkspaceAlias } from '../../lib/term2/types';
 import { Term2SavedFolderMenu, type SavedFolderChange } from './Term2SavedFolderMenu';
 
@@ -306,11 +306,7 @@ export function Term2FolderSelector({
   const directoryEntries = useMemo(() => {
     const dirs = entries.filter((entry) => entry.type !== 'file');
     const visible = showHidden ? dirs : dirs.filter((entry) => !entry.name.startsWith('.'));
-    const matched = filterPathEntries(
-      visible.map((entry) => ({ entry, path: joinPath(currentPath, entry.name) })),
-      filter,
-      visible.length,
-    ).map(({ entry }) => entry);
+    const matched = filterNamedEntries(visible, currentPath, filter);
     return {
       totalVisible: visible.length,
       hiddenCount: dirs.length - visible.length,

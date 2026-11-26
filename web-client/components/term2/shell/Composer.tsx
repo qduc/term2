@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { useStoreSelector } from '../../../hooks/useStoreSelector';
 import { extractAtMention } from '../../../lib/term2/composer-text';
+import { filterFileMentions } from '../../../lib/term2/picker-filters';
 import type { Composer as ComposerState } from '../../../lib/term2/shell-machine';
 import { currentTag } from '../../../lib/term2/shell-machine';
 import type { WorkspaceFileEntry } from '../../../lib/term2/types';
@@ -90,8 +91,7 @@ export const Composer = memo(function Composer() {
 
   const matchingFiles = useMemo(() => {
     if (!atMention || files.key !== fileScopeKey || !files.loaded) return [];
-    const q = atMention.query.toLowerCase();
-    return files.data.filter((entry) => !q || entry.path.toLowerCase().includes(q)).slice(0, 14);
+    return filterFileMentions(files.data, atMention.query);
   }, [atMention, fileScopeKey, files]);
 
   const insertFileMention = (entry: WorkspaceFileEntry) => {

@@ -399,3 +399,110 @@ leaving the shell working. Do not combine it with phase 2.
 - `wire.frames-round-trip` and `wire.snapshot-is-fold` move with the fold as the library's stated guarantees.
 - The package stays dependency-free and ESM-only, as its README promises.
 - term2's `src/protocol/fold/` becomes a re-export of the pinned package, the way `@qduc/agent-core` is consumed.
+
+## 8. Locking the architecture (phase L)
+
+Goal, in the owner's words: once the architecture is settled, guard it with CI so agents cannot break it without
+the owner's approval.
+
+### What shapes the mechanism
+
+- **Agents act on GitHub as the owner.** The GitHub identity available to an agent session is the owner's own
+  login, and recent pull requests opened by agents carry that login as author. *Verified from this session.*
+- **So a label is not approval.** The two approval gates the repo has (`golden-change` in `ci.yml`,
+  `ci-budget-change` in `scripts/check-ci-budget.mjs`) pass when the label exists; they cannot tell who applied it,
+  and an agent session has a tool that sets labels. *Verified by reading both checks.*
+- **A required code-owner review does not work either:** the author of the pull request is the owner's account,
+  and an author cannot approve their own pull request. *From memory, not checked.*
+- **A check the pull request can edit is not a lock.** `pull_request` workflows run the workflow file from the
+  pull request's own head, so a change can rewrite the check that judges it.
+
+GitHub's documentation host is not reachable from the design session, so every statement below about how GitHub
+behaves is from memory. The first task is the spike that confirms them.
+
+### Mechanism
+
+A separate workflow, `.github/workflows/architecture-lock.yml`, triggered by `pull_request_target`, so the workflow
+definition and its script come from `main`, not from the pull request. It never checks out or runs pull-request
+code; it reads the list of changed files and their contents through the API as data.
+
+| Job | Does |
+| --- | --- |
+| `detect` | Reads the lock manifest **from the base branch**, compares it with the pull request's changes, writes a summary of every lock entry touched with its `why`, and outputs `locked: true/false` |
+| `approve` | Runs only when `locked` is true. It names the environment `architecture-change`, which has the owner as required reviewer, so the run waits until the owner approves it in the GitHub UI or the mobile app |
+| `architecture-lock` | The required check: passes when `detect` succeeded and either nothing locked was touched or `approve` succeeded |
+
+Approval belongs to one run, and a run belongs to one head commit: a new push that still touches a locked entry
+asks again. That is intended, so that what was approved is what merges.
+
+**What it does not stop.** An agent running on the owner's own machine with the owner's full `gh` login can do
+anything the owner can, including approving a run or editing the ruleset. The lock closes the normal path (cloud
+sessions have no tool for either) and turns a bypass into a deliberate act recorded in the run's review history.
+A harder boundary needs agents to act under a separate GitHub identity, which is outside this repository.
+
+### The manifest
+
+`scripts/architecture-lock.json`, one entry per guarded thing, each with a `why` written for the owner reading it
+on a phone. Three modes:
+
+| Mode | Approval needed when | Used for |
+| --- | --- | --- |
+| `any-change` | the file is added, changed or deleted | executable guards, where one added line can disable a check |
+| `removal-only` | an existing line is changed or removed; pure additions pass with a notice | the API report below |
+| `must-contain` | a listed string disappears from the file | the CI commands that run the guards, without locking all of `ci.yml` |
+
+Entries:
+
+1. **The lock itself** (`any-change`): the workflow, the detect script, the manifest.
+2. **One fold** (`any-change`): `scripts/gates/architecture-rules.mjs`, a new file called from `check-rules.mjs`
+   holding these static rules, with their exceptions kept in the manifest rather than in `rule-baseline.json`:
+   - nothing under `src/protocol/fold/` imports from outside it;
+   - under `web-client/`, only `lib/term2/session-store.ts` imports the fold bundle, and only it and `present.ts`
+     import wire types; components import neither;
+   - `web-client/lib/term2/event-adapter.ts` and `native-state.ts` do not exist.
+3. **Reload equals live** (`any-change`): `scripts/generated-verification/wire.mjs` and `shell.mjs`, the
+   `acceptedPart` exclusion list, `tests/web-client/browser/**`, and the gateway integration test for the frame
+   contract.
+4. **The public contract** (`removal-only`): `docs/contracts/wire-fold.api.txt`, a generated, sorted,
+   one-member-per-line report of everything `src/protocol/fold/index.ts` exports plus the `direct-wire-v2`
+   envelope. `check-rules` fails if it is stale. A new optional field or event type adds lines and passes;
+   renaming, removing or retyping a member changes a line and waits for the owner. This is the file that tells the
+   owner the future library's interface moved.
+5. **The guards still run** (`must-contain`, on `.github/workflows/ci.yml`): `pnpm verify:generated --seed 424242`,
+   `pnpm test:web-browser`, `node scripts/check-rules.mjs`, the web typecheck step, and `web-browser` in the
+   `port` job's `needs`.
+6. **Shell policy** (`any-change` on the numbers, added after phase 3): ceilings for the count of `useEffect` and
+   `useState` in `Term2SessionShell.tsx` and `useTerm2Session.ts`, enforced by `architecture-rules.mjs`. Lowering
+   one is free; raising one waits for the owner.
+
+Not locked, on purpose: `present.ts`, `session-store.ts`, `shell-machine.ts` and the fold's own source. They change
+with ordinary feature work; the rules, properties, flows and the API report are what judge those changes.
+
+### Owner's one-time setup
+
+Only the owner can do these, and an agent must not attempt them:
+
+1. Create the environment `architecture-change` with the owner as required reviewer. Turn off administrator bypass
+   for it. Leave "prevent self-review" off: every agent pull request is triggered by the owner's account, so with
+   it on nobody could approve.
+2. Add `architecture-lock` to the required status checks of the `main` ruleset.
+
+### Order of work
+
+1. **Spike on a throwaway pull request**, before writing the real thing. Confirm, and record the result in the
+   plan: the `pull_request_target` check appears on the pull request and can be made required; a run waiting for
+   review holds auto-merge; the owner can approve from the mobile app; a new push asks again; a pull request that
+   edits the lock workflow is still judged by the version on `main`. If any of these fails, stop and bring the
+   result back; do not substitute a label.
+2. The detect script, manifest and workflow. The pull request that introduces them is not judged by them (the
+   workflow is not on `main` yet), so the owner reviews that one by hand.
+3. Prove it: one pull request per mode that should wait (a deleted flow, a changed line in the API report, a
+   removed CI command) and one that should pass untouched (an added line in the API report, an edit to
+   `present.ts`). Record the five outcomes.
+4. Entries 1 to 5 go in when phase 2 has met its exit check; entry 6 when phase 3 has.
+
+If the owner is asked more than about twice a week once things settle, the manifest is too wide: narrow it,
+through the lock.
+
+The two label gates the repo already has share the weakness described above. Moving them behind the same
+environment is a small follow-up, the owner's call.

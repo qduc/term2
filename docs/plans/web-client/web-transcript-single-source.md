@@ -1,27 +1,46 @@
 # Web client: one source of truth for the transcript
 
-Status: in progress. Phase 0 is partly on branch `claude/beautiful-planck-2aliiz` (unmerged); phases 1-3 wait on
-decision D1, which the owner asked to talk through before choosing.
+Status: in progress. Design is settled and written down; phase 0 is partly on branch
+`claude/beautiful-planck-2aliiz` (unmerged). Building is handed to a separate session.
 
 ## Resume here
 
-- Done on the branch: the dead v1 view path (`viewFromProjection`, `applyProjectionEvent`) and its unrun example
+- **Read next:** [the build spec](web-transcript-single-source-spec.md). It has the contracts, the acceptance
+  example, the checks and what not to do.
+- **On the branch:** the dead v1 view path (`viewFromProjection`, `applyProjectionEvent`) and its unrun example
   test are deleted; the `integration` CI lane typechecks `web-client` (shown failing on a seeded type error).
-- Next, independent of D1: the browser flows listed under "How it is checked".
-- Blocked on D1: everything in phases 1-3.
+- **Next:** finish phase 0 (browser flows), then phase 1. Phases are in order; 3 is independent of 1 and 2 and
+  can be scheduled separately.
 
-## Decisions (owner, 2026-11-26)
+## Decisions
 
+Owner, 2026-11-26:
+
+- `@qduc/agent-wire` is to become a public library for building agent interface layers, so nobody has to reinvent
+  this. The owner delegated the stream decision to the designer on that basis.
 - Add `@playwright/test` (Chromium only) as a root dev dependency, in its own CI lane.
 - Deliver by pushing to the working branch; the owner opens pull requests.
-- D1 (which stream the browser folds): open, but the owner stated the goal that decides it: `@qduc/agent-wire`
-  is to become a public library for building agent interface layers, so that nobody has to reinvent this. The
-  package today ships the event vocabulary and envelope parsers and leaves state and replay to each application
-  (its README says so), which is the part the web client reinvented. Proposed reading, not yet confirmed: option A,
-  with the state shape and `reduceWireEvent` incubated here and then graduated into `packages/wire` in
-  qduc/agent-runtime as the next schema version, the way `@qduc/agent-core` graduated; the web client consumes
-  them from the package. Open with it: whether the snapshot is published term2-shaped or split into a portable
-  core plus host extensions first.
+- This session designs and plans; another session builds.
+
+Designer, following from the first one:
+
+- **The browser folds native events with the shared reducer (option A below).** The package today ships the event
+  vocabulary and envelope parsers and leaves state and replay to each application (its README says so). That is
+  the part the web client reinvented, and the part a public library has to supply.
+- **Incubate here, then graduate.** The fold and its types are isolated in `src/protocol/fold/` with no outgoing
+  imports, used by the TUI and the web client, and later moved into `packages/wire` in qduc/agent-runtime as the
+  next schema version, the way `@qduc/agent-core` graduated.
+- **Split core from host extensions at graduation, not before.** The snapshot is term2-shaped today (goals,
+  verification, Codex quota, queue pause reasons). The web client's `present.ts` will show which fields a UI
+  reads; draw the line with that evidence.
+- **The v2 change vocabulary is frozen.** Its encoder and tests stay for the external consumer; nothing new is
+  added to it.
+- **Reasoning summaries and per-turn usage survive a reload.** Today they do only until the next turn starts.
+- **The six `node:test` files under `web-client/lib/` that nothing runs** (`api/term2.test.ts` and five under
+  `server/`): for each, check whether an integration test, release smoke or a browser flow already covers the
+  behaviour; move what is uncovered and matters (the Host/Origin guard, cursor and request validation) into the
+  gateway integration suite; then delete the files and make `scripts/check-no-unit-tests.mjs` scan `web-client/`.
+  Deleting them without that check would drop the only written statement of those rules.
 
 ## What the code shows (2026-11-26, `main` at `6fcad34`)
 
@@ -57,9 +76,9 @@ Each line is labelled **verified** (ran it or read the named symbol) or **inferr
    accepted change; `liveChanges` and `nativeChanges` are append-only arrays copied on each event; and
    `presentTerm2SessionView` re-concatenates every reasoning delta on each render. *Verified by reading.*
 
-## Decision D1: which stream the browser folds
+## The two options considered
 
-**A (recommended): fold native events with the shared reducer, like the TUI.**
+**A (chosen): fold native events with the shared reducer, like the TUI.**
 
 ```
 SSE batch of WireEvent ─┐
@@ -87,65 +106,50 @@ the detector that is still needed becomes a server property that also protects t
 web client stops consuming the public v2 change vocabulary, so v2's encoder loses its in-repo consumer; its
 gateway tests remain.
 
-## Design under A
+## Design in brief
 
-**Browser modules** (`web-client/lib/term2/`):
+The [build spec](web-transcript-single-source-spec.md) is the contract; this is the shape.
 
-- `session-store.ts`: owns `{ snapshot: WireSnapshot, connection }`. Applies one batch atomically; ignores an
-  accepted batch at or below `snapshot.seq`; ignores a `snapshot` event older than the installed one; turns HTTP
-  410 or `x-term2-replay: unavailable` into "Reload required". Exposed through `useSyncExternalStore`.
-- `present.ts`: pure `WireSnapshot → Term2SessionView`. Memoized per turn on the identity of that turn's
-  messages, tools and result, so a streaming delta re-presents one turn and React re-renders one turn.
-- The shared fold arrives as a build-time bundle of `src/protocol/reducer.ts`; types are imported from
-  `src/protocol/wire.ts`.
-- Deleted: `event-adapter.ts`, the view half of `hydration.ts`, `native-state.ts`, `nativeChanges`, `liveChanges`.
-
-**Accepted versus live.** The native snapshot already separates them by shape: a streaming message has
-`draft: true`, and `thinking`, `retry` and tool progress are fields the accepted facts overwrite. No overlay layer
-is needed. `acceptedPart(snapshot)` strips those fields; it is used by the property below and nowhere at runtime.
-A reconnect discards live residue because the replay tail ends with the server's authoritative snapshot.
-
-**Replay rules.** Hydrate once then replay strictly after N: the load is a snapshot at N followed by batches
-`> N` on one connection. Older cut never replaces newer: guarded in `session-store`. Fail closed: unchanged.
-`history_replaced`: the reducer handles it and the server follows with a snapshot. Branch streams never touch the
-root transcript: `subagent` events reduce into `tasks` and `branches`, which `present` reads separately.
-
-**Interactions.** The pending-interaction DTO (choices, multi-question progress) is built by `ServerInteractions`
-and is not in the snapshot. Phase 2 keeps it as a sidecar field on the batch that opens or closes an interaction;
-moving the form state into the browser is a later, separate change.
-
-**Caps.** The v2 encoder's wire caps (16 KB final text, 10 KB error) stop applying to this stream; the 2 MB
-hydration budget and the presenter's 100 KB / 4 KB view caps stay. Any change to a cap goes through `guard-design`.
+- **One fold, isolated.** `reduceWireEvent` and the wire types move under `src/protocol/fold/`, which imports
+  nothing outside itself. The server, the TUI and the browser run the same code.
+- **One stream format for the browser.** `direct-wire-v2`: the accepted/live batch envelope of v2 carrying native
+  events, plus the authoritative snapshot frame the server already produces on connect and after a replay tail.
+  The first snapshot frame is the page load, so the separate hydration request goes away.
+- **Two browser modules.** `session-store.ts` owns the connection, the checkpoint and the current snapshot.
+  `present.ts` is the only place a transcript rule is written, and it reuses unchanged turns so a streaming delta
+  re-renders one turn.
+- **Accepted versus live** is already encoded in the snapshot's shape (`draft`, `thinking`, `retry`), so there is
+  no overlay layer. A reconnect drops live residue because the replay ends with the server's snapshot.
+- **Replay rules** hold as stated in the brief: one cut then strictly-after replay on one connection; an older
+  snapshot never replaces a newer one; unavailable replay or HTTP 410 shows "Reload required"; branch events
+  reduce into `tasks` and `branches`, never the root transcript.
+- **Shell policy** becomes one pure `step(state, action) → { state, commands }` module, with results tagged by
+  session and generation so a late response cannot overwrite newer state.
 
 ## How it is checked
 
-- **Generated property `wire.snapshot-is-fold`** (`scripts/generated-verification/`, seed 424242): for generated
-  fact sequences of at most 30 facts, at every cut N,
-  `acceptedPart(snapshot of a cold replay to N) ≡ acceptedPart(reduceWireEvent fold of events 1..N)`. This is the
-  reload-equals-live rule stated where both sides are produced. No such check exists today.
-- **Generated property `web.present-is-pure`**: `present` gives equal views for equal snapshots however they were
-  reached, and never mutates its input.
-- **Browser flows** (Playwright against `term2-web` with the loopback model double from `serve.integration`):
-  first send creates the chat; streaming turn with a tool call; reload mid-turn and after; approval; failed turn
-  shows the provider message before and after reload; steer a running turn. Each flow asserts the transcript
+- `wire.snapshot-is-fold`: for generated fact sequences, the snapshot reached by folding events equals the one the
+  server's own resynchronisation produces, on accepted state. Reload equals live, checked where both sides are
+  made; it also guards the TUI. No such check exists today.
+- `wire.frames-round-trip`, `web.present-reuse`, `shell.machine-rules`: see the spec.
+- Browser flows in Chromium against the real gateway and a loopback model double, each asserting the transcript
   before a reload and again after it.
-- **Web typecheck** in the `quality` lane.
+- Web typecheck in the `integration` lane (added).
 
 ## Phases
 
-| Phase | Change | Exit check |
-| --- | --- | --- |
-| 0 | Web typecheck in CI; delete the dead v1 view path and its example test; first two browser flows. Six other `node:test` files under `web-client/lib/` test live BFF code and are run by nothing: wire them into a lane or delete them, owner's call | CI red on a seeded type error and on a seeded transcript regression |
-| 1 | Batched native SSE format; browser-safe fold bundle; `wire.snapshot-is-fold` | property green at 1,000 runs; gateway integration test reads the new format |
-| 2 | `session-store` + `present` behind the existing hook interface; remove the old reducers; snapshot gains per-turn reasoning and usage | the 24-cut probe shows 0 differences; all six flows green; delta profile no worse than #425 |
-| 3 | Shell policy: move "only the user opens the panel", "chat is created on first send", folder selection and the send gate out of effects into one reducer | each rule is one named transition; the six `C`-class fixes have a flow |
+| Phase | Change | Exit check | Risk |
+| --- | --- | --- | --- |
+| 0 | Web typecheck in CI (done); delete the dead v1 view path (done); browser flows for first send, tool call and failed turn, each asserted before and after reload; settle the six unrun test files | CI red on a seeded type error (shown) and on a seeded transcript regression | low |
+| 1 | `src/protocol/fold/` with its no-imports gate; `reasoningBlocks`; `direct-wire-v2` frames with explicit batches; browser bundle of the fold; `wire.snapshot-is-fold` and `wire.frames-round-trip` | both properties green at 1,000 runs; the gate red on a seeded import; a gateway integration test reads the new format; TUI goldens unchanged | medium, server |
+| 2 | `session-store.ts` and `present.ts` behind the existing hook interface; delete `event-adapter.ts`, `native-state.ts` and the view half of `hydration.ts`; `web.present-reuse` | the spec's acceptance example holds by fold and by snapshot; every browser flow green, including the ones phase 0 found red; no hydration GET in the network log | high: independent verifier |
+| 3 | `shell-machine.ts`: selection and draft, then composer, then panels | `shell.machine-rules` green; one browser flow per rule that already cost a fix | medium, in slices |
+| 4 | Graduate the fold into `@qduc/agent-wire` | the spec's graduation checklist | separate repo |
 
-Phase 2 touches the stream consumer for every web session and is high risk under the verification skill: it gets an
-independent verifier.
+A flow that phase 0 finds red because reload and live really differ stays red-by-design until phase 2: record it
+in this document with the evidence, keep the assertion, and do not land it in a required lane until it passes.
 
-## Assumptions
+## Open, for the owner
 
-- Reasoning summaries and per-turn usage should survive a reload (today they do only until the next turn starts).
-- The external consumer keeps using v2 unchanged; nothing here removes or alters that encoder.
-- Subagent cards are presented from `tasks` and `branches` after phase 2; the `subagent_*` change vocabulary is not
-  reproduced in the browser.
+- Whether the external consumer should move to the graduated library or stay on v2. Nothing here depends on it.
+- Whether `check-no-unit-tests.mjs` may be widened to `web-client/` (it tightens a repository guard).

@@ -300,10 +300,6 @@
     "web-client/lib/term2/shell-machine.ts": {
       "lines": 540,
       "reason": "One pure step() whose cases are the shell's rules, checked together by shell.machine-rules; splitting it by slice would hide the cross-slice resets. Recorded when the gate first covered web-client (2026-11)."
-    },
-    "web-client/components/term2/Term2ModelPicker.tsx": {
-      "lines": 509,
-      "reason": "Nine lines over; recorded when the gate first covered web-client (2026-11). Drop the ceiling when the picker is next touched."
     }
   },
   "messagePath": {

@@ -249,9 +249,9 @@ function presentTurn(turnId: string, inputs: TurnInputs, snapshot: WireSnapshot)
   if (active && (liveReasoning.length > 0 || (snapshot.thinking && blocks.length === 0)))
     items.push({ kind: 'reasoning', id: `live-reasoning:${turnId}`, text: cap(liveReasoning, TEXT_CAP), streaming: true });
 
-  // Rule 6.
+  // Rule 6. A retried turn's outcome belongs to the turn that retried it, so its own failure or stop is not shown.
   const status: Term2TurnView['status'] = result
-    ? result.outcome === 'completed'
+    ? result.outcome === 'completed' || result.retried
       ? 'completed'
       : result.outcome === 'failed'
       ? 'failed'
@@ -265,7 +265,7 @@ function presentTurn(turnId: string, inputs: TurnInputs, snapshot: WireSnapshot)
     : 'unknown';
   // Rule 7.
   const terminalError = snapshot.terminal?.turnId === turnId ? snapshot.terminal.error : undefined;
-  const error = result?.outcome === 'failed' ? result.error ?? terminalError : fault;
+  const error = result?.retried ? undefined : result?.outcome === 'failed' ? result.error ?? terminalError : fault;
   // Rule 9: notes only from snapshot fields, while the turn is active.
   const transientStatus = active ? turnNote(snapshot) : undefined;
 

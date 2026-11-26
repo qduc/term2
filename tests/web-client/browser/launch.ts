@@ -68,12 +68,14 @@ function latestUserPrompt(request: ModelRequest): { prompt: string; toolResults:
 
 /**
  * An OpenAI-compatible model double. A request whose latest user message is a key of `scripts` gets that
- * script's next step: one step per tool result already returned after that message. Keying on the prompt,
+ * script's next step: one step per tool result already returned after that message, plus one per error step
+ * already served for that prompt (so a retry gets the step after the error). Keying on the prompt,
  * not on arrival order, keeps a request the product makes on its own from consuming a scripted step.
  */
 export async function startModelDouble(scripts: Record<string, readonly ModelStep[]>): Promise<ModelDouble> {
   const scripted: { prompt: string; request: ModelRequest }[] = [];
   const unscripted: ModelRequest[] = [];
+  const errorsServed = new Map<string, number>();
   const gates = new Map<
     string,
     { reached: () => void; reachedP: Promise<void>; open: () => void; openP: Promise<void> }
@@ -101,7 +103,9 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
     req.on('end', () => {
       const request = JSON.parse(body) as ModelRequest;
       const { prompt, toolResults } = latestUserPrompt(request);
-      const step = scripts[prompt]?.[toolResults];
+      // A retried request repeats the same prompt and tool results; each error already served moves the
+      // script on, so `[error, text]` scripts a failure followed by a successful retry.
+      const step = scripts[prompt]?.[toolResults + (errorsServed.get(prompt) ?? 0)];
       if (!step) {
         unscripted.push(request);
         res.writeHead(500, { 'content-type': 'application/json' });
@@ -110,6 +114,7 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
       }
       scripted.push({ prompt, request });
       if ('error' in step) {
+        errorsServed.set(prompt, (errorsServed.get(prompt) ?? 0) + 1);
         res.writeHead(step.error.status, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: { message: step.error.message, type: 'invalid_request_error' } }));
         return;

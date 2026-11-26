@@ -224,7 +224,12 @@ export type WireBudgetDecision =
 export type WireBudgetResolution =
   | Exclude<WireBudgetDecision, { readonly kind: 'steer' }>
   | { readonly kind: 'steer'; readonly messages: readonly WireMessage[] };
-export type WireTurnResult = { readonly turnId: string; readonly messages: readonly WireMessage[] } & WireTerminal;
+export type WireTurnResult = {
+  readonly turnId: string;
+  readonly messages: readonly WireMessage[];
+  /** A turn or tool retry replaced history after this turn ended, so the turn that follows supersedes its outcome. */
+  readonly retried?: true;
+} & WireTerminal;
 /** Physical request accounting retains the actual producing turn and immutable tree ownership.
  * A late child/summary/failure charge is not another root model response or terminal.
  */

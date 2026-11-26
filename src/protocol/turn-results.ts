@@ -37,6 +37,7 @@ export function publicTurnResults(state: DirectSessionState, known: readonly Wir
       messages,
       ...publicTerminal(result),
       finalText: completedFinalText(result.outcome, messages),
+      ...(result.retried ? { retried: true as const } : {}),
     };
   });
 }

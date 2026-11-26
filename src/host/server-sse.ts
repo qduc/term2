@@ -88,7 +88,7 @@ export function agentWireV2EventStream(
   });
 }
 /**
- * direct-wire-v2 (server-wire-direct.ts): native events, one frame per Session publication. A connection with no
+ * direct-wire-v2 (the frame builder below): native events, one frame per Session publication. A connection with no
  * cursor opens with the current snapshot and then sends only publications after it; with a cursor it sends the
  * accepted tail, the replay's snapshot, then live frames. Null when this connection cannot report batches.
  */
@@ -239,7 +239,12 @@ function eventStream<U>(
             // From here on, skip what the opening snapshot already holds (not the opening frames themselves).
             contained = opening.contained;
           }
-          while (!closed && buffered.length) await writeDraining(buffered.shift()!);
+          while (!closed && buffered.length) {
+            const unit = buffered.shift()!;
+            // The limit is on what is still waiting, not on everything buffered since connect.
+            bufferedSize -= encoding.size(unit);
+            await writeDraining(unit);
+          }
           if (closed) return;
           // No await at the empty-buffer/live-cut boundary.
           live = true;

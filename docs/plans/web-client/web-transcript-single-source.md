@@ -44,8 +44,9 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
     `details` on non-conflict gateway errors is not checked either: no route can make the gateway return one.
 - **Phase 1, done on the branch** (each item shown red on a seeded regression before it was trusted):
   - The fold lives in `src/protocol/fold/` (`wire-fold.ts`, `wire-types.ts`, `wire-events.ts`, `branch-fold.ts`, ...;
-    the spec's `reducer.ts`/`wire.ts` were renamed because `check-rules` forbids duplicate basenames, and the old
-    paths stay as shims). The `fold-boundary` rule in `check-rules.mjs` fails on any import leaving it (four seeds in
+    the spec's `reducer.ts`/`wire.ts` were renamed because `check-rules` forbids duplicate basenames; `wire.ts`,
+    `reducer.ts`, `review-projection.ts` and `turn-results.ts` stay as shims at the old paths, while the few
+    importers of `reducer-nested`, `reducer-notices`, `wire-events` and `wire-commands` were pointed at the fold). The `fold-boundary` rule in `check-rules.mjs` fails on any import leaving it (four seeds in
     `prove-checks.sh`). Host-owned detail types are augmentation slots narrowed in `src/protocol/wire.ts`.
   - `scripts/build-web-fold.mjs` bundles `src/protocol/fold-browser.ts` (31 KB) with its `.d.ts` into
     `web-client/lib/term2/generated/`; `build-web.mjs`, the CI web typecheck and the CI generated-verification step
@@ -65,7 +66,25 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
     each carried over by `snapshotDirectState` (blocks while Session's timeline still has the reasoning entry,
     usage while the turn is known, live reasoning as is; all three start afresh on rotation).
     `wire.snapshot-is-fold` went red on the missing carry-over of each before it was added.
-- **Next:** an independent verifier for phase 1, then phase 2. The acceptance example's steer and the second
+- **Independent verifier, phase 1: rejected** (on `87a5eef1`), with three defects, all fixed since:
+  1. `eventStream`'s pre-live buffer counted every event since connect instead of what was still waiting, so a v1
+     or agent-wire-v2 reader draining its opening snapshot under backpressure was dropped early. Fixed; a temporary
+     probe (blocked opening write, 200 events, 150 drained, 100 more) disconnects before and not after. No
+     persistent check covers this path.
+  2. A branch's `acceptedSeq` no longer moves on a branch fact that projects to no event (a fold cannot see it).
+     Nothing reads it; the contract (`wire-events.ts`, `protocol/mapping.md`) now says so.
+  3. Session's timeline keeps reasoning entries through a rewind, so reasoning blocks of rewound turns survived a
+     resync. `snapshotDirectState` now also requires the block's turn to still have messages. The generator now
+     rewinds, and `wire.snapshot-is-fold` checks that rule after every rewind (red on the unfixed code).
+  Also from the review: `fold-boundary` now catches `import x = require(...)` and triple-slash references (two more
+  seeds), and the gateway test has the second example (a background subagent: branch values at two cuts, the
+  panel's steps), red on the reviewer's seed "branch usage always shown", which nothing caught before.
+- **Phase 2, done on the branch:** `session-store.ts` and `present.ts` behind `useTerm2Session` (same return
+  shape); `event-adapter.ts`, `native-state.ts` and `hydration.ts` deleted; panels read `view.session`;
+  `web.present-reuse` green (it found the fold rebuilding every tool object per tool event, fixed). All eight
+  browser flows pass, including the new usage flow (per-reply counts and session total equal after a reload, no
+  hydration request), which phase 0 had found red.
+- **Next:** an independent verifier for the phase 1 fixes and phase 2, then phase 3. The acceptance example's steer and the second
   example (a background subagent's panel steps) are not in the integration test yet; phase 2's browser flows
   cover the steer end to end. Phases
   are in order; 3 is independent of 1 and 2 and can be scheduled separately.

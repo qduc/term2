@@ -296,9 +296,18 @@ for (const file of files.filter((file) => file.startsWith(foldDir + path.sep))) 
       check(node, first && ts.isStringLiteralLike(first) ? first.text : '<computed>');
     }
     if (ts.isModuleDeclaration(node) && ts.isStringLiteral(node.name)) check(node, node.name.text);
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      ts.isStringLiteral(node.moduleReference.expression)
+    )
+      check(node, node.moduleReference.expression.text);
     ts.forEachChild(node, visit);
   };
   visit(sf);
+  // Triple-slash references pull in files or type packages without an import statement.
+  for (const reference of [...sf.referencedFiles, ...sf.typeReferenceDirectives])
+    foldBoundary(`${rel(file)}: references '${reference.fileName}' with a triple-slash directive`);
 }
 
 reportAndExit(

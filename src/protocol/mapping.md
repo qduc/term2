@@ -537,13 +537,15 @@ same accepted cost/usage/tool/subagent events (see `clients/headless/INTEGRATION
 
 ## Accepted branch hydration at one logical Session cut
 
-`DirectProjection.snapshot` exposes `WireSnapshot.branches` from the existing
-accepted branch projection map. `DirectAttachment` reconstructs that map from
-`Session.captureFrom(0)` before returning a connection snapshot; synchronization
-snapshots also carry the branch read models. No second journal, reader, sequence
+`DirectProjection.snapshot` exposes `WireSnapshot.branches` as the shared fold holds
+them: each `subagent` event's child event is folded into its branch
+(`fold/branch-fold.ts`), so every client that folds the same events has the same
+branches. `DirectAttachment` rebuilds them from `Session.captureFrom(0)` before returning
+a connection snapshot; synchronization snapshots keep the fold's branches. No second journal, reader, sequence
 or timestamp is introduced. The outer `sessionId`/`seq` is the single hydration
-and subsequent replay cut. Branch `acceptedSeq` is only the last real
-`branch_started`/`branch_event` boundary; task interaction and request-cost joins
+and subsequent replay cut. Branch `acceptedSeq` is the seq of the last
+`branch_started`/`branch_event` that changed what the branch shows (a branch fact that
+projects to no event, such as a hidden item, does not move it; a fold cannot see it); task interaction and request-cost joins
 can be newer, up to the outer cut, and never create separate resume cursors.
 
 Each `WireBranchSnapshot` carries actual `branchId`, `taskId`, child `turnId` and

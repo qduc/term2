@@ -150,7 +150,7 @@ const SCRIPT: ({ fact: Fact } | { live: Extract<DirectSessionUpdate, { type: 'tr
 const ACCEPTED = SCRIPT.filter((step) => 'fact' in step).length;
 
 /** A Session that publishes the script on demand and replays what it has accepted, as Session.captureFrom does. */
-function scriptedSession() {
+function scriptedSession(script: typeof SCRIPT = SCRIPT) {
   let state = initialDirectState(
     SESSION,
     { root: '/workspace', access: 'read_write', target: 'local' },
@@ -175,7 +175,7 @@ function scriptedSession() {
   } as unknown as DirectSession;
   /** Publishes the next `count` steps of the script. */
   const publish = (count: number) => {
-    for (const step of SCRIPT.slice(next, next + count)) {
+    for (const step of script.slice(next, next + count)) {
       position += 1;
       let update: DirectSessionUpdate;
       if ('fact' in step) {
@@ -188,7 +188,7 @@ function scriptedSession() {
     }
     next += count;
   };
-  return { session, publish, remaining: () => SCRIPT.length - next };
+  return { session, publish, remaining: () => script.length - next };
 }
 
 type Frame = {
@@ -426,4 +426,171 @@ it('a reconnect with a cursor gets the accepted tail, then the replay snapshot, 
   ]);
   const lastSnapshot = (last.data.events.at(-1) as Extract<WireEvent, { type: 'snapshot' }>).payload.snapshot;
   expect(json(client)).toEqual(json(lastSnapshot));
+});
+
+/** Spec section 3's second example: a background subagent, which the running-tasks panel shows. */
+const SUBAGENT_SCRIPT: typeof SCRIPT = [
+  { fact: fact({ type: 'turn_started', turnId: 'turn-1', input: [user('user-1', 'delegate it')] }) },
+  {
+    fact: fact({
+      type: 'task_started',
+      mode: 'background',
+      task: {
+        taskId: 'task-1',
+        sessionId: SESSION,
+        kind: 'subagent',
+        label: 'look around',
+        role: 'explorer',
+        parentTurnId: 'turn-1',
+        startedAt: 1,
+      },
+    }),
+  },
+  {
+    fact: fact({
+      type: 'branch_started',
+      branchId: 'branch-1',
+      taskId: 'task-1',
+      turnId: 'child-1',
+      parentTurnId: 'turn-1',
+      rootTurnId: 'turn-1',
+      input: [user('child-user-1', 'look around')],
+    }),
+  },
+  {
+    fact: fact({
+      type: 'branch_event',
+      branchId: 'branch-1',
+      fact: {
+        type: 'item',
+        turnId: 'child-1',
+        modelStep: 1,
+        executionId: 'child-exec-1',
+        item: {
+          type: 'tool_call',
+          id: 'child-call-item',
+          callId: 'child-call',
+          toolName: 'shell',
+          input: { command: 'ls' },
+        },
+      },
+    }),
+  },
+  {
+    fact: fact({
+      type: 'branch_event',
+      branchId: 'branch-1',
+      fact: {
+        type: 'tool_started',
+        turnId: 'child-1',
+        executionId: 'child-exec-1',
+        callId: 'child-call',
+        toolName: 'shell',
+        input: { command: 'ls' },
+      },
+    }),
+  },
+  {
+    fact: fact({
+      type: 'branch_event',
+      branchId: 'branch-1',
+      fact: {
+        type: 'tool_finished',
+        turnId: 'child-1',
+        executionId: 'child-exec-1',
+        result: { output: 'a.txt', isError: false },
+      },
+    }),
+  },
+  {
+    fact: fact({
+      type: 'branch_event',
+      branchId: 'branch-1',
+      fact: {
+        type: 'usage',
+        turnId: 'child-1',
+        modelStep: 1,
+        usage: { inputTokens: 40, outputTokens: 7, cachedInputTokens: 0 },
+      },
+    }),
+  },
+  {
+    fact: fact({
+      type: 'branch_event',
+      branchId: 'branch-1',
+      fact: {
+        type: 'item',
+        turnId: 'child-1',
+        modelStep: 2,
+        item: { type: 'assistant_message', id: 'child-asst', content: [{ type: 'text', text: 'Found a.txt.' }] },
+      },
+    }),
+  },
+  {
+    fact: fact({
+      type: 'branch_event',
+      branchId: 'branch-1',
+      fact: { type: 'turn_ended', turnId: 'child-1', outcome: 'completed' },
+    }),
+  },
+];
+
+it("a background subagent's branch is the same by fold and by snapshot, with the panel's steps", async () => {
+  const { session, publish } = scriptedSession(SUBAGENT_SCRIPT);
+  const attachment = new DirectAttachment(session);
+  cleanup.push(async () => attachment.close());
+  const view = attachment.connect();
+  const connection: DirectConnection = {
+    sessionId: SESSION,
+    get snapshot() {
+      return view.snapshot;
+    },
+    events: view.events,
+    batches: () => view.events.batches(),
+    cut: view.cut,
+    send: async () => ({ ok: false, code: 'closed', message: 'not used' }),
+    close: () => view.events.close(),
+  };
+  const { until } = await serve(connection);
+  await until(1);
+  // Up to the tool's finish: the branch has run a tool but reported no usage, which is unknown, not zero.
+  publish(6);
+  const beforeUsage = fold(await until(7));
+  expect(beforeUsage.branches).toHaveLength(1);
+  expect(beforeUsage.branches![0]).toMatchObject({
+    branchId: 'branch-1',
+    taskId: 'task-1',
+    turnId: 'child-1',
+    acceptedSeq: 6,
+    usage: null,
+    terminal: null,
+  });
+  publish(SUBAGENT_SCRIPT.length - 6);
+  const frames = await until(1 + SUBAGENT_SCRIPT.length);
+  const client = fold(frames);
+  expect(json(client)).toEqual(json(view.snapshot));
+  const [branch] = client.branches!;
+  expect(branch).toMatchObject({ acceptedSeq: 9, usage: { inputTokens: 40, outputTokens: 7, cachedInputTokens: 0 } });
+  expect(branch!.messages.map((message) => [message.role, message.text])).toEqual([
+    ['user', 'look around'],
+    ['assistant', 'Found a.txt.'],
+  ]);
+  expect(branch!.tools.map((tool) => [tool.executionId, tool.status, tool.output])).toEqual([
+    ['child-exec-1', 'completed', 'a.txt'],
+  ]);
+  expect(branch!.terminal).toMatchObject({ turnId: 'child-1', outcome: 'completed' });
+  // Branch events never reach the root transcript.
+  expect(client.messages.map((message) => message.id)).toEqual(['user-1']);
+
+  // The running-tasks panel's steps for that task, presented the same way from the fold.
+  const presented = present(SESSION, client, new Map(), { phase: 'live', error: null });
+  const task = presented.session.tasks.find((entry: { id: string }) => entry.id === 'task-1');
+  expect(task.branchTurns).toHaveLength(1);
+  expect(task.branchTurns[0]).toMatchObject({
+    turnId: 'child-1',
+    userText: 'look around',
+    status: 'completed',
+    commands: [{ callId: 'child-exec-1', status: 'completed', output: 'a.txt' }],
+  });
+  expect(presented.turns.map((turn: { turnId: string }) => turn.turnId)).toEqual(['turn-1']);
 });

@@ -49,6 +49,11 @@ seed "leaf-reducer module dynamically imported outside foldFact" src/app/setting
 seed "fold imports session code" src/protocol/fold/wire-fold.ts $'\nimport "../../session/state.js";\n' '\[fold-boundary\]' node scripts/check-rules.mjs
 seed "fold names an outside type inline" src/protocol/fold/wire-types.ts $'\nexport type SeededOutside = import("../../model/index.js").CodexWeeklyQuota;\n' '\[fold-boundary\]' node scripts/check-rules.mjs
 seed "fold imports a package" src/protocol/fold/reducer-notices.ts $'\nimport "node:fs";\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold uses import-equals require" src/protocol/fold/final-text.ts $'\nimport fs = require("node:fs");\nexport const seededFs = fs;\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+# A triple-slash directive only counts at the top of a file, so this seed prepends.
+backup src/protocol/fold/final-text.ts
+{ printf '/// <reference types="node" />\n'; cat src/protocol/fold/final-text.ts.prove-bak; } > src/protocol/fold/final-text.ts
+expect_fail "fold has a triple-slash reference" '\[fold-boundary\]' node scripts/check-rules.mjs
 seed "fold imports dynamically" src/protocol/fold/review.ts $'\nexport const seededLoad = () => import("../json.js");\n' '\[fold-boundary\]' node scripts/check-rules.mjs
 seed "app/ reads a session log" src/app/settings.ts $'\nexport const seededReader = readFactLines;\n' '\[log-readers\]' node scripts/check-layers.mjs
 seed "engine imports app (layer direction)" src/engine/turn.ts $'\nimport "../app/settings.js";\n' '\[layer-direction\]' node scripts/check-layers.mjs

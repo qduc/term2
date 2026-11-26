@@ -77,7 +77,16 @@ function turnDetail(
     ...turnResults.map((result) => result.turnId),
     ...state.timeline.flatMap((entry) => (entry.turnId ? [entry.turnId] : [])),
   ]);
-  const reasoningBlocks = previous.reasoningBlocks?.filter((block) => reasoningIds.has(block.messageId));
+  // Session's timeline keeps reasoning entries through a rewind, so a block also needs its turn's messages.
+  const turnsWithMessages = new Set(
+    state.messages.flatMap((message) => {
+      const turnId = (message as { readonly turnId?: string }).turnId;
+      return turnId ? [turnId] : [];
+    }),
+  );
+  const reasoningBlocks = previous.reasoningBlocks?.filter(
+    (block) => reasoningIds.has(block.messageId) && block.turnId !== null && turnsWithMessages.has(block.turnId),
+  );
   const turnUsage = previous.turnUsage?.filter((entry) => turnIds.has(entry.turnId));
   return {
     ...(reasoningBlocks?.length ? { reasoningBlocks } : {}),

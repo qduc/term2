@@ -68,6 +68,7 @@ const command = fc.oneof(
     arbitrary: fc.record({ kind: fc.constant('end'), outcome: fc.constantFrom('completed', 'failed', 'cancelled') }),
   },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant('silent'), text }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant('rewind') }) },
   { weight: 2, arbitrary: fc.record({ kind: fc.constant('branch') }) },
   {
     weight: 4,
@@ -93,6 +94,8 @@ export function sessionUpdates(commands) {
   let turnCount = 0;
   let turn = null; // { id, step, drafting, tools: [{ executionId, callId, toolName, started, finished }] }
   const branches = [];
+  // Provider history items of each root turn, in order, for a rewind to keep.
+  const history = [];
   const fact = (value) =>
     updates.push({
       type: 'fact',
@@ -196,11 +199,15 @@ export function sessionUpdates(commands) {
   const startTurn = (prompt) => {
     turnCount += 1;
     turn = { id: `turn-${turnCount}`, step: 1, drafting: false, tools: [], ended: false };
-    fact({
-      type: 'turn_started',
-      turnId: turn.id,
-      input: [{ type: 'user_message', id: `user-${turnCount}`, content: [{ type: 'text', text: prompt }] }],
-    });
+    const input = { type: 'user_message', id: `user-${turnCount}`, content: [{ type: 'text', text: prompt }] };
+    history.push({ turnId: turn.id, item: input });
+    fact({ type: 'turn_started', turnId: turn.id, input: [input] });
+  };
+  // Root facts that carry a history item record it, so a rewind can keep exactly the earlier turns.
+  const rootFact = (value) => {
+    if (value.type === 'item' && value.display !== false && value.item.type !== 'tool_call')
+      history.push({ turnId: value.turnId, item: value.item });
+    fact(value);
   };
   const ensureTurn = () => {
     if (!turn || turn.ended) startTurn('continue');
@@ -254,6 +261,18 @@ export function sessionUpdates(commands) {
       startBranch();
       continue;
     }
+    if (c.kind === 'rewind') {
+      // Back to before the latest turn: its messages leave the transcript, earlier turns stay.
+      if (!turn) continue;
+      if (!turn.ended) step(turn, 'end', { outcome: 'completed' }, rootFact, turn.id);
+      const dropped = turn.id;
+      fact({
+        type: 'history_replaced',
+        reason: 'rewind',
+        history: history.filter((entry) => entry.turnId !== dropped).map((entry) => entry.item),
+      });
+      continue;
+    }
     if (c.kind === 'branch_child') {
       const branch = branches.filter((entry) => !entry.ended).at(-1) ?? startBranch();
       const child =
@@ -277,11 +296,12 @@ export function sessionUpdates(commands) {
     ensureTurn();
     switch (c.kind) {
       case 'reasoning':
-        item(
-          turn.id,
-          { type: 'reasoning', id: `reasoning-${turn.id}-${turn.step}`, summary: c.text },
-          { modelStep: turn.step },
-        );
+        rootFact({
+          type: 'item',
+          turnId: turn.id,
+          modelStep: turn.step,
+          item: { type: 'reasoning', id: `reasoning-${turn.id}-${turn.step}`, summary: c.text },
+        });
         break;
       case 'reasoning_live':
         transient({ type: 'reasoning_delta', delta: c.text });
@@ -301,7 +321,7 @@ export function sessionUpdates(commands) {
         );
         break;
       default:
-        step(turn, c.kind, c, fact, turn.id);
+        step(turn, c.kind, c, rootFact, turn.id);
     }
   }
   return updates;
@@ -501,11 +521,19 @@ export const wireProperties = [
         for (const update of updates.slice(0, cut)) projection.update(update);
         const folded = acceptedPart(projection.snapshot);
         projection.synchronize(sessionStateAfter(updates.slice(0, cut)));
-        assert.deepEqual(
-          acceptedPart(projection.snapshot),
-          folded,
-          `synchronizing at cut ${cut} changed accepted state`,
-        );
+        const synced = projection.snapshot;
+        // After a rewind the fold is stale by design until Session's snapshot; check the snapshot's own rule there.
+        const rewound = updates
+          .slice(0, cut)
+          .some((update) => update.type === 'fact' && update.fact.type === 'history_replaced');
+        if (!rewound)
+          assert.deepEqual(acceptedPart(synced), folded, `synchronizing at cut ${cut} changed accepted state`);
+        const turnsWithMessages = new Set(synced.messages.map((message) => message.turnId).filter(Boolean));
+        for (const block of synced.reasoningBlocks ?? [])
+          assert.ok(
+            turnsWithMessages.has(block.turnId),
+            `reasoning ${block.messageId} outlived its rewound turn (cut ${cut})`,
+          );
       }
     }),
   },

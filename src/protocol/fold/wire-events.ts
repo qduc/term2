@@ -131,7 +131,8 @@ export type WireBranchSnapshot = {
   readonly turnId: string;
   readonly parentTurnId?: string;
   readonly rootTurnId?: string;
-  /** Last actual branch_started/branch_event seq, not an independent resume cursor.
+  /** Seq of the last branch_started/branch_event that changed what the branch shows (a branch fact that
+   * projects to no event does not move it). Provenance only, not an independent resume cursor.
    * Joined task interactions/costs may be newer, up to the enclosing snapshot.seq.
    */
   readonly acceptedSeq: number;

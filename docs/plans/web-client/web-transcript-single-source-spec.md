@@ -4,7 +4,9 @@ Status: plan. This is the builder's contract for
 [web-transcript-single-source.md](web-transcript-single-source.md); read that first for the evidence and the
 decisions. Nothing below is implemented unless that document's "Resume here" says so.
 
-Symbols named here were read on `main` at `6fcad34`. Check them with grep before relying on one.
+Symbols named here were read on `main` at `6fcad34`. Check them with grep before relying on one. An independent
+reviewer checked revision 1 of this spec against the code; revision 2 (this one) folds in its findings. Where a
+claim rests on that reviewer's probe and was not re-run by the author, it says "reviewer's probe".
 
 ## 1. Target
 
@@ -20,11 +22,11 @@ Symbols named here were read on `main` at `6fcad34`. Check them with grep before
 
 | Piece | Owns | Must not |
 | --- | --- | --- |
-| `src/protocol/fold/` | event and snapshot types; the only fold | import session, model, tools, host; format text for a UI |
+| `src/protocol/fold/` | event and snapshot types; the only fold, branches included | import session, model, tools, host; format text for a UI |
 | `src/host/server-sse.ts` | `direct-wire-v2` framing | reorder, drop or re-encode events |
-| `web-client/lib/term2/session-store.ts` | connection, checkpoint, the current `WireSnapshot` | hold transcript rules |
+| `web-client/lib/term2/session-store.ts` | connection, checkpoint, the current `WireSnapshot`, interaction DTOs | hold transcript rules |
 | `web-client/lib/term2/present.ts` | every rule that turns a snapshot into `Term2SessionView` | read anything but its arguments; mutate them |
-| React components | rendering a view | read `WireSnapshot` directly for transcript content |
+| React components | rendering a view | read `WireSnapshot` directly |
 
 A new wire field is consumed in `present.ts` only. A new event type is handled in `src/protocol/fold/` only; the
 browser changes nothing.
@@ -34,36 +36,49 @@ browser changes nothing.
 ### 2.1 Stream format `direct-wire-v2`
 
 Selected with `?format=direct-wire-v2`; the response carries `x-term2-event-format: direct-wire-v2`. The existing
-`direct-wire-v1` and `agent-wire-v2` formats and their tests stay unchanged.
+`direct-wire-v1` and `agent-wire-v2` formats and their tests stay unchanged. `withSession` in `src/host/server.ts`
+and the BFF route `web-client/app/api/agent/sessions/[sessionId]/events/route.ts` both reject unknown formats today
+and must accept this one; the BFF passes it through with the same cursor validation.
 
 One SSE frame is one envelope:
 
 ```
-{ format: 'direct-wire-v2', kind: 'accepted', sessionId, seq, occurredAt, events: WireEvent[], interaction? }
-{ format: 'direct-wire-v2', kind: 'live',     sessionId,                  events: WireEvent[] }
-{ format: 'direct-wire-v2', kind: 'snapshot', sessionId, seq,             events: [snapshot event], interaction }
+{ format, kind: 'accepted', sessionId, seq, occurredAt, events: WireEvent[], interactions? }
+{ format, kind: 'live',     sessionId,                  events: WireEvent[] }
+{ format, kind: 'snapshot', sessionId, seq,             events: [...companions, snapshot event], interactions }
 ```
 
-- **Batch rule.** All events returned by one `DirectProjection.update()` call travel in one frame, in order. Events
-  with a non-null `seq` form an `accepted` frame with `id: <seq>`; `seq: null` events form a `live` frame with no
-  id. All events returned by one `synchronize()` call form one `snapshot` frame (its `error` / `turn_ended`
-  companions ride in the same frame, before the snapshot event).
-- **Do not infer batches from equal `seq` values or from the queue running empty.** `DirectEventQueue` receives the
-  events of one update in a synchronous loop today, but that is an accident of three call sites
-  (`in-process-direct-attachment.ts`, `in-process-direct-replay.ts`). Carry the boundary explicitly: let the queue
-  accept a batch and expose batches to the SSE writer while single-event iteration keeps working for the TUI.
+- **Batch rule.** All events returned by one `DirectProjection.update()` call travel in one frame, in order. A fact
+  update returns only events with that fact's `seq` (an `accepted` frame, `id: <seq>`); a transient update returns
+  one `seq: null` event (a `live` frame, no id); `synchronize()` returns its `error` / `turn_ended` companions and
+  the snapshot event (one `snapshot` frame, whose `seq` is `payload.snapshot.seq`, since the event's own `seq` is
+  null). The reviewer confirmed updates never mix the two kinds and no two updates share a `seq`.
+- **Empty accepted frames.** Some facts project to no event (`display: false` items, `rollover_requested`,
+  `effort_updates_rejected`, review-approved opens) but still advance the server's `seq`. Send an `accepted` frame
+  with `events: []` for them so the client checkpoint equals the server's.
+- **Carry the boundary explicitly.** A batch is `{ seq, occurredAt, events }` handed to `DirectEventQueue` as one
+  unit by the two push sites (`in-process-direct-attachment.ts`, `in-process-direct-replay.ts`); single-event
+  iteration keeps working for the TUI. Do not infer batches from equal `seq` values or from the queue running
+  empty. `MAX_BUFFERED_EVENTS` in `eventStream` keeps counting events, not batches.
 - **Modes.** No cursor: first frame is `snapshot` (the current cut N), then frames with `seq > N` and live frames.
-  `after=N`: frames in `(N, toSeq]`, then one `snapshot` frame at `toSeq`, then live. This is what
-  `directReplayView` already produces; the v2 encoder drops that snapshot, this format keeps it.
-- **`interaction`.** The pending-interaction DTO as the v2 hydration body builds it today
-  (`interactions.project` / `projectBudget`, with `subagent` for task owners), or `null`. Present on every
-  `snapshot` frame and on any `accepted` frame containing `interaction_opened`, `interaction_resolved`,
-  `budget_opened` or `budget_closed`, whether root or inside a `subagent` event. Absent means "unchanged". It is a
-  term2 gateway field, not part of what graduates.
-- **Failure.** Replay unavailable: HTTP 410 or `x-term2-replay: unavailable`, as now. An encoder that cannot build a
-  frame fails the stream with the existing reload-required error; it never skips a frame.
-- **BFF.** `web-client/app/api/agent/sessions/[sessionId]/events/route.ts` passes the new format through unchanged,
-  with the same cursor validation.
+  `after=N`: frames in `(N, toSeq]`, then one `snapshot` frame at `toSeq`, then live. `directReplayView` already
+  produces this; the v2 encoder drops that snapshot, this format keeps it. On a live connection the server also
+  sends a snapshot after a command that replaces history (`publishState()` after the command settles).
+- **`interactions`.** A map from `requestId` to the pending-interaction DTO that `ServerInteractions.project` /
+  `projectBudget` builds (with `subagent` for task owners).
+  - On an `accepted` frame: one entry per `interaction_opened` or `budget_opened` in the frame, root or inside a
+    `subagent` event, built from the event payload as `canonicalCandidate` does today.
+  - On a `snapshot` frame: one entry per item in that snapshot's `pendingInteractions` and `pendingBudgets`, built
+    from the snapshot event's own payload so the DTOs and the state are one cut.
+  - Closing needs no entry: whether a request is still pending is read from the folded snapshot, which also drops
+    requests on `turn_ended` and on `task_changed` with a result, where no `interaction_resolved` is sent.
+  - It is a term2 gateway field, not part of what graduates.
+- **Failure.** An encoder that cannot build a frame fails the stream with the existing reload-required error; it
+  never skips a frame.
+- **Check on connect.** A no-cursor connect reads the snapshot after the queue exists, so an event may be both in
+  the snapshot and in the queue (the reviewer inferred this; it is not reproduced). Accepted duplicates are dropped
+  by the checkpoint rule. Cover a connect during streaming in the integration test and fix the server if a live
+  delta can be applied twice.
 
 Not carried over from the v2 encoder: its text caps (16 KB final text, 10 KB command error, 4 KB error message).
 The native snapshot is already sent uncapped on load; view-side caps stay in `present.ts` (section 2.5). Changing
@@ -71,119 +86,177 @@ any cap value is out of scope and goes through the `guard-design` skill.
 
 ### 2.2 The fold boundary
 
-- Move `reducer.ts`, `reducer-nested.ts`, `reducer-notices.ts`, `review-projection.ts`, the reducer's part of
-  `turn-results.ts`, and the wire types (`wire.ts`, `wire-events.ts`, the types of `wire-commands.ts`) under
-  `src/protocol/fold/`, leaving re-exports at the old paths so no other file changes.
-- The folder imports nothing outside itself, type imports included. Today's leaks, each to be resolved inside the
-  folder: `formatToolCommand` (via `protocol/json.ts` from `tools/conversation-utils.ts`), used once in
-  `nestedPresentation` to build `WireTask.lastTool.label`; and type imports from `session/` and `model/` in
-  `wire.ts`, `review-projection.ts` and `turn-results.ts`.
-  - `lastTool.label` is UI wording inside the fold. Keep the field for the TUI, but have the fold take the formatter
-    as a parameter with a default supplied by `src/protocol/`, so the folder itself carries no tool knowledge.
-  - Replace imported types with structural declarations in the folder; the original modules assert assignability to
-    them so drift is a compile error.
+Move the fold and its types under `src/protocol/fold/`, leaving re-exports at the old paths so no other file
+changes: `reducer.ts`, `reducer-nested.ts`, `reducer-notices.ts`, `reduceApprovalReview` / `withoutReview` from
+`review-projection.ts`, `completedFinalText` from `turn-results.ts`, and the types in `wire.ts`, `wire-events.ts`
+and `wire-commands.ts`.
+
+The folder imports nothing outside itself, inline `import('…')` types included. Every edge that leaves the set
+today, and what to do with it:
+
+| Edge | Resolution |
+| --- | --- |
+| `reducer-nested.ts` → `formatToolCommand` (value, via `json.ts`), used once for `WireTask.lastTool.label` | the fold takes the formatter as a parameter; `src/protocol/` supplies the default, so the TUI keeps the label |
+| `wire.ts` re-exports the runtime value `ASK_USER_NO_ANSWER_RESULT` from `tools/` | stays in the old-path shim, not in the folder |
+| `wire.ts` → `ModelRequestCost` (`session/recovery-budget`, from `@qduc/agent-core`) | structural declaration in the folder; the original asserts assignability |
+| `wire.ts` → `DirectFinalWindow` (`session/final.ts`, which pulls conversation items and `CommandMessage`) | opaque type in the folder; the fold never reads inside it |
+| `wire.ts` → inline import of `shared/contracts/approval-review.js` | structural declaration |
+| `wire-events.ts` → inline imports of `CodexWeeklyQuota` from `model/` | structural declaration |
+| `review-projection.ts` → `DirectApprovalReviewTransient` | only `approvalReviewEvent` needs it; that function stays outside |
+| `turn-results.ts` → `DirectSessionState`, values from `public.ts` | only `completedFinalText` moves |
+
 - **Gate.** `scripts/check-layers.mjs` checks edges between layers, not inside one. Add a rule beside it (in
   `scripts/check-rules.mjs`, with its reason text in `scripts/gates/rules.mjs`) that fails on any import leaving
-  `src/protocol/fold/`, and show it red on a seeded import (`scripts/prove-checks.sh`).
+  `src/protocol/fold/`, inline type imports included, and show it red on a seeded import
+  (`scripts/prove-checks.sh`).
 - **Browser bundle.** A build step emits one ESM file from `src/protocol/fold/index.ts` into the web client (for
   example `web-client/lib/term2/generated/wire-fold.js` plus its `.d.ts`), run by `scripts/build-web.mjs` and by the
   web typecheck step. Direct source imports failed before under Turbopack's `.js` specifier resolution (see
   `web-client/WIRE.md`); the bundle sidesteps that. The spike measured 33 KB unminified. The generated file is
   not committed; CI builds it.
 
-### 2.3 What the snapshot must gain
+### 2.3 What the fold must gain
 
-Only one field is missing for parity with what the web shows live today:
+The fold is not yet the whole state transition. Four additions, all additive and optional so `protocolVersion`
+stays 1, all in phase 1.
 
-- **`reasoningBlocks?: readonly { messageId: string; turnId: string | null; modelStep: number | null; text: string }[]`**,
-  appended by the `reasoning` event (upsert by `messageId`), cleared where `messages` is cleared
-  (`session_rotated`, `history_replaced` without `retainTranscript`). `snapshotDirectState(state, previous)` carries
-  it over from `previous` the way it carries `reasoningIdentity`; a cold attach gets it from the fact replay that
-  `DirectAttachment` already runs before `synchronize`. The existing `reasoning` / `reasoningIdentity` fields stay
-  for the TUI. Additive and optional, so `protocolVersion` stays 1.
+**a. Branches.** `reduceWireEvent` never writes `branches`: `DirectProjection` builds them from private nested
+projections (`branchSnapshots` in `projection-parts.ts`), and the fold's `subagent` case updates `tasks[]` only. So
+a client that folds events has `branches: []` while the server snapshot has the branch's tools and usage
+(reviewer's probe). Move the reduction into the fold: a `subagent` event folds its child event into that branch's
+state with the same reducer, and `branches` is a pure function of fold state. `DirectProjection.snapshot` then reads
+what the fold holds, so its nested projections go away. The `subagent` payload already carries `branchId`,
+`turnId`, `agentId`, `parentTurnId`, `rootTurnId` and `role`. This is the largest server change in the plan and
+the TUI renders from the same state: its goldens must not change.
 
-Already present, so no change:
+**b. `reasoningBlocks?: readonly { messageId; turnId; modelStep; text; after: { kind: 'message' | 'tool'; id } | null }[]`.**
+Upserted by the `reasoning` event; `after` is the last timeline entry at that moment, or null. The existing
+`reasoning` / `reasoningIdentity` fields stay for the TUI.
 
-- **Per-turn usage**: sum `requestCosts[].record.usage` over receipts whose `rootTurnId` is the turn. No receipts
-  for a turn means usage is unknown and nothing is shown (not zero).
-- **Subagent cards**: `tasks[]` with `kind: 'subagent'` and `turnId` equal to the turn give role, name, input,
-  status, `lastTool`, `toolCounts`, `progress` / `text` and `result` (`output`, `toolUseCounts`, `error`); the
-  matching `branches[]` entry (by `taskId`) gives the card's tool list and usage.
+- The fold does not clear it on `history_replaced`: that event only adds a notice, and the dropped messages
+  arrive with the snapshot that follows. So `snapshotDirectState(state, previous)` carries blocks over from
+  `previous` and keeps only those whose `messageId` is still a reasoning entry in the session `state.timeline`
+  (`session/state.ts` records them; `protocol/state.ts` filters them out of the public timeline). Without the
+  filter, the blocks of rewound turns live forever.
+- `session_rotated` clears it with `messages`.
 
-If either turns out not to hold on a real session, add the missing data to the snapshot through the fold. Do not
-reintroduce a browser-side accumulator.
+**c. `liveReasoning?: string`**, live-only. Appended by `reasoning_delta`; reset by `reasoning`, `turn_started`,
+`turn_ended` and `session_rotated`. Needed because `reasoning` cannot be split after the fact: the `reasoning`
+event sets it to a summary and later deltas, which carry no message id or step, append to the same string.
+
+**d. `turnUsage?: readonly { turnId; usage: WireUsage }[]`.** The last `usage` event of each turn, which is what
+the live view shows per reply today. Carried over in `snapshotDirectState` like the blocks, kept for turns still in
+`turnResults` or the timeline. Summing `requestCosts` by `rootTurnId` is not a substitute: it adds every model call
+and every descendant subagent call, and a receipt's `usage` is optional.
+
+Read from what is already there:
+
+- **Context-window fill** (`Term2UsagePopover.tsx`): `snapshot.lastUsage.inputTokens`.
+- **Session token total** (the composer chip): `snapshot.usage`.
+- **Subagent detail** for the running-tasks panel: `tasks[]` (role, name, input, status, `lastTool`,
+  `toolCounts`, `progress` / `text`, `result.output`, `result.toolUseCounts`, `result.error`) and, after (a), the
+  matching `branches[]` entry by `taskId` for steps, turns and usage.
+
+If something the UI shows turns out to have no source in the snapshot, add it to the fold. Do not reintroduce a
+browser-side accumulator.
 
 ### 2.4 `session-store.ts`
 
-State: `{ sessionId, snapshot: WireSnapshot | null, interaction, phase, error }`, where `phase` is one of
-`idle | connecting | live | reconnecting | reload_required | closed`.
+State: `{ sessionId, snapshot: WireSnapshot | null, interactions: Map<requestId, Dto>, phase, error, held }`, where
+`phase` is `idle | connecting | live | reconnecting | reload_required | closed`.
 
 | Input | Transition |
 | --- | --- |
-| `snapshot` frame, `seq >=` installed `seq` (or none installed) | replace `snapshot` and `interaction`; `phase = live` |
+| `snapshot` frame, `seq >=` installed `seq` (or none installed) | fold its events; replace `interactions` with the frame's; `held = false`; `phase = live`; publish |
 | `snapshot` frame with a lower `seq` | ignore |
 | `accepted` frame, `seq <=` installed `seq` | ignore the whole frame |
-| `accepted` frame, higher `seq` | fold every event, then publish once; apply `interaction` if present |
-| `live` frame | fold every event, publish; the checkpoint does not move |
-| a frame that fails to parse or fold | keep the last published state, close the stream, `phase = reload_required` |
-| stream ends or errors | `phase = reconnecting`; reconnect with `after = snapshot.seq` |
-| HTTP 410 or `x-term2-replay: unavailable` | `phase = reload_required` |
-| frame for another session | protocol error, as above |
+| `accepted` frame, higher `seq` | fold every event (none for an empty frame); merge the frame's `interactions`; drop DTOs whose request is no longer pending; publish once unless `held` |
+| the frame contains `history_replaced` without `retainTranscript` | as above, then `held = true`: nothing is published until the next `snapshot` frame, as `clients/tui/use-client.ts` does |
+| `live` frame | fold every event; publish unless `held`; the checkpoint does not move |
+| resolve response of kind `next` (multi-question step) | replace that request's DTO; publish |
+| a frame that fails to parse or fold; a frame for another session | keep the last published state, close the stream, `phase = reload_required` |
+| stream ends or a network error | `phase = reconnecting`; reconnect with today's backoff, `after = snapshot.seq`, or no cursor when that is 0 or nothing is installed |
+| HTTP 410 `cursor_compacted`, HTTP 503 `replay_unavailable`, or `x-term2-replay: unavailable` | `phase = reload_required`; no automatic retry |
+| HTTP 401, 403, 404 | terminal error, as the hook treats them today |
+| `refresh()` (user reload, the 409 path, the rewind fallback that calls `hydrateSession` today) | close the stream and connect with no cursor |
 
 Publication is at most once per animation frame while the tab is visible, as `flushLiveView` does today; the fold
 itself runs immediately. Expose the store through `useSyncExternalStore`. `useTerm2Session` keeps its current
 return shape so components do not change in this phase.
 
-There is no separate hydration GET: the first `snapshot` frame is the load.
+There is no separate hydration GET: the first `snapshot` frame is the load, and it is the only way a cut is
+installed. With diagnostics switched on, the store may keep the last 200 frames in a ring for the diagnostics
+panel; nothing else reads it.
 
 ### 2.5 `present.ts`
 
-`present(snapshot, interaction, previous?) → Term2SessionView`. Pure, total over any valid snapshot, and it never
+`present(snapshot, interactions, previous?) → Term2SessionView`. Pure, total over any valid snapshot, and it never
 throws for unknown optional fields.
 
-Rules, each written here once (they are today split between `contextTurns` in `hydration.ts` and
-`applyAcceptedChange` in `event-adapter.ts`; where those two disagree the line says which wins):
+Rules, each written here once. They are split today between `contextTurns` in `hydration.ts` and
+`applyAcceptedChange` / `presentTerm2SessionView` in `event-adapter.ts`; where those disagree the line says which
+wins. The reviewer confirmed rules 1 to 4, 6 and 7 match `contextTurns`.
 
 1. A turn is the set of timeline entries whose message or tool has that `turnId`, in timeline order. Messages with
    no `turnId` and `role: 'tool'` messages are not transcript items.
 2. With `timeline: null`: if there are no tools, message order is the order; otherwise no turns are presented and
    the view says ordering is unavailable.
 3. The first user message of a turn, when nothing precedes it, is the opening bubble (`userText`,
-   `userMessageId`). Any later user message with non-empty text is a `user` item at its timeline position (a
-   steered message). *Hydration's rule wins.*
+   `userMessageId`, and the message's `content`, which carries image parts). Any later user message with non-empty
+   text is a `user` item at its timeline position, also with `content` (a steered message). *Hydration's rule
+   wins.* `userMessageId` is what rewind names.
 4. An assistant message with non-empty text is a `text` item carrying `id`, `draft`, `modelStep`. `turn.text` is
    those texts joined by a blank line. A message with `presentation.withdrawn` is not shown.
-5. A tool with a call is a command: `callId = executionId`; status `called → pending`, `started → running`,
-   `completed → failed` if `isError` else `completed`, `unknown → unknown`; `argumentsText` is the input string or
-   its JSON; `output` or `error` from `output` by `isError`. One card per `executionId`. A result with no call stays
-   in `unmatchedToolResults` and is not a card.
+5. A tool with a call is one command per `executionId`: `callId = executionId`; status `called → pending`,
+   `started → running`, `completed → failed` if `isError` else `completed`, `unknown → unknown`; `argumentsText` is
+   the input string or its JSON; `output` or `error` from `output` by `isError`. *Hydration's rule wins:* the live
+   path's one card per command display message is dropped. In a turn that has a result, a tool still `called` or
+   `started` is shown `failed` for a failed turn, `aborted` for a cancelled or interrupted one, and `unknown` for a
+   completed one. A result with no call stays in `unmatchedToolResults` and is not a card.
 6. Turn status: the turn's `turnResults` entry gives `completed`, `aborted` (`cancelled` or `interrupted`) or
    `failed`; otherwise `streaming` if it is `activeTurnId` and the session is `running` or
-   `awaiting_interaction`; otherwise `unknown`.
+   `awaiting_interaction`; otherwise `aborted` if the session is `interrupted` and it is the last turn; otherwise
+   `unknown`.
 7. A failed turn shows `error` from one table mapping `WireError.kind` to the display reason (the table now
    duplicated in `hydratedErrorReason` and in the server's `errorReason`) and `errorMessage` from
    `error.message`, falling back to `terminal.error` when `terminal.turnId` matches.
-8. Reasoning: each `reasoningBlocks` entry is a `reasoning` item placed before the first `text` item with the same
-   `modelStep`; with no such item it goes last if the turn is streaming, else first. While `thinking` is true or
-   `reasoning` holds text not yet in a block for the active step, show it as one streaming reasoning item.
-9. Turn notes: `retry` gives `retrying (attempt a/b)` on the active turn; a compaction notice in progress gives
-   `compacting context…`. Both vanish when the snapshot field does; `present` keeps no memory of them.
-10. Per-turn usage and subagent cards as in section 2.3.
-11. Session status: `idle → connected`; the other native statuses map by name; connection phases come from the
-    store, not the snapshot.
-12. Caps, unchanged values: 100,000 characters for any presented text, 4,096 for `errorMessage`, 10,000 for a
+8. Reasoning: each `reasoningBlocks` entry of the turn is a `reasoning` item placed directly after its `after`
+   anchor, or first in the turn when the anchor is null or not in this turn. Non-empty `liveReasoning`, or
+   `thinking` with nothing yet, is one streaming reasoning item at the end of the active turn.
+9. Turn notes come only from snapshot fields: `retry` gives `retrying (attempt a/b)` on the active turn; a
+   compaction notice in progress gives `compacting context…`. They vanish when the field does; `present` keeps no
+   memory. Today's live path also shows `retries exhausted` and `compaction failed`: find the snapshot field or
+   notice that carries each, or add one to the fold. Do not drop them silently.
+10. Per-reply token count from `turnUsage`; a turn with no entry shows nothing, not zero. Subagent activity is
+    shown by the running-tasks panel from `tasks` and `branches`. The transcript shows no subagent card, which is
+    what happens today in practice: `Term2SessionShell.tsx` hides a card whenever a task descriptor exists for it.
+11. Session status: `awaiting_interaction` whenever an interaction is presented (the fold does not set it for
+    task-owned interactions or budgets); otherwise `idle → connected` and the other native statuses by name.
+    Connection phases come from the store.
+12. The presented interaction is the DTO for `pendingInteractions[0] ?? pendingBudgets[0]`. If the snapshot has a
+    pending request with no DTO, show the request as pending and not answerable, never nothing.
+13. `lastError` is a session-level error (kind and message) on the view. It replaces the live-only
+    `transientFailure` overlay: in this stream a runtime fault arrives with the snapshot that already has status
+    `interrupted`. This is the designer's reading of that path; reproduce a writer fault or a restart mid-turn
+    before settling the wording.
+14. Caps, unchanged values: 100,000 characters for any presented text, 4,096 for `errorMessage`, 10,000 for a
     command error.
 
 **Reuse.** `present` returns the previous turn object when that turn's inputs are identical by reference (its
-messages, tools, result, reasoning blocks, tasks, receipts, and whether it is the active turn). After one text
-delta, exactly one turn object changes identity and `view.turns` is a new array of otherwise identical elements.
+messages, tools, result, reasoning blocks, usage entry, and whether it is the active turn). After one text delta,
+exactly one turn object changes identity and `view.turns` is a new array of otherwise identical elements.
 
-Deleted when this lands: `event-adapter.ts`, `native-state.ts`, the view half of `hydration.ts`
+**Deleted when this lands:** `event-adapter.ts`, `native-state.ts`, the view half of `hydration.ts`
 (`viewFromHydration`, `contextTurns`), and the view fields `hydration`, `nativeBranch`, `rootEvidence`,
-`nativeState`, `nativeChanges`, `liveChanges`, `retiredTurns`. Components that read them
-(`Term2NativeEvidence.tsx`, `Term2QueueBar.tsx`, `Term2RunningTasksPanel.tsx`, `Term2UsagePopover.tsx`,
-`Term2SessionShell.tsx`) move to view fields that `present` fills from the snapshot. `queue.ts` and
-`receipt-cost.ts` become functions of the snapshot.
+`nativeState`, `nativeChanges`, `liveChanges`, `retiredTurns`. Components that read them move to view fields that
+`present` fills from the snapshot: `Term2TurnTimeline.tsx` and `Term2SessionShell.tsx` (message `content` for
+`Term2UserContent`), `Term2NativeEvidence.tsx`, `Term2QueueBar.tsx`, `Term2RunningTasksPanel.tsx`,
+`Term2UsagePopover.tsx`. `queue.ts` and `receipt-cost.ts` become functions of the snapshot.
+
+**Intended losses, to list in the change description:** the raw accepted-change log in the diagnostics panel (it
+becomes the frame ring from section 2.4); `retiredTurns` placeholders after `session_rotated` (the snapshot is
+authoritative about what the session holds); one card per command display message (rule 5). Anything else that
+disappears is a defect: compare screenshots of each component before and after on the same session.
 
 ## 3. Acceptance example
 
@@ -202,32 +275,41 @@ The session the probe used. Facts, in order:
 Expected view at the end, whichever way the snapshot was reached:
 
 - Turn 1: `userText` "first prompt"; items `reasoning rs-1`, `text asst-1`, `tool exec-1`, `user` "also check
-  this", `text asst-2`; one command (`exec-1`, completed, output "a.txt\nb.txt"); status `completed`.
+  this", `text asst-2`; one command (`exec-1`, completed, output "a.txt\nb.txt"); usage 100 in / 20 out; status
+  `completed`.
 - Turn 2: `userText` "second prompt"; items `tool exec-2`; one command (failed, error "exit 1"); status `failed`,
   `error` `rate_limit`, `errorMessage` "429 slow down".
 - After the two `text_delta` facts and before `asst-1`: turn 1 has one `text` item with `draft: true` and text
   "Let me look.", under the id the fold gives it.
+- After step 2's live delta and before `rs-1`: turn 1 ends with one streaming reasoning item.
 
-Today's two browser paths disagree with this at 18 of 24 cuts: turn 1's reasoning is gone from the reload view once
-turn 2 starts, and the live view has a second command card for `exec-1`.
+Today's two browser paths disagree with this at 18 of 24 cuts: turn 1's reasoning and usage are gone from the
+reload view, and the live view has a second command card for `exec-1`.
+
+Add a second example with a background subagent (a `branch_started` and three `branch_event`s, one a tool call):
+the running-tasks panel's steps for that task are the same by fold and by snapshot. It fails until 2.3(a) lands.
 
 ## 4. Checks
 
+What makes reload equal live in the browser is that the browser has no fold of its own: that is by construction,
+and no property proves it. The properties guard the places where two producers still exist.
+
 | Check | Where | Shows |
 | --- | --- | --- |
-| `wire.snapshot-is-fold` | `scripts/generated-verification/wire.mjs` | Generated fact sequences (at most 30 facts, built from commands like the example: prompt, deltas, message, reasoning, tool call/start/finish, steer, usage, end as completed/failed/cancelled, a background task with a branch). Fold them through `DirectProjection.forReplay(...).update`, take `acceptedPart(snapshot)`, call `synchronize` with the session state folded from the same facts, take it again: equal. This is the server's own reload path, so it also guards the TUI |
-| `wire.frames-round-trip` | same file | Encode the events as `direct-wire-v2` frames, JSON round-trip, decode and fold with the browser bundle: equals the server snapshot. Catches batching and JSON-shape loss |
+| `wire.frames-round-trip` | `scripts/generated-verification/wire.mjs` | Generated fact sequences (at most 30 facts, built from commands like the examples: prompt, deltas, message, reasoning, tool call/start/finish, steer, usage, end as completed/failed/cancelled, a branch with child events, a silent fact). Encode as `direct-wire-v2` frames, JSON round-trip, fold with the browser bundle: equals the server's snapshot, `seq` included. Catches batching, empty frames, JSON-shape loss and anything the server holds outside the fold; it is red today as soon as a branch exists |
+| `wire.snapshot-is-fold` | same file | After folding, call `synchronize` with the session state built from the same facts (`initialDirectState` + `reduceDirectFact` in `session/state.ts`; no Session needed): `acceptedPart` is unchanged. Compare only at cuts that are not between a non-retain `history_replaced` and its snapshot, where the fold is stale by design. It is a real check for fields `snapshotDirectState` rebuilds from session state and for the carry-over filters of 2.3; for fields merely copied from `previous` it compares a value with itself |
 | `web.present-reuse` | same file | `present` is deterministic, does not mutate its input, and after one more event changes the identity of at most the turns that event touched |
-| Example in section 3 | gateway integration test beside `sse.integration.test.ts` | the expected view, reached by fold and by snapshot, through real HTTP SSE |
-| Browser flows | `tests/web-client/browser/` | transcript before and after a reload, in a real browser |
+| Examples in section 3 | gateway integration test beside `sse.integration.test.ts` | the expected views, by fold and by snapshot, through real HTTP SSE; includes a connect while a turn is streaming |
+| Browser flows | `tests/web-client/browser/` | transcript before and after a reload, in a real browser; add usage and reasoning flows when phase 2 makes them pass |
 | Web typecheck | `integration` lane | already added |
 | Fold has no outgoing imports | `check-rules.mjs` | graduation stays possible |
 
-`acceptedPart` removes the fields that only `seq: null` events write. Derive the list from the reducer, do not
-guess; candidates read so far: `thinking`, `retry`, `reviewingApprovals`, `codexQuota`, `codexFiveHourQuota`,
-`lastError`, tool progress text, `tasks[].lastObservation`, `tasks[].lastActivityAt`, and `reasoning` text that
-arrived by `reasoning_delta`. If the property fails on a field that accepted facts write, that is a defect in
-`snapshotDirectState` or the fold: fix it, do not add the field to the list.
+`acceptedPart` removes every field whose value can depend on a `seq: null` event. Derive the list from the reducer,
+do not guess; candidates read so far: `thinking` (set live, reset by accepted events), `retry`,
+`reviewingApprovals`, `codexQuota`, `codexFiveHourQuota`, `lastError`, `liveReasoning`, `reasoning`, tool progress
+text, and `tasks[].lastObservation` / `lastActivityAt` / `progress`. If a property fails on a field that only
+accepted facts write, that is a defect in `snapshotDirectState` or the fold: fix it, do not add the field to the
+list.
 
 Bounds for the generated properties follow `docs/experiments/generated-verification/README.md`: 1,000 cases, at
 most 30 actions, no model or network, about 30 seconds per target. Register the target in
@@ -244,28 +326,33 @@ Line numbers are from `6fcad34`; the symbols are the stable reference.
 **Module.** `web-client/lib/term2/shell-machine.ts`: `step(state, action) → { state, commands }`, pure, no React.
 The shell holds it with `useReducer` and runs the returned commands in one place.
 
-**State** (user intent only): `selection` (`sessionId`, or a draft `{ workspaceId, config }`), the user's chosen
-folder, composer (`input`, attachments, armed skill, history position), `stagedConfig`, `pendingFirstSend`,
-retry and resend notices, panels and dialogs (`tasksPanelOpen`, `sidebarOpen`, `dialog`, `skillsOpen`), `pinned`,
-and a `generation` counter bumped on every selection change.
+**The URL owns which chat is open.** `Term2Entry.tsx` reads `agentSession` and passes it as `initialSessionId`;
+the shell mirrors it and several handlers write history and dispatch `popstate`. Keep one owner: `URL_CHANGED` is
+the only action that changes the open chat, and handlers that want to change it emit a `navigate` command. The
+machine does not store a second copy that can disagree with the address bar.
+
+**State** (user intent only): the open chat as last reported by `URL_CHANGED`, or a draft
+`{ workspaceId, config }`; the user's chosen folder; composer (`input`, attachments, armed skill, history
+position); `stagedConfig`; `pendingFirstSend`; retry and resend notices; panels and dialogs (`tasksPanelOpen`,
+`sidebarOpen`, `dialog`, `skillsOpen`); `pinned`; and a `generation` counter bumped on every `URL_CHANGED`.
 
 **Derived at render, not stored**: `isDraft`, the effective folder (`chosen ?? open chat's folder ?? first saved`),
 `sessionConfig` for the open chat, `stagedForChat`, `sendBlocked`, `composerDisabled`, the visible live status.
-These replace the effects at TSX 458, 465, 885 and 1177, and the refs `prevInitialSessionId`,
-`draftSessionIdRef`, `pendingFirstSendIdRef`, `alignmentRef`, `prevStatusRef`.
+These replace the effects at TSX 458, 465, 885 and 1177, and the refs `draftSessionIdRef`,
+`pendingFirstSendIdRef`, `alignmentRef`, `prevStatusRef`.
 
 **Rules as transitions.** Each is one named case in `step`:
 
 | Rule | Transition |
 | --- | --- |
 | Only the user opens or closes the running-tasks panel | `tasksPanelOpen` changes on `TASKS_PANEL_TOGGLED` and `TASKS_PANEL_CLOSED` and nowhere else |
-| A chat is created on first send | `SEND_REQUESTED` in a draft emits `createSession`; `SESSION_CREATED` emits `applyConfig`; `CONFIG_APPLIED` plus stream `live` emits exactly one `submit` and clears `pendingFirstSend` |
+| A chat is created on first send | `SEND_REQUESTED` in a draft emits `createSession`; `SESSION_CREATED` emits `applyConfig` and `navigate`; once `URL_CHANGED` names that chat, its config is loaded, `sendBlocked` is false and the stream is `live`, emit exactly one `submit` and clear `pendingFirstSend` |
 | A new chat starts in the folder the user chose | `NEW_DRAFT(folder?)` records the folder from the user's action; `createSession` uses that value and nothing derived from the open chat |
 | Sending waits for the live stream | no `submit` command while the stream phase is not `live` |
-| Changing chat resets the composer, staging, pin and notices | done inside `SESSION_SELECTED` / `SESSION_LEFT`, except for a draft handing off to the chat it just created |
+| Changing chat resets the composer, staging, pin and notices | done inside the `URL_CHANGED` transition, except for a draft handing off to the chat it just created |
 | Staged model and effort apply before the next send | `SEND_REQUESTED` with a stage emits `applyConfig` then `submit` |
 | A failed send puts the text back | `SUBMIT_REJECTED` restores `input` and sets the resend notice |
-| Notices drain once per accepted boundary | the store's boundary event emits `drainNotifications`; one retry after a busy answer |
+| Notices drain once per accepted boundary | a `BOUNDARY(seq, pendingNoticeIds, ready)` action fed from the store emits `drainNotifications`; one retry after a busy answer |
 | Post-tool status is delayed 400 ms | `TOOL_ROW_SETTLED` emits a timer command; `STATUS_TIMER_FIRED` reveals it |
 
 **Commands** carry `{ sessionId, generation }`, and every result action echoes them. `step` drops a result whose
@@ -274,15 +361,16 @@ resolving after a chat switch, `startDraftChat` half-failing and leaving a sessi
 overwriting a just-created chat. Treat those three as hazards to reproduce first (the inventory inferred them by
 reading, nobody has triggered them), and fix only what reproduces.
 
-**Out of the hook.** `selectedWorkspaceId` and `selectSession` are user intent and move into the machine. The hook
-keeps the connection, the lists and the request functions.
+**Out of the hook.** `selectedWorkspaceId` is user intent and moves into the machine; `selectSession` becomes the
+`navigate` command. The hook keeps the connection, the lists and the request functions.
 
 **Checks.**
 
 - Generated property `shell.machine-rules` (`scripts/generated-verification/shell.mjs`): random action sequences
   of at most 30 steps, including late and out-of-order results. Invariants: the panel rule; exactly one `submit`
   per `SEND_REQUESTED` and never before `live`; `createSession` carries the user-chosen folder; a stale-tagged
-  result leaves the state unchanged; after `SESSION_SELECTED` the composer is empty unless it is a handoff.
+  result leaves the state unchanged; after `URL_CHANGED` to another chat the composer is empty unless it is a
+  handoff.
 - A browser flow for each rule that has already cost a fix: the panel stays as the user left it across a turn
   with a background task (#394, #396); opening the page creates no chat and the first send creates one (#375); a
   new chat lands in the chosen folder while another chat is open (#389); send is disabled until the stream is
@@ -293,8 +381,9 @@ leaving the shell working. Do not combine it with phase 2.
 
 ## 6. Do not
 
-- Write a browser-side reducer, accumulator or event log, however small.
-- Read `WireSnapshot` in a component for transcript content.
+- Write a browser-side reducer or accumulator, however small. The diagnostics frame ring is the one exception and
+  nothing may read state from it.
+- Read `WireSnapshot` in a component.
 - Change `@qduc/agent-wire`, the v2 encoder, or what the TUI renders.
 - Change a cap value, a timeout or a retry limit.
 - Add a permanent unit test. The checks above are integration tests, browser flows or generated properties.
@@ -307,6 +396,6 @@ leaving the shell working. Do not combine it with phase 2.
 - The web client's `present.ts` shows which snapshot fields a UI reads. Fields only term2 uses (goal,
   verification, Codex quota, queue pause reasons, admissions, command receipts) are candidates for a host
   extension slot; decide the split then, with that evidence.
-- `wire.snapshot-is-fold` moves with the fold as the library's stated guarantee.
+- `wire.frames-round-trip` and `wire.snapshot-is-fold` move with the fold as the library's stated guarantees.
 - The package stays dependency-free and ESM-only, as its README promises.
 - term2's `src/protocol/fold/` becomes a re-export of the pinned package, the way `@qduc/agent-core` is consumed.

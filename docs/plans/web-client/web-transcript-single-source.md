@@ -51,7 +51,10 @@ Designer, following from the first one:
   reads; draw the line with that evidence.
 - **The v2 change vocabulary is frozen.** Its encoder and tests stay for the external consumer; nothing new is
   added to it.
-- **Reasoning summaries and per-turn usage survive a reload.** Today they do only until the next turn starts.
+- **Reasoning summaries and per-turn usage survive a reload.** Today reasoning does only until the next turn
+  starts, and the per-reply token count not at all.
+- **Subagent activity stays in the running-tasks panel.** The transcript shows no subagent card, which is what
+  happens today in practice.
 - **The six `node:test` files under `web-client/lib/` that nothing runs** (`api/term2.test.ts` and five under
   `server/`): for each, check whether an integration test, release smoke or a browser flow already covers the
   behaviour; move what is uncovered and matters (the Host/Origin guard, cursor and request validation) into the
@@ -144,20 +147,29 @@ The [build spec](web-transcript-single-source-spec.md) is the contract; this is 
 
 ## How it is checked
 
-- `wire.snapshot-is-fold`: for generated fact sequences, the snapshot reached by folding events equals the one the
-  server's own resynchronisation produces, on accepted state. Reload equals live, checked where both sides are
-  made; it also guards the TUI. No such check exists today.
-- `wire.frames-round-trip`, `web.present-reuse`, `shell.machine-rules`: see the spec.
+- **By construction:** the browser has no fold of its own, so a snapshot and a fold of the same events cannot
+  disagree there. No property proves this; the spec's "Do not" list protects it.
+- `wire.frames-round-trip`: generated fact sequences, sent as frames and folded by the browser bundle, equal the
+  server's snapshot. It catches anything the server still holds outside the fold, and is red today as soon as a
+  subagent branch exists.
+- `wire.snapshot-is-fold`: the server's own resynchronisation does not change accepted state that the fold
+  already produced. It guards the server's second producer (`snapshotDirectState`) and so the TUI as well.
+- `web.present-reuse`, `shell.machine-rules`: see the spec.
 - Browser flows in Chromium against the real gateway and a loopback model double, each asserting the transcript
   before a reload and again after it.
 - Web typecheck in the `integration` lane (added).
+
+The spec was checked against the code by an independent reviewer before handoff. Its first revision was wrong in
+three places that would have blocked the build: subagent branch state is not in the shared fold at all, the
+reasoning field could not be cleared or positioned as written, and image attachments had no rule. Revision 2
+corrects those and ten smaller ones.
 
 ## Phases
 
 | Phase | Change | Exit check | Risk |
 | --- | --- | --- | --- |
 | 0 | Web typecheck in CI (done); delete the dead v1 view path (done); browser flows for first send, tool call and failed turn, each asserted before and after reload; settle the six unrun test files | CI red on a seeded type error (shown) and on a seeded transcript regression | low |
-| 1 | `src/protocol/fold/` with its no-imports gate; `reasoningBlocks`; `direct-wire-v2` frames with explicit batches; browser bundle of the fold; `wire.snapshot-is-fold` and `wire.frames-round-trip` | both properties green at 1,000 runs; the gate red on a seeded import; a gateway integration test reads the new format; TUI goldens unchanged | medium, server |
+| 1 | `src/protocol/fold/` with its no-imports gate; branch state moved into the fold; `reasoningBlocks`, `liveReasoning`, `turnUsage`; `direct-wire-v2` frames with explicit batches and empty accepted frames; browser bundle of the fold; `wire.frames-round-trip` and `wire.snapshot-is-fold` | both properties green at 1,000 runs (write `frames-round-trip` first and see it red on a branch); the gate red on a seeded import; a gateway integration test reads the new format; TUI goldens unchanged | high: it changes the state every client renders. Independent verifier |
 | 2 | `session-store.ts` and `present.ts` behind the existing hook interface; delete `event-adapter.ts`, `native-state.ts` and the view half of `hydration.ts`; `web.present-reuse` | the spec's acceptance example holds by fold and by snapshot; every browser flow green, including the ones phase 0 found red; no hydration GET in the network log | high: independent verifier |
 | 3 | `shell-machine.ts`: selection and draft, then composer, then panels | `shell.machine-rules` green; one browser flow per rule that already cost a fix | medium, in slices |
 | 4 | Graduate the fold into `@qduc/agent-wire` | the spec's graduation checklist | separate repo |

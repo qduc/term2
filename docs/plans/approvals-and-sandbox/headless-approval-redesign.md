@@ -128,6 +128,21 @@ refusals, scratch files dropped in the repo, or turns ended by the refusal limit
   for a `/tmp` path gets a one-line hint naming `$TMPDIR`; the hint adds text
   and never changes whether a command runs.
 - Reads from `/tmp` are unaffected.
+- The command classifier reads `$TMPDIR` / `${TMPDIR}` as the scratch area
+  (`command-safety/scratch-path.ts`) unless the command itself mentions
+  `TMPDIR` some other way. Read literally, `rm "$TMPDIR/x"` was a workspace
+  path and RED, so the scratch area the prompt recommends could not be cleaned
+  up without a denial (conversation `conv_d2d91496…`, 2026-11-25). A target
+  counts as scratch only as concrete text (`isConcreteScratchPath`): a `$`,
+  brace, glob or `..` left in it can expand anywhere (`$TMPDIR/$X/…`,
+  `$TMPDIR/{a,..}/…`). Known limits: the classifier cannot see quoting
+  (`'$TMPDIR/x'` is read as scratch), symlinks planted in scratch, or that an
+  SSH session's `$TMPDIR` is the remote one; those stay with the reviewer.
+- Tools that hard-code shared `/tmp` and ignore `TMPDIR` still fail sandboxed
+  (pnpm 12 locks `/tmp/pnpm-store-operation-locks-<uid>`). The owner kept
+  `/tmp` outside the wall (2026-11-26); instead, on macOS a failed sandboxed
+  command carries the kernel's denials in `<sandbox_violations>`, so the model
+  sees the blocked path and can ask for a one-shot unsandboxed run.
 
 ### 5. Credential locks
 

@@ -25,6 +25,8 @@ export interface CommandHandlerHelpers {
     reason?: string;
   };
   isSessionCreatedFile?: (path: string) => boolean;
+  /** Path text as the command will see it: `$TMPDIR` expanded, scratch spellings canonical (`scratch-path.ts`). */
+  resolvePathText: (text: string | undefined) => string | undefined;
 }
 
 /**

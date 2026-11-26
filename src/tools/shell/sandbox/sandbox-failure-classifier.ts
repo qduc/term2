@@ -1,5 +1,5 @@
 import type { SandboxReadPolicy } from './sandbox-policy.js';
-import { detectDeniedRead, type DeniedReadInfo } from './denied-read-detector.js';
+import { detectDeniedRead, violationsExplainFailure, type DeniedReadInfo } from './denied-read-detector.js';
 import { detectDockerDaemonBlock } from './docker-host-control.js';
 
 export type SandboxFailureConfidence = 'runtime_annotation' | 'stderr_pattern';
@@ -85,7 +85,12 @@ export function classifySandboxFailure({
     }
   }
 
-  if (runtimeAnnotated) {
+  // A violation report that names nothing the run touched stays in the output as information only.
+  const hasViolationReport = annotatedStderr.includes('<sandbox_violations>');
+  if (
+    runtimeAnnotated &&
+    (!hasViolationReport || proxyAllowlistBlocked || violationsExplainFailure(command, annotatedStderr))
+  ) {
     return {
       type: 'blocked',
       reason: proxyAllowlistBlocked ? 'network' : 'unknown',

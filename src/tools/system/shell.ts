@@ -1238,7 +1238,7 @@ export function createShellToolDefinition(deps: {
           const stdout = result.stdout ?? '';
           const rawStderr = result.stderr ?? '';
           const annotatedStderr = sandboxed
-            ? await shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr)
+            ? await shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr, result.exitCode)
             : rawStderr;
 
           const readPolicy = settingsService.get('sandbox.readPolicy');

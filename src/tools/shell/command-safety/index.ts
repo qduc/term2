@@ -4,6 +4,7 @@ import { SafetyStatus, ALLOWED_COMMANDS, BLOCKED_COMMANDS } from './constants.js
 import { extractWordText } from './utils.js';
 import { hasFindDangerousExecution, hasFindSuspiciousFlags } from './find-helpers.js';
 import { analyzePathRisk } from './path-analysis.js';
+import { createScratchPathResolver } from './scratch-path.js';
 
 /** Redirect operators that write their target; `<`, `<<<` and heredocs only read. */
 const WRITE_REDIRECTS: ReadonlySet<string> = new Set(['>', '>>', '>|', '&>', '&>>', '>&', '<>']);
@@ -96,7 +97,8 @@ export function classifyCommandDetailed(
   }
   let worstStatus: SafetyStatus = SafetyStatus.GREEN;
 
-  const analyzePathRiskWithLogger = (p: string | undefined) => analyzePathRisk(p, logger);
+  const resolvePathText = createScratchPathResolver(commandString);
+  const analyzePathRiskWithLogger = (p: string | undefined) => analyzePathRisk(resolvePathText(p), logger);
 
   function upgradeStatus(s: SafetyStatus, reason?: string) {
     if (worstStatus === SafetyStatus.RED) return;
@@ -123,7 +125,9 @@ export function classifyCommandDetailed(
     if (redirect.target) {
       traverseWord(redirect.target);
       const fileText = extractWordText(redirect.target);
-      const pathStatus = analyzePathRisk(fileText, logger, { write: WRITE_REDIRECTS.has(redirect.operator) });
+      const pathStatus = analyzePathRisk(resolvePathText(fileText), logger, {
+        write: WRITE_REDIRECTS.has(redirect.operator),
+      });
       upgradeStatus(pathStatus, `redirect to ${fileText ?? '<unknown>'}`);
     } else {
       upgradeStatus(SafetyStatus.YELLOW, 'redirect to <unknown>');
@@ -144,6 +148,7 @@ export function classifyCommandDetailed(
           hasFindDangerousExecution,
           hasFindSuspiciousFlags,
           isSessionCreatedFile: options?.isSessionCreatedFile,
+          resolvePathText,
         };
         const result = handler.handle(node, helpers);
         upgradeStatus(result.status, result.reasons.join('; '));

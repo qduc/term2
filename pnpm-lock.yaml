@@ -220,6 +220,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  '@anthropic-ai/sandbox-runtime@0.0.83': cbbc9c46fe4bf8186be9b451438dcb4f317c4cac85c3076acb5575dfdb6846ea
   ink-prompt@0.4.3: 9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044
   ink@7.0.1: 6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc
 
@@ -241,7 +242,7 @@ importers:
         version: 3.0.10
       '@anthropic-ai/sandbox-runtime':
         specifier: 0.0.83
-        version: 0.0.83
+        version: 0.0.83(patch_hash=cbbc9c46fe4bf8186be9b451438dcb4f317c4cac85c3076acb5575dfdb6846ea)
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
@@ -5093,7 +5094,7 @@ snapshots:
 
   '@alloc/quick-lru@5.3.0': {}
 
-  '@anthropic-ai/sandbox-runtime@0.0.83':
+  '@anthropic-ai/sandbox-runtime@0.0.83(patch_hash=cbbc9c46fe4bf8186be9b451438dcb4f317c4cac85c3076acb5575dfdb6846ea)':
     dependencies:
       '@pondwader/socks5-server': 1.0.10
       commander: 12.1.0

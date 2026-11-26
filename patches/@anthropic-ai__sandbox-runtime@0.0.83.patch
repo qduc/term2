@@ -1,0 +1,47 @@
+diff --git a/dist/sandbox/macos-sandbox-utils.js b/dist/sandbox/macos-sandbox-utils.js
+index 0e598b612d84d24b09ec2ab0d7ccc9b009c9457b..a419e642f65ab59a602c3636bdbee4dafa86d42f 100644
+--- a/dist/sandbox/macos-sandbox-utils.js
++++ b/dist/sandbox/macos-sandbox-utils.js
+@@ -1215,13 +1215,12 @@ resolveCommandText) {
+         '--style',
+         'compact',
+     ]);
+-    logProcess.stdout?.on('data', (data) => {
+-        const lines = data.toString().split('\n');
+-        // Get violation and command lines
+-        const violationLine = lines.find(line => line.includes('Sandbox:') && line.includes('deny'));
+-        const commandLine = lines.find(line => line.startsWith('CMD64_'));
+-        if (!violationLine)
+-            return;
++    // A chunk can hold many events and can end mid-line. Each event is a
++    // `Sandbox: ... deny(...)` line followed by its `CMD64_..._END` tag line,
++    // so pair them line by line and keep a partial last line for the next chunk.
++    let partialLine = '';
++    let pendingViolation;
++    const report = (violationLine, commandLine) => {
+         // Extract violation details
+         const sandboxMatch = violationLine.match(sandboxExtractRegex);
+         if (!sandboxMatch?.[1])
+@@ -1259,6 +1258,22 @@ resolveCommandText) {
+             encodedCommand,
+             timestamp: new Date(), // We could parse the timestamp from the log but this feels more reliable
+         });
++    };
++    logProcess.stdout?.on('data', (data) => {
++        const lines = (partialLine + data.toString()).split('\n');
++        partialLine = lines.pop() ?? '';
++        for (const line of lines) {
++            if (line.startsWith('CMD64_')) {
++                if (pendingViolation !== undefined)
++                    report(pendingViolation, line);
++                pendingViolation = undefined;
++            }
++            else if (line.includes('Sandbox:') && line.includes('deny') && !line.includes('duplicate report')) {
++                if (pendingViolation !== undefined)
++                    report(pendingViolation, undefined);
++                pendingViolation = line;
++            }
++        }
+     });
+     logProcess.stderr?.on('data', (data) => {
+         logForDebugging(`[Sandbox Monitor] Log stream stderr: ${data.toString()}`);

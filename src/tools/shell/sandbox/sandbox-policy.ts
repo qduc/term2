@@ -33,7 +33,7 @@ export interface ShellSandboxRunner {
     },
   ): Promise<{ command: string; diagnostics?: string[] }>;
   cleanupAfterCommand?(): void | Promise<void>;
-  annotateFailure(command: string, stderr: string): string | Promise<string>;
+  annotateFailure(command: string, stderr: string, exitCode?: number | null): string | Promise<string>;
 }
 
 export type ScopedShellSandbox = {

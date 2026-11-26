@@ -16,10 +16,14 @@ const webLauncher = path.join(repoRoot, 'dist', 'web.js');
 const READY_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 10_000;
 
-/** One model response: assistant text, one tool call, or an HTTP error from the provider. */
+/**
+ * One model response: assistant text, one tool call, or an HTTP error from the provider. A step with
+ * `hold` streams its first chunk (the text, or nothing for a call) and then waits until the flow calls
+ * `release(hold)` before it finishes, so a flow can act while a turn is visibly running.
+ */
 export type ModelStep =
-  | { readonly text: string }
-  | { readonly call: { readonly tool: string; readonly args: Record<string, unknown> } }
+  | { readonly text: string; readonly hold?: string }
+  | { readonly call: { readonly tool: string; readonly args: Record<string, unknown> }; readonly hold?: string }
   | { readonly error: { readonly status: number; readonly message: string } };
 
 type WireMessage = { role: string; content?: unknown };
@@ -31,6 +35,10 @@ export type ModelDouble = {
   readonly turn: (prompt: string) => ModelRequest[];
   /** Requests that matched no script; a flow asserts this stays empty. */
   readonly unscripted: () => ModelRequest[];
+  /** Resolves once the step named `hold` has sent its first chunk and is waiting. */
+  readonly held: (hold: string) => Promise<void>;
+  /** Lets the step named `hold` finish. */
+  readonly release: (hold: string) => void;
   readonly close: () => Promise<void>;
 };
 
@@ -41,10 +49,13 @@ const textOf = (content: unknown): string =>
     ? content.map((part) => (typeof part === 'string' ? part : (part as { text?: string }).text ?? '')).join('')
     : '';
 
+/** A steered message reaches the model behind an instruction block the runtime adds; scripts key on the user's words. */
+const STEERING_PREFIX = /^\[Steering message:[^\]]*\]\s*/;
+
 function latestUserPrompt(request: ModelRequest): { prompt: string; toolResults: number } {
   const lastUser = request.messages.map((message) => message.role).lastIndexOf('user');
   return {
-    prompt: textOf(request.messages[lastUser]?.content).trim(),
+    prompt: textOf(request.messages[lastUser]?.content).trim().replace(STEERING_PREFIX, ''),
     toolResults: request.messages.slice(lastUser).filter((message) => message.role === 'tool').length,
   };
 }
@@ -57,6 +68,22 @@ function latestUserPrompt(request: ModelRequest): { prompt: string; toolResults:
 export async function startModelDouble(scripts: Record<string, readonly ModelStep[]>): Promise<ModelDouble> {
   const scripted: { prompt: string; request: ModelRequest }[] = [];
   const unscripted: ModelRequest[] = [];
+  const gates = new Map<
+    string,
+    { reached: () => void; reachedP: Promise<void>; open: () => void; openP: Promise<void> }
+  >();
+  const gate = (name: string) => {
+    let entry = gates.get(name);
+    if (!entry) {
+      let reached!: () => void;
+      let open!: () => void;
+      const reachedP = new Promise<void>((resolve) => (reached = resolve));
+      const openP = new Promise<void>((resolve) => (open = resolve));
+      entry = { reached, reachedP, open, openP };
+      gates.set(name, entry);
+    }
+    return entry;
+  };
   const server = http.createServer((req, res) => {
     if (req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -95,18 +122,29 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
               ],
             }
           : { role: 'assistant', content: step.text };
+      const finish = [
+        `data: ${JSON.stringify({
+          id,
+          choices: [{ delta: {}, finish_reason: 'call' in step ? 'tool_calls' : 'stop' }],
+        })}`,
+        'data: [DONE]',
+        '',
+      ].join('\n\n');
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end(
-        [
-          `data: ${JSON.stringify({ id, choices: [{ delta }] })}`,
-          `data: ${JSON.stringify({
-            id,
-            choices: [{ delta: {}, finish_reason: 'call' in step ? 'tool_calls' : 'stop' }],
-          })}`,
-          'data: [DONE]',
-          '',
-        ].join('\n\n'),
-      );
+      if (!step.hold) {
+        res.end(`data: ${JSON.stringify({ id, choices: [{ delta }] })}\n\n${finish}`);
+        return;
+      }
+      // A held text step streams its text now; a held call sends its call only when released, so the
+      // turn is visibly waiting on the model rather than running a tool.
+      const held = gate(step.hold);
+      if (!('call' in step)) res.write(`data: ${JSON.stringify({ id, choices: [{ delta }] })}\n\n`);
+      else res.flushHeaders();
+      held.reached();
+      void held.openP.then(() => {
+        if ('call' in step) res.write(`data: ${JSON.stringify({ id, choices: [{ delta }] })}\n\n`);
+        res.end(finish);
+      });
     });
   });
   await new Promise<void>((resolve, reject) => {
@@ -118,6 +156,8 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
     baseUrl: `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`,
     turn: (prompt) => scripted.filter((entry) => entry.prompt === prompt).map((entry) => entry.request),
     unscripted: () => [...unscripted],
+    held: (name) => gate(name).reachedP,
+    release: (name) => gate(name).open(),
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();

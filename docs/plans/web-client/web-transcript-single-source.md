@@ -10,10 +10,15 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
 - **On the branch:**
   - The dead v1 view path (`viewFromProjection`, `applyProjectionEvent`) and its unrun example test are deleted.
   - The `integration` CI lane typechecks `web-client` (shown failing on a seeded type error).
-  - Three browser flows in `tests/web-client/browser/` (first send, tool call, failed turn), each comparing the
-    transcript's accessibility tree before and after a reload. Run with
-    `pnpm build && node scripts/build-web.mjs && pnpm test:web-browser`. They pass locally (about 9 s) and went red
-    on a seeded reload-only regression in `Term2TurnTimeline.tsx`.
+  - Six browser flows in `tests/web-client/browser/` (first send, tool call, failed turn, approval, reload
+    mid-turn, steer), each comparing the transcript's accessibility tree before and after a reload. Run with
+    `pnpm build && node scripts/build-web.mjs && pnpm test:web-browser`. They pass locally (about 14 s). The first
+    three went red on a seeded reload-only regression in `Term2TurnTimeline.tsx`; each of the last three went red
+    on its own seeded reload-only regression in `hydration.ts` (steered user item dropped, draft text dropped,
+    pending interaction dropped).
+  - The model double can hold a step (`hold` / `held()` / `release()`) so a flow acts while a turn runs, and it
+    keys a steered message on the user's words, not the runtime's steering preamble. Steering only enters the
+    running turn at a tool boundary: steered during a text-only reply, the message runs as the next turn.
   - A `web-browser` CI job, required by `port`. **It has never run on GitHub.** Its counted steps may exceed the
     120 s lane budget in `scripts/ci-budget.json`; if they do, shorten the lane first, and raise the budget only
     through the guard's own route.
@@ -23,7 +28,8 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   a reload that text is gone. After two turns (three provider requests) the composer chip shows 2.5k live and 3.7k
   after reload. The three flows stay green only because the double sends no usage. Keep them that way in the
   required lane; add the usage flow when phase 2 makes it pass.
-- **Next:** the approval, reload-mid-turn and steer flows; settle the six unrun test files; then phase 1. Phases
+- **Next:** settle the six unrun test files and widen `check-no-unit-tests.mjs` to `web-client/` (owner approved,
+  2026-11-26); then phase 1. Phases
   are in order; 3 is independent of 1 and 2 and can be scheduled separately.
 - **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
   lockfile lines; use the pinned version for dependency changes.
@@ -39,6 +45,7 @@ Owner, 2026-11-26:
 - This session designs and plans; another session builds.
 
 - Once the architecture is settled, CI guards it so agents cannot break it without the owner's approval.
+- Widen `scripts/check-no-unit-tests.mjs` to scan `web-client/`.
 
 Designer, following from the first one:
 
@@ -192,4 +199,3 @@ in this document with the evidence, keep the assertion, and do not land it in a 
   agent session that can label a pull request can satisfy them today.
 
 - Whether the external consumer should move to the graduated library or stay on v2. Nothing here depends on it.
-- Whether `check-no-unit-tests.mjs` may be widened to `web-client/` (it tightens a repository guard).

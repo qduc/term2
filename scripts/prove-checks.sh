@@ -55,6 +55,10 @@ backup src/protocol/fold/final-text.ts
 { printf '/// <reference types="node" />\n'; cat src/protocol/fold/final-text.ts.prove-bak; } > src/protocol/fold/final-text.ts
 expect_fail "fold has a triple-slash reference" '\[fold-boundary\]' node scripts/check-rules.mjs
 seed "fold imports dynamically" src/protocol/fold/review.ts $'\nexport const seededLoad = () => import("../json.js");\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "a component imports the fold bundle" web-client/components/term2/Term2QueueBar.tsx $'\nimport type { WireSnapshot } from "../../lib/term2/generated/wire-fold.js";\nexport type SeededSnapshot = WireSnapshot;\n' '\[web-fold-imports\]' node scripts/check-rules.mjs
+seed "present.ts imports a fold value" web-client/lib/term2/present.ts $'\nimport { reduceWireEvent as seededFold } from "./generated/wire-fold.js";\nexport const seeded = seededFold;\n' '\[web-fold-imports\]' node scripts/check-rules.mjs
+seed "the browser reducer comes back" web-client/lib/term2/event-adapter.ts $'export const seeded = 1;\n' '\[browser-owns-no-reducer\]' node scripts/check-rules.mjs
+seed "the fold interface changes without its report" src/protocol/fold/wire-types.ts $'\nexport type SeededInterface = { readonly seeded: string };\n' '\[wire-fold-api-current\]' node scripts/check-rules.mjs
 seed "app/ reads a session log" src/app/settings.ts $'\nexport const seededReader = readFactLines;\n' '\[log-readers\]' node scripts/check-layers.mjs
 seed "engine imports app (layer direction)" src/engine/turn.ts $'\nimport "../app/settings.js";\n' '\[layer-direction\]' node scripts/check-layers.mjs
 seed "duplicate basename" src/app/turn.ts $'export const seededTurn = 1;\n' '\[duplicate-basenames\]' node scripts/check-rules.mjs

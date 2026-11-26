@@ -7,9 +7,11 @@
  * delta re-renders one turn.
  */
 import type {
+  WireBranchSnapshot,
   WireMessage,
   WireReasoningBlock,
   WireSnapshot,
+  WireTask,
   WireTool,
   WireTurnResult,
   WireUsage,
@@ -18,11 +20,35 @@ import type {
   InteractionProjection,
   Term2Command,
   Term2ConnectionStatus,
-  Term2SessionFacts,
   Term2SessionView,
   Term2TurnItem,
   Term2TurnView,
 } from './types';
+
+/** The parts of a session snapshot the panels read, filled by present.ts; components never read the snapshot. */
+export interface Term2SessionFacts {
+  /** Each task with its subagent branch (steps, turns, usage) when it has one. */
+  tasks: readonly (WireTask & {
+    readonly branch: WireBranchSnapshot | null;
+    /** The branch's turns, presented like the root's (the running-tasks panel's activity). */
+    readonly branchTurns: readonly Term2TurnView[];
+  })[];
+  queue: WireSnapshot['queue'];
+  queueState: WireSnapshot['queueState'];
+  queuePauseReason: NonNullable<WireSnapshot['queuePauseReason']> | null;
+  notifications: NonNullable<WireSnapshot['notifications']>;
+  requestCosts: NonNullable<WireSnapshot['requestCosts']>;
+  usage: WireSnapshot['usage'];
+  lastUsage: NonNullable<WireSnapshot['lastUsage']> | null;
+  cost: WireSnapshot['cost'];
+  goal: WireSnapshot['goal'];
+  verification: WireSnapshot['verification'];
+  notices: WireSnapshot['notices'];
+  /** Rule 13: a session-level fault, shown once instead of a live-only overlay. */
+  lastError: WireSnapshot['lastError'];
+  /** Rule 2: the snapshot has tools but no timeline, so no order can be shown. */
+  unorderedTranscript: boolean;
+}
 
 /** The pending-interaction DTOs a frame carried, by request id (server-sse.ts, PendingInteractionEntry). */
 export type PresentInteractions = ReadonlyMap<string, Exclude<InteractionProjection, null>>;

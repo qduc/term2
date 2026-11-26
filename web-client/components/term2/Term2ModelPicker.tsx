@@ -1,150 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Loader2, Minus, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ChevronDown, Loader2, RefreshCw, Search, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { ModelSummary, SessionConfigRecord, SessionConfigUpdate, SettingsProjection } from '../../lib/term2/types';
+import {
+  EffortBars,
+  ModelOptionRow,
+  ProviderTabBar,
+  REASONING_LEVELS,
+  ReasoningEffortSection,
+  chipModelName,
+  type PickerTab,
+  type ProviderTabItem,
+} from './Term2ModelPickerSections';
 
-export const REASONING_LEVELS: ReadonlyArray<{
-  value: NonNullable<SessionConfigUpdate['reasoningEffort']>;
-  label: string;
-  hint: string;
-}> = [
-  { value: 'default', label: 'Default', hint: 'Use model default reasoning' },
-  { value: 'none', label: 'Off', hint: 'No extended reasoning' },
-  { value: 'minimal', label: 'Minimal', hint: 'Fastest, lightest reasoning' },
-  { value: 'low', label: 'Low', hint: 'Quick reasoning for simple tasks' },
-  { value: 'medium', label: 'Medium', hint: 'Balanced depth and speed' },
-  { value: 'high', label: 'High', hint: 'Deep reasoning for hard tasks' },
-  { value: 'xhigh', label: 'Extra high', hint: 'Maximum reasoning effort' },
-];
-
-/** Short labels so all levels fit one segmented control; the full label and hint show on hover. */
-const EFFORT_SHORT_LABELS: Record<string, string> = {
-  none: 'Off',
-  low: 'Low',
-  medium: 'Med',
-  high: 'High',
-  xhigh: 'Extra high',
-};
-
-/**
- * The levels offered in the picker. `default` and `minimal` stay in REASONING_LEVELS so a chat
- * already set to one still shows its name, but they are no longer offered.
- */
-const PICKER_LEVELS = REASONING_LEVELS.filter((level) =>
-  ['none', 'low', 'medium', 'high', 'xhigh'].includes(level.value),
-);
-
-function formatContextWindow(tokens?: number): string | null {
-  if (!tokens || tokens <= 0) return null;
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(tokens % 1_000_000 === 0 ? 0 : 1)}M`;
-  return `${Math.round(tokens / 1_000)}k`;
-}
-
-function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(tokens % 1_000_000 === 0 ? 0 : 1)}M tokens`;
-  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K tokens`;
-  return `${tokens} tokens`;
-}
-
-function formatPrice(value: number | undefined): string | null {
-  if (value === undefined) return null;
-  if (value === 0) return 'Free';
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: value < 0.1 ? 4 : 2 })}`;
-}
-
-/** What term2 knows about a model: limits and prices from its catalog. Shown on hover or focus. */
-function ModelDetails({ model, providerLabel }: { model: ModelSummary; providerLabel: string }) {
-  const rows: Array<[string, string]> = [];
-  if (model.contextWindow) rows.push(['Context', formatTokens(model.contextWindow)]);
-  if (model.maxOutputTokens) rows.push(['Max output', formatTokens(model.maxOutputTokens)]);
-  const pricing = model.pricing;
-  const input = formatPrice(pricing?.inputPerMTok);
-  const output = formatPrice(pricing?.outputPerMTok);
-  if (input) rows.push(['Input', `${input} / 1M tokens`]);
-  if (output) rows.push(['Output', `${output} / 1M tokens`]);
-  const cacheRead = formatPrice(pricing?.cacheReadPerMTok);
-  const cacheWrite = formatPrice(pricing?.cacheWritePerMTok);
-  if (cacheRead) rows.push(['Cache read', `${cacheRead} / 1M tokens`]);
-  if (cacheWrite) rows.push(['Cache write', `${cacheWrite} / 1M tokens`]);
-  if (model.default_reasoning_level) rows.push(['Default reasoning', model.default_reasoning_level]);
-  return (
-    <div className="space-y-1.5">
-      <div>
-        <div className="break-all font-mono font-medium">{model.id}</div>
-        <div className="opacity-70">
-          {model.name && model.name !== model.id ? `${model.name} · ` : ''}
-          {providerLabel}
-        </div>
-      </div>
-      {rows.length > 0 ? (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-          {rows.map(([label, value]) => (
-            <div key={label} className="contents">
-              <dt className="opacity-70">{label}</dt>
-              <dd className="tabular-nums">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="opacity-70">No limits or prices known for this model.</p>
-      )}
-      {pricing?.tiers?.map((tier) => (
-        <p key={tier.inputTokensAbove} className="opacity-70">
-          Above {formatTokens(tier.inputTokensAbove).replace(' tokens', '')} input:{' '}
-          {[
-            formatPrice(tier.inputPerMTok) && `${formatPrice(tier.inputPerMTok)} in`,
-            formatPrice(tier.outputPerMTok) && `${formatPrice(tier.outputPerMTok)} out`,
-          ]
-            .filter(Boolean)
-            .join(', ')}{' '}
-          per 1M
-        </p>
-      ))}
-    </div>
-  );
-}
-
-/**
- * A short, readable model name for the chip: the catalog name without its "Vendor: " prefix
- * (the provider is shown beside it), or the id without its `vendor/` part when there is no name.
- */
-export function chipModelName(modelId: string, name?: string): string {
-  const cleaned = name?.replace(/^[^:/]{1,40}:\s+/, '').trim();
-  if (cleaned && cleaned !== modelId) return cleaned;
-  return modelId.includes('/') ? modelId.slice(modelId.lastIndexOf('/') + 1) : modelId;
-}
-
-/** Bars filled per effort level; Extra high fills all three in the accent colour. */
-const EFFORT_BARS: Record<string, number> = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 3 };
-
-function EffortBars({ effort, label }: { effort: string; label: string }) {
-  if (effort === 'none') return <Minus aria-label={`Reasoning ${label}`} className="size-3 text-muted-foreground" />;
-  const filled = EFFORT_BARS[effort];
-  if (filled === undefined) return null;
-  const strong = effort === 'xhigh';
-  return (
-    <span role="img" aria-label={`Reasoning effort ${label}`} className="inline-flex h-2.5 shrink-0 items-end gap-px">
-      {[4, 7, 10].map((height, index) => (
-        <span
-          key={height}
-          style={{ height }}
-          className={cn(
-            'w-[3px] rounded-[1px]',
-            index < filled ? (strong ? 'bg-primary' : 'bg-foreground/70') : 'bg-foreground/20',
-          )}
-        />
-      ))}
-    </span>
-  );
-}
-
-type PickerTab = 'all' | 'favorites' | `provider:${string}`;
+export { REASONING_LEVELS, chipModelName } from './Term2ModelPickerSections';
 
 type SelectableItem =
   | { kind: 'model'; key: string; model: ModelSummary }
@@ -234,13 +107,12 @@ export function Term2ModelPicker({
     tab.startsWith('provider:') && !providerCounts.has(tab.slice('provider:'.length)) ? 'all' : tab;
   const activeProviderId = effectiveTab.startsWith('provider:') ? effectiveTab.slice('provider:'.length) : null;
 
-  const tabItems = useMemo(
+  const tabItems = useMemo<ProviderTabItem[]>(
     () => [
-      { id: 'all' as PickerTab, label: 'All', count: models.length },
-      { id: 'favorites' as PickerTab, label: 'Favorites', count: favoriteCount },
+      { id: 'all', label: 'All', count: models.length },
+      { id: 'favorites', label: 'Favorites', count: favoriteCount },
       ...providerOrder.map((id) => ({
         id: `provider:${id}` as PickerTab,
-        providerId: id,
         label: providerLabels.get(id) ?? id,
         count: providerCounts.get(id) ?? 0,
       })),
@@ -269,7 +141,6 @@ export function Term2ModelPicker({
 
   const effortValue = config.reasoningEffort || 'default';
   const currentEffortMeta = REASONING_LEVELS.find((item) => item.value === effortValue);
-  const effortOffered = PICKER_LEVELS.some((level) => level.value === effortValue);
   const chipProvider = providerLabels.get(config.providerId) ?? config.providerId;
   const currentModel = models.find((m) => m.provider === config.providerId && m.id === config.modelId);
   const chipName = chipModelName(config.modelId, currentModel?.name);
@@ -477,63 +348,7 @@ export function Term2ModelPicker({
               <RefreshCw className={loadingModels ? 'animate-spin' : ''} />
             </Button>
           </div>
-          <div
-            role="tablist"
-            aria-label="Filter models by provider"
-            className="flex items-center gap-1 overflow-x-auto border-b px-3 py-1.5 text-xs scrollbar-thin"
-            onKeyDown={(event) => {
-              if (
-                event.key !== 'ArrowLeft' &&
-                event.key !== 'ArrowRight' &&
-                event.key !== 'Home' &&
-                event.key !== 'End'
-              ) {
-                return;
-              }
-              if (tabItems.length === 0) return;
-              event.preventDefault();
-              const currentIndex = tabItems.findIndex((item) => item.id === effectiveTab);
-              let nextIndex = 0;
-              if (event.key === 'Home') {
-                nextIndex = 0;
-              } else if (event.key === 'End') {
-                nextIndex = tabItems.length - 1;
-              } else {
-                const step = event.key === 'ArrowRight' ? 1 : -1;
-                nextIndex =
-                  currentIndex === -1 ? 0 : (currentIndex + step + tabItems.length) % tabItems.length;
-              }
-              const nextTab = tabItems[nextIndex]!;
-              selectTab(nextTab.id);
-              const tabButton = event.currentTarget.querySelector<HTMLButtonElement>(
-                `[data-tab="${CSS.escape(nextTab.id)}"]`,
-              );
-              tabButton?.focus();
-              tabButton?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-            }}
-          >
-            {tabItems.map((item) => {
-              const isActive = effectiveTab === item.id;
-              return (
-                <Button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  tabIndex={isActive ? 0 : -1}
-                  data-tab={item.id}
-                  size="xs"
-                  variant={isActive ? 'default' : 'ghost'}
-                  title={`${item.label} (${item.count})`}
-                  onClick={() => selectTab(item.id)}
-                  className={cn('shrink-0', !isActive && 'text-muted-foreground')}
-                >
-                  {item.id === 'favorites' && <Star />}
-                  {item.id === 'all' ? `All (${item.count})` : item.label}
-                </Button>
-              );
-            })}
-          </div>
+          <ProviderTabBar tabs={tabItems} activeTab={effectiveTab} onSelectTab={selectTab} />
           <div
             ref={listRef}
             id={listboxId}
@@ -591,67 +406,25 @@ export function Term2ModelPicker({
                     const isCurrent = model.provider === config.providerId && model.id === config.modelId;
                     const favKey = `${model.provider}/${model.id}`;
                     const flatIndex = itemIndexByKey.get(favKey) ?? -1;
-                    const isActive = flatIndex !== -1 && flatIndex === activeIndex;
-                    const isFav = favoriteSet.has(favKey) || favoriteSet.has(model.id);
-                    const ctx = formatContextWindow(model.contextWindow);
                     return (
-                      <li key={favKey} className="flex items-center gap-1">
-                        <Tooltip delayDuration={350}>
-                          <TooltipTrigger asChild>
-                            <button
-                              id={flatIndex >= 0 ? `${listboxId}-opt-${flatIndex}` : undefined}
-                              type="button"
-                              role="option"
-                              aria-selected={isActive}
-                              data-active={isActive ? 'true' : undefined}
-                              onPointerMove={(event) => {
-                                if (event.pointerType === 'mouse' && activeKey !== favKey) setActiveKey(favKey);
-                              }}
-                              onClick={() => {
-                                onSelectModel(model.provider, model.id);
-                                setOpen(false);
-                                setQuery('');
-                              }}
-                              className={cn(
-                                'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs outline-none transition-colors focus-visible:bg-accent',
-                                isActive && 'bg-accent text-accent-foreground ring-1 ring-inset ring-foreground/10',
-                                isCurrent && 'font-medium',
-                              )}
-                            >
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate font-mono">{model.id}</span>
-                                {model.name && model.name !== model.id && (
-                                  <span className="block truncate text-xs text-muted-foreground">{model.name}</span>
-                                )}
-                              </span>
-                              {ctx && (
-                                <Badge variant="secondary" className="shrink-0 font-mono">
-                                  {ctx}
-                                </Badge>
-                              )}
-                              {isCurrent && <Check className="h-3.5 w-3.5 shrink-0" />}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" align="start" sideOffset={10} className="w-64 text-xs">
-                            <ModelDetails
-                              model={model}
-                              providerLabel={providerLabels.get(model.provider) ?? model.provider}
-                            />
-                          </TooltipContent>
-                        </Tooltip>
-                        {onToggleFavorite && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label={isFav ? `Remove ${model.id} from favorites` : `Favorite ${model.id}`}
-                            onClick={() => onToggleFavorite(favKey)}
-                            className={isFav ? 'text-amber-500' : 'text-muted-foreground'}
-                          >
-                            <Star className={isFav ? 'fill-current' : ''} />
-                          </Button>
-                        )}
-                      </li>
+                      <ModelOptionRow
+                        key={favKey}
+                        model={model}
+                        providerLabel={providerLabels.get(model.provider) ?? model.provider}
+                        optionId={flatIndex >= 0 ? `${listboxId}-opt-${flatIndex}` : undefined}
+                        isCurrent={isCurrent}
+                        isActive={flatIndex !== -1 && flatIndex === activeIndex}
+                        isFav={favoriteSet.has(favKey) || favoriteSet.has(model.id)}
+                        onHover={() => {
+                          if (activeKey !== favKey) setActiveKey(favKey);
+                        }}
+                        onSelect={() => {
+                          onSelectModel(model.provider, model.id);
+                          setOpen(false);
+                          setQuery('');
+                        }}
+                        onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(favKey) : undefined}
+                      />
                     );
                   })}
                 </ul>
@@ -685,57 +458,12 @@ export function Term2ModelPicker({
               );
             })()}
           </div>
-          <div className="border-t px-3 py-2.5">
-            <div className="flex items-baseline justify-between gap-2 text-xs">
-              <span id="term2-effort-label" className="font-medium">
-                Reasoning effort
-              </span>
-              <span className="truncate text-muted-foreground">{currentEffortMeta?.hint}</span>
-            </div>
-            <div
-              role="radiogroup"
-              aria-labelledby="term2-effort-label"
-              className="mt-1.5 grid grid-cols-5 gap-0.5 rounded-lg bg-muted p-0.5"
-              onKeyDown={(event) => {
-                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-                event.preventDefault();
-                const index = PICKER_LEVELS.findIndex((level) => level.value === effortValue);
-                const step = event.key === 'ArrowRight' ? 1 : -1;
-                const next =
-                  index === -1
-                    ? PICKER_LEVELS[0]!
-                    : PICKER_LEVELS[(index + step + PICKER_LEVELS.length) % PICKER_LEVELS.length]!;
-                onSelectEffort(next.value);
-                event.currentTarget.querySelector<HTMLButtonElement>(`[data-effort="${next.value}"]`)?.focus();
-              }}
-            >
-              {PICKER_LEVELS.map((level, levelIndex) => {
-                const selected = level.value === effortValue;
-                return (
-                  <button
-                    key={level.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    aria-label={level.label}
-                    data-effort={level.value}
-                    tabIndex={selected || (!effortOffered && levelIndex === 0) ? 0 : -1}
-                    title={`${level.label}: ${level.hint}`}
-                    disabled={disabled || busy}
-                    onClick={() => {
-                      if (!selected) onSelectEffort(level.value);
-                    }}
-                    className={cn(
-                      'rounded-md py-1 text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50',
-                      selected && 'bg-background font-medium text-foreground shadow-sm',
-                    )}
-                  >
-                    {EFFORT_SHORT_LABELS[level.value] ?? level.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <ReasoningEffortSection
+            effortValue={effortValue}
+            disabled={disabled}
+            busy={busy}
+            onSelectEffort={onSelectEffort}
+          />
           <div className="flex items-center justify-between border-t px-3 py-1.5 text-xs">
             <span className="text-muted-foreground">↑↓ navigate · ↵ select</span>
             <Button

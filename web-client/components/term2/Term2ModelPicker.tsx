@@ -5,6 +5,7 @@ import { ChevronDown, Loader2, RefreshCw, Search, TriangleAlert } from 'lucide-r
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { filterUnifiedModels } from '../../lib/term2/picker-filters';
 import type { ModelSummary, SessionConfigRecord, SessionConfigUpdate, SettingsProjection } from '../../lib/term2/types';
 import {
   VirtualModelList,
@@ -247,17 +248,14 @@ function ModelPickerPanel({
   );
 
   const groupedModels = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const groups = new Map<string, ModelSummary[]>();
-    for (const model of models) {
+    const tabModels = models.filter((model) => {
       const favKey = `${model.provider}/${model.id}`;
-      if (effectiveTab === 'favorites' && !favoriteSet.has(favKey) && !favoriteSet.has(model.id)) continue;
-      if (activeProviderId !== null && model.provider !== activeProviderId) continue;
-      if (needle) {
-        const providerLabel = (providerLabels.get(model.provider) ?? model.provider).toLowerCase();
-        const hay = `${model.id} ${model.name ?? ''} ${model.provider} ${providerLabel}`.toLowerCase();
-        if (!hay.includes(needle)) continue;
-      }
+      if (effectiveTab === 'favorites' && !favoriteSet.has(favKey) && !favoriteSet.has(model.id)) return false;
+      if (activeProviderId !== null && model.provider !== activeProviderId) return false;
+      return true;
+    });
+    const groups = new Map<string, ModelSummary[]>();
+    for (const model of filterUnifiedModels(tabModels, query, providerLabels)) {
       const list = groups.get(model.provider) ?? [];
       list.push(model);
       groups.set(model.provider, list);

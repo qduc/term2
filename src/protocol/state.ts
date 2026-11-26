@@ -60,6 +60,32 @@ function firstById<T>(items: readonly T[], key: (item: T) => string): Map<string
   return byId;
 }
 
+/**
+ * Per-turn detail Session does not keep, carried from the previous snapshot: reasoning summaries while Session's
+ * timeline still has them (a rewind or compaction drops the rest), each turn's usage while the turn is still
+ * known, and live reasoning. A rotation starts all three afresh.
+ */
+function turnDetail(
+  state: DirectSessionState,
+  previous: WireSnapshot | undefined,
+  rotated: boolean,
+  turnResults: readonly { readonly turnId: string }[],
+): Pick<WireSnapshot, 'reasoningBlocks' | 'liveReasoning' | 'turnUsage'> {
+  if (!previous || rotated) return {};
+  const reasoningIds = new Set(state.timeline.filter((entry) => entry.kind === 'reasoning').map((entry) => entry.id));
+  const turnIds = new Set([
+    ...turnResults.map((result) => result.turnId),
+    ...state.timeline.flatMap((entry) => (entry.turnId ? [entry.turnId] : [])),
+  ]);
+  const reasoningBlocks = previous.reasoningBlocks?.filter((block) => reasoningIds.has(block.messageId));
+  const turnUsage = previous.turnUsage?.filter((entry) => turnIds.has(entry.turnId));
+  return {
+    ...(reasoningBlocks?.length ? { reasoningBlocks } : {}),
+    ...(previous.liveReasoning !== undefined ? { liveReasoning: previous.liveReasoning } : {}),
+    ...(turnUsage?.length ? { turnUsage } : {}),
+  };
+}
+
 export function snapshotDirectState(
   state: DirectSessionState & {
     readonly tasks?: readonly DirectTaskState[];
@@ -155,6 +181,7 @@ export function snapshotDirectState(
     ...(state.codexFiveHourQuota ? { codexFiveHourQuota: { ...state.codexFiveHourQuota } } : {}),
     reasoning: state.reasoning,
     reasoningIdentity: !rotated && previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,
+    ...turnDetail(state, previous, rotated, turnResults),
     retryEligibility: rotated
       ? { turn: false, tool: false }
       : previous?.retryEligibility ?? { turn: false, tool: false },

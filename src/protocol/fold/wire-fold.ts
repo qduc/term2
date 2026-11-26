@@ -14,6 +14,7 @@ import {
 import type { WireEvent, WireSnapshot } from './wire-types.js';
 import { commandReceipts, delta, message, timeline, withNotice } from './transcript.js';
 import { reduceBranch, withRootShares } from './branch-fold.js';
+import { withoutLiveReasoning, withReasoningBlock, withTurnUsage } from './turn-detail.js';
 import { reduceApprovalReview, withoutReview } from './review.js';
 
 /** What a host supplies to the fold. Every field is optional; the fold has a plain default for each. */
@@ -35,7 +36,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
       return event.payload.snapshot;
     case 'turn_started':
       return {
-        ...state,
+        ...(event.payload.foreground ? withoutLiveReasoning(state) : state),
         ...(event.payload.admission
           ? {
               admissions: [
@@ -65,7 +66,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
       return delta(state, event);
     case 'reasoning':
       return {
-        ...state,
+        ...withReasoningBlock(withoutLiveReasoning(state), event),
         reasoning: event.payload.text,
         reasoningIdentity: {
           messageId: event.payload.messageId,
@@ -86,6 +87,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
     case 'reasoning_delta':
       return {
         ...state,
+        liveReasoning: (state.liveReasoning ?? '') + event.payload.delta,
         thinking: true,
         reasoning: state.reasoning + event.payload.delta,
         reasoningIdentity: event.payload.messageId
@@ -234,8 +236,9 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
         throw new Error('Session rotation belongs to a different logical session');
       // Foreground provider context is physically replaced. Task/queue/command/
       // notification owners, goal/context, and accepted cost/request audit survive.
+      const { reasoningBlocks: _blocks, turnUsage: _usage, ...kept } = withoutLiveReasoning(state);
       return {
-        ...state,
+        ...kept,
         backingSessionId: event.payload.backingSessionId,
         model: event.payload.configuration.model,
         configuration: { ...event.payload.configuration },
@@ -298,7 +301,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
       };
     case 'usage':
       return {
-        ...state,
+        ...withTurnUsage(state, event),
         lastUsage: event.payload.usage,
         lastSpeed: event.payload.speed,
         usage: {
@@ -311,7 +314,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
       return { ...state, status: event.payload.status };
     case 'turn_ended':
       return {
-        ...state,
+        ...withoutLiveReasoning(state),
         pendingBudgets: (state.pendingBudgets ?? []).filter((request) => request.turnId !== event.turnId),
         turnResults: event.turnId
           ? [

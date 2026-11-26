@@ -61,9 +61,13 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   - `wire.frames-round-trip` and `wire.snapshot-is-fold` in `scripts/generated-verification/wire.mjs`, green at
     seed 424242 (about 2 s and 4 s per 1,000 cases); `tests/host/gateway/direct-wire-v2.integration.test.ts` runs
     the acceptance example over real HTTP, including a publication between connect and the stream's cut.
-- **Next:** spec 2.3 (b) `reasoningBlocks`, (c) `liveReasoning`, (d) `turnUsage`, each with its carry-over in
-  `snapshotDirectState`; then an independent verifier for phase 1. The acceptance example's steer and the
-  second example (background subagent's panel steps) are not in the integration test yet. Phases
+  - Spec 2.3 (b) to (d): `reasoningBlocks`, `liveReasoning` and `turnUsage` in the fold (`fold/turn-detail.ts`),
+    each carried over by `snapshotDirectState` (blocks while Session's timeline still has the reasoning entry,
+    usage while the turn is known, live reasoning as is; all three start afresh on rotation).
+    `wire.snapshot-is-fold` went red on the missing carry-over of each before it was added.
+- **Next:** an independent verifier for phase 1, then phase 2. The acceptance example's steer and the second
+  example (a background subagent's panel steps) are not in the integration test yet; phase 2's browser flows
+  cover the steer end to end. Phases
   are in order; 3 is independent of 1 and 2 and can be scheduled separately.
 - **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
   lockfile lines; use the pinned version for dependency changes.

@@ -89,6 +89,12 @@ export type WireSnapshot = {
     readonly turnId: string | null;
     readonly modelStep: number | null;
   } | null;
+  /** Every accepted reasoning summary of the transcript, where it was said. Absent until the first one. */
+  readonly reasoningBlocks?: readonly import('./wire-types.js').WireReasoningBlock[];
+  /** Reasoning streaming now, before its summary is accepted. Live only. */
+  readonly liveReasoning?: string;
+  /** The last usage each turn reported (what a reply's token count shows). Absent until the first one. */
+  readonly turnUsage?: readonly { readonly turnId: string; readonly usage: WireUsage }[];
   readonly retryEligibility: WireRetry;
   readonly queue: readonly WireQueueEntry[];
   readonly queueState:

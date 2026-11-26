@@ -27,6 +27,14 @@ export type WireContent =
   /** data is raw RFC 4648 base64 bytes, NOT a data URI/path/URL. Provider policy stays Session-owned. */
   | { readonly type: 'image'; readonly mediaType: string; readonly data: string; readonly detail?: string };
 export type WireStatus = 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
+/** One accepted reasoning summary. `after` is the timeline entry it followed when accepted; null when none. */
+export type WireReasoningBlock = {
+  readonly messageId: string;
+  readonly turnId: string | null;
+  readonly modelStep: number | null;
+  readonly text: string;
+  readonly after: { readonly kind: 'message' | 'tool'; readonly id: string } | null;
+};
 export type WireUsage = {
   readonly inputTokens: number;
   readonly outputTokens: number;

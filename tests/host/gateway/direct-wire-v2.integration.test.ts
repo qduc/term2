@@ -333,6 +333,21 @@ it('a client that connects mid-turn folds the opening snapshot and every later f
     ['exec-1', 'completed', 'a.txt\nb.txt', false],
     ['exec-2', 'completed', 'exit 1', true],
   ]);
+  // Reasoning keeps its place after a reload: rs-1 was said right after the opening prompt.
+  expect(client.reasoningBlocks).toEqual([
+    {
+      messageId: 'rs-1',
+      turnId: 'turn-1',
+      modelStep: 1,
+      text: 'Plan: read the file.',
+      after: { kind: 'message', id: 'user-1' },
+    },
+  ]);
+  // Live reasoning ended with its summary; per-reply usage is the turn's last report, and turn 2 reported none.
+  expect(client.liveReasoning).toBeUndefined();
+  expect(client.turnUsage).toEqual([
+    { turnId: 'turn-1', usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 0 } },
+  ]);
   expect(client.turnResults?.map((result) => [result.turnId, result.outcome, result.error?.message])).toEqual([
     ['turn-1', 'completed', undefined],
     ['turn-2', 'failed', '429 slow down'],

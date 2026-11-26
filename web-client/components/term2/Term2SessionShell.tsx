@@ -1125,9 +1125,8 @@ export function Term2SessionShell({
   }, []);
 
   // Drive duty-cycled smooth WAAPI breathing only while live indicators exist.
-  const hasRunningSubagent = session.view.turns.some(
-    (t) => t.subagents?.some((s) => s.status === 'running') ?? false,
-  );
+  const hasRunningSubagent =
+    session.view.session?.tasks.some((task) => task.kind === 'subagent' && task.status === 'running') ?? false;
   const hasLiveAnimation =
     hasStreamingTurn ||
     Boolean(visibleLiveStatus) ||
@@ -1339,8 +1338,8 @@ export function Term2SessionShell({
     startingChat,
   ]);
 
-  const activeGoal = session.view.nativeState?.goal;
-  const activeVerification = session.view.nativeState?.verification;
+  const activeGoal = session.view.session?.goal;
+  const activeVerification = session.view.session?.verification;
 
   const sessionTitle = sessionId
     ? (() => {
@@ -1359,16 +1358,10 @@ export function Term2SessionShell({
     if (sendBlocked) return 'Choose a model that can reply before resending.';
     setRetryError(null);
     let targets: RewindTargetSummary[];
-    let messageId = session.view.turns.find((item) => item.turnId === turnId)?.userMessageId;
+    // Rewind targets name the user message; every presented turn carries its opening message's id.
+    const messageId = session.view.turns.find((item) => item.turnId === turnId)?.userMessageId;
     try {
       ({ targets } = await term2Client.listRewindTargets(sessionId));
-      // Rewind targets name the user message; a turn sent from this page only knows its turn
-      // id, so look the message up in the saved history.
-      if (!messageId) {
-        const { snapshot } = await term2Client.hydrateSession(sessionId);
-        const message = snapshot.messages.find((item) => item.role === 'user' && item.turnId === turnId);
-        messageId = typeof message?.id === 'string' ? message.id : undefined;
-      }
     } catch (error) {
       return error instanceof Error ? error.message : 'Could not load this chat’s history.';
     }
@@ -1712,11 +1705,7 @@ export function Term2SessionShell({
                         Active goal{typeof activeGoal.status === 'string' ? ` · ${activeGoal.status}` : ''}
                       </p>
                       <p className="mt-0.5 text-zinc-700 dark:text-zinc-300">
-                        {typeof activeGoal.outcome === 'string'
-                          ? activeGoal.outcome
-                          : typeof activeGoal.text === 'string'
-                          ? activeGoal.text
-                          : JSON.stringify(activeGoal)}
+                        {activeGoal.text}
                       </p>
                       {activeVerification && (
                         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -1801,7 +1790,7 @@ export function Term2SessionShell({
                       <Term2UserMessage
                         turnId={turn.turnId}
                         text={turn.userText}
-                        content={session.view.nativeState?.messages?.find(entry => entry.message.id === turn.userMessageId)?.message.content}
+                        content={turn.userContent}
                         copied={copiedTurn === `${turn.turnId}:user`}
                         onCopy={() => copyTurn(`${turn.turnId}:user`, turn.userText ?? '')}
                         disabled={commandDisabled}
@@ -1810,26 +1799,12 @@ export function Term2SessionShell({
                       />
                     )}
                     <div className="min-w-0 space-y-4">
-                      <Term2TurnTimeline turn={turn} displayMode={displayMode} messages={session.view.nativeState?.messages} />
-                      {(turn.subagents ?? []).length > 0 && (
-                        <div className="space-y-2">
-                          {(turn.subagents ?? [])
-                            .filter(
-                              (card) =>
-                                !session.view.nativeState?.tasks?.some(
-                                  (task) => task.id === card.agentId || task.agentId === card.agentId,
-                                ),
-                            )
-                            .map((card) => (
-                              <Term2SubagentCard key={card.agentId} card={card} />
-                            ))}
-                        </div>
-                      )}
+                      <Term2TurnTimeline turn={turn} displayMode={displayMode} />
                       {turn.status !== 'completed' && turn.status !== 'streaming' && turn.status !== 'pending' && (
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2.5 py-0.5 text-xs text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">
-                            {turn.transientFailure
-                              ? 'Live connection error (reload to check saved state)'
+                            {turn.interruptedByFault
+                              ? 'Interrupted by an error (reload to check saved state)'
                               : turn.status === 'aborted'
                               ? 'Stopped'
                               : `Turn ${turn.status}`}
@@ -2045,7 +2020,7 @@ export function Term2SessionShell({
                           onCreateNewSession={() => void createNewChat()}
                         />
                       )}
-                      <Term2NativeEvidence view={session.view} />
+                      <Term2NativeEvidence view={session.view} frames={session.frames} />
                     </div>
                   </details>
                 )}

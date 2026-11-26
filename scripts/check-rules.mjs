@@ -11,12 +11,17 @@
 //   6. Fixed sleeps: integration, e2e and provider black-box tests wait for conditions; a sleep needs a
 //      `// sleep-ok: <observed>; <why long enough>` comment or a per-file ceiling in rule-baseline.json
 //      (shapes detected are listed in scripts/gates/fixed-sleeps.mjs).
+//   7-10. The settled web-transcript architecture (scripts/gates/architecture-rules.mjs): the fold imports nothing
+//      outside itself; only the session store (and present.ts, for types) imports the browser's fold bundle; the
+//      browser's old reducers stay deleted; the fold's interface report is current (this one builds a TypeScript
+//      program, about two seconds).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { exceptionKeys, failureMap, reportAndExit } from './gates/rules.mjs';
 import { findFixedSleeps, slowTierFiles } from './gates/fixed-sleeps.mjs';
+import { checkArchitecture } from './gates/architecture-rules.mjs';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
@@ -47,13 +52,13 @@ const parse = (file) => ts.createSourceFile(file, texts.get(file), ts.ScriptTarg
 const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart()).line + 1;
 
 // 1. WireEvent construction.
-const eventsText = fs.readFileSync(path.join(src, 'protocol/wire-events.ts'), 'utf8');
+const eventsText = fs.readFileSync(path.join(src, 'protocol/fold/wire-events.ts'), 'utf8');
 const payloads = eventsText.slice(
   eventsText.indexOf('export type WireEventPayloads'),
   eventsText.indexOf('export type WireEventType'),
 );
 const wireTypes = new Set([...payloads.matchAll(/^ {2}([a-z_]+):/gm)].map((match) => match[1]));
-if (wireTypes.size < 20) projection('rule-check: could not read WireEventPayloads from protocol/wire-events.ts');
+if (wireTypes.size < 20) projection('rule-check: could not read WireEventPayloads from protocol/fold/wire-events.ts');
 const wireAllowed = exceptionKeys(
   baseline.wireEventOutsideProtocol.map((entry) => ({ key: `${entry.file} ${entry.type}`, reason: entry.reason })),
   'key',
@@ -265,6 +270,9 @@ for (const [file, ceiling] of sleepCeilings) {
       `rule-baseline.json fixedSleeps ${file}: ${now} unjustified sleeps now, ${ceiling} recorded; lower the count`,
     );
 }
+
+// 7-10. The settled web-transcript architecture (scripts/gates/architecture-rules.mjs).
+checkArchitecture(repo, (rule) => add(rule));
 
 reportAndExit(
   failures,

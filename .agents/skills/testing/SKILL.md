@@ -23,6 +23,7 @@ pnpm test path/to/tmp.test.ts      # run one temporary test
 pnpm test:integration              # cross-module and child-process journeys
 pnpm test:e2e                      # process-level: terminal UI smoke, build/rollback, fake-codex network
 pnpm test:provider-black-box       # built CLI against loopback provider fixtures (see `provider-testing`)
+pnpm test:web-browser              # Chromium against the built term2-web (see "Web browser flows")
 pnpm check:no-unit-tests           # what CI and the pre-commit hook run
 ```
 
@@ -75,8 +76,11 @@ Each behavioral shard restores its own Vitest results cache (`lane: <tier>-<shar
 and `vitest.ci.config.ts` orders its files by recorded duration (longest first). Without it, a
 30 s sleeping Discord download case started late and added ~11 s to the integration lane. A new
 long file runs early from its second run on.
-`port` is the aggregate gate requiring `quality` success, successful behavioral lanes (or skips
-justified by an inert pull request), and that every lane/shard stays within `scripts/ci-budget.json`.
+`web-browser` is a separate job, not a Vitest tier: it builds the CLI and the web UI, installs
+Chromium and runs `pnpm test:web-browser`.
+`port` is the aggregate gate requiring `quality` success, successful behavioral lanes including
+`web-browser` (or skips justified by an inert pull request), and that every lane/shard stays within
+`scripts/ci-budget.json`.
 Known docs/evidence formats may skip tests; unknown extensions and executable scripts under
 `docs/` run every tier. Follow any late CI failure through to a passing run or a blocker someone
 clearly owns.
@@ -98,6 +102,27 @@ explicit finite timeout and wait for the completion notification rather than pol
   and its built-CLI launch count in the handoff. Don't copy a fixed sleep from a
   neighbouring test: the e2e files still carry sleeps written before that guidance
   (`5202455`, 2026-11-05, against `6ff90c5`, 2026-11-07). They are debt, not precedent.
+
+## Web browser flows
+
+`tests/web-client/browser/*.flow.ts` are Playwright flows (Chromium only), not Vitest files: no Vitest
+config collects them, and `pnpm test:web-browser` is the only command that runs them. Each flow launches
+its own `dist/web.js` (gateway plus the built web UI) in an isolated world against a loopback model
+double (`launch.ts`), drives the page, records the transcript once the turn has settled, reloads, and
+requires the same transcript.
+
+- Build first, in this order: `pnpm build`, then `node scripts/build-web.mjs`. `pnpm build` replaces
+  `dist/`, which removes `dist/web.js` and `dist/web-client`; the flows read the built page, so a web
+  source change needs `build-web.mjs` again before it shows.
+- A reload comparison that fails means the product shows two transcripts for one conversation. Report
+  it; do not relax the comparison or mark the flow expected-to-fail.
+- The model double answers by the latest user message, and a request no script covers fails the flow.
+  It sends no `usage` chunk. With one added (2026-11-26, `c57d0bb`), the first-send and tool-call flows
+  failed at the reload comparison: the token count under a reply is shown live and is gone after a
+  reload. No committed flow asserts usage yet; the plan
+  (`docs/plans/web-client/web-transcript-single-source.md`) says where a red-by-design flow may run.
+- Failure screenshots go to `TERM2_WEB_FLOW_OUTPUT` (a new temp directory when unset), never into the
+  repository. Locally, Chromium comes from `pnpm exec playwright install chromium`.
 
 ## Keeping the slow tiers fast
 

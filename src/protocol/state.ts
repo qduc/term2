@@ -2,7 +2,13 @@
 import type { DirectSessionState, DirectToolDisplay } from '../session/facade-types.js';
 import type { DirectDisplayTool, DirectPublicState } from '../session/state.js';
 import { isSubscriptionProvider } from '../model/cost/subscription-providers.js';
-import { DIRECT_PROTOCOL_VERSION, type WireConfiguration, type WireModel, type WireSnapshot } from './wire.js';
+import {
+  DIRECT_PROTOCOL_VERSION,
+  type WireConfiguration,
+  type WireEvent,
+  type WireModel,
+  type WireSnapshot,
+} from './wire.js';
 import type { DirectContextState } from '../session/context.js';
 import { publicContext } from './context.js';
 import type { DirectTaskState } from '../session/background-types.js';
@@ -52,6 +58,41 @@ function firstById<T>(items: readonly T[], key: (item: T) => string): Map<string
     if (!byId.has(id)) byId.set(id, item);
   }
   return byId;
+}
+
+/**
+ * Per-turn detail Session does not keep, carried from the previous snapshot: reasoning summaries while Session's
+ * timeline still has them (a rewind or compaction drops the rest), each turn's usage while the turn is still
+ * known, and live reasoning. A rotation starts all three afresh.
+ */
+function turnDetail(
+  state: DirectSessionState,
+  previous: WireSnapshot | undefined,
+  rotated: boolean,
+  turnResults: readonly { readonly turnId: string }[],
+): Pick<WireSnapshot, 'reasoningBlocks' | 'liveReasoning' | 'turnUsage'> {
+  if (!previous || rotated) return {};
+  const reasoningIds = new Set(state.timeline.filter((entry) => entry.kind === 'reasoning').map((entry) => entry.id));
+  const turnIds = new Set([
+    ...turnResults.map((result) => result.turnId),
+    ...state.timeline.flatMap((entry) => (entry.turnId ? [entry.turnId] : [])),
+  ]);
+  // Session's timeline keeps reasoning entries through a rewind, so a block also needs its turn's messages.
+  const turnsWithMessages = new Set(
+    state.messages.flatMap((message) => {
+      const turnId = (message as { readonly turnId?: string }).turnId;
+      return turnId ? [turnId] : [];
+    }),
+  );
+  const reasoningBlocks = previous.reasoningBlocks?.filter(
+    (block) => reasoningIds.has(block.messageId) && block.turnId !== null && turnsWithMessages.has(block.turnId),
+  );
+  const turnUsage = previous.turnUsage?.filter((entry) => turnIds.has(entry.turnId));
+  return {
+    ...(reasoningBlocks?.length ? { reasoningBlocks } : {}),
+    ...(previous.liveReasoning !== undefined ? { liveReasoning: previous.liveReasoning } : {}),
+    ...(turnUsage?.length ? { turnUsage } : {}),
+  };
 }
 
 export function snapshotDirectState(
@@ -149,6 +190,7 @@ export function snapshotDirectState(
     ...(state.codexFiveHourQuota ? { codexFiveHourQuota: { ...state.codexFiveHourQuota } } : {}),
     reasoning: state.reasoning,
     reasoningIdentity: !rotated && previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,
+    ...turnDetail(state, previous, rotated, turnResults),
     retryEligibility: rotated
       ? { turn: false, tool: false }
       : previous?.retryEligibility ?? { turn: false, tool: false },
@@ -217,5 +259,17 @@ export function subscriptionQuotaView(snapshot: WireSnapshot): SubscriptionQuota
     provider: snapshot.model.provider,
     subscription: isSubscriptionProvider(snapshot.model.provider),
     windows: { fiveHour: window(snapshot.codexFiveHourQuota), weekly: window(snapshot.codexQuota) },
+  };
+}
+
+/** A snapshot as a live event: what a client folds to install a cut. It is not an accepted fact. */
+export function snapshotEvent(snapshot: WireSnapshot): WireEvent {
+  return {
+    sessionId: snapshot.sessionId,
+    seq: null,
+    occurredAt: null,
+    turnId: null,
+    type: 'snapshot',
+    payload: { snapshot },
   };
 }

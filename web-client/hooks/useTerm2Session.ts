@@ -1,16 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { term2Client, Term2ApiError } from '../lib/api/term2';
-import { viewFromHydration, type SessionHydration } from '../lib/term2/hydration';
-import { consumeSseResponse } from '../lib/term2/sse';
 import { readyForBackgroundDrain, undeliveredBackgroundNoticeIds } from '../lib/term2/queue';
-import {
-  applyTerm2Event,
-  clearTerm2LiveEvidence,
-  presentTerm2SessionView,
-  emptyTerm2SessionView,
-} from '../lib/term2/event-adapter';
+import { Term2SessionStore } from '../lib/term2/session-store';
 import type {
   InteractionResolveRequest,
   MessageSubmitOptions,
@@ -24,12 +17,29 @@ import type {
   Term2SessionView,
   WorkspacePage,
 } from '../lib/term2/types';
-import { Term2ProtocolError } from '../lib/term2/types';
 
-const MAX_RECONNECT_DELAY = 10_000;
-const MAX_PROTOCOL_RELOADS = 2;
-const BACKOFF_BASE = 500;
 const BACKGROUND_DRAIN_RETRY_MS = 2_000;
+const DIAGNOSTICS_KEY = 'term2.web.diagnostics';
+
+/** The view of no session at all. */
+const NO_SESSION: Term2SessionView = {
+  sessionId: '',
+  turns: [],
+  pendingInteraction: null,
+  status: 'idle',
+  lastAppliedSequence: 0,
+  error: null,
+  reloadRequired: false,
+};
+const noSubscription = () => () => undefined;
+
+function diagnosticsOn(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.localStorage.getItem(DIAGNOSTICS_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 // Messages need a live session stream to observe their accepted outcome.
 export function canSubmitSessionMessage(status: Term2ConnectionStatus): boolean {
@@ -119,11 +129,22 @@ export interface UseTerm2SessionResult {
   abort: () => Promise<void>;
   resolveInteraction: (request: InteractionResolveRequest) => Promise<void>;
   refresh: () => Promise<void>;
+  /** With diagnostics on, the last frames the session stream sent (for the diagnostics panel only). */
+  frames: readonly unknown[] | null;
 }
 
 export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult {
-  const [view, setView] = useState<Term2SessionView>(() => emptyTerm2SessionView(sessionId || ''));
-  const [connectionAttempt, setConnectionAttempt] = useState(0);
+  // One store per open session; it owns the stream, the checkpoint and the snapshot (lib/term2/session-store.ts).
+  const store = useMemo(() => (sessionId ? new Term2SessionStore(sessionId, { diagnostics: diagnosticsOn() }) : null), [sessionId]);
+  useEffect(() => {
+    store?.start();
+    return () => store?.close();
+  }, [store]);
+  const view = useSyncExternalStore(
+    store?.subscribe ?? noSubscription,
+    store ? store.getView : () => NO_SESSION,
+    () => NO_SESSION,
+  );
   const [workspaces, setWorkspaces] = useState<WorkspacePage['workspaces']>([]);
   const [sessions, setSessions] = useState<SessionPage['sessions']>([]);
   const [workspaceCursor, setWorkspaceCursor] = useState<string | null>(null);
@@ -138,22 +159,12 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   // Keyed by session like commandState, so a command still in flight for the
   // previous session cannot disable the newly selected one's menu.
   const [commandPendingSessionId, setCommandPendingSessionId] = useState<string | null>(null);
-  const generationRef = useRef(0);
-  const viewRef = useRef(view);
+  const storeRef = useRef(store);
+  storeRef.current = store;
   const sessionIdRef = useRef(sessionId);
-  const selectionControllerRef = useRef<AbortController | null>(null);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingTextRef = useRef(new Map<string, string>());
   const admittingSessionIdsRef = useRef(new Set<string>());
-
-  // viewRef is the source of truth for the latest view; React state only mirrors
-  // it. Every update goes through the ref first, so a render that lags behind a
-  // burst of replayed events can never roll the ref back and fake a sequence gap.
-  const patchView = useCallback((update: (current: Term2SessionView) => Term2SessionView) => {
-    const next = update(viewRef.current);
-    viewRef.current = next;
-    setView(next);
-  }, []);
+  /** The current view of the open session, read at call time (the store is the source of truth). */
+  const currentView = useCallback(() => storeRef.current?.getView() ?? NO_SESSION, []);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -178,244 +189,6 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     ]);
     setSessionCursor(result.nextCursor);
   }, [sessionCursor]);
-
-  const installHydration = useCallback((hydration: SessionHydration, expectedGeneration: number) => {
-    if (expectedGeneration !== generationRef.current || hydration.sessionId !== sessionIdRef.current) return false;
-    const previous = viewRef.current;
-    if (hydration.earliestReplayableSequence === null) throw new Term2ProtocolError('Native atomic replay cut is unavailable');
-    if (previous.sessionId === hydration.sessionId && hydration.seq < previous.lastAppliedSequence)
-      throw new Term2ProtocolError('Native hydration predates the accepted checkpoint');
-    const projected = viewFromHydration(hydration);
-    const next = previous.sessionId === hydration.sessionId ? {
-      ...projected, branches: projected.branches ?? clearTerm2LiveEvidence(previous).branches, nativeChanges: previous.nativeChanges, retiredTurns: previous.retiredTurns,
-    } : projected;
-    viewRef.current = next;
-    setView(next);
-    return true;
-  }, []);
-
-  const hydrateAndConnect = useCallback(
-    async (id: string, generation: number, signal: AbortSignal) => {
-      let hydration = await term2Client.hydrateSession(id, signal);
-      if (!installHydration(hydration, generation)) return;
-      let delay = BACKOFF_BASE;
-      let cursor = hydration.seq;
-      // A reload that lands on the same cursor replays the same event; stop after a few instead of looping.
-      let reloadCursor = -1;
-      let reloadsAtCursor = 0;
-      while (!signal.aborted && generation === generationRef.current && sessionIdRef.current === id) {
-        patchView((current) => ({
-          ...current,
-          status:
-            current.status === 'running' || current.status === 'awaiting_interaction'
-              ? current.status
-              : delay === BACKOFF_BASE
-                ? 'connecting'
-                : 'reconnecting',
-          error: null,
-        }));
-        try {
-          let streamHadActivity = false;
-          const response = await term2Client.openEvents(id, cursor, signal);
-          const replayMode = response.data.headers.get('x-term2-replay');
-          if (replayMode !== 'atomic') {
-            await response.data.body?.cancel();
-            patchView(current => ({ ...current, status: 'error', reloadRequired: true, error: 'Atomic replay after the hydration cut is unavailable. Reload requires a new real accepted cut; no live-only fallback was used.' }));
-            return;
-          }
-          patchView((current) => ({
-            ...current,
-            replayMode,
-            status:
-              current.pendingInteraction?.state === 'pending'
-                ? 'awaiting_interaction'
-                : current.turns.some((turn) => turn.status === 'streaming' || turn.status === 'pending')
-                  ? 'running'
-                  : 'connected',
-            error: null,
-          }));
-          let pendingFrameId: number | null = null;
-          let pendingHiddenTimer: ReturnType<typeof setTimeout> | null = null;
-          const flushLiveView = () => {
-            if (pendingFrameId !== null) {
-              window.cancelAnimationFrame(pendingFrameId);
-              pendingFrameId = null;
-            }
-            if (pendingHiddenTimer !== null) {
-              clearTimeout(pendingHiddenTimer);
-              pendingHiddenTimer = null;
-            }
-            if (generation === generationRef.current && sessionIdRef.current === id) {
-              setView(viewRef.current);
-            }
-          };
-          const scheduleLiveFlush = () => {
-            if (typeof document !== 'undefined' && document.hidden) {
-              if (pendingHiddenTimer === null) {
-                pendingHiddenTimer = setTimeout(flushLiveView, 500);
-              }
-              return;
-            }
-            if (pendingFrameId === null) {
-              pendingFrameId = window.requestAnimationFrame(flushLiveView);
-            }
-          };
-          const onVisibilityChange = () => {
-            if (!document.hidden && (pendingFrameId !== null || pendingHiddenTimer !== null)) {
-              flushLiveView();
-            }
-          };
-          if (typeof document !== 'undefined') {
-            document.addEventListener('visibilitychange', onVisibilityChange);
-          }
-          try {
-            await consumeSseResponse(response.data, {
-              signal,
-              expectedSessionId: id,
-              onHeartbeat: () => {
-                streamHadActivity = true;
-                delay = BACKOFF_BASE;
-              },
-              onFrame: (event) => {
-                streamHadActivity = true;
-                delay = BACKOFF_BASE;
-                if (generation !== generationRef.current || sessionIdRef.current !== id) return;
-                const enrichedEvent = event.kind === 'accepted' ? {
-                  ...event,
-                  changes: event.changes.map((change) => {
-                    if (change.type !== 'user_message_accepted' || typeof change.payload.clientRequestId !== 'string') return change;
-                    const requestId = change.payload.clientRequestId;
-                    const pendingText = pendingTextRef.current.get(requestId);
-                    return pendingText === undefined ? change : { ...change, payload: { ...change.payload, text: pendingText } };
-                  }),
-                } : event;
-                const next = applyTerm2Event(viewRef.current, enrichedEvent);
-                for (const change of event.changes) {
-                  if (change.type === 'user_message_accepted' && typeof change.payload.clientRequestId === 'string')
-                    pendingTextRef.current.delete(change.payload.clientRequestId);
-                }
-                viewRef.current = next;
-                cursor = next.lastAppliedSequence;
-                if (next.reloadRequired) {
-                  flushLiveView();
-                  throw new Term2ProtocolError('Accepted history replacement requires projection reload');
-                }
-                if (event.kind === 'live') {
-                  scheduleLiveFlush();
-                } else {
-                  flushLiveView();
-                }
-              },
-            });
-          } finally {
-            if (typeof document !== 'undefined') {
-              document.removeEventListener('visibilitychange', onVisibilityChange);
-            }
-            if (pendingFrameId !== null) window.cancelAnimationFrame(pendingFrameId);
-            if (pendingHiddenTimer !== null) clearTimeout(pendingHiddenTimer);
-          }
-          if (signal.aborted) return;
-          patchView(clearTerm2LiveEvidence);
-          delay = streamHadActivity ? BACKOFF_BASE : Math.min(MAX_RECONNECT_DELAY, Math.max(BACKOFF_BASE, delay * 2));
-          await new Promise<void>((resolve) => {
-            retryTimerRef.current = setTimeout(resolve, delay);
-          });
-        } catch (error) {
-          if (signal.aborted) return;
-          patchView(clearTerm2LiveEvidence);
-          if (error instanceof Term2ApiError && (error.status === 410 || error.code === 'replay_unavailable')) {
-            patchView(current => ({ ...current, status: 'error', reloadRequired: true, error: 'The native replay cut is no longer available. Reload explicitly to hydrate a new current cut; no missing history was reconstructed.' }));
-            return;
-          }
-          if (error instanceof Term2ApiError && [401, 403, 404].includes(error.status)) {
-            patchView((current) => ({ ...current, status: 'error', error: error.message }));
-            return;
-          }
-          if (error instanceof Term2ProtocolError) {
-            reloadsAtCursor = cursor === reloadCursor ? reloadsAtCursor + 1 : 1;
-            reloadCursor = cursor;
-            if (reloadsAtCursor > MAX_PROTOCOL_RELOADS) {
-              patchView((current) => ({
-                ...current,
-                status: 'error',
-                reloadRequired: true,
-                error: 'The session stream has an event this client cannot read.',
-              }));
-              return;
-            }
-            patchView((current) => ({
-              ...current,
-              status: 'reconnecting',
-              reloadRequired: true,
-              error: 'The session stream needs to reload.',
-            }));
-            try {
-              hydration = await term2Client.hydrateSession(id, signal);
-              if (!installHydration(hydration, generation)) return;
-              cursor = hydration.seq;
-              delay = BACKOFF_BASE;
-              continue;
-            } catch (reloadError) {
-              if (signal.aborted) return;
-              patchView((current) => ({
-                ...current,
-                status: 'error',
-                error: reloadError instanceof Error ? reloadError.message : 'Unable to reload session',
-              }));
-              return;
-            }
-          }
-          patchView((current) => ({
-            ...current,
-            status: 'reconnecting',
-            error: 'Connection interrupted; retrying.',
-          }));
-          await new Promise<void>((resolve) => {
-            retryTimerRef.current = setTimeout(resolve, delay);
-          });
-          delay = Math.min(MAX_RECONNECT_DELAY, delay * 2);
-        }
-      }
-    },
-    [installHydration, patchView],
-  );
-
-  useEffect(() => {
-    generationRef.current += 1;
-    const generation = generationRef.current;
-    selectionControllerRef.current?.abort();
-    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-    const controller = new AbortController();
-    selectionControllerRef.current = controller;
-    if (!sessionId) {
-      const next = emptyTerm2SessionView('');
-      viewRef.current = next;
-      setView(next);
-      return () => controller.abort();
-    }
-    const id = sessionId;
-    const run = async () => {
-      patchView((current) => ({ ...emptyTerm2SessionView(id), status: 'hydrating' }));
-      try {
-        await hydrateAndConnect(id, generation, controller.signal);
-      } catch (error) {
-        if (!controller.signal.aborted)
-          patchView((current) => ({
-            ...current,
-            status: 'error',
-            error: error instanceof Error ? error.message : 'Unable to load session',
-          }));
-      } finally {
-        // A terminal reader must release its request and be restartable by Reload.
-        controller.abort();
-      }
-    };
-    void run();
-    return () => {
-      controller.abort();
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-    };
-  }, [sessionId, hydrateAndConnect, connectionAttempt]);
 
   const createSession = useCallback(async (workspaceId: string) => {
     const projection = await term2Client.createSession(workspaceId);
@@ -454,25 +227,21 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       if (
         !id ||
         (!text.trim() && !hasAttachments) ||
-        viewRef.current.sessionId !== id ||
-        !canSubmitSessionMessage(viewRef.current.status) ||
-        viewRef.current.pendingInteraction?.state === 'pending' ||
+        currentView().sessionId !== id ||
+        !canSubmitSessionMessage(currentView().status) ||
+        currentView().pendingInteraction !== null ||
         admittingSessionIdsRef.current.has(id)
       ) {
         return false;
       }
-      const generation = generationRef.current;
-      const sequenceAtSubmit = viewRef.current.lastAppliedSequence;
+      const owner = storeRef.current;
+      const sequenceAtSubmit = currentView().lastAppliedSequence;
       const clientRequestId = crypto.randomUUID();
       admittingSessionIdsRef.current.add(id);
-      pendingTextRef.current.set(clientRequestId, text);
       setSubmitErrorState((current) => (current?.sessionId === id ? null : current));
       try {
         await term2Client.submitMessage(id, text, clientRequestId, options);
-        if (generation !== generationRef.current || sessionIdRef.current !== id) {
-          pendingTextRef.current.delete(clientRequestId);
-          return false;
-        }
+        if (owner !== storeRef.current || sessionIdRef.current !== id) return false;
         const firstLine = text.trim().split('\n')[0]?.trim().slice(0, 120);
         if (firstLine) {
           setSessions((current) =>
@@ -483,15 +252,13 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             ),
           );
         }
-        patchView((current) =>
-          canSubmitSessionMessage(current.status) && current.lastAppliedSequence === sequenceAtSubmit
-            ? { ...current, status: 'running', error: null }
-            : current,
-        );
+        // Until the accepted turn arrives, show the chat as running (the next accepted frame clears this).
+        const now = currentView();
+        if (canSubmitSessionMessage(now.status) && now.lastAppliedSequence === sequenceAtSubmit)
+          owner?.setOverlay({ status: 'running', error: null });
         return true;
       } catch (error) {
-        pendingTextRef.current.delete(clientRequestId);
-        if (generation !== generationRef.current || sessionIdRef.current !== id) return false;
+        if (owner !== storeRef.current || sessionIdRef.current !== id) return false;
         // Keep a healthy stream alive and the composer usable so the user can edit/retry immediately.
         setSubmitErrorState({
           sessionId: id,
@@ -502,7 +269,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         admittingSessionIdsRef.current.delete(id);
       }
     },
-    [patchView],
+    [currentView],
   );
 
   // Command results never render a turn: an accepted retry arrives through the
@@ -529,10 +296,8 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   }, []);
 
   const refresh = useCallback(async () => {
-    // Tear down the prior stream before installing a new accepted cut. Never
-    // install a second snapshot over a concurrently replaying/live connection.
-    selectionControllerRef.current?.abort();
-    setConnectionAttempt((attempt) => attempt + 1);
+    // Tear down the prior stream; the next snapshot frame is a fresh cut (never a second one over a live stream).
+    storeRef.current?.refresh();
   }, []);
 
   const manageQueue = useCallback(async (action: QueueManageAction) => {
@@ -621,7 +386,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         // UI wait only: on timeout the caller's send is refused and its text is kept.
         for (let waited = 0; waited < 10_000; waited += 50) {
           if (sessionIdRef.current !== id) return false;
-          if (viewRef.current.sessionId === id && canSubmitSessionMessage(viewRef.current.status)) return true;
+          if (currentView().sessionId === id && canSubmitSessionMessage(currentView().status)) return true;
           await new Promise((resolve) => window.setTimeout(resolve, 50));
         }
         return true;
@@ -636,39 +401,35 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         setCommandPendingSessionId((current) => (current === id ? null : current));
       }
     },
-    [refresh],
+    [refresh, currentView],
   );
 
   const abort = useCallback(async () => {
     const id = sessionIdRef.current;
-    const generation = generationRef.current;
-    const activeTurnId = viewRef.current.turns.find(
+    const owner = storeRef.current;
+    const activeTurnId = currentView().turns.find(
       (item) => item.status === 'streaming' || item.status === 'pending',
     )?.turnId;
-    if (!id || !activeTurnId) return;
-    patchView((current) => ({ ...current, status: 'aborting', error: null }));
+    if (!id || !activeTurnId || !owner) return;
+    owner.setOverlay({ status: 'aborting', error: null });
     try {
       await term2Client.abort(id, activeTurnId);
     } catch (error) {
-      if (generation !== generationRef.current || sessionIdRef.current !== id) return;
-      patchView((current) => ({
-        ...current,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Abort result unknown',
-      }));
+      if (owner !== storeRef.current || sessionIdRef.current !== id) return;
+      owner.setOverlay({ status: 'error', error: error instanceof Error ? error.message : 'Abort result unknown' });
     }
-  }, [patchView]);
+  }, [currentView]);
 
   const resolveInteraction = useCallback(
     async (request: InteractionResolveRequest) => {
       const id = sessionIdRef.current;
-      const pending = viewRef.current.pendingInteraction;
-      if (!id || pending?.state !== 'pending') return;
-      const generation = generationRef.current;
+      const owner = storeRef.current;
+      const pending = currentView().pendingInteraction;
+      if (!id || !owner || pending?.state !== 'pending') return;
       const stillCurrent = () => {
-        const current = viewRef.current.pendingInteraction;
+        const current = currentView().pendingInteraction;
         return (
-          generation === generationRef.current &&
+          owner === storeRef.current &&
           sessionIdRef.current === id &&
           current?.state === 'pending' &&
           current.interaction.interactionId === request.interactionId &&
@@ -683,19 +444,8 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
           ...(request.approvalAnswer === undefined ? {} : { approvalAnswer: request.approvalAnswer }),
         });
         if (!stillCurrent()) return;
-        if (!result.accepted) {
-          const next = {
-            ...viewRef.current,
-            pendingInteraction: {
-              state: 'pending' as const,
-              interaction: result.interaction,
-              turnId: pending.turnId,
-            },
-            status: 'awaiting_interaction' as Term2ConnectionStatus,
-          };
-          viewRef.current = next;
-          setView(next);
-        }
+        // A multi-question request answers with its next step: the same request, a new DTO.
+        if (!result.accepted) owner.replaceInteractionById(request.interactionId, { ...pending, interaction: result.interaction });
       } catch (error) {
         if (!stillCurrent()) return;
         if (error instanceof Term2ApiError && [409, 410].includes(error.status)) {
@@ -703,27 +453,18 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
             error.code && error.code in INTERACTION_CONFLICT_MESSAGES
               ? INTERACTION_CONFLICT_MESSAGES[error.code as keyof typeof INTERACTION_CONFLICT_MESSAGES]
               : 'The interaction changed; the latest session state was reloaded.';
-          try {
-            await refresh();
-          } finally {
-            if (generation !== generationRef.current || sessionIdRef.current !== id) return;
-            const next = { ...viewRef.current, error: message };
-            viewRef.current = next;
-            setView(next);
-          }
+          await refresh();
+          if (owner === storeRef.current && sessionIdRef.current === id) owner.setOverlay({ error: message });
           return;
         }
-        patchView((current) => ({
-          ...current,
-          error: error instanceof Error ? error.message : 'Interaction was not accepted',
-        }));
+        owner.setOverlay({ error: error instanceof Error ? error.message : 'Interaction was not accepted' });
       }
     },
-    [refresh],
+    [refresh, currentView],
   );
 
   return {
-    view: presentTerm2SessionView(view),
+    view,
     workspaces,
     sessions,
     workspaceCursor,
@@ -750,5 +491,6 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     abort,
     resolveInteraction,
     refresh,
+    frames: store?.frames ?? null,
   };
 }

@@ -46,6 +46,19 @@ seed "new unused export" src/app/settings.ts $'\nexport function seededUnusedExp
 seed "leaf reducer imported outside foldFact" src/app/settings.ts $'\nimport { reduceDirectQueue } from "../session/queue-state.js";\nexport const seededFold = reduceDirectQueue;\n' '\[one-fold\]' node scripts/check-rules.mjs
 seed "leaf-reducer module namespace-imported outside foldFact" src/app/settings.ts $'\nimport * as q from "../session/queue-state.js";\nexport const seededFold = q;\n' '\[one-fold\]' node scripts/check-rules.mjs
 seed "leaf-reducer module dynamically imported outside foldFact" src/app/settings.ts $'\nexport const seededFold = import("../session/queue-state.js");\n' '\[one-fold\]' node scripts/check-rules.mjs
+seed "fold imports session code" src/protocol/fold/wire-fold.ts $'\nimport "../../session/state.js";\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold names an outside type inline" src/protocol/fold/wire-types.ts $'\nexport type SeededOutside = import("../../model/index.js").CodexWeeklyQuota;\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold imports a package" src/protocol/fold/reducer-notices.ts $'\nimport "node:fs";\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold uses import-equals require" src/protocol/fold/final-text.ts $'\nimport fs = require("node:fs");\nexport const seededFs = fs;\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+# A triple-slash directive only counts at the top of a file, so this seed prepends.
+backup src/protocol/fold/final-text.ts
+{ printf '/// <reference types="node" />\n'; cat src/protocol/fold/final-text.ts.prove-bak; } > src/protocol/fold/final-text.ts
+expect_fail "fold has a triple-slash reference" '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "fold imports dynamically" src/protocol/fold/review.ts $'\nexport const seededLoad = () => import("../json.js");\n' '\[fold-boundary\]' node scripts/check-rules.mjs
+seed "a component imports the fold bundle" web-client/components/term2/Term2QueueBar.tsx $'\nimport type { WireSnapshot } from "../../lib/term2/generated/wire-fold.js";\nexport type SeededSnapshot = WireSnapshot;\n' '\[web-fold-imports\]' node scripts/check-rules.mjs
+seed "present.ts imports a fold value" web-client/lib/term2/present.ts $'\nimport { reduceWireEvent as seededFold } from "./generated/wire-fold.js";\nexport const seeded = seededFold;\n' '\[web-fold-imports\]' node scripts/check-rules.mjs
+seed "the browser reducer comes back" web-client/lib/term2/event-adapter.ts $'export const seeded = 1;\n' '\[browser-owns-no-reducer\]' node scripts/check-rules.mjs
+seed "the fold interface changes without its report" src/protocol/fold/wire-types.ts $'\nexport type SeededInterface = { readonly seeded: string };\n' '\[wire-fold-api-current\]' node scripts/check-rules.mjs
 seed "app/ reads a session log" src/app/settings.ts $'\nexport const seededReader = readFactLines;\n' '\[log-readers\]' node scripts/check-layers.mjs
 seed "engine imports app (layer direction)" src/engine/turn.ts $'\nimport "../app/settings.js";\n' '\[layer-direction\]' node scripts/check-layers.mjs
 seed "duplicate basename" src/app/turn.ts $'export const seededTurn = 1;\n' '\[duplicate-basenames\]' node scripts/check-rules.mjs

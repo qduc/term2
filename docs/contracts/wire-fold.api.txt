@@ -1,0 +1,882 @@
+DirectWireV2Envelope[kind=accepted].readonly events: ReadonlyArray<WireEvent>
+DirectWireV2Envelope[kind=accepted].readonly format: "direct-wire-v2"
+DirectWireV2Envelope[kind=accepted].readonly interactions?: Readonly<Record<string, PendingInteractionEntry>> | undefined
+DirectWireV2Envelope[kind=accepted].readonly kind: "accepted"
+DirectWireV2Envelope[kind=accepted].readonly occurredAt: string | null
+DirectWireV2Envelope[kind=accepted].readonly seq: number
+DirectWireV2Envelope[kind=accepted].readonly sessionId: string
+DirectWireV2Envelope[kind=live].readonly events: ReadonlyArray<WireEvent>
+DirectWireV2Envelope[kind=live].readonly format: "direct-wire-v2"
+DirectWireV2Envelope[kind=live].readonly kind: "live"
+DirectWireV2Envelope[kind=live].readonly sessionId: string
+DirectWireV2Envelope[kind=snapshot].readonly events: ReadonlyArray<WireEvent>
+DirectWireV2Envelope[kind=snapshot].readonly format: "direct-wire-v2"
+DirectWireV2Envelope[kind=snapshot].readonly interactions: Readonly<Record<string, PendingInteractionEntry>>
+DirectWireV2Envelope[kind=snapshot].readonly kind: "snapshot"
+DirectWireV2Envelope[kind=snapshot].readonly seq: number | null
+DirectWireV2Envelope[kind=snapshot].readonly sessionId: string
+WireAdmission[kind=duplicate].readonly clientRequestId: string
+WireAdmission[kind=duplicate].readonly kind: "duplicate"
+WireAdmission[kind=duplicate].readonly original: { readonly kind: "started" | "queued" | "steering"; readonly clientRequestId: string; readonly messageId: string; readonly turnId?: string | undefined; } | { readonly kind: "rejected"; readonly clientRequestId: string; readonly reason: string; }
+WireAdmission[kind=rejected].readonly clientRequestId: string
+WireAdmission[kind=rejected].readonly kind: "rejected"
+WireAdmission[kind=rejected].readonly reason: string
+WireAdmission[{ readonly kind: "started" | "queued" | "steering"; readonly clientRequestId: string; readonly messageId: string; readonly turnId?: string | undefined; }].readonly clientRequestId: string
+WireAdmission[{ readonly kind: "started" | "queued" | "steering"; readonly clientRequestId: string; readonly messageId: string; readonly turnId?: string | undefined; }].readonly kind: "started" | "queued" | "steering"
+WireAdmission[{ readonly kind: "started" | "queued" | "steering"; readonly clientRequestId: string; readonly messageId: string; readonly turnId?: string | undefined; }].readonly messageId: string
+WireAdmission[{ readonly kind: "started" | "queued" | "steering"; readonly clientRequestId: string; readonly messageId: string; readonly turnId?: string | undefined; }].readonly turnId?: string | undefined
+WireAnswerProvenance.readonly automaticApproval?: boolean | undefined
+WireAnswerProvenance.readonly source: "user" | "system" | "policy"
+WireBackgroundNotice.readonly id: string
+WireBackgroundNotice.readonly kind: "check_in" | "control" | "completion" | "question"
+WireBackgroundNotice.readonly taskIds: ReadonlyArray<string>
+WireBackgroundNotice.readonly text: string
+WireBranchSnapshot.readonly acceptedSeq: number
+WireBranchSnapshot.readonly branchId: string
+WireBranchSnapshot.readonly messages: ReadonlyArray<WireMessage>
+WireBranchSnapshot.readonly notices: ReadonlyArray<WireNotice>
+WireBranchSnapshot.readonly parentTurnId?: string | undefined
+WireBranchSnapshot.readonly pendingBudgets: ReadonlyArray<WireBudgetRequest>
+WireBranchSnapshot.readonly pendingInteractions: ReadonlyArray<WireInteraction>
+WireBranchSnapshot.readonly queue: null
+WireBranchSnapshot.readonly reasoning: string | null
+WireBranchSnapshot.readonly reasoningIdentity: { readonly messageId: string; readonly turnId: string | null; readonly modelStep: number | null; } | null
+WireBranchSnapshot.readonly requestCosts: ReadonlyArray<WireRequestCost>
+WireBranchSnapshot.readonly rootTurnId?: string | undefined
+WireBranchSnapshot.readonly taskId: string
+WireBranchSnapshot.readonly terminal: ({ readonly turnId: string; } & WireTerminal) | null
+WireBranchSnapshot.readonly timeline: ReadonlyArray<{ readonly kind: "message" | "tool"; readonly id: string; }> | null
+WireBranchSnapshot.readonly tools: ReadonlyArray<WireTool>
+WireBranchSnapshot.readonly turnId: string
+WireBranchSnapshot.readonly turnResults: ReadonlyArray<WireTurnResult>
+WireBranchSnapshot.readonly unmatchedToolResults: ReadonlyArray<WireToolResult>
+WireBranchSnapshot.readonly usage: WireUsage | null
+WireBudgetDecision[kind=extend].readonly grantedBy: "parent" | "human"
+WireBudgetDecision[kind=extend].readonly kind: "extend"
+WireBudgetDecision[kind=steer].readonly items: ReadonlyArray<{ readonly type: "user_message"; readonly id: string; readonly content: ReadonlyArray<WireContent>; }>
+WireBudgetDecision[kind=steer].readonly kind: "steer"
+WireBudgetDecision[kind=stop].readonly kind: "stop"
+WireBudgetEvidence[type=budget_stage].readonly evidence: { readonly dimension: "usd" | "unpriced_tokens" | "active_time" | "turns"; readonly used: number; readonly limit: number; readonly headroom: number; }
+WireBudgetEvidence[type=budget_stage].readonly stage: "soft" | "warning" | "critical"
+WireBudgetEvidence[type=budget_stage].readonly type: "budget_stage"
+WireBudgetEvidence[type=tool_stall].readonly argumentsText: string
+WireBudgetEvidence[type=tool_stall].readonly count: number
+WireBudgetEvidence[type=tool_stall].readonly threshold: number
+WireBudgetEvidence[type=tool_stall].readonly toolName: string
+WireBudgetEvidence[type=tool_stall].readonly type: "tool_stall"
+WireBudgetRequest.readonly evidence: WireBudgetEvidence
+WireBudgetRequest.readonly requestId: string
+WireBudgetRequest.readonly snapshot: WireBudgetSnapshot
+WireBudgetRequest.readonly turnId: string
+WireBudgetResolution[kind=extend].readonly grantedBy: "parent" | "human"
+WireBudgetResolution[kind=extend].readonly kind: "extend"
+WireBudgetResolution[kind=steer].readonly kind: "steer"
+WireBudgetResolution[kind=steer].readonly messages: ReadonlyArray<WireMessage>
+WireBudgetResolution[kind=stop].readonly kind: "stop"
+WireBudgetSnapshot.readonly activeTimeMs: number
+WireBudgetSnapshot.readonly extensionsGranted: number
+WireBudgetSnapshot.readonly latchedStages: ReadonlyArray<"soft" | "warning" | "critical">
+WireBudgetSnapshot.readonly pricedUsdMicros: number
+WireBudgetSnapshot.readonly turns: number
+WireBudgetSnapshot.readonly unpricedTokens: number
+WireCancelTarget[kind=foreground].readonly kind: "foreground"
+WireCancelTarget[kind=task].readonly id: string
+WireCancelTarget[kind=task].readonly kind: "task"
+WireCodexQuota.readonly resetAt: number
+WireCodexQuota.readonly usedPercent: number
+WireCommandPreconditions.readonly admission?: "idle" | undefined
+WireCommandPreconditions.readonly expectedRevision?: string | undefined
+WireCommandReceipt.readonly outcome?: WireNativeCommandOutcome | undefined
+WireCommandReceipt.readonly request: WireNativeCommandRequest
+WireCommandReceipt.readonly revision: string
+WireCommandResult[kind=abort].readonly kind: "abort"
+WireCommandResult[kind=abort].readonly ok: true
+WireCommandResult[kind=abort].readonly result: { readonly kind: "aborted"; readonly turnId: string; readonly discardedMessageIds: ReadonlyArray<string>; readonly returnedSteers?: ReadonlyArray<{ readonly messageId: string; readonly clientRequestId: string; readonly content: ReadonlyArray<WireContent>; }> | undefined; } | { readonly kind: "no_op"; readonly turnId: string; readonly status: "terminal_accepted" | "cancellation_requested" | "not_current"; readonly reason?: string | undefined; } | { readonly kind: "not_admitting"; readonly reason?: string | undefined; }
+WireCommandResult[kind=accepted].readonly kind: "accepted"
+WireCommandResult[kind=accepted].readonly ok: true
+WireCommandResult[kind=admitted].readonly admission: WireAdmission
+WireCommandResult[kind=admitted].readonly kind: "admitted"
+WireCommandResult[kind=admitted].readonly ok: true
+WireCommandResult[kind=background_drain].readonly kind: "background_drain"
+WireCommandResult[kind=background_drain].readonly ok: true
+WireCommandResult[kind=background_drain].readonly result: { readonly kind: "started" | "duplicate"; readonly turnId: string; readonly notificationIds: ReadonlyArray<string>; } | { readonly kind: "empty" | "busy"; }
+WireCommandResult[kind=command_finished].readonly kind: "command_finished"
+WireCommandResult[kind=command_finished].readonly ok: true
+WireCommandResult[kind=command_finished].readonly receipt: WireCommandReceipt & { readonly outcome: { readonly kind: "retried"; readonly turnId: string; } | { readonly kind: "rewound"; readonly draft: { readonly content: ReadonlyArray<WireContent>; }; } | { readonly kind: "compacted"; readonly tokensBefore?: number | undefined; readonly tokensAfter?: number | undefined; } | { readonly kind: "configured"; readonly configuration: WireConfiguration & { readonly model: WireModel; }; } | { readonly kind: "rolled_over"; readonly sessionId: string; }; }
+WireCommandResult[kind=command_finished].readonly replayed?: boolean | undefined
+WireCommandResult[kind=command_pending].readonly kind: "command_pending"
+WireCommandResult[kind=command_pending].readonly ok: true
+WireCommandResult[kind=command_pending].readonly receipt: WireCommandReceipt
+WireCommandResult[kind=command_pending].readonly replayed?: boolean | undefined
+WireCommandResult[kind=command_revision].readonly kind: "command_revision"
+WireCommandResult[kind=command_revision].readonly ok: true
+WireCommandResult[kind=command_revision].readonly revision: string
+WireCommandResult[kind=preview].readonly kind: "preview"
+WireCommandResult[kind=preview].readonly notices: ReadonlyArray<WireNotice & { readonly estimatedTokens?: number | undefined; }>
+WireCommandResult[kind=preview].readonly ok: true
+WireCommandResult[kind=preview].readonly requiresConfirmation: boolean
+WireCommandResult[kind=rewind_targets].readonly kind: "rewind_targets"
+WireCommandResult[kind=rewind_targets].readonly ok: true
+WireCommandResult[kind=rewind_targets].readonly targets: ReadonlyArray<WireRewindTarget>
+WireCommandResult[kind=session_changed].readonly kind: "session_changed"
+WireCommandResult[kind=session_changed].readonly ok: true
+WireCommandResult[kind=session_changed].readonly sessionId: string
+WireCommandResult[{ readonly ok: false; readonly code: "command_rejected" | "command_interrupted"; readonly replayed?: boolean | undefined; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { ...; }; }].readonly code: "command_rejected" | "command_interrupted"
+WireCommandResult[{ readonly ok: false; readonly code: "command_rejected" | "command_interrupted"; readonly replayed?: boolean | undefined; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { ...; }; }].readonly commandId: string
+WireCommandResult[{ readonly ok: false; readonly code: "command_rejected" | "command_interrupted"; readonly replayed?: boolean | undefined; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { ...; }; }].readonly message: string
+WireCommandResult[{ readonly ok: false; readonly code: "command_rejected" | "command_interrupted"; readonly replayed?: boolean | undefined; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { ...; }; }].readonly ok: false
+WireCommandResult[{ readonly ok: false; readonly code: "command_rejected" | "command_interrupted"; readonly replayed?: boolean | undefined; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { ...; }; }].readonly receipt: WireCommandReceipt & { readonly outcome: WireNativeCommandOutcome; }
+WireCommandResult[{ readonly ok: false; readonly code: "command_rejected" | "command_interrupted"; readonly replayed?: boolean | undefined; readonly commandId: string; readonly message: string; readonly receipt: WireCommandReceipt & { ...; }; }].readonly replayed?: boolean | undefined
+WireCommandResult[{ readonly ok: false; readonly code: "invalid_command" | "unavailable" | "stale_interaction" | "request_conflict" | "rejected" | "closed" | "not_found" | "forbidden" | "storage_failure" | "too_late" | "internal_error" | "replay_unavailable" | "not_admitting"; readonly message: string; readonly commandId?: string | u...].readonly code: "invalid_command" | "unavailable" | "stale_interaction" | "request_conflict" | "rejected" | "closed" | "not_found" | "forbidden" | "storage_failure" | "too_late" | "internal_error" | "replay_unavailable" | "not_admitting"
+WireCommandResult[{ readonly ok: false; readonly code: "invalid_command" | "unavailable" | "stale_interaction" | "request_conflict" | "rejected" | "closed" | "not_found" | "forbidden" | "storage_failure" | "too_late" | "internal_error" | "replay_unavailable" | "not_admitting"; readonly message: string; readonly commandId?: string | u...].readonly commandId?: string | undefined
+WireCommandResult[{ readonly ok: false; readonly code: "invalid_command" | "unavailable" | "stale_interaction" | "request_conflict" | "rejected" | "closed" | "not_found" | "forbidden" | "storage_failure" | "too_late" | "internal_error" | "replay_unavailable" | "not_admitting"; readonly message: string; readonly commandId?: string | u...].readonly message: string
+WireCommandResult[{ readonly ok: false; readonly code: "invalid_command" | "unavailable" | "stale_interaction" | "request_conflict" | "rejected" | "closed" | "not_found" | "forbidden" | "storage_failure" | "too_late" | "internal_error" | "replay_unavailable" | "not_admitting"; readonly message: string; readonly commandId?: string | u...].readonly ok: false
+WireCompactionCompleted.readonly after: WireCompactionEstimate
+WireCompactionCompleted.readonly compactionId: string
+WireCompactionCompleted.readonly durationMs: number
+WireCompactionCompleted.readonly requests: ReadonlyArray<WireCompactionRequest>
+WireCompactionCompleted.readonly strategy: "native" | "local"
+WireCompactionEstimate.readonly hardFitTokens: number
+WireCompactionEstimate.readonly outputReserveTokens: number
+WireCompactionEstimate.readonly renderedInputTokens: number
+WireCompactionEstimate.readonly safetyReserveTokens: number
+WireCompactionFailed.readonly compactionId: string
+WireCompactionFailed.readonly durationMs: number
+WireCompactionFailed.readonly failure: WireCompactionFailure
+WireCompactionFailed.readonly requests: ReadonlyArray<WireCompactionRequest>
+WireCompactionFailure[kind=blocked].readonly kind: "blocked"
+WireCompactionFailure[kind=blocked].readonly reason: WireCompactionBlockedReason
+WireCompactionFailure[kind=cancelled].readonly kind: "cancelled"
+WireCompactionFailure[kind=failed].readonly error: WireError
+WireCompactionFailure[kind=failed].readonly kind: "failed"
+WireCompactionFailure[kind=interrupted].readonly kind: "interrupted"
+WireCompactionFailure[kind=interrupted].readonly reason: "budget_wrap_up" | "budget_exhausted"
+WireCompactionRequest.readonly costUsd?: string | number | undefined
+WireCompactionRequest.readonly model: WireModel
+WireCompactionRequest.readonly modelStep: number
+WireCompactionRequest.readonly outcome: "cancelled" | "completed" | "failed"
+WireCompactionRequest.readonly requestId: string
+WireCompactionRequest.readonly usage?: WireUsage | undefined
+WireCompactionStarted.readonly before: WireCompactionEstimate
+WireCompactionStarted.readonly compactionId: string
+WireCompactionStarted.readonly contextWindow?: number | undefined
+WireCompactionStarted.readonly lastCompletedInputTokens?: number | undefined
+WireCompactionStarted.readonly maxRequestInputTokens?: number | null | undefined
+WireCompactionStarted.readonly model: WireModel
+WireCompactionStarted.readonly strategy?: "native" | "local" | undefined
+WireCompactionStarted.readonly trigger: "manual" | "automatic"
+WireConfiguration.readonly model?: WireModel | undefined
+WireConfiguration.readonly reasoning?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined
+WireConfiguration.readonly temperature?: number | undefined
+WireConfigureRequest.readonly model?: WireModel | undefined
+WireConfigureRequest.readonly profileId?: string | undefined
+WireConfigureRequest.readonly reasoning?: "default" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined
+WireConfigureRequest.readonly temperature?: number | undefined
+WireContent[type=image].readonly data: string
+WireContent[type=image].readonly detail?: string | undefined
+WireContent[type=image].readonly mediaType: string
+WireContent[type=image].readonly type: "image"
+WireContent[type=text].readonly text: string
+WireContent[type=text].readonly type: "text"
+WireError.readonly kind: string
+WireError.readonly message: string
+WireError.readonly retryAfterMs?: number | undefined
+WireError.readonly retryable?: boolean | undefined
+WireEventPayloads.admission: { readonly admission: WireAdmission; }
+WireEventPayloads.approval_review: { readonly phase: "started" | "settled"; readonly approval: WireReviewingApproval; }
+WireEventPayloads.automatic_memory_notice: { readonly success: boolean; readonly command: string; readonly output: string; }
+WireEventPayloads.background_notice_enqueued: { readonly notice: WireBackgroundNotice; }
+WireEventPayloads.background_notices_delivered: WireNoticeDelivery
+WireEventPayloads.budget_closed: { readonly requestId: string; readonly decision: WireBudgetResolution; readonly source: "user" | "parent" | "system"; }
+WireEventPayloads.budget_observed: { readonly evidence: WireBudgetEvidence; }
+WireEventPayloads.budget_opened: { readonly request: WireBudgetRequest; }
+WireEventPayloads.codex_quota: { readonly quota: WireCodexQuota | null; readonly fiveHourQuota?: WireCodexQuota | null | undefined; }
+WireEventPayloads.command_finished: { readonly receipt: WireCommandReceipt & { readonly outcome: WireNativeCommandOutcome; }; }
+WireEventPayloads.command_started: { readonly receipt: WireCommandReceipt; }
+WireEventPayloads.compacted: { readonly replaced: number; readonly summaryId: string; }
+WireEventPayloads.compaction_completed: WireCompactionCompleted
+WireEventPayloads.compaction_failed: WireCompactionFailed
+WireEventPayloads.compaction_started: WireCompactionStarted
+WireEventPayloads.configuration: WireConfiguration
+WireEventPayloads.cost: { readonly totalUsd: number; readonly currency: "USD"; }
+WireEventPayloads.error: { readonly error: WireError; }
+WireEventPayloads.goal: { readonly goal: WireGoal | null; readonly generation?: number | undefined; readonly source?: "user" | "launcher" | "proposal" | "goal_check" | undefined; }
+WireEventPayloads.goal_proposed: { readonly goal: WireGoal; }
+WireEventPayloads.history_replaced: { readonly retainTranscript?: true | undefined; readonly reason: "rewind" | "compaction" | "retry_turn" | "retry_tool"; readonly compactionId?: string | undefined; }
+WireEventPayloads.interaction_opened: { readonly interaction: WireInteraction; }
+WireEventPayloads.interaction_resolved: { readonly taskId?: string | undefined; readonly taskOwner?: WireTaskOwner | undefined; readonly requestId: string; readonly resolution: WireDecision | { readonly kind: "interrupted" | "cancelled"; }; readonly provenance?: WireAnswerProvenance | undefined; }
+WireEventPayloads.message: { readonly message: WireMessage; readonly replacesDraftId?: string | undefined; }
+WireEventPayloads.model_response_completed: { readonly modelStep: number; readonly stopReason: string; readonly costUsd?: string | number | undefined; }
+WireEventPayloads.notice: WireNotice
+WireEventPayloads.queue_changed: { readonly change: WireQueueChange; readonly entries: ReadonlyArray<WireQueueEntry>; readonly state: "idle" | "running" | "paused" | "cancelling" | "completing" | "awaiting_action" | "awaiting_preflight"; readonly pauseReason?: "manual" | "failure" | "recovered_interrupted" | null | undefined; readonly admission?: WireAdmission | undefined; readonly messages?: ReadonlyArray<WireMessage> | undefined; readonly submissions?: ReadonlyArray<WireSubmissionRecord> | undefined; }
+WireEventPayloads.reasoning: { readonly text: string; readonly messageId: string; readonly modelStep: number | null; }
+WireEventPayloads.reasoning_delta: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null; }
+WireEventPayloads.reasoning_started: Record<string, never>
+WireEventPayloads.request_cost_recorded: WireRequestCost
+WireEventPayloads.retry_eligibility: WireRetry
+WireEventPayloads.retrying: { readonly attempt: number; readonly delayMs: number; readonly error: WireError; readonly toolName?: string | undefined; readonly maxRetries?: number | undefined; readonly retryType?: string | undefined; readonly retryAfterMs?: number | undefined; readonly agentId?: string | undefined; }
+WireEventPayloads.session_rotated: WireSessionRotation
+WireEventPayloads.snapshot: { readonly snapshot: WireSnapshot; }
+WireEventPayloads.status_changed: { readonly status: WireStatus; }
+WireEventPayloads.subagent: { readonly agentId: string; readonly branchId?: string | undefined; readonly turnId?: string | undefined; readonly parentTurnId?: string | undefined; readonly rootTurnId?: string | undefined; readonly role?: string | undefined; readonly event: WireEvent; }
+WireEventPayloads.task_changed: { readonly change: "task_started" | "task_backgrounded" | "task_stop_requested" | "task_finished" | "task_question_opened" | "task_question_closed"; readonly at: number; readonly task: WireTask; }
+WireEventPayloads.task_progress: { readonly taskId: string; readonly at: number; readonly kind: "tool_progress" | "text" | "activity"; readonly chunk: string; readonly executionId?: string | undefined; readonly observation?: WireTaskObservation | undefined; }
+WireEventPayloads.text_delta: { readonly delta: string; readonly messageId: string; readonly modelStep: number; }
+WireEventPayloads.tool_call_streaming_delta: { readonly modelStep: number; readonly argumentCharCount: number; readonly toolName?: string | undefined; readonly callId?: string | undefined; readonly itemId?: string | undefined; readonly callIndex?: number | undefined; }
+WireEventPayloads.tool_called: { readonly tool: WireTool; }
+WireEventPayloads.tool_finished: WireToolResult
+WireEventPayloads.tool_progress: { readonly executionId: string; readonly chunk: string; }
+WireEventPayloads.tool_started: { readonly tool: WireTool; }
+WireEventPayloads.turn_ended: WireTerminal
+WireEventPayloads.turn_started: { readonly input: ReadonlyArray<WireMessage>; readonly foreground: boolean; readonly silent?: true | undefined; readonly admission?: WireAdmission | undefined; }
+WireEventPayloads.usage: { readonly usage: WireUsage; readonly speed?: { readonly tps: number; readonly approximate: boolean; } | undefined; }
+WireEventPayloads.verification: { readonly verification: WireVerification | null; }
+WireEvent[type=admission].readonly occurredAt?: string | null | undefined
+WireEvent[type=admission].readonly payload: { readonly admission: WireAdmission; }
+WireEvent[type=admission].readonly seq: number | null
+WireEvent[type=admission].readonly sessionId: string
+WireEvent[type=admission].readonly turnId: string | null
+WireEvent[type=admission].readonly type: "admission"
+WireEvent[type=approval_review].readonly occurredAt?: string | null | undefined
+WireEvent[type=approval_review].readonly payload: { readonly phase: "started" | "settled"; readonly approval: WireReviewingApproval; }
+WireEvent[type=approval_review].readonly seq: number | null
+WireEvent[type=approval_review].readonly sessionId: string
+WireEvent[type=approval_review].readonly turnId: string | null
+WireEvent[type=approval_review].readonly type: "approval_review"
+WireEvent[type=automatic_memory_notice].readonly occurredAt?: string | null | undefined
+WireEvent[type=automatic_memory_notice].readonly payload: { readonly success: boolean; readonly command: string; readonly output: string; }
+WireEvent[type=automatic_memory_notice].readonly seq: number | null
+WireEvent[type=automatic_memory_notice].readonly sessionId: string
+WireEvent[type=automatic_memory_notice].readonly turnId: string | null
+WireEvent[type=automatic_memory_notice].readonly type: "automatic_memory_notice"
+WireEvent[type=background_notice_enqueued].readonly occurredAt?: string | null | undefined
+WireEvent[type=background_notice_enqueued].readonly payload: { readonly notice: WireBackgroundNotice; }
+WireEvent[type=background_notice_enqueued].readonly seq: number | null
+WireEvent[type=background_notice_enqueued].readonly sessionId: string
+WireEvent[type=background_notice_enqueued].readonly turnId: string | null
+WireEvent[type=background_notice_enqueued].readonly type: "background_notice_enqueued"
+WireEvent[type=background_notices_delivered].readonly occurredAt?: string | null | undefined
+WireEvent[type=background_notices_delivered].readonly payload: WireNoticeDelivery
+WireEvent[type=background_notices_delivered].readonly seq: number | null
+WireEvent[type=background_notices_delivered].readonly sessionId: string
+WireEvent[type=background_notices_delivered].readonly turnId: string | null
+WireEvent[type=background_notices_delivered].readonly type: "background_notices_delivered"
+WireEvent[type=budget_closed].readonly occurredAt?: string | null | undefined
+WireEvent[type=budget_closed].readonly payload: { readonly requestId: string; readonly decision: WireBudgetResolution; readonly source: "user" | "parent" | "system"; }
+WireEvent[type=budget_closed].readonly seq: number | null
+WireEvent[type=budget_closed].readonly sessionId: string
+WireEvent[type=budget_closed].readonly turnId: string | null
+WireEvent[type=budget_closed].readonly type: "budget_closed"
+WireEvent[type=budget_observed].readonly occurredAt?: string | null | undefined
+WireEvent[type=budget_observed].readonly payload: { readonly evidence: WireBudgetEvidence; }
+WireEvent[type=budget_observed].readonly seq: number | null
+WireEvent[type=budget_observed].readonly sessionId: string
+WireEvent[type=budget_observed].readonly turnId: string | null
+WireEvent[type=budget_observed].readonly type: "budget_observed"
+WireEvent[type=budget_opened].readonly occurredAt?: string | null | undefined
+WireEvent[type=budget_opened].readonly payload: { readonly request: WireBudgetRequest; }
+WireEvent[type=budget_opened].readonly seq: number | null
+WireEvent[type=budget_opened].readonly sessionId: string
+WireEvent[type=budget_opened].readonly turnId: string | null
+WireEvent[type=budget_opened].readonly type: "budget_opened"
+WireEvent[type=codex_quota].readonly occurredAt?: string | null | undefined
+WireEvent[type=codex_quota].readonly payload: { readonly quota: WireCodexQuota | null; readonly fiveHourQuota?: WireCodexQuota | null | undefined; }
+WireEvent[type=codex_quota].readonly seq: number | null
+WireEvent[type=codex_quota].readonly sessionId: string
+WireEvent[type=codex_quota].readonly turnId: string | null
+WireEvent[type=codex_quota].readonly type: "codex_quota"
+WireEvent[type=command_finished].readonly occurredAt?: string | null | undefined
+WireEvent[type=command_finished].readonly payload: { readonly receipt: WireCommandReceipt & { readonly outcome: WireNativeCommandOutcome; }; }
+WireEvent[type=command_finished].readonly seq: number | null
+WireEvent[type=command_finished].readonly sessionId: string
+WireEvent[type=command_finished].readonly turnId: string | null
+WireEvent[type=command_finished].readonly type: "command_finished"
+WireEvent[type=command_started].readonly occurredAt?: string | null | undefined
+WireEvent[type=command_started].readonly payload: { readonly receipt: WireCommandReceipt; }
+WireEvent[type=command_started].readonly seq: number | null
+WireEvent[type=command_started].readonly sessionId: string
+WireEvent[type=command_started].readonly turnId: string | null
+WireEvent[type=command_started].readonly type: "command_started"
+WireEvent[type=compacted].readonly occurredAt?: string | null | undefined
+WireEvent[type=compacted].readonly payload: { readonly replaced: number; readonly summaryId: string; }
+WireEvent[type=compacted].readonly seq: number | null
+WireEvent[type=compacted].readonly sessionId: string
+WireEvent[type=compacted].readonly turnId: string | null
+WireEvent[type=compacted].readonly type: "compacted"
+WireEvent[type=compaction_completed].readonly occurredAt?: string | null | undefined
+WireEvent[type=compaction_completed].readonly payload: WireCompactionCompleted
+WireEvent[type=compaction_completed].readonly seq: number | null
+WireEvent[type=compaction_completed].readonly sessionId: string
+WireEvent[type=compaction_completed].readonly turnId: string | null
+WireEvent[type=compaction_completed].readonly type: "compaction_completed"
+WireEvent[type=compaction_failed].readonly occurredAt?: string | null | undefined
+WireEvent[type=compaction_failed].readonly payload: WireCompactionFailed
+WireEvent[type=compaction_failed].readonly seq: number | null
+WireEvent[type=compaction_failed].readonly sessionId: string
+WireEvent[type=compaction_failed].readonly turnId: string | null
+WireEvent[type=compaction_failed].readonly type: "compaction_failed"
+WireEvent[type=compaction_started].readonly occurredAt?: string | null | undefined
+WireEvent[type=compaction_started].readonly payload: WireCompactionStarted
+WireEvent[type=compaction_started].readonly seq: number | null
+WireEvent[type=compaction_started].readonly sessionId: string
+WireEvent[type=compaction_started].readonly turnId: string | null
+WireEvent[type=compaction_started].readonly type: "compaction_started"
+WireEvent[type=configuration].readonly occurredAt?: string | null | undefined
+WireEvent[type=configuration].readonly payload: WireConfiguration
+WireEvent[type=configuration].readonly seq: number | null
+WireEvent[type=configuration].readonly sessionId: string
+WireEvent[type=configuration].readonly turnId: string | null
+WireEvent[type=configuration].readonly type: "configuration"
+WireEvent[type=cost].readonly occurredAt?: string | null | undefined
+WireEvent[type=cost].readonly payload: { readonly totalUsd: number; readonly currency: "USD"; }
+WireEvent[type=cost].readonly seq: number | null
+WireEvent[type=cost].readonly sessionId: string
+WireEvent[type=cost].readonly turnId: string | null
+WireEvent[type=cost].readonly type: "cost"
+WireEvent[type=error].readonly occurredAt?: string | null | undefined
+WireEvent[type=error].readonly payload: { readonly error: WireError; }
+WireEvent[type=error].readonly seq: number | null
+WireEvent[type=error].readonly sessionId: string
+WireEvent[type=error].readonly turnId: string | null
+WireEvent[type=error].readonly type: "error"
+WireEvent[type=goal].readonly occurredAt?: string | null | undefined
+WireEvent[type=goal].readonly payload: { readonly goal: WireGoal | null; readonly generation?: number | undefined; readonly source?: "user" | "launcher" | "proposal" | "goal_check" | undefined; }
+WireEvent[type=goal].readonly seq: number | null
+WireEvent[type=goal].readonly sessionId: string
+WireEvent[type=goal].readonly turnId: string | null
+WireEvent[type=goal].readonly type: "goal"
+WireEvent[type=goal_proposed].readonly occurredAt?: string | null | undefined
+WireEvent[type=goal_proposed].readonly payload: { readonly goal: WireGoal; }
+WireEvent[type=goal_proposed].readonly seq: number | null
+WireEvent[type=goal_proposed].readonly sessionId: string
+WireEvent[type=goal_proposed].readonly turnId: string | null
+WireEvent[type=goal_proposed].readonly type: "goal_proposed"
+WireEvent[type=history_replaced].readonly occurredAt?: string | null | undefined
+WireEvent[type=history_replaced].readonly payload: { readonly retainTranscript?: true | undefined; readonly reason: "rewind" | "compaction" | "retry_turn" | "retry_tool"; readonly compactionId?: string | undefined; }
+WireEvent[type=history_replaced].readonly seq: number | null
+WireEvent[type=history_replaced].readonly sessionId: string
+WireEvent[type=history_replaced].readonly turnId: string | null
+WireEvent[type=history_replaced].readonly type: "history_replaced"
+WireEvent[type=interaction_opened].readonly occurredAt?: string | null | undefined
+WireEvent[type=interaction_opened].readonly payload: { readonly interaction: WireInteraction; }
+WireEvent[type=interaction_opened].readonly seq: number | null
+WireEvent[type=interaction_opened].readonly sessionId: string
+WireEvent[type=interaction_opened].readonly turnId: string | null
+WireEvent[type=interaction_opened].readonly type: "interaction_opened"
+WireEvent[type=interaction_resolved].readonly occurredAt?: string | null | undefined
+WireEvent[type=interaction_resolved].readonly payload: { readonly taskId?: string | undefined; readonly taskOwner?: WireTaskOwner | undefined; readonly requestId: string; readonly resolution: WireDecision | { readonly kind: "interrupted" | "cancelled"; }; readonly provenance?: WireAnswerProvenance | undefined; }
+WireEvent[type=interaction_resolved].readonly seq: number | null
+WireEvent[type=interaction_resolved].readonly sessionId: string
+WireEvent[type=interaction_resolved].readonly turnId: string | null
+WireEvent[type=interaction_resolved].readonly type: "interaction_resolved"
+WireEvent[type=message].readonly occurredAt?: string | null | undefined
+WireEvent[type=message].readonly payload: { readonly message: WireMessage; readonly replacesDraftId?: string | undefined; }
+WireEvent[type=message].readonly seq: number | null
+WireEvent[type=message].readonly sessionId: string
+WireEvent[type=message].readonly turnId: string | null
+WireEvent[type=message].readonly type: "message"
+WireEvent[type=model_response_completed].readonly occurredAt?: string | null | undefined
+WireEvent[type=model_response_completed].readonly payload: { readonly modelStep: number; readonly stopReason: string; readonly costUsd?: string | number | undefined; }
+WireEvent[type=model_response_completed].readonly seq: number | null
+WireEvent[type=model_response_completed].readonly sessionId: string
+WireEvent[type=model_response_completed].readonly turnId: string | null
+WireEvent[type=model_response_completed].readonly type: "model_response_completed"
+WireEvent[type=notice].readonly occurredAt?: string | null | undefined
+WireEvent[type=notice].readonly payload: WireNotice
+WireEvent[type=notice].readonly seq: number | null
+WireEvent[type=notice].readonly sessionId: string
+WireEvent[type=notice].readonly turnId: string | null
+WireEvent[type=notice].readonly type: "notice"
+WireEvent[type=queue_changed].readonly occurredAt?: string | null | undefined
+WireEvent[type=queue_changed].readonly payload: { readonly change: WireQueueChange; readonly entries: ReadonlyArray<WireQueueEntry>; readonly state: "idle" | "running" | "paused" | "cancelling" | "completing" | "awaiting_action" | "awaiting_preflight"; readonly pauseReason?: "manual" | "failure" | "recovered_interrupted" | null | undefined; readonly admission?: WireAdmission | undefined; readonly messages?: ReadonlyArray<WireMessage> | undefined; readonly submissions?: ReadonlyArray<WireSubmissionRecord> | undefined; }
+WireEvent[type=queue_changed].readonly seq: number | null
+WireEvent[type=queue_changed].readonly sessionId: string
+WireEvent[type=queue_changed].readonly turnId: string | null
+WireEvent[type=queue_changed].readonly type: "queue_changed"
+WireEvent[type=reasoning].readonly occurredAt?: string | null | undefined
+WireEvent[type=reasoning].readonly payload: { readonly text: string; readonly messageId: string; readonly modelStep: number | null; }
+WireEvent[type=reasoning].readonly seq: number | null
+WireEvent[type=reasoning].readonly sessionId: string
+WireEvent[type=reasoning].readonly turnId: string | null
+WireEvent[type=reasoning].readonly type: "reasoning"
+WireEvent[type=reasoning_delta].readonly occurredAt?: string | null | undefined
+WireEvent[type=reasoning_delta].readonly payload: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null; }
+WireEvent[type=reasoning_delta].readonly seq: number | null
+WireEvent[type=reasoning_delta].readonly sessionId: string
+WireEvent[type=reasoning_delta].readonly turnId: string | null
+WireEvent[type=reasoning_delta].readonly type: "reasoning_delta"
+WireEvent[type=reasoning_started].readonly occurredAt?: string | null | undefined
+WireEvent[type=reasoning_started].readonly payload: Record<string, never>
+WireEvent[type=reasoning_started].readonly seq: number | null
+WireEvent[type=reasoning_started].readonly sessionId: string
+WireEvent[type=reasoning_started].readonly turnId: string | null
+WireEvent[type=reasoning_started].readonly type: "reasoning_started"
+WireEvent[type=request_cost_recorded].readonly occurredAt?: string | null | undefined
+WireEvent[type=request_cost_recorded].readonly payload: WireRequestCost
+WireEvent[type=request_cost_recorded].readonly seq: number | null
+WireEvent[type=request_cost_recorded].readonly sessionId: string
+WireEvent[type=request_cost_recorded].readonly turnId: string | null
+WireEvent[type=request_cost_recorded].readonly type: "request_cost_recorded"
+WireEvent[type=retry_eligibility].readonly occurredAt?: string | null | undefined
+WireEvent[type=retry_eligibility].readonly payload: WireRetry
+WireEvent[type=retry_eligibility].readonly seq: number | null
+WireEvent[type=retry_eligibility].readonly sessionId: string
+WireEvent[type=retry_eligibility].readonly turnId: string | null
+WireEvent[type=retry_eligibility].readonly type: "retry_eligibility"
+WireEvent[type=retrying].readonly occurredAt?: string | null | undefined
+WireEvent[type=retrying].readonly payload: { readonly attempt: number; readonly delayMs: number; readonly error: WireError; readonly toolName?: string | undefined; readonly maxRetries?: number | undefined; readonly retryType?: string | undefined; readonly retryAfterMs?: number | undefined; readonly agentId?: string | undefined; }
+WireEvent[type=retrying].readonly seq: number | null
+WireEvent[type=retrying].readonly sessionId: string
+WireEvent[type=retrying].readonly turnId: string | null
+WireEvent[type=retrying].readonly type: "retrying"
+WireEvent[type=session_rotated].readonly occurredAt?: string | null | undefined
+WireEvent[type=session_rotated].readonly payload: WireSessionRotation
+WireEvent[type=session_rotated].readonly seq: number | null
+WireEvent[type=session_rotated].readonly sessionId: string
+WireEvent[type=session_rotated].readonly turnId: string | null
+WireEvent[type=session_rotated].readonly type: "session_rotated"
+WireEvent[type=snapshot].readonly occurredAt?: string | null | undefined
+WireEvent[type=snapshot].readonly payload: { readonly snapshot: WireSnapshot; }
+WireEvent[type=snapshot].readonly seq: number | null
+WireEvent[type=snapshot].readonly sessionId: string
+WireEvent[type=snapshot].readonly turnId: string | null
+WireEvent[type=snapshot].readonly type: "snapshot"
+WireEvent[type=status_changed].readonly occurredAt?: string | null | undefined
+WireEvent[type=status_changed].readonly payload: { readonly status: WireStatus; }
+WireEvent[type=status_changed].readonly seq: number | null
+WireEvent[type=status_changed].readonly sessionId: string
+WireEvent[type=status_changed].readonly turnId: string | null
+WireEvent[type=status_changed].readonly type: "status_changed"
+WireEvent[type=subagent].readonly occurredAt?: string | null | undefined
+WireEvent[type=subagent].readonly payload: { readonly agentId: string; readonly branchId?: string | undefined; readonly turnId?: string | undefined; readonly parentTurnId?: string | undefined; readonly rootTurnId?: string | undefined; readonly role?: string | undefined; readonly event: WireEvent; }
+WireEvent[type=subagent].readonly seq: number | null
+WireEvent[type=subagent].readonly sessionId: string
+WireEvent[type=subagent].readonly turnId: string | null
+WireEvent[type=subagent].readonly type: "subagent"
+WireEvent[type=task_changed].readonly occurredAt?: string | null | undefined
+WireEvent[type=task_changed].readonly payload: { readonly change: "task_started" | "task_backgrounded" | "task_stop_requested" | "task_finished" | "task_question_opened" | "task_question_closed"; readonly at: number; readonly task: WireTask; }
+WireEvent[type=task_changed].readonly seq: number | null
+WireEvent[type=task_changed].readonly sessionId: string
+WireEvent[type=task_changed].readonly turnId: string | null
+WireEvent[type=task_changed].readonly type: "task_changed"
+WireEvent[type=task_progress].readonly occurredAt?: string | null | undefined
+WireEvent[type=task_progress].readonly payload: { readonly taskId: string; readonly at: number; readonly kind: "tool_progress" | "text" | "activity"; readonly chunk: string; readonly executionId?: string | undefined; readonly observation?: WireTaskObservation | undefined; }
+WireEvent[type=task_progress].readonly seq: number | null
+WireEvent[type=task_progress].readonly sessionId: string
+WireEvent[type=task_progress].readonly turnId: string | null
+WireEvent[type=task_progress].readonly type: "task_progress"
+WireEvent[type=text_delta].readonly occurredAt?: string | null | undefined
+WireEvent[type=text_delta].readonly payload: { readonly delta: string; readonly messageId: string; readonly modelStep: number; }
+WireEvent[type=text_delta].readonly seq: number | null
+WireEvent[type=text_delta].readonly sessionId: string
+WireEvent[type=text_delta].readonly turnId: string | null
+WireEvent[type=text_delta].readonly type: "text_delta"
+WireEvent[type=tool_call_streaming_delta].readonly occurredAt?: string | null | undefined
+WireEvent[type=tool_call_streaming_delta].readonly payload: { readonly modelStep: number; readonly argumentCharCount: number; readonly toolName?: string | undefined; readonly callId?: string | undefined; readonly itemId?: string | undefined; readonly callIndex?: number | undefined; }
+WireEvent[type=tool_call_streaming_delta].readonly seq: number | null
+WireEvent[type=tool_call_streaming_delta].readonly sessionId: string
+WireEvent[type=tool_call_streaming_delta].readonly turnId: string | null
+WireEvent[type=tool_call_streaming_delta].readonly type: "tool_call_streaming_delta"
+WireEvent[type=tool_called].readonly occurredAt?: string | null | undefined
+WireEvent[type=tool_called].readonly payload: { readonly tool: WireTool; }
+WireEvent[type=tool_called].readonly seq: number | null
+WireEvent[type=tool_called].readonly sessionId: string
+WireEvent[type=tool_called].readonly turnId: string | null
+WireEvent[type=tool_called].readonly type: "tool_called"
+WireEvent[type=tool_finished].readonly occurredAt?: string | null | undefined
+WireEvent[type=tool_finished].readonly payload: WireToolResult
+WireEvent[type=tool_finished].readonly seq: number | null
+WireEvent[type=tool_finished].readonly sessionId: string
+WireEvent[type=tool_finished].readonly turnId: string | null
+WireEvent[type=tool_finished].readonly type: "tool_finished"
+WireEvent[type=tool_progress].readonly occurredAt?: string | null | undefined
+WireEvent[type=tool_progress].readonly payload: { readonly executionId: string; readonly chunk: string; }
+WireEvent[type=tool_progress].readonly seq: number | null
+WireEvent[type=tool_progress].readonly sessionId: string
+WireEvent[type=tool_progress].readonly turnId: string | null
+WireEvent[type=tool_progress].readonly type: "tool_progress"
+WireEvent[type=tool_started].readonly occurredAt?: string | null | undefined
+WireEvent[type=tool_started].readonly payload: { readonly tool: WireTool; }
+WireEvent[type=tool_started].readonly seq: number | null
+WireEvent[type=tool_started].readonly sessionId: string
+WireEvent[type=tool_started].readonly turnId: string | null
+WireEvent[type=tool_started].readonly type: "tool_started"
+WireEvent[type=turn_ended].readonly occurredAt?: string | null | undefined
+WireEvent[type=turn_ended].readonly payload: WireTerminal
+WireEvent[type=turn_ended].readonly seq: number | null
+WireEvent[type=turn_ended].readonly sessionId: string
+WireEvent[type=turn_ended].readonly turnId: string | null
+WireEvent[type=turn_ended].readonly type: "turn_ended"
+WireEvent[type=turn_started].readonly occurredAt?: string | null | undefined
+WireEvent[type=turn_started].readonly payload: { readonly input: ReadonlyArray<WireMessage>; readonly foreground: boolean; readonly silent?: true | undefined; readonly admission?: WireAdmission | undefined; }
+WireEvent[type=turn_started].readonly seq: number | null
+WireEvent[type=turn_started].readonly sessionId: string
+WireEvent[type=turn_started].readonly turnId: string | null
+WireEvent[type=turn_started].readonly type: "turn_started"
+WireEvent[type=usage].readonly occurredAt?: string | null | undefined
+WireEvent[type=usage].readonly payload: { readonly usage: WireUsage; readonly speed?: { readonly tps: number; readonly approximate: boolean; } | undefined; }
+WireEvent[type=usage].readonly seq: number | null
+WireEvent[type=usage].readonly sessionId: string
+WireEvent[type=usage].readonly turnId: string | null
+WireEvent[type=usage].readonly type: "usage"
+WireEvent[type=verification].readonly occurredAt?: string | null | undefined
+WireEvent[type=verification].readonly payload: { readonly verification: WireVerification | null; }
+WireEvent[type=verification].readonly seq: number | null
+WireEvent[type=verification].readonly sessionId: string
+WireEvent[type=verification].readonly turnId: string | null
+WireEvent[type=verification].readonly type: "verification"
+WireFinalWindow.readonly coverage: { readonly items: "complete_public_items" | "private_or_unrepresentable_items_omitted"; readonly reasoning: "accepted_summaries"; readonly usage: "accepted_root_observations"; readonly commands: "source_displays_only"; readonly costs: "accepted_tree_at_terminal"; }
+WireFinalWindow.readonly derivedFromAcceptedFacts?: true | undefined
+WireFinalWindow.readonly items: ReadonlyArray<DirectFinalItem>
+WireFinalWindow.readonly liveEligibleCommandMessageIds: ReadonlyArray<string>
+WireFinalWindow.readonly record: { readonly type: "final"; readonly finalText: string; readonly reasoningText?: string | undefined; readonly turnItems: ReadonlyArray<Item>; readonly usage?: { readonly prompt_tokens: number; readonly completion_tokens: number; readonly total_tokens: number; readonly reasoning_tokens?: number | undefined; readonly cache_read_tokens?: number | undefined; } | undefined; readonly commandMessages: ReadonlyArray<CommandMessage>; readonly costRecords: ReadonlyArray<ModelRequestCost>; readonly terminalCause?: "budget_exhausted" | "goal_check_unresolved" | "completion_verification_blocked" | "approval_refusal_limit" | undefined; }
+WireFinalWindow.readonly turnId: TurnId
+WireFinalWindow.readonly version: "public-turn-v1"
+WireFoldOptions.readonly formatToolLabel?: ((toolName: string, input: unknown) => string) | undefined
+WireGoal.readonly id: string
+WireGoal.readonly status: "cancelled" | "completed" | "active" | "blocked" | "achieved" | "abandoned"
+WireGoal.readonly successCriteria?: string | undefined
+WireGoal.readonly text: string
+WireHostTypes.readonly finalWindow: DirectFinalWindow
+WireHostTypes.readonly modelRequestCost: ModelRequestCost
+WireInteraction.readonly detail?: string | undefined
+WireInteraction.readonly executionId?: string | undefined
+WireInteraction.readonly input: JsonValue
+WireInteraction.readonly kind: "question" | "approval"
+WireInteraction.readonly origin?: WireOrigin | undefined
+WireInteraction.readonly parentExecutionId?: string | undefined
+WireInteraction.readonly presentation?: { readonly [key: string]: JsonValue; } | undefined
+WireInteraction.readonly questions?: ReadonlyArray<WireQuestion> | undefined
+WireInteraction.readonly requestId: string
+WireInteraction.readonly review?: WireApprovalReview | undefined
+WireInteraction.readonly risk?: "low" | "medium" | "high" | undefined
+WireInteraction.readonly sessionId?: string | undefined
+WireInteraction.readonly summary: string
+WireInteraction.readonly supportedGrants: ReadonlyArray<WireGrant>
+WireInteraction.readonly taskId?: string | undefined
+WireInteraction.readonly taskOwner?: WireTaskOwner | undefined
+WireInteraction.readonly toolName: string
+WireInteraction.readonly turnId: string
+WireMessage.readonly content: ReadonlyArray<WireContent>
+WireMessage.readonly draft?: boolean | undefined
+WireMessage.readonly executionId?: string | undefined
+WireMessage.readonly id: string
+WireMessage.readonly isError?: boolean | undefined
+WireMessage.readonly modelStep?: number | undefined
+WireMessage.readonly presentation?: { readonly [key: string]: JsonValue; } | undefined
+WireMessage.readonly replacesDraftId?: string | undefined
+WireMessage.readonly role: "tool" | "user" | "system" | "assistant"
+WireMessage.readonly text: string
+WireMessage.readonly turnId?: string | undefined
+WireModel.readonly model: string
+WireModel.readonly provider: string
+WireModelRequestCost.model: string
+WireModelRequestCost.outcome: CostOutcome
+WireModelRequestCost.pricedFromProvider?: string | undefined
+WireModelRequestCost.pricingVersion?: string | undefined
+WireModelRequestCost.provider: string
+WireModelRequestCost.requestId: string
+WireModelRequestCost.serviceTier: ServiceTier
+WireModelRequestCost.source?: CostSource | undefined
+WireModelRequestCost.unpricedReason?: UnpricedReason | undefined
+WireModelRequestCost.usage?: NormalizedUsage | undefined
+WireModelRequestCost.usdMicros?: number | undefined
+WireNativeCommandOperation[kind=compact].readonly kind: "compact"
+WireNativeCommandOperation[kind=configure].readonly configuration: WireConfigureRequest
+WireNativeCommandOperation[kind=configure].readonly kind: "configure"
+WireNativeCommandOperation[kind=retry].readonly executionId?: string | undefined
+WireNativeCommandOperation[kind=retry].readonly kind: "retry"
+WireNativeCommandOperation[kind=retry].readonly target: "turn" | "tool"
+WireNativeCommandOperation[kind=rewind].readonly kind: "rewind"
+WireNativeCommandOperation[kind=rewind].readonly targetId: string
+WireNativeCommandOperation[kind=rollover].readonly kind: "rollover"
+WireNativeCommandOutcome[kind=compacted].readonly kind: "compacted"
+WireNativeCommandOutcome[kind=compacted].readonly tokensAfter?: number | undefined
+WireNativeCommandOutcome[kind=compacted].readonly tokensBefore?: number | undefined
+WireNativeCommandOutcome[kind=configured].readonly configuration: WireConfiguration & { readonly model: WireModel; }
+WireNativeCommandOutcome[kind=configured].readonly kind: "configured"
+WireNativeCommandOutcome[kind=interrupted].readonly kind: "interrupted"
+WireNativeCommandOutcome[kind=interrupted].readonly reason: "outcome_unobserved"
+WireNativeCommandOutcome[kind=rejected].readonly code: "unavailable" | "busy" | "cancelled" | "failed" | "ineligible" | "stale"
+WireNativeCommandOutcome[kind=rejected].readonly kind: "rejected"
+WireNativeCommandOutcome[kind=rejected].readonly message: string
+WireNativeCommandOutcome[kind=retried].readonly kind: "retried"
+WireNativeCommandOutcome[kind=retried].readonly turnId: string
+WireNativeCommandOutcome[kind=rewound].readonly draft: { readonly content: ReadonlyArray<WireContent>; }
+WireNativeCommandOutcome[kind=rewound].readonly kind: "rewound"
+WireNativeCommandOutcome[kind=rolled_over].readonly kind: "rolled_over"
+WireNativeCommandOutcome[kind=rolled_over].readonly sessionId: string
+WireNotice.readonly after?: string | undefined
+WireNotice.readonly kind: string
+WireNotice.readonly message: string
+WireNoticeDelivery.readonly clientRequestId: string
+WireNoticeDelivery.readonly notificationIds: ReadonlyArray<string>
+WireNoticeDelivery.readonly turnId: string
+WireNotificationDrainResult[kind=not_admitting].readonly kind: "not_admitting"
+WireNotificationDrainResult[kind=not_admitting].readonly reason: string
+WireNotificationDrainResult[{ readonly kind: "empty" | "busy"; }].readonly kind: "empty" | "busy"
+WireNotificationDrainResult[{ readonly kind: "started" | "duplicate"; readonly turnId: string; readonly notificationIds: readonly string[]; }].readonly kind: "started" | "duplicate"
+WireNotificationDrainResult[{ readonly kind: "started" | "duplicate"; readonly turnId: string; readonly notificationIds: readonly string[]; }].readonly notificationIds: ReadonlyArray<string>
+WireNotificationDrainResult[{ readonly kind: "started" | "duplicate"; readonly turnId: string; readonly notificationIds: readonly string[]; }].readonly turnId: string
+WireNotifications.readonly deliveries: ReadonlyArray<WireNoticeDelivery>
+WireNotifications.readonly notices: ReadonlyArray<WireBackgroundNotice>
+WireOrigin[kind=control].readonly id?: string | undefined
+WireOrigin[kind=control].readonly kind: "control"
+WireOrigin[kind=control].readonly source?: "orchestrator" | undefined
+WireOrigin[kind=discord].readonly discordMessageId?: string | undefined
+WireOrigin[kind=discord].readonly kind: "discord"
+WireOrigin[kind=discord].readonly relayedBy?: string | undefined
+WireOrigin[kind=discord].readonly sender: string
+WireOrigin[kind=discord].readonly source: "human" | "agent" | "reaction"
+WireOrigin[kind=tui].readonly id?: string | undefined
+WireOrigin[kind=tui].readonly kind: "tui"
+WireOrigin[kind=tui].readonly skill?: { readonly name: string; readonly request: string; } | undefined
+WireOrigin[{ readonly kind: "cli" | "acp" | "api"; readonly id?: string | undefined; }].readonly id?: string | undefined
+WireOrigin[{ readonly kind: "cli" | "acp" | "api"; readonly id?: string | undefined; }].readonly kind: "cli" | "acp" | "api"
+WireQuestion.readonly allowCustom: boolean
+WireQuestion.readonly id: string
+WireQuestion.readonly multiple: boolean
+WireQuestion.readonly options: ReadonlyArray<{ readonly label: string; readonly description?: string | undefined; }>
+WireQuestion.readonly prompt: string
+WireQuestionAnswer.readonly questionId: string
+WireQuestionAnswer.readonly value: string | ReadonlyArray<string>
+WireQueueChange[type=queue_cancelling].readonly cancelledMessageIds: ReadonlyArray<string>
+WireQueueChange[type=queue_cancelling].readonly preservePendingSteers?: boolean | undefined
+WireQueueChange[type=queue_cancelling].readonly retainedMessageIds: ReadonlyArray<string>
+WireQueueChange[type=queue_cancelling].readonly turnId: string
+WireQueueChange[type=queue_cancelling].readonly type: "queue_cancelling"
+WireQueueChange[type=queue_discarded].readonly messageIds: ReadonlyArray<string>
+WireQueueChange[type=queue_discarded].readonly type: "queue_discarded"
+WireQueueChange[type=queue_edited].readonly content: ReadonlyArray<WireContent>
+WireQueueChange[type=queue_edited].readonly messageId: string
+WireQueueChange[type=queue_edited].readonly type: "queue_edited"
+WireQueueChange[type=queue_recovered].readonly type: "queue_recovered"
+WireQueueChange[type=queue_resumed].readonly type: "queue_resumed"
+WireQueueChange[type=queue_retracted].readonly messageId: string
+WireQueueChange[type=queue_retracted].readonly type: "queue_retracted"
+WireQueueChange[type=queue_settled].readonly outcome: "interrupted" | "cancelled" | "completed" | "failed"
+WireQueueChange[type=queue_settled].readonly preservePendingSteers?: boolean | undefined
+WireQueueChange[type=queue_settled].readonly turnId: string
+WireQueueChange[type=queue_settled].readonly type: "queue_settled"
+WireQueueChange[type=queue_started].readonly messageId: string
+WireQueueChange[type=queue_started].readonly turnId: string
+WireQueueChange[type=queue_started].readonly type: "queue_started"
+WireQueueChange[type=queue_steered].readonly messageIds: ReadonlyArray<string>
+WireQueueChange[type=queue_steered].readonly turnId: string
+WireQueueChange[type=queue_steered].readonly type: "queue_steered"
+WireQueueChange[type=queue_submitted].readonly record: WireSubmissionRecord
+WireQueueChange[type=queue_submitted].readonly type: "queue_submitted"
+WireQueueEntry.readonly clientRequestId: string
+WireQueueEntry.readonly content?: ReadonlyArray<WireContent> | undefined
+WireQueueEntry.readonly delivery: "queued" | "steering"
+WireQueueEntry.readonly messageId: string
+WireQueueEntry.readonly origin?: WireOrigin | undefined
+WireQueueEntry.readonly receivedAt?: string | undefined
+WireQueueEntry.readonly text: string
+WireQueueEntry.readonly turnId?: string | undefined
+WireReasoningBlock.readonly after: { readonly kind: "message" | "tool"; readonly id: string; } | null
+WireReasoningBlock.readonly messageId: string
+WireReasoningBlock.readonly modelStep: number | null
+WireReasoningBlock.readonly text: string
+WireReasoningBlock.readonly turnId: string | null
+WireRequestCost.readonly parentTurnId?: string | undefined
+WireRequestCost.readonly record: Readonly<ModelRequestCost>
+WireRequestCost.readonly rootTurnId: string
+WireRequestCost.readonly turnId: string
+WireRetry.readonly tool: boolean
+WireRetry.readonly turn: boolean
+WireReviewingApproval.readonly requestId: string
+WireReviewingApproval.readonly summary: string
+WireReviewingApproval.readonly taskId?: string | undefined
+WireReviewingApproval.readonly toolName: string
+WireReviewingApproval.readonly turnId?: string | undefined
+WireRewindTarget.readonly discardedReplies: number
+WireRewindTarget.readonly discardedTurns: number
+WireRewindTarget.readonly id: string
+WireRewindTarget.readonly imageCount: number
+WireRewindTarget.readonly label: string
+WireRewindTarget.readonly messageId: string
+WireSessionRotation.readonly backingSessionId: string
+WireSessionRotation.readonly commandId: string
+WireSessionRotation.readonly configuration: WireConfiguration & { readonly model: WireModel; }
+WireSessionRotation.readonly handoff?: { readonly clientRequestId: string; readonly messageId: string; readonly turnId: string; } | undefined
+WireSessionRotation.readonly logicalSessionId: string
+WireSessionRotation.readonly predecessor: { readonly sessionId: string; readonly throughSeq: number; }
+WireSnapshot.readonly activeTurnId: string | null
+WireSnapshot.readonly admissions: ReadonlyArray<WireAdmission>
+WireSnapshot.readonly backingSessionId: string
+WireSnapshot.readonly branches?: ReadonlyArray<WireBranchSnapshot> | undefined
+WireSnapshot.readonly budgetObservations?: ReadonlyArray<{ readonly turnId: string | null; readonly evidence: WireBudgetEvidence; }> | undefined
+WireSnapshot.readonly codexFiveHourQuota?: WireCodexQuota | undefined
+WireSnapshot.readonly codexQuota?: WireCodexQuota | undefined
+WireSnapshot.readonly commands?: ReadonlyArray<WireCommandReceipt> | undefined
+WireSnapshot.readonly configuration: WireConfiguration
+WireSnapshot.readonly cost: { readonly totalUsd: number; readonly currency: "USD"; } | null
+WireSnapshot.readonly goal: WireGoal | null
+WireSnapshot.readonly goalGeneration?: number | undefined
+WireSnapshot.readonly goalProposal?: WireGoal | null | undefined
+WireSnapshot.readonly lastError: WireError | null
+WireSnapshot.readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean; } | undefined
+WireSnapshot.readonly lastUsage?: WireUsage | undefined
+WireSnapshot.readonly liveReasoning?: string | undefined
+WireSnapshot.readonly messages: ReadonlyArray<WireMessage>
+WireSnapshot.readonly model: WireModel
+WireSnapshot.readonly notices: ReadonlyArray<WireNotice>
+WireSnapshot.readonly notifications?: WireNotifications | undefined
+WireSnapshot.readonly pendingBudgets?: ReadonlyArray<WireBudgetRequest> | undefined
+WireSnapshot.readonly pendingInteractions: ReadonlyArray<WireInteraction>
+WireSnapshot.readonly protocolVersion: 1
+WireSnapshot.readonly queue: ReadonlyArray<WireQueueEntry>
+WireSnapshot.readonly queuePauseReason?: "manual" | "failure" | "recovered_interrupted" | null | undefined
+WireSnapshot.readonly queueState: "idle" | "running" | "paused" | "cancelling" | "completing" | "awaiting_action" | "awaiting_preflight"
+WireSnapshot.readonly reasoning: string
+WireSnapshot.readonly reasoningBlocks?: ReadonlyArray<WireReasoningBlock> | undefined
+WireSnapshot.readonly reasoningIdentity?: { readonly messageId: string; readonly turnId: string | null; readonly modelStep: number | null; } | null | undefined
+WireSnapshot.readonly requestCosts?: ReadonlyArray<WireRequestCost> | undefined
+WireSnapshot.readonly retry?: { readonly id: number; readonly attempt: number; readonly maxRetries: number; readonly delayMs: number; } | undefined
+WireSnapshot.readonly retryEligibility: WireRetry
+WireSnapshot.readonly reviewingApprovals?: ReadonlyArray<WireReviewingApproval> | undefined
+WireSnapshot.readonly seq: number | null
+WireSnapshot.readonly sessionId: string
+WireSnapshot.readonly status: WireStatus
+WireSnapshot.readonly submissions?: ReadonlyArray<WireSubmissionRecord> | undefined
+WireSnapshot.readonly tasks: ReadonlyArray<WireTask>
+WireSnapshot.readonly terminal: ({ readonly turnId: string; } & WireTerminal) | null
+WireSnapshot.readonly thinking?: boolean | undefined
+WireSnapshot.readonly timeline: ReadonlyArray<{ readonly kind: "message" | "tool"; readonly id: string; }> | null
+WireSnapshot.readonly tools: ReadonlyArray<WireTool>
+WireSnapshot.readonly turnResults?: ReadonlyArray<WireTurnResult> | undefined
+WireSnapshot.readonly turnUsage?: ReadonlyArray<{ readonly turnId: string; readonly usage: WireUsage; }> | undefined
+WireSnapshot.readonly unmatchedToolResults?: ReadonlyArray<WireToolResult> | undefined
+WireSnapshot.readonly usage: WireUsage
+WireSnapshot.readonly verification: WireVerification | null
+WireSubmission.readonly attachments?: ReadonlyArray<WireContent> | undefined
+WireSubmission.readonly delivery?: "auto" | "steer" | "follow_up" | "reject_if_busy" | undefined
+WireSubmission.readonly expectedSteerTurnId?: string | undefined
+WireSubmission.readonly origin?: WireOrigin | undefined
+WireSubmission.readonly requestId: string
+WireSubmission.readonly text: string
+WireSubmissionRecord.readonly admission: WireAdmission
+WireSubmissionRecord.readonly clientRequestId: string
+WireSubmissionRecord.readonly content: ReadonlyArray<WireContent>
+WireSubmissionRecord.readonly delivery: "steer" | "follow_up" | "reject_if_busy"
+WireSubmissionRecord.readonly finalText: string | null
+WireSubmissionRecord.readonly messageId: string
+WireSubmissionRecord.readonly origin?: WireOrigin | undefined
+WireSubmissionRecord.readonly originalContent: ReadonlyArray<WireContent>
+WireSubmissionRecord.readonly outcome?: "interrupted" | "cancelled" | "completed" | "failed" | undefined
+WireSubmissionRecord.readonly receivedAt?: string | undefined
+WireSubmissionRecord.readonly stage: "cancelled" | "running" | "queued" | "pending_steer" | "steered" | "finished" | "retracted" | "discarded"
+WireSubmissionRecord.readonly turnId?: string | undefined
+WireTask.readonly agentId?: string | undefined
+WireTask.readonly completedAt?: number | undefined
+WireTask.readonly id: string
+WireTask.readonly input?: string | undefined
+WireTask.readonly kind?: "subagent" | "shell" | undefined
+WireTask.readonly label?: string | undefined
+WireTask.readonly lastActivityAt?: number | undefined
+WireTask.readonly lastObservation?: WireTaskObservation | undefined
+WireTask.readonly lastTool?: { readonly label: string; readonly state: "running" | "failed" | "success"; } | undefined
+WireTask.readonly lastToolName?: string | undefined
+WireTask.readonly mode?: "foreground" | "background" | undefined
+WireTask.readonly model?: WireModel | undefined
+WireTask.readonly name?: string | undefined
+WireTask.readonly origin?: WireOrigin | undefined
+WireTask.readonly parentExecutionId?: string | undefined
+WireTask.readonly pendingQuestion?: { readonly messageId: string; readonly question: string; } | undefined
+WireTask.readonly progress?: string | undefined
+WireTask.readonly result?: WireTaskResult | undefined
+WireTask.readonly role?: string | undefined
+WireTask.readonly sessionId?: string | undefined
+WireTask.readonly sourceCallId?: string | undefined
+WireTask.readonly startedAt?: number | undefined
+WireTask.readonly status: "interrupted" | "cancelled" | "running" | "awaiting_interaction" | "cancelling" | "completed" | "failed"
+WireTask.readonly text?: string | undefined
+WireTask.readonly toolCounts?: ReadonlyArray<{ readonly toolName: string; readonly count: number; }> | undefined
+WireTask.readonly turnId?: string | undefined
+WireTaskObservation[kind=retrying].readonly at: number
+WireTaskObservation[kind=retrying].readonly attempt: number
+WireTaskObservation[kind=retrying].readonly kind: "retrying"
+WireTaskObservation[kind=retrying].readonly maxRetries: number
+WireTaskObservation[kind=tool_completed].readonly at: number
+WireTaskObservation[kind=tool_completed].readonly kind: "tool_completed"
+WireTaskObservation[kind=tool_completed].readonly toolName?: string | undefined
+WireTaskObservation[kind=tool_input_received].readonly argumentCharCount: number
+WireTaskObservation[kind=tool_input_received].readonly at: number
+WireTaskObservation[kind=tool_input_received].readonly kind: "tool_input_received"
+WireTaskObservation[kind=tool_input_received].readonly toolName: string
+WireTaskObservation[kind=tool_started].readonly at: number
+WireTaskObservation[kind=tool_started].readonly kind: "tool_started"
+WireTaskObservation[kind=tool_started].readonly toolName: string
+WireTaskObservation[{ readonly kind: "settled" | "request_dispatched" | "response_started" | "text_received" | "approval_requested" | "question_asked" | "shell_started" | "shell_output_received" | "stop_requested"; readonly at: number; }].readonly at: number
+WireTaskObservation[{ readonly kind: "settled" | "request_dispatched" | "response_started" | "text_received" | "approval_requested" | "question_asked" | "shell_started" | "shell_output_received" | "stop_requested"; readonly at: number; }].readonly kind: "settled" | "request_dispatched" | "response_started" | "text_received" | "approval_requested" | "question_asked" | "shell_started" | "shell_output_received" | "stop_requested"
+WireTaskOwner.readonly id: string
+WireTaskOwner.readonly kind?: "subagent" | "shell" | undefined
+WireTaskOwner.readonly name?: string | undefined
+WireTaskOwner.readonly origin?: WireOrigin | undefined
+WireTaskOwner.readonly parentExecutionId?: string | undefined
+WireTaskOwner.readonly role?: string | undefined
+WireTaskOwner.readonly sessionId?: string | undefined
+WireTaskOwner.readonly sourceCallId?: string | undefined
+WireTaskOwner.readonly turnId?: string | undefined
+WireTaskResult.readonly error?: WireError | undefined
+WireTaskResult.readonly kind: "interrupted" | "cancelled" | "completed" | "failed"
+WireTaskResult.readonly output?: string | undefined
+WireTaskResult.readonly reason?: string | undefined
+WireTaskResult.readonly toolUseCounts?: ReadonlyArray<WireToolUseCount> | undefined
+WireTerminal.readonly error?: WireError | undefined
+WireTerminal.readonly finalText?: string | null | undefined
+WireTerminal.readonly finalWindow?: DirectFinalWindow | undefined
+WireTerminal.readonly notice?: string | undefined
+WireTerminal.readonly outcome: "interrupted" | "cancelled" | "completed" | "failed"
+WireTerminal.readonly terminalCause?: string | undefined
+WireTool.readonly callId?: string | undefined
+WireTool.readonly content?: ReadonlyArray<WireContent> | undefined
+WireTool.readonly display?: JsonValue | undefined
+WireTool.readonly executionId: string
+WireTool.readonly input: JsonValue
+WireTool.readonly isError?: boolean | undefined
+WireTool.readonly output?: string | undefined
+WireTool.readonly parentExecutionId?: string | undefined
+WireTool.readonly progress?: string | undefined
+WireTool.readonly status: "started" | "called" | "completed" | "unknown"
+WireTool.readonly toolName: string
+WireTool.readonly turnId: string
+WireToolResult.readonly callId?: string | undefined
+WireToolResult.readonly content?: ReadonlyArray<WireContent> | undefined
+WireToolResult.readonly display?: JsonValue | undefined
+WireToolResult.readonly executionId: string
+WireToolResult.readonly input?: JsonValue | undefined
+WireToolResult.readonly isError: boolean
+WireToolResult.readonly output: string
+WireToolResult.readonly parentExecutionId?: string | undefined
+WireToolResult.readonly toolName?: string | undefined
+WireToolUseCount.readonly count: number
+WireToolUseCount.readonly toolName: string
+WireUsage.readonly cacheWrite1hTokens?: number | undefined
+WireUsage.readonly cacheWriteTokens?: number | undefined
+WireUsage.readonly cachedInputTokens: number
+WireUsage.readonly inputTokens: number
+WireUsage.readonly outputTokens: number
+WireUsage.readonly reasoningTokens?: number | undefined
+WireUsage.readonly upstreamProvider?: string | undefined
+WireVerification.readonly attemptId?: string | undefined
+WireVerification.readonly goalGeneration?: number | undefined
+WireVerification.readonly message?: string | undefined
+WireVerification.readonly report?: { readonly outcome: "PASS" | "FAIL" | "INCONCLUSIVE" | "ERROR" | "TIMEOUT"; readonly evidence: string; readonly checked: ReadonlyArray<string>; readonly limitations: ReadonlyArray<string>; readonly verifierVersion: string; } | undefined
+WireVerification.readonly revision?: string | undefined
+WireVerification.readonly status: "running" | "failed" | "blocked" | "pending" | "passed"
+const DIRECT_PROTOCOL_VERSION: 1
+const WIRE_REASONING_SELECTIONS: readonly ["default", "none", "minimal", "low", "medium", "high", "xhigh"]
+function reduceWireEvent(state: WireSnapshot, event: WireEvent, options?: WireFoldOptions): WireSnapshot
+type JsonValue = string | number | boolean | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue; } | null
+type WireApprovalReview = ({ readonly kind: "not_reviewed"; readonly approved: false; } | { readonly kind: "unavailable"; readonly approved: false; } | { readonly kind: "bypassed"; readonly approved: true; readonly grant?: string | undefined; } | { readonly kind: "reviewed"; readonly approved: boolean; readonly grant?: string | undefined; readonly advisoryOnly?: true | undefined; readonly advisory: { readonly approved: boolean; readonly reasoning: string; readonly model: string; readonly source?: "system" | "llm" | undefined; readonly riskLevel?: "low" | "medium" | "high" | undefined; readonly authorization?: "unknown" | "explicit" | "implied" | "weak" | undefined; readonly confidence?: "low" | "high" | undefined; }; }) & { readonly refused?: true | undefined; readonly showReview?: boolean | undefined; }
+type WireCommand = ({ readonly type: "submit"; } & WireSubmission) | { readonly type: "answer"; readonly requestId: string; readonly decision: WireDecision; readonly provenance?: WireAnswerProvenance | undefined; } | { readonly type: "take_over_review"; readonly requestId: string; } | { readonly type: "answer_budget"; readonly requestId: string; readonly decision: WireBudgetDecision; readonly provenance?: WireAnswerProvenance | undefined; } | { readonly type: "cancel"; readonly target?: WireCancelTarget | undefined; readonly expectedTurnId?: string | undefined; readonly discardQueue?: boolean | undefined; readonly returnSteers?: boolean | undefined; } | ({ readonly type: "retry"; readonly commandId: string; readonly target: "turn" | "tool"; readonly executionId?: string | undefined; } & WireCommandPreconditions) | ({ readonly type: "compact"; readonly commandId: string; } & WireCommandPreconditions) | ({ readonly type: "configure"; readonly commandId: string; readonly configuration: WireConfigureRequest; } & WireCommandPreconditions) | { readonly type: "queue_edit"; readonly messageId: string; readonly text: string; readonly attachments?: ReadonlyArray<WireContent> | undefined; } | { readonly type: "queue_retract"; readonly messageId: string; } | { readonly type: "queue_resume"; } | { readonly type: "queue_discard"; } | { readonly type: "task_control"; readonly taskId: string; readonly action: "cancel" | "check_in" | "foreground" | "background"; } | { readonly type: "command_status"; readonly commandId: string; } | { readonly type: "command_revision"; } | { readonly type: "drain_background_notifications"; readonly requestId: string; } | { readonly type: "list_rewind_targets"; } | ({ readonly type: "rewind"; readonly commandId: string; readonly targetId: string; } & WireCommandPreconditions) | { readonly type: "reset"; } | ({ readonly type: "rollover"; readonly commandId: string; } & WireCommandPreconditions) | { readonly type: "preview"; readonly text: string; readonly attachments?: ReadonlyArray<WireContent> | undefined; }
+type WireCommandErrorCode = "invalid_command" | "unavailable" | "stale_interaction" | "request_conflict" | "rejected" | "closed" | "not_found" | "forbidden" | "storage_failure" | "too_late" | "internal_error" | "replay_unavailable" | "not_admitting" | "command_rejected" | "command_interrupted"
+type WireCompactionBlockedReason = "disabled" | "unknown_threshold" | "native_unavailable" | "unsettled_tools" | "no_complete_cold_turn" | "single_turn_too_large" | "opaque_context" | "summary_input_too_large" | "non_reducing" | "result_still_too_large"
+type WireDecision = ({ readonly kind: "allow"; } | { readonly kind: "decline"; } | { readonly kind: "deny"; readonly reason?: string | undefined; } | { readonly kind: "answer"; readonly answer: string; } | { readonly kind: "answers"; readonly answers: ReadonlyArray<WireQuestionAnswer>; } | { readonly kind: "grant"; readonly grant: WireGrant; }) & { readonly stopAfterApprovalResolution?: boolean | undefined; }
+type WireEventType = keyof WireEventPayloads
+type WireGrant = "network-allow-once" | "allow-project" | "allow-remember" | "unsandboxed-once" | "allow-folder-session" | "allow-edit-file-session" | "allow-edit-folder-session" | "docker-allow-once" | "docker-allow-session" | "docker-allow-project"
+type WireNativeCommandRequest = { readonly commandId: string; readonly operation: WireNativeCommandOperation; } & WireCommandPreconditions
+type WireStatus = "closed" | "interrupted" | "idle" | "running" | "awaiting_interaction"
+type WireTurnResult = { readonly turnId: string; readonly messages: ReadonlyArray<WireMessage>; } & WireTerminal

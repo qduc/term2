@@ -82,7 +82,7 @@ who may use them and what they own.
 | --- | --- |
 | `components/term2/Term2SessionShell.tsx#Term2SessionShell` | UI entry with `initialSessionId:string|null`, optional `authUserId:string|null`, optional packaged `homeFolder:string`, optional `allowWrite:boolean`, and the settings page's URL state `settingsSection`/`settingsProvider:string|null` (from `?settings=`/`?provider=`, read by `Term2Entry`). Owns selection, drafts, first-run onboarding checklist, sidebar, composer controls (model/effort/approval mode/usage/skills/`@`-files/attachments/queue), chronological turn rendering (`Term2TurnTimeline`), rewind, tasks drawer, folder browser (`Term2FolderSelector`), and session/settings presentation. `@` suggestions use session-scoped listing for persisted chats and workspace-scoped listing for drafts; opening suggestions does not create a chat. Identity/selection transitions clear the previous draft. `authUserId` is a UI reset signal, not gateway authorization. The packaged page supplies its home folder as a starting point for browsing and whether the launcher was started with `--allow-write`; folder validation, selection and access checks still go through the gateway. |
 | `components/term2/settings/Term2SettingsPage.tsx#Term2SettingsPage` | Full-page settings that replaces the chat view while `?settings=<section>` is present (the chat stays mounted, hidden). The shell opens it with `pushState` (so Back returns to the chat), moves between sections and providers with `replaceState`, and `onClose` either goes back or drops the parameters. It loads its own settings projection, reports it through `onLoaded`, and writes only through the existing settings, credential, provider and OAuth facade methods. Which projection keys appear, in which section, with what labels, units and search keywords is data in `settings/settings-catalog.ts`; keys it does not describe are not shown. Browser-only preferences (theme, tool display, notifications, diagnostics) arrive as props. API keys are write-only: the page never receives or shows a stored secret. |
-| `hooks/useTerm2Session.ts#useTerm2Session` | Takes the selected `sessionId:string|null`; returns `UseTerm2SessionResult`. Owns the active hydrate/stream lifecycle, accepted checkpoint, reconnect state, pending message text, session-scoped `submitError`, and interaction/command feedback. Callers use returned actions rather than opening a second stream or mutating the view. Session generation/abort checks prevent stale work installing another selection's state. |
+| `hooks/useTerm2Session.ts#useTerm2Session` | Takes the selected `sessionId:string|null`; returns `UseTerm2SessionResult`. Holds one `Term2SessionStore` per open session (stream lifecycle via the store), accepted checkpoint, reconnect state, pending message text, session-scoped `submitError`, and interaction/command feedback. Callers use returned actions rather than opening a second stream or mutating the view. Session generation/abort checks prevent stale work installing another selection's state. |
 | `lib/api/term2.ts#term2Client` | Browser HTTP facade, typed parsers and domain errors. Calls local BFF paths, not provider endpoints or the Unix socket directly. Workspace file listing (`listWorkspaceFiles`) is grant-scoped and can serve draft mentions without creating a session; session file listing remains session-scoped. Optional `AbortSignal` is propagated; facade requests disable generic automatic HTTP retries. Stream retry ownership belongs to the hook; original configure-command retry belongs to its caller. |
 | `components/term2/Term2SessionConfig.tsx#Term2SessionConfig` | Receives optional session/config/settings plus `onDiscovered`, `onCreateNewSession`, and reauthentication state. Session-keyed UI owns the mounted original configure request/retry handle (model, reasoning effort, mode, and `approvalMode`). `onDiscovered` supplies current discovery only, not an original receipt. |
 | `lib/term2/types.ts#Term2SessionView` | Read model consumed by shell/evidence UI: root turns/status (including chronological `items` for interleaved reasoning, text, and tool executions), nullable interaction, accepted checkpoint, separate hydration and native public state, actual branch views, accepted evidence and connection-local live observations. It is not provider history, a billing accumulator or a new persisted session format. |
@@ -102,7 +102,7 @@ usable so the user can edit or retry immediately.
 `expectedSteerTurnId`, `skill`, and image `attachments`, and returns `Promise<boolean>`;
 other mutation/control actions expose completion through their promise and view/feedback.
 `createSession` retains its existing creation metadata result (`SessionProjection`);
-that result is **not** the new native hydration cut. Only `hydrateSession` supplies the negotiated cut.
+that result is **not** a session cut. Only the first `snapshot` frame of the session stream installs one.
 
 ### Facade and BFF boundaries
 
@@ -111,7 +111,7 @@ The public facade groups are:
 - Workspace/session discovery and creation: `listWorkspaces`, `listSessions`
   (including optional server-projected `title` and `model`), `createSession`;
   candidate validation/browse/selection remain separate capability-based workspace controls.
-- Conversation: `hydrateSession`, `openEvents`, `submitMessage` (with optional
+- Conversation: `openDirectEvents` (the `direct-wire-v2` stream), `submitMessage` (with optional
   delivery mode, skill, and bounded image attachments), `abort`,
   `resolveInteraction`, `commands` (compact/retry-tool/retry-turn),
   `listRewindTargets`, `rewindSession`, `manageQueue` (edit/retract/resume/discard),
@@ -145,7 +145,9 @@ Browser paths under `app/api/agent/` and `app/api/term2/` are Node.js BFF handle
 `lib/server/proxy.ts#rpc` maps them to the private gateway API; a browser GET may
 become a purpose-bound POST control RPC (with per-route timeout override where
 appropriate, such as OAuth login). Hydration, SSE and keyed configuration
-explicitly opt into `format=agent-wire-v2`. The BFF validates local input,
+explicitly opt into `format=agent-wire-v2`; the events route also passes
+`format=direct-wire-v2` through unchanged (same cursor validation, upstream format
+must match), which the browser does not request yet. The BFF validates local input,
 resolves session/workspace binding, uses the configured local owner identity and
 purpose-bound gateway assertions, and forwards native bodies/receipt evidence
 and negotiated headers. It must not synthesize aggregate state, re-key commands,
@@ -164,45 +166,27 @@ does not establish deployment/security acceptance for a new topology.
 
 ### Internal ownership and compatibility limits
 
-`lib/term2/hydration.ts` owns browser validation of the separately negotiated
-native snapshot and native-owned transcript/timeline references.
-`event-adapter.ts#applyTerm2Event` owns atomic accepted installation and actual
-branch routing; `native-state.ts` owns browser validation/reduction of observed
-public messages/tasks/cost/goals/verification/notices, **not** pricing or native
-goal/task-running policy. Ordered native message entries retain real IDs and
-replace only named drafts in place; root task descriptors retain nested
-result.toolUseCounts and numeric task time as evidence. Current descriptor state
-supersedes legacy cards with the same actual task identity. Accepted tool_called
-creates a pending command by actual executionId; the original public descriptor
-retains native callId/parent/input. A later physical start uses that same
-execution key. Results lacking an observed call/start remain unmatched evidence,
-not invented tool metadata. Pending tool UI explicitly means not started.
-`event-adapter.ts#presentTerm2SessionView` is a presentation-only overlay for real
-live turn_failed; underlying accepted state/checkpoints are unchanged. Shared
-source `a4bcebc48dc22086c655a601bf4911c64882a8eb` separates accepted
-admission from its general change union; `applyTerm2Event` narrows by kind and
-uses the corresponding accepted/live types without casting. Live error
-alone is not a terminal, and error is not in the accepted allowlist. Both
-transient observations are connection-local and
-removed on disconnect/hydration; later accepted lifecycle supersedes a live
-failure. No provider-native history is built from these public records.
-`sse.ts#consumeSseResponse` owns SSE framing and shared-envelope validation.
-`lib/term2/receipt-cost.ts#summarizeReceiptCosts(receipts)` is pure presentation:
-it selects latest complete physical records by actual requestId, then returns
-known signed USD micros, priced/unpriced counts and receipt-set pricing status.
-Undefined input stays unavailable; empty/all-unpriced sets do not become zero
-bills. It mirrors the existing pure source `summarizeCost` arithmetic without a
-runtime or type import (Turbopack `.js` resolution and the ES2017 target make that
-module incompatible here). It performs no pricing lookup or native-state write.
-`Term2NativeEvidence` renders this only at root, separately from native aggregate
-evidence, with explicit unknown historical coverage and no complete-session-bill
-claim. Branch lists show the same physical charges, not additional costs.
-Correction/hydration both use the same `nativeState.requestCosts` receipt seam.
-See WIRE.md for exact status semantics and compatibility limits. Native
-verification is not user-task success and request receipts are not extra bills.
-These are cohesive internal seams of this module, not separately versioned
-public packages. Wire versions, same-cut semantics and exact external originals
-are recorded in WIRE.md.
+The transcript has one source of truth (docs/plans/web-client/web-transcript-single-source.md):
+
+- `lib/term2/generated/wire-fold.js` is the shared fold (`src/protocol/fold/`), bundled by
+  `scripts/build-web-fold.mjs` and not committed. The browser owns no reducer: a new event type is handled in
+  the fold for every client at once.
+- `lib/term2/session-store.ts#Term2SessionStore` owns one session's `direct-wire-v2` connection, the accepted
+  checkpoint, the current `WireSnapshot` and the answerable interaction DTOs. The first `snapshot` frame is the
+  page load (there is no separate hydration request); accepted frames at or before the checkpoint are ignored;
+  live frames never move it; an unreadable frame, an unavailable replay or HTTP 410 ends in Reload required.
+  Publication is at most once per animation frame while visible. With diagnostics on, it keeps the last 200
+  frames for `Term2NativeEvidence`; nothing reads state from them.
+- `lib/term2/present.ts#present` is the only place a transcript rule is written (spec section 2.5): snapshot to
+  `Term2SessionView`, reusing unchanged turns by identity. Components read the view, never the snapshot; the
+  panels read `view.session` (tasks with their branch turns, queue, notifications, request receipts, session
+  usage, goal, verification).
+- `lib/term2/receipt-cost.ts#summarizeReceiptCosts(receipts)` is pure presentation of request receipts (latest
+  record per real requestId; priced/unpriced counts and status); it mirrors `summarizeCost` arithmetic without
+  importing it.
+
+Results with no call stay in `unmatchedToolResults` and are not cards. Live-only observations (reasoning deltas,
+tool progress) live in the snapshot's live fields and are replaced by the server's snapshot on reconnect.
 
 Server/native owners produce accepted facts, snapshots, real identities and
 provider-required history. Shared-wire owners produce versioned schemas/parsers;
@@ -211,17 +195,6 @@ activation. Browser/BFF owns only consumption, local state and presentation.
 No missing implementation owner is identified inside this slice. Provider
 continuation verification and the combined M6 verifier must be allocated by the
 coordinator; this browser handoff does not assign or impersonate those owners.
-
-Option B explicitly makes raw reasoning chunks and intermediate tool progress
-live-only, including after reconnect/crash. The UI drops connection-local
-observations on disconnection/hydration; accepted summaries and final tool
-results are recovery evidence, not raw-stream replay parity. Complete
-provider-required reasoning items/signatures/encrypted metadata and tool
-calls/results remain provider/runtime responsibilities and must not be stripped.
-Actual provider continuation is pending post-M6 verification. Live runtime
-failure presentation is not a durable failed turn: the actual null-seq lifecycle
-may settle visible activity, while hydration/current accepted state owns recovery.
-No status_changed, missing terminal or missed transient history is fabricated.
 
 Other limits: no durable browser outbox or retry handle across navigation; no
 browser-owned journal/history synthesis; historical receipt coverage is unknown and native aggregate

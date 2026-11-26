@@ -69,10 +69,6 @@
       "lines": 1046,
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction. The apply_patch preview is the one exception: its parsing, escaping and paging live in presentation/utils/apply-patch-display.ts and presentation/components/prompt/ApplyPatchPreview.tsx."
     },
-    "src/protocol/wire.ts": {
-      "lines": 523,
-      "reason": "The wire type catalogue keeps approval grant values together, including the two explicit sandbox network decisions, and keeps accepted usage dimensions beside the existing counters; cache creation, its one-hour subset and provider-reported reasoning tokens (which agent-core's Usage cannot carry yet, so they ride the accepted usage fact) add three optional fields without changing older messages. Splitting either group from its contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains. Twelve lines add the approval review to the public interaction contract: the review recorded on a request once a person decides, and the shape of a request still under review. They sit beside WireInteraction because clients read them as part of it. Two lines document WireNotice.after, the accepted timeline row a retained notice followed: clients replay it to place the notice where it was said. The field belongs to the notice contract that already lives here. Two lines add WireRewindTarget.messageId and its comment: the user message a rewind returns to, which the web client's Edit and Retry match against a turn. It is part of the rewind target contract defined here."
-    },
     "src/session/conversation.ts": {
       "lines": 561,
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission. Two lines hand notices an earlier process left pending to the background owner (ConversationBackground.deliverReopened) before the turn's history snapshot is taken; the delivery has to precede the turn's admission, so it cannot live in the later notice preparation. Fifteen lines connect the approval arbiter (approval/approval-arbiter.ts): one shared reviewer for root and task approvals built where the generation, accepted history and live publisher meet, handed to each turn and to the task owner, and takeOverReview routed root-then-task exactly like answer. The reviewer's logic stays in the arbiter; only the wiring that closes over this driver's state is here. Eleven lines take an unattended turn's workspace snapshot before its first model request: the per-turn holder (approval/unattended-snapshot.ts) is built where the turn id, the arbiter and the app's snapshot port meet, the turn's prepareRequest awaits it, and the turn owner reads its report for the terminal notice. One line is the comment on the rollover-reminder gate: contextMilestones is handed to the turn only when modelRollover is not false, so the model is not told to call session_rollover where that tool is not offered. The gate sits here because this is where a turn's deps are read from generation.supplied each turn, and config-runtime.ts re-derives modelRollover on a settings rebind, so a check where the supplier is built would go stale; the line goes when the supplier owns that decision."
@@ -88,14 +84,6 @@
     "src/model/provider.ts": {
       "lines": 502,
       "reason": "Moved at 500 lines; +2 lines forward deps.onReasoningStarted into ModelEventProjection for foreground reasoning_started notifications without splitting the single provider stream assembly."
-    },
-    "src/protocol/projection.ts": {
-      "lines": 502,
-      "reason": "Moved at 500 lines; +2 lines project transient reasoning_started into a WireEvent alongside the other transient session updates."
-    },
-    "src/protocol/reducer.ts": {
-      "lines": 501,
-      "reason": "Moved at 495 lines; +6 lines maintain live WireSnapshot.thinking across reasoning_started/reasoning_delta and turn/step boundaries."
     },
     "src/app/lib/agent-factory.ts": {
       "lines": 557,

@@ -5,8 +5,7 @@
  * still under review. An approval the review answers itself is never published as open.
  */
 import type { DirectApprovalReviewTransient } from '../session/approval/approval-arbiter.js';
-import type { WireEventPayloads } from './wire-events.js';
-import type { WireApprovalReview, WireEvent, WireInteraction, WireReviewingApproval, WireSnapshot } from './wire.js';
+import type { WireApprovalReview, WireEvent, WireInteraction } from './wire.js';
 
 /** A transient (null seq) review frame; it never stands for an open or resolved request. */
 export function approvalReviewEvent(sessionId: string, event: DirectApprovalReviewTransient): WireEvent {
@@ -33,16 +32,4 @@ export function reviewedInteraction(
   return review ? { ...interaction, review } : interaction;
 }
 
-export function reduceApprovalReview(state: WireSnapshot, payload: WireEventPayloads['approval_review']): WireSnapshot {
-  const others = withoutReview(state, payload.approval.requestId);
-  if (payload.phase !== 'started') return others;
-  return { ...others, reviewingApprovals: [...(others.reviewingApprovals ?? []), payload.approval] };
-}
-
-/** A request leaves review once it opens or resolves, whatever the order of live and durable events. */
-export function withoutReview(state: WireSnapshot, requestId: string): WireSnapshot {
-  if (!state.reviewingApprovals?.some((item: WireReviewingApproval) => item.requestId === requestId)) return state;
-  const reviewingApprovals = state.reviewingApprovals.filter((item) => item.requestId !== requestId);
-  const { reviewingApprovals: _previous, ...rest } = state;
-  return reviewingApprovals.length ? { ...rest, reviewingApprovals } : rest;
-}
+export { reduceApprovalReview, withoutReview } from './fold/review.js';

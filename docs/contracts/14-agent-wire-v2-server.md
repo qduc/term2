@@ -88,6 +88,10 @@ V2 SSE, hydration and configuration use `?format=agent-wire-v2`. An optional
 `x-term2-event-format: agent-wire-v2` header must agree with query negotiation.
 SSE/configuration reject unknown or conflicting formats. `format=direct` remains
 the explicit native snapshot/live transport; it is not a browser fallback.
+`format=direct-wire-v2` (SSE only) sends native `WireEvent`s unchanged, one
+`accepted`/`live`/`snapshot` frame per Session publication, for clients that fold
+with the shared fold (`src/protocol/fold/`). Its envelope and ordering rules are
+in `src/host/server-sse.ts` and the web transcript build spec, section 2.1.
 Unqualified events are refused, rather than automatically upgraded to v2.
 Older gated server builds refuse explicit v2 requests with `503 agent_wire_v2_unavailable`; use matching server and browser builds.
 

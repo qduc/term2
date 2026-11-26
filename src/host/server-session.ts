@@ -5,6 +5,7 @@ import type { ServerHostDependencies, ServerResult, ServerSessionRequest } from 
 import type { PrivateRoute } from './server-routes.js';
 import { commandFailure, publicError, unavailable } from './server-errors.js';
 import type { ServerInteractions } from './server-interactions.js';
+import { pendingInteractionEntry } from './server-sse.js';
 import { parseWireCommand } from '../protocol/parse.js';
 import { projectServerSession } from './server-projection.js';
 import {
@@ -53,26 +54,9 @@ export async function handleSessionRoute(
         // Same snapshot cut as the raw public interaction records. The DTO is the
         // existing resolver contract, not a second attachment or a guessed revision.
         const interaction = pending
-          ? {
-              state: 'pending' as const,
-              interaction: interactions.project(connection.snapshot.sessionId, pending),
-              turnId: pending.turnId,
-              ...(pending.taskOwner
-                ? {
-                    subagent: {
-                      agentId: pending.taskOwner.id,
-                      role: pending.taskOwner.role ?? 'subagent',
-                      ...(pending.taskOwner.name ? { name: pending.taskOwner.name } : {}),
-                    },
-                  }
-                : {}),
-            }
+          ? pendingInteractionEntry(interactions, connection.snapshot.sessionId, { interaction: pending })
           : budget
-          ? {
-              state: 'pending' as const,
-              interaction: interactions.projectBudget(budget),
-              turnId: budget.turnId,
-            }
+          ? pendingInteractionEntry(interactions, connection.snapshot.sessionId, { budget })
           : null;
         // The snapshot is the current accepted projection through this seq, not a replay event.
         // Consumers must open the v2 SSE with after=seq and never re-apply this snapshot.

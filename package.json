@@ -55,6 +55,7 @@
     "test:integration": "cross-env NODE_ENV=test TERM2_TEST_CLI=dist/src/app/cli.js vitest run --reporter=minimal --config vitest.integration.config.ts",
     "test:codex-network": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts scripts/fake-codex-server.e2e.test.ts",
     "test:provider-black-box": "cross-env NODE_ENV=test node scripts/run-provider-black-box.mjs",
+    "test:web-browser": "playwright test --config tests/web-client/browser/playwright.config.ts --trace off",
     "provider:record": "tsx scripts/provider-record.ts",
     "release:smoke": "tsx scripts/release-smoke.ts",
     "provider:fixture:prepare": "tsx scripts/provider-fixture-prepare.ts",
@@ -114,6 +115,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@modelcontextprotocol/server": "2.0.0",
+    "@playwright/test": "1.63.0",
     "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.2.3.tgz",
     "@types/better-sqlite3": "^9.6.0",
     "@types/env-paths": "^1.0.2",

@@ -5,7 +5,7 @@ import { Bot, ChevronRight, Terminal, X } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { TaskControlAction, Term2SessionView } from '../../lib/term2/types';
+import type { TaskControlAction, Term2SessionView, Term2TurnView } from '../../lib/term2/types';
 import { describeCommand } from './Term2CommandCard';
 import { Term2TurnTimeline } from './Term2TurnTimeline';
 
@@ -45,7 +45,7 @@ export function useRunningTasks(view: Term2SessionView) {
   const everShown = useRef(new Set<string>());
   const [tick, setTick] = useState(0);
   const now = Date.now();
-  const tasks = (view.nativeState?.tasks ?? []) as readonly Fields[];
+  const tasks = (view.session?.tasks ?? []) as unknown as readonly Fields[];
   // A foreground shell command that reaches the network waits on the chat's network prompt; its
   // task status stays running, so mark it here as waiting on you.
   const pending = view.pendingInteraction?.state === 'pending' ? view.pendingInteraction : undefined;
@@ -140,8 +140,8 @@ function elapsed(ms: number): string {
  * A subagent's current step from its own events, the way the TUI's nested reducer finds it:
  * the tool it is running, else whether the model is writing or still thinking.
  */
-function branchActivity(branch: Term2SessionView | undefined): string | undefined {
-  const turn = branch?.turns.at(-1);
+function branchActivity(turns: readonly Term2TurnView[] | undefined): string | undefined {
+  const turn = turns?.at(-1);
   if (!turn || turn.status !== 'streaming') return undefined;
   const running = [...turn.commands].reverse().find((command) => command.status === 'running');
   if (running) {
@@ -153,7 +153,7 @@ function branchActivity(branch: Term2SessionView | undefined): string | undefine
 }
 
 /** What the task is doing right now, in plain words (the TUI task manager's activity, reworded). */
-function activity(task: Fields, now: number, branch?: Term2SessionView): string {
+function activity(task: Fields, now: number, branch?: readonly Term2TurnView[]): string {
   const status = String(task.status ?? '');
   if (status === 'cancelling') return 'Stopping…';
   if (status === 'awaiting_interaction')
@@ -216,7 +216,6 @@ export function Term2RunningTasksPanel({
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
   const [openActivity, setOpenActivity] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const branches = Object.values(view.branches ?? {});
   const runningCount = shown.filter((entry) => entry.live).length;
 
   useEffect(() => {
@@ -276,8 +275,8 @@ export function Term2RunningTasksPanel({
           const model = (task.model as { model?: string } | undefined)?.model;
           const text = shell ? (str(task.label) ?? str(task.input)) : (str(task.input) ?? str(task.label));
           const startedAt = num(task.startedAt);
-          const branch = branches.find((entry) => entry.identity.taskId === id);
-          const steps = branch?.view.turns.length ?? 0;
+          const branchTurns = view.session?.tasks.find((entry) => entry.id === id)?.branchTurns ?? [];
+          const steps = branchTurns.length;
           const status = String(task.status ?? '');
           return (
             <article
@@ -318,7 +317,7 @@ export function Term2RunningTasksPanel({
                 {live && !needsYou && status !== 'cancelling' && (
                   <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
                 )}
-                <span className="min-w-0 truncate">{activity(task, now, branch?.view)}</span>
+                <span className="min-w-0 truncate">{activity(task, now, branchTurns)}</span>
               </p>
               {needsYou && (
                 <button
@@ -385,7 +384,7 @@ export function Term2RunningTasksPanel({
                   </button>
                   {openActivity === id && (
                     <div className="mt-2 space-y-2 border-l-2 pl-2.5">
-                      {branch!.view.turns.map((turn) => (
+                      {branchTurns.map((turn) => (
                         <Term2TurnTimeline key={turn.turnId} turn={turn} displayMode="concise" />
                       ))}
                     </div>

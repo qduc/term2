@@ -9,6 +9,9 @@ const dist = path.join(root, 'dist');
 const output = path.join(dist, 'web-client', '.next');
 if (!existsSync(path.join(dist, 'cli.js'))) throw new Error('Run pnpm build before packing term2.');
 
+// The browser's copy of the shared fold comes from src/protocol/fold/, not from web-client/ itself.
+execFileSync(process.execPath, [path.join(root, 'scripts/build-web-fold.mjs')], { stdio: 'inherit' });
+
 // Build from source, never from a developer's dev server output. No local dotenv
 // files are staged, and public flags needed by the packaged app are fixed here.
 execFileSync(process.execPath, [path.join(source, 'node_modules/next/dist/bin/next'), 'build', '--webpack'], {

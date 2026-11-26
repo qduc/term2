@@ -76,36 +76,19 @@ export function Term2UsagePopover({
 }) {
   const [open, setOpen] = useState(false);
 
-  const allTurns = [...(view.retiredTurns ?? []), ...view.turns];
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cachedTokens = 0;
-  let lastTurnInput = 0;
-  for (const turn of allTurns) {
-    if (!turn.usage) continue;
-    const usage = turn.usage as {
-      inputTokens?: number;
-      outputTokens?: number;
-      totalTokens?: number;
-      cachedInputTokens?: number;
-    };
-    inputTokens += usage.inputTokens ?? 0;
-    outputTokens += usage.outputTokens ?? 0;
-    cachedTokens += usage.cachedInputTokens ?? 0;
-    if (usage.inputTokens) lastTurnInput = usage.inputTokens;
-  }
-  const snapUsage = view.hydration?.snapshot.usage as
-    | { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number }
-    | undefined;
-  const totalInput = Math.max(inputTokens, snapUsage?.inputTokens ?? 0);
-  const totalOutput = Math.max(outputTokens, snapUsage?.outputTokens ?? 0);
-  const totalCached = Math.max(cachedTokens, snapUsage?.cachedInputTokens ?? 0);
+  const allTurns = view.turns;
+  // The session's own totals and the latest request's input (context fill), not sums of per-reply counts.
+  const sessionUsage = view.session?.usage;
+  const lastTurnInput = view.session?.lastUsage?.inputTokens ?? 0;
+  const totalInput = sessionUsage?.inputTokens ?? 0;
+  const totalOutput = sessionUsage?.outputTokens ?? 0;
+  const totalCached = sessionUsage?.cachedInputTokens ?? 0;
   const totalTokens = totalInput + totalOutput;
 
   const modelMeta = config ? models.find((m) => m.provider === config.providerId && m.id === config.modelId) : undefined;
   const contextWindow = modelMeta?.contextWindow;
   const contextRatio = contextWindow && lastTurnInput > 0 ? Math.min(1, lastTurnInput / contextWindow) : null;
-  const receiptSummary = summarizeReceiptCosts(view.nativeState?.requestCosts);
+  const receiptSummary = summarizeReceiptCosts(view.session?.requestCosts);
   const hasCost = Boolean(receiptSummary && receiptSummary.pricedRequests > 0);
   const knownUsd = hasCost && receiptSummary ? receiptSummary.knownUsdMicros / 1_000_000 : null;
 

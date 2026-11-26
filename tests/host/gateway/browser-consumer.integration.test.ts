@@ -8,9 +8,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // runtime boundary so the root NodeNext project does not recompile that tree.
 const browserModule = (name: string) =>
   import(new URL(`../../../web-client/lib/term2/${name}.ts`, import.meta.url).href);
-const { consumeSseResponse } = await browserModule('sse');
-const { applyTerm2Event, emptyTerm2SessionView } = await browserModule('event-adapter');
-const { parseSessionHydration, viewFromHydration } = await browserModule('hydration');
 
 // A real HTTP boundary exercises browser API response validation and SSE decoding.
 // The upstream is a controlled public-wire fixture, not native-runtime acceptance.
@@ -177,67 +174,5 @@ describe('browser consumer over HTTP', () => {
       if (previous === undefined) delete process.env.NEXT_PUBLIC_API_BASE;
       else process.env.NEXT_PUBLIC_API_BASE = previous;
     }
-  });
-
-  it('checkpoints complete sparse batches once and never dispatches an EOF-truncated batch', async () => {
-    let view = emptyTerm2SessionView('session-1');
-    const delivered: number[] = [];
-    await consumeSseResponse(await fetch(`${baseUrl}/events`), {
-      expectedSessionId: 'session-1',
-      onFrame(frame: { kind: string; seq: number }) {
-        if (frame.kind === 'accepted') delivered.push(frame.seq);
-        view = applyTerm2Event(view, frame);
-      },
-    });
-    expect(delivered).toEqual([3, 3]);
-    expect(view.lastAppliedSequence).toBe(3);
-    expect(view.turns).toEqual([]); // Live evidence is separate from accepted history.
-    expect(view.liveChanges).toHaveLength(1);
-  });
-
-  it('hydrates a result-only timeline slot without fabricating a named tool or turn', async () => {
-    const snapshot = {
-      protocolVersion: 1,
-      sessionId: 'session-1',
-      backingSessionId: 'session-1',
-      seq: 5,
-      status: 'idle',
-      activeTurnId: null,
-      messages: [],
-      tools: [],
-      unmatchedToolResults: [{ executionId: 'result-only', output: 'retained output', isError: false }],
-      timeline: [{ kind: 'tool', id: 'result-only' }],
-      queue: [],
-      tasks: [],
-      notices: [],
-      pendingInteractions: [],
-      admissions: [],
-      model: { provider: 'fixture', model: 'fixture-model' },
-      usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
-      configuration: { model: { provider: 'fixture', model: 'fixture-model' } },
-      retryEligibility: { turn: false, tool: false },
-      queueState: 'idle',
-      cost: null,
-      goal: null,
-      verification: null,
-      lastError: null,
-      terminal: null,
-      reasoning: '',
-    };
-    // Round-trip the same public snapshot through an HTTP response before parsing.
-    hydrationResponse = {
-      schemaVersion: 2,
-      kind: 'snapshot',
-      sessionId: 'session-1',
-      seq: 5,
-      earliestReplayableSequence: 1,
-      interaction: null,
-      snapshot,
-    };
-    const wire = await fetch(`${baseUrl}/hydration`);
-    const view = viewFromHydration(parseSessionHydration(await wire.json(), 'session-1'));
-    expect(view.lastAppliedSequence).toBe(5);
-    expect(view.turns).toEqual([]);
-    expect(view.hydration?.snapshot.unmatchedToolResults).toEqual(snapshot.unmatchedToolResults);
   });
 });

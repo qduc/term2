@@ -125,6 +125,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/check-ci-budget.mjs
+      # A reminder, not a lock: changing the shared fold's interface report, deleting a transcript check, or changing
+      # the architecture rules asks for the owner's architecture-change label (web-transcript spec, section 8).
+      - name: Ask the owner about architecture changes
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-architecture-change.mjs
       - uses: ./.github/actions/setup-tests
       - name: Typecheck production and check layer boundaries
         run: |
@@ -137,18 +146,21 @@ jobs:
           node scripts/check-baselines.mjs
       - name: Run static repository guards
         run: pnpm exec node scripts/run-ci-lane.mjs quality
-      # Bounded generated properties over approvals, history, opaque lanes and the native log
+      # Bounded generated properties over approvals, history, opaque lanes, the native log and the wire
       # (docs/experiments/generated-verification/README.md). They import src/ through tsx and need
       # no build. The seed is fixed so a red run is a change in this pull request, not a new sample;
       # a failure prints the replay command.
       - name: Run generated verification
-        run: pnpm verify:generated --seed 424242
+        # The wire target folds frames with the browser's copy of the fold, which this builds (no full build).
+        run: |
+          node scripts/build-web-fold.mjs
+          pnpm verify:generated --seed 424242
 
   # Preserve the existing check name without serializing quality behind tests.
   # Explicit status handling also covers push/workflow_call's skipped changes job.
   # An unexpected skipped, failed or cancelled lane must never make this pass.
   port:
-    needs: [changes, quality, integration, bench, e2e, provider-black-box]
+    needs: [changes, quality, integration, bench, e2e, provider-black-box, web-browser]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -164,7 +176,8 @@ jobs:
             integration: inert ? 'skipped' : 'success',
             bench: inert ? 'skipped' : 'success',
             e2e: inert ? 'skipped' : 'success',
-            'provider-black-box': inert ? 'skipped' : 'success' };
+            'provider-black-box': inert ? 'skipped' : 'success',
+            'web-browser': inert ? 'skipped' : 'success' };
           for (const [lane, result] of Object.entries(expected)) {
             if (needs[lane].result !== result) {
               console.error(`${lane}: expected ${result}, got ${needs[lane].result}`);
@@ -202,6 +215,13 @@ jobs:
           ripgrep: 'true'
           web-client: 'true'
           lane: integration-${{ matrix.shard }}
+      # Nothing else compiles web-client on its own: root tsc and eslint exclude it, and the bench
+      # lane only compiles it as a side effect of packing. This lane already installs its workspace.
+      - name: Typecheck web client
+        if: matrix.shard == 1
+        run: |
+          node scripts/build-web-fold.mjs
+          pnpm --dir web-client exec tsc --noEmit
       - name: Run integration shard ${{ matrix.shard }}/2
         # This job installs bubblewrap and socat, so the ACP shell cases must run their command in the
         # sandbox instead of accepting a sandbox refusal (see tests/clients/acp/v1.integration.test.ts).
@@ -305,3 +325,58 @@ jobs:
           lane: provider-black-box-${{ matrix.shard }}
       - name: Run provider black-box shard ${{ matrix.shard }}/2
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box --shard=${{ matrix.shard }}/2
+
+  # The only lane that opens a browser: Chromium drives the built `term2-web` (gateway plus web UI)
+  # against a loopback model double and requires the same transcript before and after a page reload
+  # (tests/web-client/browser). It builds what `pnpm pack` ships, so a stale `.next` cannot pass.
+  web-browser:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: ./.github/actions/setup-tests
+        with:
+          web-client: 'true'
+      - name: Build the CLI
+        run: node scripts/build.mjs
+      # Same key as the bench lane's packed build: both run `next build` on the same sources.
+      - name: Restore Next.js build cache for web UI
+        uses: actions/cache@v6
+        with:
+          path: web-client/.next/cache
+          key: test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'web-client/**') }}
+          restore-keys: |
+            test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-
+      - name: Build the web UI
+        run: node scripts/build-web.mjs
+      # The browser build is tied to the Playwright version, not to the whole lockfile.
+      - name: Read the locked Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Restore Chromium for Playwright
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: test-playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      # A restored browser skips the download. No --with-deps: the ubuntu-22.04 image ships Google Chrome and the
+      # libraries it needs, and the apt step that flag adds (mostly fonts) took 116 s on a 190 kB/s mirror in the
+      # lane's first run, more than the lane's whole budget.
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium
+      - name: Run browser flows
+        env:
+          TERM2_WEB_FLOW_OUTPUT: ${{ runner.temp }}/term2-web-flows
+        run: /usr/bin/time -v pnpm test:web-browser
+      - name: Upload failure screenshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-browser-failure-evidence
+          path: ${{ runner.temp }}/term2-web-flows
+          if-no-files-found: ignore
+          retention-days: 7

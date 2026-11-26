@@ -1,5 +1,4 @@
-import type { NativeState } from './native-state';
-import type { SessionHydration, NativeBranchHydration } from './hydration';
+import type { Term2SessionFacts } from './present';
 export const TERM2_CONTRACT_VERSION = 2 as const;
 /**
  * Digest of the immutable v1 (P105) identity choices. The M4 event additions
@@ -163,6 +162,8 @@ export interface Term2SubagentIdentity {
 
 export type InteractionProjection =
   | null
+  /** A request is pending but no answerable DTO reached this client; shown as pending, never as nothing. */
+  | { state: 'unavailable'; requestId: string; turnId: string }
   | {
       state: 'pending';
       interaction: PendingInteraction;
@@ -440,7 +441,7 @@ export interface Term2SubagentCard {
   commands: Term2Command[];
 }
 export type Term2TurnItem =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; content?: readonly unknown[] }
   | { kind: 'reasoning'; id: string; text: string; streaming?: boolean; modelStep?: number }
   | { kind: 'text'; id: string; text: string; draft?: boolean; modelStep?: number }
   | { kind: 'tool'; executionId: string };
@@ -453,6 +454,8 @@ export interface Term2TurnView {
    * `turnId`; live turns use the message id as their `turnId`, so this is unset there.
    */
   userMessageId?: string;
+  /** The opening message's content parts (text and images), as accepted. */
+  userContent?: readonly unknown[];
   text: string;
   reasoning: string;
   status: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted' | 'rejected' | 'unknown';
@@ -462,34 +465,25 @@ export interface Term2TurnView {
   subagents?: Term2SubagentCard[];
   /** Transient turn-level note (retry/compaction); cleared on terminal events. */
   transientStatus?: string;
-  /** Presentation overlay only, never installed as an accepted terminal. */
-  transientFailure?: boolean;
+  /** The session stopped on a runtime fault during this turn (no accepted terminal); `error` says which. */
+  interruptedByFault?: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   error?: string;
   errorMessage?: string;
 }
+export type { Term2SessionFacts } from './present';
+
 export interface Term2SessionView {
   sessionId: string;
-  projection: SessionProjection | null;
-  hydration?: SessionHydration;
-  nativeBranch?: NativeBranchHydration;
-  rootEvidence?: Readonly<Record<string, unknown>>;
-  nativeState?: NativeState;
+  /** Filled by present.ts from the snapshot; absent before the first one. */
+  session?: Term2SessionFacts;
   turns: Term2TurnView[];
   pendingInteraction: InteractionProjection;
   status: Term2ConnectionStatus;
   lastAppliedSequence: number;
   error: string | null;
   reloadRequired: boolean;
-  /** Actual branch ownership; branch streams never mutate the root transcript. */
   replayMode?: 'atomic' | 'unavailable';
-  retiredTurns?: Term2TurnView[];
-  branches?: Record<string, { identity: AgentBranchV2; view: Term2SessionView }>;
-  /** Native evidence retained verbatim, separate from model usage totals. */
-  nativeChanges?: readonly Term2AcceptedChange[];
-  /** Connection-local UI observations only; never persisted or replay-checkpointed. */
-  liveChanges?: readonly Term2LiveChange[];
-
 }
 
 export const INTERACTION_OUTCOMES = new Set<InteractionOutcome>(['approved', 'rejected', 'cancelled', 'continued']);

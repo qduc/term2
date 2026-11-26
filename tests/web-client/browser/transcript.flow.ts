@@ -35,10 +35,20 @@ const turns = (page: Page): Locator => conversation(page).locator('article:not(a
 
 /**
  * What the reader is shown, turn by turn: the accessibility tree of each turn (text, tool rows, failure
- * notes and the per-message actions), in page order.
+ * notes and the per-message actions), in page order. All turns come from one snapshot of the
+ * conversation, so the result is the page at one moment and never a mix of two renders.
  */
 async function transcript(page: Page): Promise<string[]> {
-  return Promise.all((await turns(page).all()).map((turn) => turn.ariaSnapshot()));
+  // Before a chat is open (and while a reloaded page is still loading) there is no conversation region.
+  if ((await conversation(page).count()) === 0) return [];
+  const lines = (await conversation(page).ariaSnapshot()).split('\n');
+  // The region's direct children sit at two spaces: the status line, one `article` per turn, the composer.
+  const children: string[][] = [];
+  for (const line of lines.slice(1)) {
+    if (line.startsWith('  - ')) children.push([]);
+    children.at(-1)?.push(line.slice(2));
+  }
+  return children.filter((child) => child[0]!.startsWith('- article')).map((child) => child.join('\n'));
 }
 
 /** Opens the page and picks the launch's folder, which leaves an unsent draft chat. */
@@ -47,7 +57,7 @@ async function openDraftChat(page: Page, app: WebApp): Promise<void> {
   await page.getByRole('button', { name: 'Browse' }).click();
   await page
     .getByRole('dialog', { name: 'Choose a folder' })
-    .getByRole('button', { name: 'Select flow-workspace' })
+    .getByRole('button', { name: `Select ${app.workspaceName}` })
     .click();
   await expect(page.getByRole('heading', { level: 1, name: 'New chat' })).toBeVisible();
 }

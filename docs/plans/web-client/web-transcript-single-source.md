@@ -7,10 +7,26 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
 
 - **Read next:** [the build spec](web-transcript-single-source-spec.md). It has the contracts, the acceptance
   example, the checks and what not to do.
-- **On the branch:** the dead v1 view path (`viewFromProjection`, `applyProjectionEvent`) and its unrun example
-  test are deleted; the `integration` CI lane typechecks `web-client` (shown failing on a seeded type error).
-- **Next:** finish phase 0 (browser flows), then phase 1. Phases are in order; 3 is independent of 1 and 2 and
-  can be scheduled separately.
+- **On the branch:**
+  - The dead v1 view path (`viewFromProjection`, `applyProjectionEvent`) and its unrun example test are deleted.
+  - The `integration` CI lane typechecks `web-client` (shown failing on a seeded type error).
+  - Three browser flows in `tests/web-client/browser/` (first send, tool call, failed turn), each comparing the
+    transcript's accessibility tree before and after a reload. Run with
+    `pnpm build && node scripts/build-web.mjs && pnpm test:web-browser`. They pass locally (about 9 s) and went red
+    on a seeded reload-only regression in `Term2TurnTimeline.tsx`.
+  - A `web-browser` CI job, required by `port`. **It has never run on GitHub.** Its counted steps may exceed the
+    120 s lane budget in `scripts/ci-budget.json`; if they do, shorten the lane first, and raise the budget only
+    through the guard's own route.
+- **Found by the flows, not yet fixed (phase 2 fixes it by construction):** token usage differs between live and
+  reload. To reproduce, make the model double in `tests/web-client/browser/launch.ts` send a final chunk with
+  `usage: { total_tokens: 1234 }` before `[DONE]`. Live, each reply shows "1,234 tokens" in its action row; after
+  a reload that text is gone. After two turns (three provider requests) the composer chip shows 2.5k live and 3.7k
+  after reload. The three flows stay green only because the double sends no usage. Keep them that way in the
+  required lane; add the usage flow when phase 2 makes it pass.
+- **Next:** the approval, reload-mid-turn and steer flows; settle the six unrun test files; then phase 1. Phases
+  are in order; 3 is independent of 1 and 2 and can be scheduled separately.
+- **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
+  lockfile lines; use the pinned version for dependency changes.
 
 ## Decisions
 

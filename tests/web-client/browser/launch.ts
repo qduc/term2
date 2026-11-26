@@ -129,8 +129,8 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
 export type WebApp = {
   /** `http://127.0.0.1:<port>` of the web UI. */
   readonly origin: string;
-  /** The folder the flows open as their workspace; it is under the launch's isolated HOME. */
-  readonly workspace: string;
+  /** Name of the folder a flow picks as its workspace; it sits directly under the launch's isolated HOME. */
+  readonly workspaceName: string;
   readonly model: ModelDouble;
   /** Everything the gateway and the web server printed, for a failure message. */
   readonly output: () => string;
@@ -177,20 +177,23 @@ export async function launchWebApp(options: {
   if (!fs.existsSync(webLauncher) || !fs.existsSync(path.join(repoRoot, 'dist', 'web-client', '.next', 'BUILD_ID'))) {
     throw new Error('The built web UI is missing. Run `pnpm build && node scripts/build-web.mjs` first.');
   }
+  const model = await startModelDouble(options.scripts);
   const world: World = createWorld('t2web');
-  // The gateway admits folders under HOME, so the workspace lives there and not in `world.workspace`.
-  const workspace = path.join(world.home, 'flow-workspace');
+  // The folder picker starts at HOME and the gateway admits folders under it, so the workspace is a
+  // folder there. `world.workspace` is only the directory the launcher starts in.
+  const workspaceName = 'flow-workspace';
+  const workspace = path.join(world.home, workspaceName);
   fs.mkdirSync(workspace);
   for (const [name, content] of Object.entries(options.files ?? {})) {
     fs.writeFileSync(path.join(workspace, name), content);
   }
-  const model = await startModelDouble(options.scripts);
+  // Product defaults, apart from the provider and `retryAttempts: 0` that the helper writes.
   writeWorldSettings(world, model.baseUrl);
 
   // Its own process group, so teardown can account for every descendant (gateway, Next server).
   const child = spawn(process.execPath, [webLauncher], {
     cwd: world.workspace,
-    env: { ...world.env, PORT: '0', NEXT_TELEMETRY_DISABLED: '1' },
+    env: { ...world.env, PORT: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
@@ -223,13 +226,16 @@ export async function launchWebApp(options: {
     } catch {
       // No process is left in the group, which is the expected case.
     }
-    await waitFor(
-      () => !groupAlive(group),
-      STOP_TIMEOUT_MS,
-      () => `term2-web process group ${group} is still alive after teardown`,
-    );
-    await model.close();
-    removeWorld(world);
+    try {
+      await waitFor(
+        () => !groupAlive(group),
+        STOP_TIMEOUT_MS,
+        () => `term2-web process group ${group} is still alive after teardown`,
+      );
+    } finally {
+      await model.close();
+      removeWorld(world);
+    }
   };
 
   try {
@@ -246,7 +252,7 @@ export async function launchWebApp(options: {
     // The page's first request needs the signed gateway route, not only the Next listener.
     const probe = await fetch(`${origin}/api/agent/workspaces`, { signal: AbortSignal.timeout(READY_TIMEOUT_MS) });
     if (!probe.ok) throw new Error(`Gateway route answered ${probe.status}: ${await probe.text()}\n${output}`);
-    return { origin: origin!, workspace, model, output: () => output, close };
+    return { origin: origin!, workspaceName, model, output: () => output, close };
   } catch (error) {
     await close();
     throw error;

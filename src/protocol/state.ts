@@ -2,7 +2,13 @@
 import type { DirectSessionState, DirectToolDisplay } from '../session/facade-types.js';
 import type { DirectDisplayTool, DirectPublicState } from '../session/state.js';
 import { isSubscriptionProvider } from '../model/cost/subscription-providers.js';
-import { DIRECT_PROTOCOL_VERSION, type WireConfiguration, type WireModel, type WireSnapshot } from './wire.js';
+import {
+  DIRECT_PROTOCOL_VERSION,
+  type WireConfiguration,
+  type WireEvent,
+  type WireModel,
+  type WireSnapshot,
+} from './wire.js';
 import type { DirectContextState } from '../session/context.js';
 import { publicContext } from './context.js';
 import type { DirectTaskState } from '../session/background-types.js';
@@ -217,5 +223,17 @@ export function subscriptionQuotaView(snapshot: WireSnapshot): SubscriptionQuota
     provider: snapshot.model.provider,
     subscription: isSubscriptionProvider(snapshot.model.provider),
     windows: { fiveHour: window(snapshot.codexFiveHourQuota), weekly: window(snapshot.codexQuota) },
+  };
+}
+
+/** A snapshot as a live event: what a client folds to install a cut. It is not an accepted fact. */
+export function snapshotEvent(snapshot: WireSnapshot): WireEvent {
+  return {
+    sessionId: snapshot.sessionId,
+    seq: null,
+    occurredAt: null,
+    turnId: null,
+    type: 'snapshot',
+    payload: { snapshot },
   };
 }

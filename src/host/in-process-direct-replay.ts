@@ -5,12 +5,14 @@
 import type { DirectSession, DirectSessionUpdate } from '../session/facade-types.js';
 import { DirectProjection } from '../protocol/projection.js';
 import { DirectProtocolError } from '../protocol/errors.js';
-import { DirectEventQueue } from './in-process-direct-queue.js';
+import { DirectEventQueue, directBatch } from './in-process-direct-queue.js';
 
 export function directReplayView(session: DirectSession, fromSeq: number) {
   const pending: DirectSessionUpdate[] = [];
   let projection: DirectProjection | null = null;
   let after = 0;
+  // A replay connection has no snapshot cut to compare against; ordinals only keep batches in order.
+  let ordinal = 0;
   let unsubscribe = (): void => undefined;
   const events = new DirectEventQueue(() => unsubscribe());
   const update = (next: DirectSessionUpdate): void => {
@@ -22,7 +24,7 @@ export function directReplayView(session: DirectSession, fromSeq: number) {
     try {
       if (next.position <= after) throw new Error('Session replay/live positions overlap');
       after = next.position;
-      for (const event of projection.update(next)) events.push(event);
+      events.push(directBatch(next, projection.update(next), ++ordinal));
     } catch {
       events.fail(new DirectProtocolError('internal_error', 'Session replay projection failed.'));
     }
@@ -41,14 +43,19 @@ export function directReplayView(session: DirectSession, fromSeq: number) {
     for (const entry of capture.replay) {
       if (entry.seq <= previousSeq || entry.seq > capture.seq) throw new Error('Invalid accepted replay prefix');
       previousSeq = entry.seq;
-      for (const event of projection.update(entry)) {
-        if (entry.seq > fromSeq) events.push(event);
-      }
+      const batch = directBatch(entry, projection.update(entry), ++ordinal);
+      if (entry.seq > fromSeq) events.push(batch);
     }
     // The accepted log cannot contain reopen interruption or a poisoned-writer fault.
     // Synchronize AFTER the tail, never before it, so retained clients reach the real
     // atomic cut without applying historical deltas on top of a current snapshot.
-    for (const event of projection.synchronize(capture.state)) events.push(event);
+    events.push(
+      directBatch(
+        { type: 'state', position: after, state: capture.state },
+        projection.synchronize(capture.state),
+        ++ordinal,
+      ),
+    );
     for (const next of pending) update(next);
     return { snapshot: null, replay: { fromSeq, toSeq: capture.seq }, events } as const;
   } catch (error) {

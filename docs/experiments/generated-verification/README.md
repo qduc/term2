@@ -45,6 +45,15 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
 
 ## Current scope
 
+- `wire.frames-round-trip` and `wire.snapshot-is-fold` (`--target wire`): generated
+  sessions (turns, deltas, reasoning, tools, usage, hidden facts, subagent branches)
+  through the real `DirectProjection`. The first runs the gateway's own
+  `direct-wire-v2` stream, parses its SSE text and folds every frame with the
+  browser's bundle of the shared fold (`node scripts/build-web-fold.mjs` first); the
+  browser state must equal the server snapshot after every frame. The second
+  synchronizes the projection with Session state built from the same facts at every
+  cut; accepted state must not move. See
+  `docs/plans/web-client/web-transcript-single-source-spec.md`, section 4.
 - `approval.decision-table` and `approval.arbiter-settle` (`--target approvals`)
   include `unattended`: nothing but a question waits for a person, hard gates,
   unreviewable tools and (unless `reviewEscapes`) sandbox escapes are refused

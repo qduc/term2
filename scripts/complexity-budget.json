@@ -85,10 +85,6 @@
       "lines": 502,
       "reason": "Moved at 500 lines; +2 lines forward deps.onReasoningStarted into ModelEventProjection for foreground reasoning_started notifications without splitting the single provider stream assembly."
     },
-    "src/protocol/projection.ts": {
-      "lines": 502,
-      "reason": "Moved at 500 lines; +2 lines project transient reasoning_started into a WireEvent alongside the other transient session updates."
-    },
     "src/app/lib/agent-factory.ts": {
       "lines": 557,
       "reason": "Agent graph assembly and tool invocation wrappers retain their existing shared execution/approval dependencies. Provider capability resolution and model request settings now live in app/lib/agent-model-settings.ts; this lowered ceiling records the remaining assembly body without authorizing growth. Five lines forward the read-session shell posture (readSession, shellWithheld) from the surface to the agent definition, like the existing readOnly field."

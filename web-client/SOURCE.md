@@ -145,7 +145,9 @@ Browser paths under `app/api/agent/` and `app/api/term2/` are Node.js BFF handle
 `lib/server/proxy.ts#rpc` maps them to the private gateway API; a browser GET may
 become a purpose-bound POST control RPC (with per-route timeout override where
 appropriate, such as OAuth login). Hydration, SSE and keyed configuration
-explicitly opt into `format=agent-wire-v2`. The BFF validates local input,
+explicitly opt into `format=agent-wire-v2`; the events route also passes
+`format=direct-wire-v2` through unchanged (same cursor validation, upstream format
+must match), which the browser does not request yet. The BFF validates local input,
 resolves session/workspace binding, uses the configured local owner identity and
 purpose-bound gateway assertions, and forwards native bodies/receipt evidence
 and negotiated headers. It must not synthesize aggregate state, re-key commands,

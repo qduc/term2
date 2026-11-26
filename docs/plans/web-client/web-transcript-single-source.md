@@ -42,7 +42,28 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
     `validateSelectedCandidate`, `validateSettings`) and `skipAuth` / `skipRetry` are exercised by every flow's
     folder pick and page load; their rejection of a malformed gateway reply is not checked anywhere now. Hiding
     `details` on non-conflict gateway errors is not checked either: no route can make the gateway return one.
-- **Next:** phase 1. Phases
+- **Phase 1, done on the branch** (each item shown red on a seeded regression before it was trusted):
+  - The fold lives in `src/protocol/fold/` (`wire-fold.ts`, `wire-types.ts`, `wire-events.ts`, `branch-fold.ts`, ...;
+    the spec's `reducer.ts`/`wire.ts` were renamed because `check-rules` forbids duplicate basenames, and the old
+    paths stay as shims). The `fold-boundary` rule in `check-rules.mjs` fails on any import leaving it (four seeds in
+    `prove-checks.sh`). Host-owned detail types are augmentation slots narrowed in `src/protocol/wire.ts`.
+  - `scripts/build-web-fold.mjs` bundles `src/protocol/fold-browser.ts` (31 KB) with its `.d.ts` into
+    `web-client/lib/term2/generated/`; `build-web.mjs`, the CI web typecheck and the CI generated-verification step
+    run it. Nothing in the browser imports it yet.
+  - Branch state is in the fold (`branch-fold.ts`): `DirectProjection` keeps its nested projections only to
+    translate branch facts, and its snapshot is the fold's state. Before the old `branchSnapshots` was deleted,
+    `wire.frames-round-trip` compared it with the new fold at every frame: 8,000 cases, equal. Parity goldens 9/9,
+    `subagent-batch` included.
+  - `direct-wire-v2`: `DirectEventQueue` carries one batch per publication (with an ordinal; `cut()` reads the
+    snapshot and the last ordinal it contains together), `server-sse.ts` frames it, `server.ts` and the BFF events
+    route accept it. The property caught a real bug while it was written: the opening snapshot frame was dropped as
+    "already contained" by its own cut.
+  - `wire.frames-round-trip` and `wire.snapshot-is-fold` in `scripts/generated-verification/wire.mjs`, green at
+    seed 424242 (about 2 s and 4 s per 1,000 cases); `tests/host/gateway/direct-wire-v2.integration.test.ts` runs
+    the acceptance example over real HTTP, including a publication between connect and the stream's cut.
+- **Next:** spec 2.3 (b) `reasoningBlocks`, (c) `liveReasoning`, (d) `turnUsage`, each with its carry-over in
+  `snapshotDirectState`; then an independent verifier for phase 1. The acceptance example's steer and the
+  second example (background subagent's panel steps) are not in the integration test yet. Phases
   are in order; 3 is independent of 1 and 2 and can be scheduled separately.
 - **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
   lockfile lines; use the pinned version for dependency changes.

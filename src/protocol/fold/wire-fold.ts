@@ -13,6 +13,7 @@ import {
 } from './reducer-notices.js';
 import type { WireEvent, WireSnapshot } from './wire-types.js';
 import { commandReceipts, delta, message, timeline, withNotice } from './transcript.js';
+import { reduceBranch, withRootShares } from './branch-fold.js';
 import { reduceApprovalReview, withoutReview } from './review.js';
 
 /** What a host supplies to the fold. Every field is optional; the fold has a plain default for each. */
@@ -24,7 +25,7 @@ export type WireFoldOptions = {
 /** Reject cross-session input; seq only advances on actual durable event references. */
 export function reduceWireEvent(state: WireSnapshot, event: WireEvent, options: WireFoldOptions = {}): WireSnapshot {
   if (event.sessionId !== state.sessionId) throw new Error('Wire event belongs to a different session');
-  const reduced = reducePayload(state, event, options);
+  const reduced = withRootShares(state, reducePayload(state, event, options));
   const next = reduced.retry && ENDS_RETRY.has(event.type) ? { ...reduced, retry: undefined } : reduced;
   return event.seq === null ? next : { ...next, seq: Math.max(next.seq ?? 0, event.seq) };
 }
@@ -431,6 +432,10 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
         `Compacted ${event.payload.replaced} items (summary ${event.payload.summaryId}).`,
       );
     case 'subagent':
-      return nestedPresentation(state, event, options.formatToolLabel ?? ((toolName) => toolName));
+      return reduceBranch(
+        nestedPresentation(state, event, options.formatToolLabel ?? ((toolName) => toolName)),
+        event,
+        (branch, child) => reduceWireEvent(branch, child, options),
+      );
   }
 }

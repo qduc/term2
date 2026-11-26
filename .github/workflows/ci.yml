@@ -202,6 +202,11 @@ jobs:
           ripgrep: 'true'
           web-client: 'true'
           lane: integration-${{ matrix.shard }}
+      # Nothing else compiles web-client on its own: root tsc and eslint exclude it, and the bench
+      # lane only compiles it as a side effect of packing. This lane already installs its workspace.
+      - name: Typecheck web client
+        if: matrix.shard == 1
+        run: pnpm --dir web-client exec tsc --noEmit
       - name: Run integration shard ${{ matrix.shard }}/2
         # This job installs bubblewrap and socat, so the ACP shell cases must run their command in the
         # sandbox instead of accepting a sandbox refusal (see tests/clients/acp/v1.integration.test.ts).

@@ -470,7 +470,6 @@ export interface Term2TurnView {
 }
 export interface Term2SessionView {
   sessionId: string;
-  projection: SessionProjection | null;
   hydration?: SessionHydration;
   nativeBranch?: NativeBranchHydration;
   rootEvidence?: Readonly<Record<string, unknown>>;

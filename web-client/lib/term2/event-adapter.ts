@@ -1,7 +1,6 @@
 import { applyNativeState } from './native-state';
 import {
   parsePendingInteraction,
-  parseProjection,
   Term2ProtocolError,
   type AgentEventEnvelope,
   type AgentChangeV2,
@@ -9,7 +8,6 @@ import {
   type Term2LiveChange,
   type InteractionProjection,
   type PendingInteraction,
-  type SessionProjection,
   type Term2Command,
   type Term2SessionView,
   type Term2SubagentCard,
@@ -160,7 +158,6 @@ function completedTurn(view: Term2SessionView, turnId: string, payloadText: unkn
 export function emptyTerm2SessionView(sessionId: string): Term2SessionView {
   return {
     sessionId,
-    projection: null,
     turns: [],
     pendingInteraction: null,
     status: 'idle',
@@ -168,118 +165,6 @@ export function emptyTerm2SessionView(sessionId: string): Term2SessionView {
     error: null,
     reloadRequired: false,
   };
-}
-
-function transcriptCommands(value: unknown): Term2Command[] {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 64).flatMap((entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
-    const item = entry as Record<string, unknown>;
-    const status = item.status;
-    if (
-      typeof item.callId !== 'string' ||
-      item.callId.length === 0 ||
-      typeof item.toolName !== 'string' ||
-      item.toolName.length === 0 ||
-      !['completed', 'failed', 'aborted', 'unknown'].includes(String(status))
-    )
-      return [];
-    return [
-      {
-        callId: text(item.callId, 256),
-        toolName: text(item.toolName, 256),
-        status: status as Term2Command['status'],
-        ...(typeof item.output === 'string' && item.output.length > 0 ? { output: text(item.output) } : {}),
-        ...(typeof item.error === 'string' && item.error.length > 0 ? { error: text(item.error, 10_000) } : {}),
-      },
-    ];
-  });
-}
-
-function transcriptTurns(projection: SessionProjection): Term2TurnView[] {
-  const root =
-    projection.transcript && typeof projection.transcript === 'object'
-      ? (projection.transcript as Record<string, unknown>)
-      : {};
-  const entries = Array.isArray(root.messages) ? root.messages : Array.isArray(root.items) ? root.items : [];
-  const parsed = entries.flatMap((entry) => {
-    if (!entry || typeof entry !== 'object') return [];
-    const item = entry as Record<string, unknown>;
-    const turnId = typeof item.turnId === 'string' ? item.turnId : typeof item.id === 'string' ? item.id : null;
-    if (!turnId) return [];
-    return [
-      {
-        turnId,
-        role: item.role === 'user' ? ('user' as const) : ('assistant' as const),
-        text: text(item.text ?? item.content),
-        commands: transcriptCommands(item.commands),
-        aborted: item.role === 'bot' && item.status === 'aborted',
-      },
-    ];
-  });
-  const turns: Term2TurnView[] = [];
-  for (let index = 0; index < parsed.length; index += 1) {
-    const current = parsed[index];
-    const next = parsed[index + 1];
-    if (current.role === 'user' && next?.role === 'assistant') {
-      const syntheticInterruption = next.turnId.startsWith('system-interrupted-');
-      const stillRunning = projection.status === 'running' || projection.status === 'awaiting_interaction';
-      turns.push({
-        turnId: current.turnId,
-        role: 'assistant',
-        userText: current.text,
-        text: syntheticInterruption && stillRunning ? '' : next.text,
-        reasoning: '',
-        status: next.aborted ? 'aborted' : stillRunning && index + 1 === parsed.length - 1 ? 'streaming' : 'completed',
-        commands: next.commands,
-      });
-      index += 1;
-      continue;
-    }
-    if (current.role === 'user') {
-      turns.push({
-        turnId: current.turnId,
-        role: 'assistant',
-        userText: current.text,
-        text: '',
-        reasoning: '',
-        status:
-          (projection.status === 'running' || projection.status === 'awaiting_interaction') && index === parsed.length - 1
-            ? 'streaming'
-            : 'completed',
-        commands: current.commands,
-      });
-      continue;
-    }
-    turns.push({
-      turnId: current.turnId,
-      role: current.role,
-      text: current.text,
-      reasoning: '',
-      status: 'completed',
-      commands: current.commands,
-    });
-  }
-  return turns;
-}
-
-export function viewFromProjection(projection: SessionProjection): Term2SessionView {
-  const view = emptyTerm2SessionView(projection.id);
-  view.projection = projection;
-  view.turns = transcriptTurns(projection);
-  view.pendingInteraction = projection.interaction;
-  view.lastAppliedSequence = projection.projectionSequence;
-  view.status =
-    projection.status === 'running'
-      ? 'running'
-      : projection.status === 'awaiting_interaction'
-      ? 'awaiting_interaction'
-      : projection.status === 'interrupted'
-      ? 'interrupted'
-      : projection.status === 'closed'
-      ? 'closed'
-      : 'connected';
-  return view;
 }
 
 function replaceInteraction(view: Term2SessionView, interaction: InteractionProjection): void {
@@ -1136,10 +1021,4 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       throw new Term2ProtocolError('Unsupported term2 event');
   }
   return view;
-}
-
-export function applyProjectionEvent(view: Term2SessionView, projection: SessionProjection): Term2SessionView {
-  const next = viewFromProjection(parseProjection(projection));
-  if (next.sessionId !== view.sessionId) throw new Term2ProtocolError('Projection belongs to another session');
-  return next;
 }

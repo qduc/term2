@@ -67,8 +67,9 @@ It parsed configure acknowledgements as current configuration. Those assumptions
 cannot represent sparse accepted boundaries, several command messages in one
 boundary, native queue/branch state, root rotation or original keyed receipts.
 Production hydration/stream consumption no longer uses that projection path.
-Legacy helper exports and v1 example tests remain historical; their presence is
-not supported downgrade behavior. Roll back compatible server/consumer/artifact
+The v1 view helpers (`viewFromProjection`, `applyProjectionEvent`) and their
+example test were deleted; `parseProjection` remains only for the session-create
+response. Roll back compatible server/consumer/artifact
 versions together; source rollback alone does not establish log compatibility.
 
 ## v2: hydration and replay

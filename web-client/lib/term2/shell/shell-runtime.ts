@@ -8,7 +8,7 @@ import { createBrowserPrefs, type BrowserPrefs } from '../browser-prefs';
 import { createServerData, type ServerData } from '../data/server-data';
 import { initialShellState, step, type ShellAction, type ShellState } from '../shell-machine';
 import { derivedStore, type ReadableStore } from '../store';
-import type { ModelSummary } from '../types';
+import type { ModelSummary, SessionStatus, Term2ConnectionStatus } from '../types';
 import { createChatFacts, type ChatFacts } from './chat-facts';
 import { OpenSession } from './open-session';
 import { createCommandRunner } from './shell-commands';
@@ -20,6 +20,12 @@ export interface ComposerHandle {
   setText(text: string): void;
   /** Cmd/Ctrl+K: toggles the palette, resets its highlighted row, focuses. */
   togglePalette(): void;
+}
+
+/** The sidebar's live statuses; every other connection phase is idle in the thread list. */
+function listedStatus(status: Term2ConnectionStatus): SessionStatus {
+  if (status === 'awaiting_interaction') return 'awaiting_interaction';
+  return status === 'running' || status === 'aborting' ? 'running' : 'idle';
 }
 
 export interface ShellRuntime {
@@ -71,6 +77,20 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
   );
   const composer: { current: ComposerHandle | null } = { current: null };
 
+  // The list is a snapshot fetched at startup. Re-read it when the open chat enters or leaves a live
+  // status, so the sidebar dot follows the turn, and when the sidebar opens, so chats running in
+  // other tabs are current when the reader looks at them. No polling: a quiet page stays quiet.
+  let lastListed: { readonly id: string; readonly status: SessionStatus } | null = null;
+  session.view.subscribe(() => {
+    const view = session.view.get();
+    if (!view.sessionId) return;
+    const status = listedStatus(view.status);
+    if (lastListed?.id === view.sessionId && lastListed.status === status) return;
+    const leavingLive = lastListed !== null && lastListed.status !== 'idle';
+    lastListed = { id: view.sessionId, status };
+    if (leavingLive || status !== 'idle') void data.chats.refresh().catch(() => undefined);
+  });
+
   let runCommand: (command: Parameters<ReturnType<typeof createCommandRunner>>[0]) => void = () => undefined;
   function dispatch(action: ShellAction) {
     const previous = state;
@@ -79,6 +99,7 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
     // The stream follows the open chat, before anything renders, so one render never pairs the new chat with the
     // old chat's transcript. It is not a command: URL_CHANGED is still the only action that changes the open chat.
     if (next.openChat !== previous.openChat) session.open(next.openChat);
+    if (next.panels.sidebar && !previous.panels.sidebar) void data.chats.refresh().catch(() => undefined);
     if (next !== previous) for (const listener of [...listeners]) listener();
     for (const command of commands) runCommand(command);
   }

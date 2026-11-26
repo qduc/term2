@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useStoreSelector } from '../../../hooks/useStoreSelector';
 import { shellSandboxMachineFact } from '../../../lib/term2/shell-sandbox-notice';
 import { currentTag } from '../../../lib/term2/shell-machine';
@@ -8,39 +9,50 @@ import { Term2NativeEvidence } from '../Term2NativeEvidence';
 import { Term2SessionConfig } from '../Term2SessionConfig';
 import { useChatFacts, useSessionView, useShell, useShellEnv } from './ShellContext';
 
-/** The live status line under the last turn. */
+/**
+ * The live status line under the last turn, like the TUI's working line: `Thinking… 12s`. While a turn runs it
+ * always has text, so status changes swap words in a fixed slot instead of making the line come and go.
+ */
 export function LiveStatusLine() {
-  const shell = useShell();
-  const displayMode = useStoreSelector(shell.prefs, (p) => p.displayMode);
   const hasStreamingTurn = useChatFacts((f) => f.hasStreamingTurn);
-  const visibleLiveStatus = useChatFacts((f) => f.visibleLiveStatus);
+  const liveStatus = useChatFacts((f) => f.liveStatus);
   const interactionPending = useChatFacts((f) => f.interactionPending);
-  const lastTurn = useChatFacts((f) => f.lastTurn);
+  const runningTurnId = useChatFacts((f) => f.runningTurnId);
   // While a prompt is pending the card below is the status; a second line would repeat it.
-  // Reserve the 1-line slot during an active turn (matching the 40px reply action bar slot:
-  // 16px gap + 24px height) so status transitions and turn completion don't bounce the transcript.
-  if (!((hasStreamingTurn || visibleLiveStatus) && !interactionPending)) return null;
-  // In standard mode, a streaming reasoning block with text already renders its own "Thinking…" row.
-  const reasoningRowShown =
-    displayMode === 'standard' &&
-    visibleLiveStatus === 'Thinking…' &&
-    Boolean(lastTurn?.items?.some((item) => item.kind === 'reasoning' && item.streaming && item.text.trim()));
-  const shownStatus = reasoningRowShown ? null : visibleLiveStatus;
+  // The 1-line slot (16px gap + 24px height) matches the reply action bar, so turn completion doesn't bounce the transcript.
+  if (!((hasStreamingTurn || liveStatus) && !interactionPending)) return null;
   return (
-    <p
-      role="status"
-      className={`-mt-2 flex h-6 items-center gap-2.5 text-sm ${shownStatus ? '' : 'invisible'}`}
-    >
-      {shownStatus && (
+    <p role="status" className={`-mt-2 flex h-6 items-center gap-2.5 text-sm ${liveStatus ? '' : 'invisible'}`}>
+      {liveStatus && (
         <>
           <span
             aria-hidden
             className="t2-heartbeat h-2 w-2 shrink-0 rounded-full bg-teal-500 ring-2 ring-teal-400/30"
           />
-          <span className="t2-shimmer truncate">{shownStatus}</span>
+          <span className="t2-shimmer truncate">{liveStatus}</span>
+          {runningTurnId && <TurnElapsed turnId={runningTurnId} />}
         </>
       )}
     </p>
+  );
+}
+
+/** When this page first saw the running turn, so hiding the line for an approval does not restart the count. */
+let turnSeen: { readonly turnId: string; readonly at: number } | null = null;
+
+/** Seconds since this page first saw the running turn. */
+function TurnElapsed({ turnId }: { turnId: string }) {
+  if (turnSeen?.turnId !== turnId) turnSeen = { turnId, at: Date.now() };
+  const startedAt = turnSeen.at;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <span className="shrink-0 tabular-nums text-zinc-400 dark:text-zinc-500">
+      {Math.max(0, Math.floor((now - startedAt) / 1000))}s
+    </span>
   );
 }
 

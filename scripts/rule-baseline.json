@@ -935,8 +935,8 @@
   "webShellEffects": [
     {
       "file": "web-client/components/term2/shell/ShellFeeds.tsx",
-      "count": 6,
-      "reason": "The six places a prop or a fact derived from the open chat becomes a machine action (address bar, first mount, user change, first send, notice drain, status line). They are kept in this one file so a seventh is visible; each could go only if the machine read the session view itself."
+      "count": 5,
+      "reason": "The five places a prop or a fact derived from the open chat becomes a machine action (address bar, first mount, user change, first send, notice drain). They are kept in this one file so a sixth is visible; each could go only if the machine read the session view itself."
     }
   ],
   "webShellRequests": [

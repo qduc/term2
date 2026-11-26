@@ -287,10 +287,7 @@ test('a rewind that restores its prompt after switching chats does not put it in
   await expect(page.getByRole('textbox', { name: 'Message' })).toHaveValue('');
 });
 
-test('after a tool row finishes, the status line appears once the short delay has passed (#415)', async ({
-  page,
-  launch,
-}) => {
+test('after a tool row finishes, the status line keeps saying the turn is working (#415)', async ({ page, launch }) => {
   const prompt = 'read then think';
   const app = await launch({
     files: { 'notes.txt': 'the quick brown fox\n' },
@@ -303,7 +300,7 @@ test('after a tool row finishes, the status line appears once the short delay ha
   await send(page, prompt);
   await app.model.held('after-tool');
   await expect(turns(page).first().getByRole('button', { name: 'Read 1 file' })).toBeVisible();
-  // The status that follows a tool row is held back briefly (the machine's timer), then shown.
+  // The fixed status line stays up after the tool row: the turn is still working.
   await expect(page.getByRole('status').filter({ hasText: 'Working…' })).toBeVisible();
   app.model.release('after-tool');
   await expectNoRunningTurn(page);

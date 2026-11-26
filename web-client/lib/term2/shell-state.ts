@@ -10,8 +10,6 @@ export type StagedConfig = Pick<SessionConfigUpdate, 'modelSelection' | 'reasoni
 export type Delivery = 'auto' | 'steer' | 'follow_up';
 export type Tag = { readonly sessionId: string | null; readonly generation: number };
 
-/** A status that follows a finished tool row waits this long, so a quick next step does not flash it. */
-export const POST_TOOL_STATUS_DELAY_MS = 400;
 /** A busy or failed background-notice drain is asked once more after this long. */
 export const BACKGROUND_DRAIN_RETRY_MS = 2_000;
 
@@ -92,8 +90,6 @@ export type ShellState = {
   readonly sending: OutgoingMessage | null;
   /** The transcript follows new output. */
   readonly pinned: boolean;
-  /** The page's live status line; a deferred one is shown only once its timer fires. */
-  readonly liveStatus: { readonly text: string | null; readonly defer: boolean; readonly shown: string | null; readonly timer: number };
   /** The background-notice boundary last asked about, and whether its one retry was used. */
   readonly drain: { readonly boundary: string; readonly retried: boolean } | null;
   readonly panels: Panels;
@@ -149,9 +145,6 @@ export type ShellAction =
   | { readonly type: 'ATTACHMENTS_ADDED'; readonly tag: Tag; readonly images: readonly ComposerImage[]; readonly error: string | null }
   | { readonly type: 'NOTICE'; readonly tag: Tag; readonly key: NoticeKey; readonly message: string | null }
   | { readonly type: 'SCROLLED'; readonly pinned: boolean }
-  /** Fed from the page whenever its status line or whether it follows a tool row changes. */
-  | { readonly type: 'LIVE_STATUS'; readonly text: string | null; readonly defer: boolean }
-  | { readonly type: 'STATUS_TIMER_FIRED'; readonly timer: number }
   /** Fed from the page: the open chat is idle with undelivered background notices at this accepted boundary. */
   | { readonly type: 'BOUNDARY'; readonly sessionId: string; readonly boundary: string }
   | { readonly type: 'DRAIN_ANSWERED'; readonly tag: Tag; readonly boundary: string; readonly retry: boolean }
@@ -192,7 +185,6 @@ export type ShellCommand =
 
 export const EMPTY_COMPOSER: Composer = { input: '', attachments: [], armedSkill: null, historyIndex: null, paletteOpen: false };
 export const NO_NOTICES: Notices = { resend: null, config: null, attachment: null };
-export const NO_LIVE_STATUS = { text: null, defer: false, shown: null, timer: 0 };
 export const CLOSED_PANELS: Panels = { tasks: false, sidebar: false, dialog: null, skills: false };
 
 export const initialShellState = (openChat: string | null): ShellState => ({
@@ -210,7 +202,6 @@ export const initialShellState = (openChat: string | null): ShellState => ({
   notices: NO_NOTICES,
   sending: null,
   pinned: true,
-  liveStatus: NO_LIVE_STATUS,
   drain: null,
   panels: CLOSED_PANELS,
   configApply: null,

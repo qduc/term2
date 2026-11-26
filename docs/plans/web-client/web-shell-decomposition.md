@@ -4,7 +4,10 @@ Status: merged as `f13a1ee0` (qduc/term2#432). Part two, which finishes what sec
 [web-shell-decomposition-part2.md](web-shell-decomposition-part2.md). Built from
 [the brief](web-shell-decomposition-brief.md). Owner's defaults taken: the in-house data layer, the race-window
 differences in section 6.3, the nine ceilings in section 7.1. Where the build departs from this design, see
-[section 15](#15-build-notes). The claims below about the old code come from reading it.
+[section 15](#15-build-notes). The claims below about the old code come from reading it. Since then the status
+line feed (`LIVE_STATUS`, `deferLiveStatus`, `visibleLiveStatus` and the post-tool delay timer) is gone: the
+status line became a fixed slot that always has text while a turn runs, like the TUI's working line, so there is
+nothing to hold back.
 
 ## 1. Where the brief is wrong or in conflict
 

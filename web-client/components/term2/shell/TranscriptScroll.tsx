@@ -40,7 +40,7 @@ export function TranscriptPin({ scrollRef, lastScrollTopRef }: ScrollRefs) {
   const pinned = useShellState((s) => s.pinned);
   const turns = useSessionView((v) => v.turns);
   const pendingInteraction = useSessionView((v) => v.pendingInteraction);
-  const visibleLiveStatus = useChatFacts((f) => f.visibleLiveStatus);
+  const liveStatus = useChatFacts((f) => f.liveStatus);
   // Pin before browser paint so streaming growth doesn't flash at the old scrollTop for one frame.
   useIsomorphicLayoutEffect(() => {
     const el = scrollRef.current;
@@ -48,7 +48,7 @@ export function TranscriptPin({ scrollRef, lastScrollTopRef }: ScrollRefs) {
       el.scrollTop = el.scrollHeight;
       lastScrollTopRef.current = el.scrollTop;
     }
-  }, [turns, pendingInteraction, visibleLiveStatus, pinned, scrollRef, lastScrollTopRef]);
+  }, [turns, pendingInteraction, liveStatus, pinned, scrollRef, lastScrollTopRef]);
   // The transcript was display:none while settings was open, which loses its scroll offset.
   useIsomorphicLayoutEffect(() => {
     if (settingsOpen) return;

@@ -76,8 +76,6 @@ export type ChatFacts = {
   readonly readyToSend: boolean;
   readonly drainBoundary: string | null;
   readonly liveStatus: string | null;
-  readonly deferLiveStatus: boolean;
-  readonly visibleLiveStatus: string | null;
   readonly hasLiveAnimation: boolean;
   readonly tasksPanelVisible: boolean;
 };
@@ -320,33 +318,25 @@ export function createChatFacts(): (inputs: ChatFactInputs) => ChatFacts {
       sessionId && sessionConfig && !sendBlocked && view.sessionId === sessionId && canSubmitSessionMessage(view.status),
     );
     const drainBoundary = drainBoundaryOf(view, sessionId);
+    // Like the TUI's working line: while a turn runs there is always one status, so the line never blinks out.
     const liveStatus = interactionPending
       ? 'Waiting for your approval'
       : lastTurn?.transientStatus
-        ? lastTurn.transientStatus
+        ? lastTurn.transientStatus.charAt(0).toUpperCase() + lastTurn.transientStatus.slice(1)
         : lastTurn && (lastTurn.status === 'streaming' || lastTurn.status === 'pending')
           ? (() => {
-              // A running or waiting tool already says so on its own row, with its spinner;
-              // repeating it here showed the same words twice.
-              if (lastTurn.commands.some((c) => c.status === 'running' || c.status === 'pending')) return null;
+              if (lastTurn.commands.some((c) => c.status === 'running' || c.status === 'pending'))
+                return 'Running tools…';
               const lastItem = lastTurn.items?.[lastTurn.items.length - 1];
               if (lastItem?.kind === 'reasoning' && lastItem.streaming) return 'Thinking…';
-              if (lastItem?.kind === 'text' && lastItem.text) return null;
-              return lastTurn.text ? null : lastTurn.reasoning ? 'Thinking…' : 'Working…';
+              if (lastItem?.kind === 'text' && lastItem.text) return 'Writing…';
+              if (lastItem?.kind === 'tool') return 'Working…';
+              return lastTurn.text ? 'Writing…' : lastTurn.reasoning ? 'Thinking…' : 'Working…';
             })()
           : null;
-    const deferLiveStatus = Boolean(
-      liveStatus && !interactionPending && !lastTurn?.transientStatus && (lastTurn?.commands.length ?? 0) > 0,
-    );
-    // A status that follows a tool row waits for the machine's timer; until the machine has seen it, it stays hidden.
-    const visibleLiveStatus = !deferLiveStatus
-      ? liveStatus
-      : shell.liveStatus.text === liveStatus && shell.liveStatus.defer
-      ? shell.liveStatus.shown
-      : null;
     const hasRunningSubagent =
       view.session?.tasks.some((task) => task.kind === 'subagent' && task.status === 'running') ?? false;
-    const hasLiveAnimation = hasStreamingTurn || Boolean(visibleLiveStatus) || view.status === 'running' || hasRunningSubagent;
+    const hasLiveAnimation = hasStreamingTurn || Boolean(liveStatus) || view.status === 'running' || hasRunningSubagent;
 
     return {
       sessionId,
@@ -387,8 +377,6 @@ export function createChatFacts(): (inputs: ChatFactInputs) => ChatFacts {
       readyToSend,
       drainBoundary,
       liveStatus,
-      deferLiveStatus,
-      visibleLiveStatus,
       hasLiveAnimation,
       tasksPanelVisible: Boolean(sessionId) && shell.panels.tasks,
     };

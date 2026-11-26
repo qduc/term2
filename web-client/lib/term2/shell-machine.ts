@@ -22,7 +22,6 @@ import {
   isCurrentTag,
   EMPTY_COMPOSER,
   NO_NOTICES,
-  POST_TOOL_STATUS_DELAY_MS,
   BACKGROUND_DRAIN_RETRY_MS,
   type Delivery,
   type OutgoingMessage,
@@ -42,7 +41,6 @@ const opened = (state: ShellState): readonly ShellCommand[] =>
 
 /**
  * What leaving the current screen clears: the message box, its notices, a send in flight and the drain boundary.
- * The status line is not cleared here: it follows the transcript the page shows (LIVE_STATUS).
  */
 const LEFT_SCREEN: Pick<ShellState, 'composer' | 'notices' | 'sending' | 'pinned' | 'drain'> = {
   composer: EMPTY_COMPOSER,
@@ -314,24 +312,6 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
         : result(state);
     case 'SCROLLED':
       return action.pinned === state.pinned ? result(state) : result({ ...state, pinned: action.pinned });
-    case 'LIVE_STATUS': {
-      const current = state.liveStatus;
-      if (action.text === current.text && action.defer === current.defer) return result(state);
-      const timer = current.timer + 1;
-      if (!action.defer || !action.text)
-        return result({
-          ...state,
-          liveStatus: { text: action.text, defer: action.defer, shown: action.defer ? null : action.text, timer },
-        });
-      return result({ ...state, liveStatus: { text: action.text, defer: true, shown: null, timer } }, [
-        { type: 'later', ms: POST_TOOL_STATUS_DELAY_MS, action: { type: 'STATUS_TIMER_FIRED', timer } },
-      ]);
-    }
-    case 'STATUS_TIMER_FIRED': {
-      const current = state.liveStatus;
-      if (action.timer !== current.timer || !current.defer || !current.text) return result(state);
-      return result({ ...state, liveStatus: { ...current, shown: current.text } });
-    }
     case 'BOUNDARY': {
       // Ask once per accepted boundary; the Session dedupes concurrent asks from other tabs.
       if (action.sessionId !== state.openChat || state.drain?.boundary === action.boundary) return result(state);

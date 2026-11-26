@@ -51,12 +51,5 @@ export function ShellFeeds({ initialSessionId, authUserId }: { initialSessionId:
     if (drainBoundary && sessionId) dispatch({ type: 'BOUNDARY', sessionId, boundary: drainBoundary });
   }, [drainBoundary, sessionId, dispatch]);
 
-  // A status that follows a tool row waits for the machine's timer so a quick next step does not flash it.
-  const liveStatus = useChatFacts((f) => f.liveStatus);
-  const deferLiveStatus = useChatFacts((f) => f.deferLiveStatus);
-  useEffect(() => {
-    dispatch({ type: 'LIVE_STATUS', text: liveStatus, defer: deferLiveStatus });
-  }, [liveStatus, deferLiveStatus, dispatch]);
-
   return null;
 }

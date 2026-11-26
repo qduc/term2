@@ -70,11 +70,6 @@ const user = fc.oneof(
   fc.record({ kind: fc.constant('restore') }),
   // The same accepted boundary reported again, or a later one (a boundary's sequence only grows).
   fc.record({ kind: fc.constant('boundary'), next: fc.boolean() }),
-  fc.record({
-    kind: fc.constant('status'),
-    text: fc.constantFrom(null, 'Working…', 'Thinking…'),
-    defer: fc.boolean(),
-  }),
   // Resolve or fail one of the pending commands, picked by index. Weighted so chains of results (a retry's timer,
   // then its second answer) are reached.
   { arbitrary: fc.record({ kind: fc.constant('settle'), index: fc.nat(7), ok: fc.boolean() }), weight: 6 },
@@ -97,7 +92,6 @@ function run([lateFromStart, actions]) {
   const firstSends = []; // chats a first message was submitted to
   const drains = new Map(); // `${generation}|${boundary}` → asks
   const retryAnswered = new Set(); // `${generation}|${boundary}` whose ask was answered busy
-  let firedTimer = null; // the last status timer that fired while current
   let configStarts = 0;
   let lateReports = lateFromStart; // the page reports a navigate later, as a pending result
   let configStartTag = null; // the tag of the settings change the machine accepted last
@@ -182,13 +176,6 @@ function run([lateFromStart, actions]) {
         [{ type: 'navigate', sessionId: null, history: 'replace' }],
         'a user change did not clear the address bar',
       );
-    if (action.type === 'STATUS_TIMER_FIRED' && action.timer === before.liveStatus.timer) firedTimer = action.timer;
-    // A deferred status shows only once its own timer fired; a shown status is always the current one.
-    if (state.liveStatus.shown !== null) {
-      assert.equal(state.liveStatus.shown, state.liveStatus.text, 'an old status is shown');
-      if (state.liveStatus.defer)
-        assert.equal(firedTimer, state.liveStatus.timer, 'a deferred status was shown before its delay');
-    }
     if (action.type === 'SESSION_CREATED' && state.draft?.createdSessionId === action.sessionId)
       unopened = { folder: state.draft.workspaceId, sessionId: action.sessionId };
     // Opening any chat ends it: opening the created chat is the handoff, and opening another one is the user
@@ -357,9 +344,6 @@ function run([lateFromStart, actions]) {
         if (!state.openChat) break;
         if (action.next || boundaries === 0) boundaries += 1;
         dispatch({ type: 'BOUNDARY', sessionId: state.openChat, boundary: `${state.openChat}:${boundaries}` });
-        break;
-      case 'status':
-        dispatch({ type: 'LIVE_STATUS', text: action.text, defer: action.defer });
         break;
       case 'settle': {
         if (pending.length === 0) break;

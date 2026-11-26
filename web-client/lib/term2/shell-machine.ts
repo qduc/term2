@@ -175,7 +175,8 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
         : result(state);
     case 'SEND_REQUESTED': {
       if (state.openChat) {
-        if (state.sending) return result(state);
+        // A draft's first message still waiting to go (READY_TO_SEND) is the same text: one send at a time.
+        if (state.sending || state.pendingFirstSend?.sessionId === state.openChat) return result(state);
         const message = outgoing(
           state,
           action.requestId,

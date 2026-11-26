@@ -2,7 +2,8 @@
  * Settings writes, one at a time, each against the revision the store holds when its turn comes, so a second change
  * made while the first is saving is not refused as a conflict (docs/plans/web-client/web-shell-decomposition-part2.md,
  * section 3.3). A failed write does not stop the next. After a conflict the server's projection is installed, so the
- * next write uses the server's revision, and the conflicting write rejects. No facade import, so the generated
+ * next write uses the server's revision, and the conflicting write rejects. Either answer is installed as newer than
+ * any settings read still in flight (`replace`), so a read sent before the write cannot put the old values back. No facade import, so the generated
  * property web.settings-writes-in-order can load it. No React here.
  */
 import type { SettingsProjection } from '../types';
@@ -23,11 +24,11 @@ export function createSettingsWriter(deps: {
       if (!current) throw new Error('Settings are not loaded.');
       try {
         const result = await deps.write({ expectedRevision: current.revision, changes });
-        deps.settings.set(result.projection);
+        deps.settings.replace(result.projection);
         return result.projection;
       } catch (error) {
         const projection = deps.conflictProjection(error);
-        if (projection) deps.settings.set(projection);
+        if (projection) deps.settings.replace(projection);
         throw error;
       }
     };

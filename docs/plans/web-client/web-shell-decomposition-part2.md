@@ -820,3 +820,22 @@ What the build did beyond or differently from the sections above, and what it fo
     (`settings.flow.ts`, the second settings GET answered with a 500): red without the fix, green with it.
   - Confirmed fixed: the flash (8 of 8 direct loads clean), N1-N3, and section 7, item 7. `useLoadOnOpen` has no
     counterpart of the defect: none of its three screens writes through what it shows.
+- **Independent verifier, round three (on `d6314b6d`): rejected**, with one blocking finding and one non-blocking,
+  both now fixed:
+  - **`shell.machine-rules` failed about 1 unseeded run in 5** ("a second message started while one was on its
+    way"): a draft's first message waiting for `READY_TO_SEND`, plus the user pressing Send in the new chat, sent
+    the same text twice, because `READY_TO_SEND` does not check `sending`. It predates this change (f13a1ee0's
+    `step()` emits the same two `submit` commands; its harness finds it only at about 20,000 runs); round two's
+    weights made it common. `SEND_REQUESTED` in a chat is now refused while that chat's first send waits. The three
+    failing seeds pass; 0 of 30 random `--target shell` runs fail (was about 6).
+  - **A slow start-up read could undo a saved change** (non-blocking): once the page installs its own read, a write
+    can answer while the start-up read is still on its way, and that read then put the old values back (the next
+    change met a conflict). `Resource` gains `replace`, which installs data over every request in flight; the
+    settings writer installs both a write's answer and a conflict's projection with it.
+    - `web.resource-latest-wins` sends `replace` steps; red 5 of 5 with `replace` not superseding.
+    - `web.settings-writes-in-order` sends held reads; red 5 of 5 with the writer back on `set`.
+    - New flow "a start-up read that arrives after a saved change does not put the old value back"
+      (`settings.flow.ts`): red with the writer on `set`, green with `replace`.
+  - Confirmed by the verifier: in all three read orders (start-up read fails first; own read first, then the
+    start-up read fails late; own read first, then the start-up read succeeds late) the page shows the settings, never
+    the error, and saves, matching the base.

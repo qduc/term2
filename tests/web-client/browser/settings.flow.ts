@@ -102,3 +102,39 @@ test('a settings page whose own read answered still saves when the start-up read
   await page.reload();
   await expect(memory).not.toHaveAttribute('aria-checked', before ?? '');
 });
+
+test('a start-up read that arrives after a saved change does not put the old value back', async ({ page, launch }) => {
+  const app = await launch({ scripts: {} });
+  // The start-up read (the second settings GET) is answered by the server now, before the change, and delivered
+  // only after the change has saved.
+  let gets = 0;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let delivered!: () => void;
+  const lateRead = new Promise<void>((resolve) => (delivered = resolve));
+  await page.route('**/api/term2/settings', async (route) => {
+    if (route.request().method() === 'GET' && ++gets === 2) {
+      const response = await route.fetch();
+      await released;
+      await route.fulfill({ response });
+      delivered();
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto(`${app.origin}/?settings=conversation`);
+  const memory = page.getByRole('switch', { name: 'Personal memory' });
+  await expect(memory).toBeVisible();
+  const before = await memory.getAttribute('aria-checked');
+  await memory.click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  release();
+  await lateRead;
+  // The change stays on screen, and a second change saves against it (no conflict).
+  await expect(memory).not.toHaveAttribute('aria-checked', before ?? '');
+  await memory.click();
+  await expect(memory).toHaveAttribute('aria-checked', before ?? '');
+  await expect(page.getByText('Settings changed somewhere else')).toHaveCount(0);
+  await page.reload();
+  await expect(memory).toHaveAttribute('aria-checked', before ?? '');
+});

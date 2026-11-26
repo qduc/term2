@@ -160,6 +160,9 @@ function command(tool: WireTool, result: WireTurnResult | undefined): Term2Comma
 
 function presentTurn(turnId: string, inputs: TurnInputs, snapshot: WireSnapshot): Term2TurnView {
   const { entries, result, blocks, usage, active, interruptedLast } = inputs;
+  // Rule 13: a runtime fault (Session interrupted with an error, no accepted terminal) is shown on the turn it
+  // interrupted, as the turn's failure.
+  const fault = !result && interruptedLast && snapshot.lastError ? snapshot.lastError : undefined;
   const items: Term2TurnItem[] = [];
   const commands: Term2Command[] = [];
   const texts: string[] = [];
@@ -230,11 +233,13 @@ function presentTurn(turnId: string, inputs: TurnInputs, snapshot: WireSnapshot)
     : active && (snapshot.status === 'running' || snapshot.status === 'awaiting_interaction')
     ? 'streaming'
     : interruptedLast
-    ? 'aborted'
+    ? fault
+      ? 'failed'
+      : 'aborted'
     : 'unknown';
   // Rule 7.
   const terminalError = snapshot.terminal?.turnId === turnId ? snapshot.terminal.error : undefined;
-  const error = result?.outcome === 'failed' ? result.error ?? terminalError : undefined;
+  const error = result?.outcome === 'failed' ? result.error ?? terminalError : fault;
   // Rule 9: notes only from snapshot fields, while the turn is active.
   const transientStatus = active ? turnNote(snapshot) : undefined;
 
@@ -260,7 +265,8 @@ function presentTurn(turnId: string, inputs: TurnInputs, snapshot: WireSnapshot)
           },
         }
       : {}),
-    ...(result?.outcome === 'failed' ? { error: failureReason(error?.kind) } : {}),
+    ...(result?.outcome === 'failed' || fault ? { error: failureReason(error?.kind) } : {}),
+    ...(fault ? { interruptedByFault: true } : {}),
     ...(error?.message?.trim() ? { errorMessage: cap(error.message, ERROR_MESSAGE_CAP) } : {}),
   };
 }
@@ -420,7 +426,9 @@ export function present(
       usage: usageByTurn.get(turnId),
       active,
       interruptedLast: turnId === last,
-      live: active ? live : [snapshot.terminal?.turnId === turnId ? snapshot.terminal : null],
+      live: active
+        ? live
+        : [snapshot.terminal?.turnId === turnId ? snapshot.terminal : null, turnId === last ? snapshot.lastError : null],
     };
     const known = cache?.get(turnId);
     const turn = known && sameInputs(known.inputs, inputs) ? known.turn : presentTurn(turnId, inputs, snapshot);

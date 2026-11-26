@@ -1125,9 +1125,8 @@ export function Term2SessionShell({
   }, []);
 
   // Drive duty-cycled smooth WAAPI breathing only while live indicators exist.
-  const hasRunningSubagent = session.view.turns.some(
-    (t) => t.subagents?.some((s) => s.status === 'running') ?? false,
-  );
+  const hasRunningSubagent =
+    session.view.session?.tasks.some((task) => task.kind === 'subagent' && task.status === 'running') ?? false;
   const hasLiveAnimation =
     hasStreamingTurn ||
     Boolean(visibleLiveStatus) ||
@@ -1804,8 +1803,8 @@ export function Term2SessionShell({
                       {turn.status !== 'completed' && turn.status !== 'streaming' && turn.status !== 'pending' && (
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2.5 py-0.5 text-xs text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">
-                            {turn.transientFailure
-                              ? 'Live connection error (reload to check saved state)'
+                            {turn.interruptedByFault
+                              ? 'Interrupted by an error (reload to check saved state)'
                               : turn.status === 'aborted'
                               ? 'Stopped'
                               : `Turn ${turn.status}`}

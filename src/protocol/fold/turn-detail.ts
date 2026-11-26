@@ -14,7 +14,22 @@ export function withReasoningBlock(
       ...state,
       reasoningBlocks: blocks.map((block, index) => (index === known ? { ...block, text: event.payload.text } : block)),
     };
-  const last = state.timeline?.at(-1);
+  // A step's reasoning item arrives when the response completes, after that step's text streamed as a draft;
+  // the reasoning precedes that text, so the anchor is the entry before the step's own drafts.
+  const timeline = state.timeline ?? [];
+  let at = timeline.length - 1;
+  while (at >= 0) {
+    const entry = timeline[at]!;
+    const message = entry.kind === 'message' ? state.messages.find((item) => item.id === entry.id) : undefined;
+    if (
+      !message?.draft ||
+      message.turnId !== (event.turnId ?? undefined) ||
+      message.modelStep !== event.payload.modelStep
+    )
+      break;
+    at -= 1;
+  }
+  const last = at >= 0 ? timeline[at] : undefined;
   const block: WireReasoningBlock = {
     messageId: event.payload.messageId,
     turnId: event.turnId,
@@ -23,6 +38,23 @@ export function withReasoningBlock(
     after: last ? { kind: last.kind, id: last.id } : null,
   };
   return { ...state, reasoningBlocks: [...blocks, block] };
+}
+
+/** A final message replaces its draft in the timeline; an anchor that named the draft follows it. */
+export function withAnchorsMoved(state: WireSnapshot, draftId: string | undefined, messageId: string): WireSnapshot {
+  if (
+    !draftId ||
+    !state.reasoningBlocks?.some((block) => block.after?.kind === 'message' && block.after.id === draftId)
+  )
+    return state;
+  return {
+    ...state,
+    reasoningBlocks: state.reasoningBlocks.map((block) =>
+      block.after?.kind === 'message' && block.after.id === draftId
+        ? { ...block, after: { kind: 'message', id: messageId } }
+        : block,
+    ),
+  };
 }
 
 /** Records a turn's latest usage; one entry per turn, in the order turns first reported usage. */

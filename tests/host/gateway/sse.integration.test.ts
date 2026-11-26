@@ -15,11 +15,6 @@ const browserModule = (name: string) =>
   import(new URL(`../../../web-client/lib/term2/${name}.ts`, import.meta.url).href);
 // agent-wire-v2 is still served (frozen) for the external consumer: frames are checked with the shared parser.
 const { parseEventEnvelope } = await browserModule('types');
-// The browser presents the shared fold's snapshot (which is what the projection holds) with present().
-const { present } = await browserModule('present');
-const live = { phase: 'live', error: null };
-const describeItems = (items: readonly Record<string, unknown>[]) =>
-  items.map(({ kind, id, text, modelStep }) => ({ kind, id, text, ...(modelStep === undefined ? {} : { modelStep }) }));
 
 it('establishes an idle v2 stream before any event and closes its attachment on browser disconnect', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'idle-v2-'));
@@ -391,7 +386,7 @@ it('carries native orchestrator question lifecycle through HTTP SSE and the pinn
   }
 });
 
-it('keeps steered queued messages at their chronological position in the presented turn', async () => {
+it('carries a steered message through the queue on the agent-wire-v2 stream', async () => {
   const { DirectProjection } = await import('../../../src/protocol/projection.js');
   const { initialDirectState } = await import('../../../src/session/state.js');
   const { createDirectQueueState, planDirectQueue, submitDirectQueue } = await import('../../../src/session/queue.js');
@@ -528,16 +523,8 @@ it('keeps steered queued messages at their chronological position in the present
     );
     expect(queued).toBe(true);
 
-    const view = present('session-1', JSON.parse(JSON.stringify(projection.snapshot)), new Map(), live);
-    expect(view.session?.queue).toEqual([]);
-    expect(view.turns).toHaveLength(1);
-    expect(view.turns[0]?.userText).toBe('first prompt');
-    expect(view.turns[0]?.userMessageId).toBe('msg-1');
-    expect(describeItems(view.turns[0]?.items ?? [])).toEqual([
-      { kind: 'text', id: 'asst-1', text: 'working on it', modelStep: 1 },
-      { kind: 'user', id: 'msg-2', text: 'also check this' },
-      { kind: 'text', id: 'asst-2', text: 'checked it', modelStep: 2 },
-    ]);
+    // The browser no longer reads this format; the steer's place in the presented turn is checked by the
+    // browser steer flow over direct-wire-v2 (tests/web-client/browser/transcript.flow.ts).
   } finally {
     request?.destroy();
     await transport.stop();
@@ -545,7 +532,7 @@ it('keeps steered queued messages at their chronological position in the present
   }
 });
 
-it('preserves provider error messages on a failed turn, on the v2 wire and in the presented turn', async () => {
+it('preserves provider error messages on a failed turn on the agent-wire-v2 stream', async () => {
   const { DirectProjection } = await import('../../../src/protocol/projection.js');
   const { initialDirectState } = await import('../../../src/session/state.js');
   const { createDirectQueueState, submitDirectQueue } = await import('../../../src/session/queue.js');
@@ -639,11 +626,7 @@ it('preserves provider error messages on a failed turn, on the v2 wire and in th
     // The v2 wire carries the provider's words on the failed turn.
     expect(JSON.stringify(received)).toContain('400 Request path cannot be relayed');
 
-    const view = present('session-1', JSON.parse(JSON.stringify(projection.snapshot)), new Map(), live);
-    expect(view.turns).toHaveLength(1);
-    expect(view.turns[0]?.status).toBe('failed');
-    expect(view.turns[0]?.error).toBe('runtime_error');
-    expect(view.turns[0]?.errorMessage).toBe('400 Request path cannot be relayed');
+    // The browser's view of a failed turn is checked by the failed-turn browser flow over direct-wire-v2.
   } finally {
     request?.destroy();
     await transport.stop();

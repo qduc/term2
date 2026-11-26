@@ -465,8 +465,8 @@ export interface Term2TurnView {
   subagents?: Term2SubagentCard[];
   /** Transient turn-level note (retry/compaction); cleared on terminal events. */
   transientStatus?: string;
-  /** Presentation overlay only, never installed as an accepted terminal. */
-  transientFailure?: boolean;
+  /** The session stopped on a runtime fault during this turn (no accepted terminal); `error` says which. */
+  interruptedByFault?: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   error?: string;
   errorMessage?: string;

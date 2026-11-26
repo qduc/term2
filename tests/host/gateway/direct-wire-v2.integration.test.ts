@@ -146,6 +146,15 @@ const SCRIPT: ({ fact: Fact } | { live: Extract<DirectSessionUpdate, { type: 'tr
       error: { kind: 'rate_limit', message: '429 slow down', retryable: true },
     }),
   },
+  // A result whose call this session never accepted: kept as unmatched evidence, never a tool card (rule 5).
+  {
+    fact: fact({
+      type: 'tool_finished',
+      turnId: 'turn-2',
+      executionId: 'orphan-exec',
+      result: { output: 'retained output', isError: false },
+    }),
+  },
 ];
 const ACCEPTED = SCRIPT.filter((step) => 'fact' in step).length;
 
@@ -188,7 +197,17 @@ function scriptedSession(script: typeof SCRIPT = SCRIPT) {
     }
     next += count;
   };
-  return { session, publish, remaining: () => script.length - next };
+  /** What a poisoned writer publishes: no accepted terminal, just Session state interrupted with its error. */
+  const fault = (message: string) => {
+    position += 1;
+    state = {
+      ...state,
+      status: 'interrupted',
+      runtimeError: { kind: 'provider', message, retryable: false }, // as session.ts sets it on a writer fault
+    } as typeof state;
+    for (const listener of listeners) listener({ type: 'state', position, state: state as never });
+  };
+  return { session, publish, fault, remaining: () => script.length - next };
 }
 
 type Frame = {
@@ -363,6 +382,8 @@ it('a client that connects mid-turn folds the opening snapshot and every later f
   expect(first.status).toBe('completed');
   expect(second.userText).toBe('second prompt');
   expect(second.items.map(describe)).toEqual(['tool exec-2']);
+  expect(client.unmatchedToolResults?.map((result) => result.executionId)).toEqual(['orphan-exec']);
+  expect(second.commands.map((command: { callId: string }) => command.callId)).toEqual(['exec-2']);
   expect(second.commands).toMatchObject([{ callId: 'exec-2', status: 'failed', error: 'exit 1' }]);
   expect(second).toMatchObject({ status: 'failed', error: 'rate_limit', errorMessage: '429 slow down' });
   expect(second.usage).toBeUndefined();
@@ -593,4 +614,38 @@ it("a background subagent's branch is the same by fold and by snapshot, with the
     commands: [{ callId: 'child-exec-1', status: 'completed', output: 'a.txt' }],
   });
   expect(presented.turns.map((turn: { turnId: string }) => turn.turnId)).toEqual(['turn-1']);
+});
+
+it('a runtime fault mid-turn reaches the page as the failure of the turn it interrupted', async () => {
+  const { session, publish, fault } = scriptedSession();
+  publish(5); // turn 1 is streaming its first reply
+  const attachment = new DirectAttachment(session);
+  cleanup.push(async () => attachment.close());
+  const view = attachment.connect();
+  const connection: DirectConnection = {
+    sessionId: SESSION,
+    get snapshot() {
+      return view.snapshot;
+    },
+    events: view.events,
+    batches: () => view.events.batches(),
+    cut: view.cut,
+    send: async () => ({ ok: false, code: 'closed', message: 'not used' }),
+    close: () => view.events.close(),
+  };
+  const { until } = await serve(connection);
+  await until(1);
+  fault('log writer failed');
+  const frames = await until(2);
+  expect(frames[1]!.event).toBe('snapshot');
+  const client = fold(frames);
+  expect(client.status).toBe('interrupted');
+  const presented = present(SESSION, client, new Map(), { phase: 'live', error: null });
+  expect(presented.turns.at(-1)).toMatchObject({
+    turnId: 'turn-1',
+    status: 'failed',
+    error: 'provider_error',
+    errorMessage: 'log writer failed',
+    interruptedByFault: true,
+  });
 });

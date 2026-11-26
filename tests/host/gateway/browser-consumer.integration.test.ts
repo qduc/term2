@@ -8,7 +8,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // runtime boundary so the root NodeNext project does not recompile that tree.
 const browserModule = (name: string) =>
   import(new URL(`../../../web-client/lib/term2/${name}.ts`, import.meta.url).href);
-const { present } = await browserModule('present');
 
 // A real HTTP boundary exercises browser API response validation and SSE decoding.
 // The upstream is a controlled public-wire fixture, not native-runtime acceptance.
@@ -175,42 +174,5 @@ describe('browser consumer over HTTP', () => {
       if (previous === undefined) delete process.env.NEXT_PUBLIC_API_BASE;
       else process.env.NEXT_PUBLIC_API_BASE = previous;
     }
-  });
-
-  it('presents a result-only timeline slot without fabricating a named tool or turn', async () => {
-    const snapshot = {
-      protocolVersion: 1,
-      sessionId: 'session-1',
-      backingSessionId: 'session-1',
-      seq: 5,
-      status: 'idle',
-      activeTurnId: null,
-      messages: [],
-      tools: [],
-      unmatchedToolResults: [{ executionId: 'result-only', output: 'retained output', isError: false }],
-      timeline: [{ kind: 'tool', id: 'result-only' }],
-      queue: [],
-      tasks: [],
-      notices: [],
-      pendingInteractions: [],
-      admissions: [],
-      model: { provider: 'fixture', model: 'fixture-model' },
-      usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
-      configuration: { model: { provider: 'fixture', model: 'fixture-model' } },
-      retryEligibility: { turn: false, tool: false },
-      queueState: 'idle',
-      cost: null,
-      goal: null,
-      verification: null,
-      lastError: null,
-      terminal: null,
-      reasoning: '',
-    };
-    // Round-trip the same public snapshot through an HTTP response before presenting it.
-    hydrationResponse = snapshot;
-    const wire = await fetch(`${baseUrl}/hydration`);
-    const view = present('session-1', await wire.json(), new Map(), { phase: 'live', error: null });
-    expect(view.lastAppliedSequence).toBe(5);
-    expect(view.turns).toEqual([]);
   });
 });

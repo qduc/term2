@@ -84,7 +84,29 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   `web.present-reuse` green (it found the fold rebuilding every tool object per tool event, fixed). All eight
   browser flows pass, including the new usage flow (per-reply counts and session total equal after a reload, no
   hydration request), which phase 0 had found red.
-- **Next:** an independent verifier for the phase 1 fixes and phase 2, then phase 3. The acceptance example's steer and the second
+- **Independent verifier, second round** (on `c7bf7333`): phase 1 fixes accepted; phase 2 rejected with three
+  findings, all fixed since:
+  1. Reasoning drawn at the top of multi-step turns. A step's reasoning item arrives at completion, after the
+     step's text streamed as a draft, so its anchor was the draft, which the final message then replaced. The fold
+     now anchors before the step's own drafts and moves any anchor naming a replaced draft to its final message.
+     `web.present-reuse` checks step order (a step's reasoning after earlier steps' text, before its own); red on the
+     unfixed fold.
+  2. A runtime fault (Session interrupted with an error, no accepted terminal) no longer reached the transcript.
+     `present()` now shows it on the turn it interrupted: `failed`, the error's reason and message,
+     `interruptedByFault` (rule 6 reads "aborted" only without such an error). Gateway test: a writer fault over
+     the stream; red without it. The dead `transientFailure`/`subagents` reads are gone; the heartbeat's running
+     subagent check reads `view.session.tasks`.
+  3. Unit-style tests: the result-only case (a fixture fetched and passed to `present()`) is gone; an orphan
+     result is now part of the stream test's acceptance script. The agent-wire-v2 steer and error tests keep their
+     wire assertions only; the browser flows cover both views over `direct-wire-v2`.
+  Also: the generator publishes Session state after each rewind, so `wire.snapshot-is-fold` compares again after
+  it, and frames include mid-stream snapshots.
+- **Known deviations, recorded:** accepted frames publish at once (as the old hook did), live deltas at most once
+  per animation frame; while a history replacement is held, connection phases are not published either; the
+  submit/abort overlays clear on any accepted frame; a pending request with no DTO shows the status line only, no
+  card; a cancelled turn's running command reads `unknown`, because the fold settles `started` to `unknown` at turn
+  end (as the old reload view did). No persistent check covers the pre-live SSE buffer path.
+- **Next:** verifier round three for these fixes, then phase 3. The acceptance example's steer and the second
   example (a background subagent's panel steps) are not in the integration test yet; phase 2's browser flows
   cover the steer end to end. Phases
   are in order; 3 is independent of 1 and 2 and can be scheduled separately.

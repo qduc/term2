@@ -137,6 +137,7 @@ export function sessionUpdates(commands) {
           executionId: `${idPrefix}-exec-${n}`,
           callId: `${idPrefix}-call-${n}`,
           toolName: 'shell',
+          step: state.step,
           started: false,
           finished: false,
         };
@@ -271,6 +272,8 @@ export function sessionUpdates(commands) {
         reason: 'rewind',
         history: history.filter((entry) => entry.turnId !== dropped).map((entry) => entry.item),
       });
+      // Session publishes its state right after a history-replacing command; clients take that snapshot.
+      updates.push({ type: 'state', position: ++position, state: sessionStateAfter(updates) });
       continue;
     }
     if (c.kind === 'branch_child') {
@@ -296,6 +299,8 @@ export function sessionUpdates(commands) {
     ensureTurn();
     switch (c.kind) {
       case 'reasoning':
+        // The runtime delivers a step's reasoning before that step's tool calls (both at completion).
+        if (turn.tools.some((tool) => tool.step === turn.step)) break;
         rootFact({
           type: 'item',
           turnId: turn.id,
@@ -499,14 +504,28 @@ export const wireProperties = [
               : []),
           ].filter(Boolean),
         );
-        const earlier = new Map(previousView.turns.map((turn) => [turn.turnId, turn]));
+        // Rule 8: a step's accepted reasoning follows earlier steps' text and precedes its own.
         for (const turn of view.turns)
-          if (!touched.has(turn.turnId) && earlier.has(turn.turnId))
-            assert.equal(
-              turn,
-              earlier.get(turn.turnId),
-              `turn ${turn.turnId} was rebuilt by update ${index} that did not touch it`,
+          for (const [at, item] of turn.items.entries()) {
+            if (item.kind !== 'reasoning' || item.streaming || item.modelStep === undefined) continue;
+            const misplaced = turn.items.some(
+              (other, index) =>
+                other.kind === 'text' &&
+                other.modelStep !== undefined &&
+                (index < at ? other.modelStep >= item.modelStep : other.modelStep < item.modelStep),
             );
+            assert.ok(!misplaced, `reasoning ${item.id} is out of step order in ${turn.turnId} at update ${index}`);
+          }
+        const earlier = new Map(previousView.turns.map((turn) => [turn.turnId, turn]));
+        // A state publication installs a whole new snapshot (new objects throughout): every turn may be rebuilt.
+        if (update.type !== 'state')
+          for (const turn of view.turns)
+            if (!touched.has(turn.turnId) && earlier.has(turn.turnId))
+              assert.equal(
+                turn,
+                earlier.get(turn.turnId),
+                `turn ${turn.turnId} was rebuilt by update ${index} that did not touch it`,
+              );
         previousSnapshot = snapshot;
         previousView = view;
       }
@@ -523,8 +542,11 @@ export const wireProperties = [
         projection.synchronize(sessionStateAfter(updates.slice(0, cut)));
         const synced = projection.snapshot;
         // After a rewind the fold is stale by design until Session's snapshot; check the snapshot's own rule there.
-        const rewound = updates
-          .slice(0, cut)
+        // Stale only between a rewind and the state publication that follows it.
+        const prefix = updates.slice(0, cut);
+        const lastState = prefix.map((update) => update.type).lastIndexOf('state');
+        const rewound = prefix
+          .slice(lastState + 1)
           .some((update) => update.type === 'fact' && update.fact.type === 'history_replaced');
         if (!rewound)
           assert.deepEqual(acceptedPart(synced), folded, `synchronizing at cut ${cut} changed accepted state`);

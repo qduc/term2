@@ -14,7 +14,7 @@ import {
 import type { WireEvent, WireSnapshot } from './wire-types.js';
 import { commandReceipts, delta, message, timeline, withNotice } from './transcript.js';
 import { reduceBranch, withRootShares } from './branch-fold.js';
-import { withoutLiveReasoning, withReasoningBlock, withTurnUsage } from './turn-detail.js';
+import { withAnchorsMoved, withoutLiveReasoning, withReasoningBlock, withTurnUsage } from './turn-detail.js';
 import { reduceApprovalReview, withoutReview } from './review.js';
 
 /** What a host supplies to the fold. Every field is optional; the fold has a plain default for each. */
@@ -104,8 +104,9 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
         ...event.payload.message,
         ...(event.payload.replacesDraftId ? { replacesDraftId: event.payload.replacesDraftId } : {}),
       };
+      const moved = withAnchorsMoved(state, event.payload.replacesDraftId, event.payload.message.id);
       return {
-        ...state,
+        ...moved,
         timeline: timeline(state, [{ kind: 'message', id: event.payload.message.id }], event.payload.replacesDraftId),
         messages: message(state.messages, next, event.payload.replacesDraftId),
       };

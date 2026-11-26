@@ -32,6 +32,23 @@ const user = fc.oneof(
     edit: fc.boolean(),
   }),
   fc.record({ kind: fc.constant('discard') }),
+  // A chat picked from the list, with its folder when the list knows it.
+  fc.record({
+    kind: fc.constant('pick_chat'),
+    sessionId: fc.constantFrom(...CHATS),
+    workspaceId: fc.constantFrom(null, ...FOLDERS),
+  }),
+  fc.record({ kind: fc.constant('user') }),
+  // A whole first send in one step (a draft, some text, Send), so later steps reach a chat being created.
+  fc.record({ kind: fc.constant('draft_send'), workspaceId: fc.constantFrom(...FOLDERS) }),
+  // From now on the page reports address-bar changes late (as the router does), or at once again.
+  fc.record({ kind: fc.constant('router'), late: fc.boolean() }),
+  // A settings change in the open chat; its end arrives later, or never.
+  fc.record({ kind: fc.constant('config') }),
+  // A Retry's failure, or a failed switch's draft offer, arriving later for what is shown now.
+  fc.record({ kind: fc.constant('retry_fail') }),
+  fc.record({ kind: fc.constant('retry_offer') }),
+  fc.record({ kind: fc.constant('page_error'), message: fc.constantFrom(null, 'boom') }),
   fc.record({
     kind: fc.constant('panel'),
     action: fc.constantFrom(
@@ -78,6 +95,9 @@ function run(actions) {
   const drains = new Map(); // `${generation}|${boundary}` → asks
   const retryAnswered = new Set(); // `${generation}|${boundary}` whose ask was answered busy
   let firedTimer = null; // the last status timer that fired while current
+  let configStarts = 0;
+  let lateReports = false; // the page reports a navigate later, as a pending result
+  let configStartTag = null; // the tag of the settings change the machine accepted last
   let boundaries = 0;
 
   const dispatch = (action) => {
@@ -110,6 +130,55 @@ function run(actions) {
       assert.notEqual(state.panels.dialog, 'rewind', "another chat's rewind dialog stayed open");
       assert.equal(state.panels.skills, false, "another chat's skills picker stayed open");
     }
+    // P1: what belongs to one chat goes when the page shows something else.
+    if (state.generation !== before.generation) {
+      assert.equal(state.configApply, null, 'per-chat intent survived a change of what the page shows');
+      assert.equal(state.retryError, null, 'per-chat intent survived a change of what the page shows');
+      assert.equal(state.retryDraft, null, 'per-chat intent survived a change of what the page shows');
+    }
+    // P2: one settings change at a time, only in an open chat, and only the one accepted for this screen.
+    if (action.type === 'CONFIG_APPLY_STARTED' && state.configApply !== before.configApply) {
+      assert.equal(before.configApply, null, 'a settings change replaced one still in flight');
+      configStartTag = action.tag;
+    }
+    if (state.configApply) {
+      assert.ok(state.openChat, 'a settings change is in flight with no chat open');
+      assert.ok(configStartTag && isCurrentTag(state, configStartTag), 'a settings change from another screen is held');
+    }
+    // P3: a current end of the held change clears it; any other end changes nothing.
+    if (action.type === 'CONFIG_APPLY_SETTLED' && isCurrentTag(before, action.tag)) {
+      if (before.configApply?.requestId === action.requestId)
+        assert.equal(state.configApply, null, 'the held settings change did not end');
+      else assert.equal(next, before, 'another settings change ended the held one');
+    }
+    // P4: the page's banner changes only when something says so; a chat change leaves it.
+    if (state.pageError !== before.pageError) {
+      const allowed =
+        action.type === 'PAGE_ERROR' ||
+        (action.type === 'NEW_DRAFT' && state.pageError === null) ||
+        (action.type === 'DRAFT_START_FAILED' && state.pageError === action.message);
+      assert.ok(allowed, `${action.type} changed the page's error banner`);
+    }
+    // P5: picking a chat only records its folder and asks the address bar for it.
+    if (action.type === 'CHAT_PICKED') {
+      assert.deepEqual(
+        commands,
+        [{ type: 'navigate', sessionId: action.sessionId }],
+        'picking a chat did not navigate',
+      );
+      assert.deepEqual(
+        { ...next, chosenFolder: before.chosenFolder },
+        before,
+        'picking a chat changed more than the chosen folder',
+      );
+    }
+    // P6: another user signed in: nothing of the previous user's stays.
+    if (action.type === 'USER_CHANGED')
+      assert.deepEqual(
+        commands,
+        [{ type: 'navigate', sessionId: null, history: 'replace' }],
+        'a user change did not clear the address bar',
+      );
     if (action.type === 'STATUS_TIMER_FIRED' && action.timer === before.liveStatus.timer) firedTimer = action.timer;
     // A deferred status shows only once its own timer fired; a shown status is always the current one.
     if (state.liveStatus.shown !== null) {
@@ -122,9 +191,22 @@ function run(actions) {
     // Opening any chat ends it: opening the created chat is the handoff, and opening another one is the user
     // walking away from a send they made (their chat stays in the list, as any sent chat does).
     if (unopened && action.type === 'URL_CHANGED' && action.sessionId !== null) unopened = null;
-    if (unopened && action.type === 'DRAFT_DISCARDED') unopened = null;
+    if (unopened && (action.type === 'DRAFT_DISCARDED' || action.type === 'USER_CHANGED')) unopened = null;
     if (unopened && action.type === 'NEW_DRAFT' && action.workspaceId !== unopened.folder && !before.starting)
       unopened = null;
+    const afterCommands = () => {
+      if (action.type === 'CHAT_PICKED' && !lateReports)
+        assert.equal(state.openChat, action.sessionId, 'the picked chat did not open');
+      if (action.type === 'USER_CHANGED') {
+        assert.equal(state.openChat, null, 'the previous user’s chat is still open');
+        assert.equal(state.draft, null, 'the previous user’s draft stayed');
+        assert.equal(state.sendIntent, null, 'the previous user’s send stayed');
+        assert.equal(state.pendingFirstSend, null, 'the previous user’s first message would still be sent');
+        assert.equal(state.sending, null, 'the previous user’s message is still on its way');
+        assert.equal(state.starting, false, 'the previous user’s chat is still being created');
+        assert.deepEqual(state.composer, EMPTY_COMPOSER, 'the previous user’s message box stayed');
+      }
+    };
     for (const command of commands) {
       if (command.type === 'createSession') {
         assert.ok(state.draft, 'createSession without a draft');
@@ -160,13 +242,17 @@ function run(actions) {
         if (asks === 2) assert.ok(retryAnswered.has(key), 'a boundary was re-asked without a busy answer');
       }
       if (command.type === 'navigate') {
-        // The address bar changes; the page reports it back.
-        dispatch({ type: 'URL_CHANGED', sessionId: command.sessionId });
+        // The address bar changes; the page reports it back, at once or later. The runner reports a silent
+        // replace itself, at once.
+        if (lateReports && command.history !== 'replace')
+          pending.push({ type: 'urlReport', sessionId: command.sessionId });
+        else dispatch({ type: 'URL_CHANGED', sessionId: command.sessionId });
         continue;
       }
       if (command.type === 'rememberPrompt') continue;
       pending.push(command);
     }
+    afterCommands();
   };
 
   const sendContext = (running) => ({ runningTurnId: running ? 'turn-running' : null });
@@ -205,6 +291,39 @@ function run(actions) {
       }
       case 'discard':
         dispatch({ type: 'DRAFT_DISCARDED' });
+        break;
+      case 'pick_chat':
+        dispatch({ type: 'CHAT_PICKED', sessionId: action.sessionId, workspaceId: action.workspaceId });
+        break;
+      case 'user':
+        dispatch({ type: 'USER_CHANGED' });
+        break;
+      case 'draft_send': {
+        dispatch({ type: 'NEW_DRAFT', workspaceId: action.workspaceId });
+        dispatch({ type: 'COMPOSER_EDITED', patch: { input: 'first message' } });
+        const requestId = `request-${++requests}`;
+        runningAt.set(requestId, false);
+        dispatch({ type: 'SEND_REQUESTED', requestId, context: sendContext(false) });
+        break;
+      }
+      case 'router':
+        lateReports = action.late;
+        break;
+      case 'config': {
+        const tag = { sessionId: state.openChat, generation: state.generation };
+        const requestId = `config-${++configStarts}`;
+        dispatch({ type: 'CONFIG_APPLY_STARTED', tag, requestId });
+        if (state.configApply?.requestId === requestId) pending.push({ type: 'configApply', tag, requestId });
+        break;
+      }
+      case 'retry_fail':
+        pending.push({ type: 'retryFail', tag: { sessionId: state.openChat, generation: state.generation } });
+        break;
+      case 'retry_offer':
+        pending.push({ type: 'retryOffer', tag: { sessionId: state.openChat, generation: state.generation } });
+        break;
+      case 'page_error':
+        dispatch({ type: 'PAGE_ERROR', message: action.message });
         break;
       case 'panel':
         dispatch(action.action);
@@ -300,6 +419,30 @@ function run(actions) {
             break;
           case 'restore':
             dispatch({ type: 'TEXT_RESTORED', tag: command.tag, text: 'restored' });
+            break;
+          case 'urlReport':
+            dispatch({ type: 'URL_CHANGED', sessionId: command.sessionId });
+            break;
+          case 'configApply':
+            dispatch({
+              type: 'CONFIG_APPLY_SETTLED',
+              tag: command.tag,
+              requestId: action.ok ? command.requestId : 'another-change',
+            });
+            break;
+          case 'retryFail':
+            dispatch({
+              type: 'RETRY_ERROR',
+              tag: command.tag,
+              error: action.ok ? { turnId: 'turn-1', message: 'could not resend' } : null,
+            });
+            break;
+          case 'retryOffer':
+            dispatch({
+              type: 'RETRY_DRAFT',
+              tag: command.tag,
+              draft: action.ok ? { turnId: 'turn-1', model: { provider: 'p', id: 'model-b' } } : null,
+            });
             break;
         }
         break;

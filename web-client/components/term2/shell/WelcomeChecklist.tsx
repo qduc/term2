@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStoreSelector } from '../../../hooks/useStoreSelector';
 import { shallowEqual } from '../../../lib/term2/store';
-import { useChatFacts, useShell, useShellEnv } from './ShellContext';
+import { useChatFacts, useShell, useShellEnv, useShellState } from './ShellContext';
 import { Wordmark } from './Wordmark';
 
 /** Radix Select reserves the empty string, so the "no folder" option uses a sentinel. */
@@ -25,7 +25,7 @@ export function WelcomeChecklist() {
   const settingsLoaded = useStoreSelector(shell.data.settings, (s) => Boolean(s.data));
   const folders = useStoreSelector(shell.data.folders, (s) => s.data);
   const loadingWorkspaces = useStoreSelector(shell.data.folders, (s) => s.loading);
-  const pageError = useStoreSelector(shell.local, (l) => l.pageError);
+  const pageError = useShellState((s) => s.pageError);
   if (sessionId || isDraft) return null;
   const openFolderDialog = () => dispatch({ type: 'DIALOG_OPENED', dialog: 'folder' });
 

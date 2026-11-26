@@ -14,199 +14,23 @@
  * delayed post-tool status and the background-notice drain); and the panels (running tasks, sidebar, dialogs, the
  * skills picker).
  */
-import type { ImageAttachmentPayload, SessionConfigRecord, SessionConfigUpdate } from './types';
+export * from './shell-state';
+import {
+  currentTag,
+  isCurrentTag,
+  EMPTY_COMPOSER,
+  NO_NOTICES,
+  POST_TOOL_STATUS_DELAY_MS,
+  BACKGROUND_DRAIN_RETRY_MS,
+  type Delivery,
+  type OutgoingMessage,
+  type Panels,
+  type SendContext,
+  type ShellAction,
+  type ShellCommand,
+  type ShellState,
+} from './shell-state';
 
-export type DraftConfig = Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'approvalMode'>;
-export type StagedConfig = Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort'>;
-export type Delivery = 'auto' | 'steer' | 'follow_up';
-export type Tag = { readonly sessionId: string | null; readonly generation: number };
-
-/** A status that follows a finished tool row waits this long, so a quick next step does not flash it. */
-export const POST_TOOL_STATUS_DELAY_MS = 400;
-/** A busy or failed background-notice drain is asked once more after this long. */
-export const BACKGROUND_DRAIN_RETRY_MS = 2_000;
-
-export interface ComposerImage extends ImageAttachmentPayload {
-  readonly id: string;
-  readonly name: string;
-  readonly previewUrl: string;
-}
-
-/** What the user is writing: reset whenever the page shows something else, except a draft's own handoff. */
-export type Composer = {
-  readonly input: string;
-  readonly attachments: readonly ComposerImage[];
-  readonly armedSkill: string | null;
-  /** Position in the prompt history while browsing it with the arrow keys. */
-  readonly historyIndex: number | null;
-  /** The slash-command palette. */
-  readonly paletteOpen: boolean;
-};
-
-export type Notices = {
-  /** A rewound Edit or Retry whose message was not sent: the text is back in the message box. */
-  readonly resend: string | null;
-  readonly config: string | null;
-  readonly attachment: string | null;
-};
-export type NoticeKey = keyof Notices;
-
-export type Dialog = 'folder' | 'help' | 'rewind' | 'provider';
-
-export type Panels = {
-  /** The running tasks panel: only the user opens or closes it (#394, #396). */
-  readonly tasks: boolean;
-  readonly sidebar: boolean;
-  readonly dialog: Dialog | null;
-  readonly skills: boolean;
-};
-
-/** One message as the user sent it, fixed when Send was pressed. */
-export type OutgoingMessage = {
-  readonly requestId: string;
-  readonly text: string;
-  readonly delivery: Delivery;
-  readonly expectedSteerTurnId?: string;
-  readonly skill?: string;
-  readonly attachments?: readonly ComposerImage[];
-  /** It came from the message box (not an Edit or Retry), so acceptance clears the box. */
-  readonly fromComposer: boolean;
-  /** An Edit or Retry: if it is refused, its text goes back into the message box with the resend notice. */
-  readonly restoreOnFailure: boolean;
-};
-
-export type ShellState = {
-  /** The chat the address bar names, as last reported by URL_CHANGED. */
-  readonly openChat: string | null;
-  readonly generation: number;
-  /** The folder the user last chose (a folder pick, a new chat in it, a chat opened from it). */
-  readonly chosenFolder: string | null;
-  /**
-   * An unsent new chat: its folder and the picks to apply before its first message. `createdSessionId` is the
-   * chat its first send already created, so a retry after a failure reuses it instead of creating another.
-   */
-  readonly draft: { readonly workspaceId: string; readonly config: DraftConfig; readonly createdSessionId?: string } | null;
-  /** A draft's first send is in progress (creating the chat, applying its picks). */
-  readonly starting: boolean;
-  /** What the first send asked for, kept while its chat is being created. */
-  readonly sendIntent: { readonly delivery?: Delivery; readonly overrideText?: string } | null;
-  readonly startError: string | null;
-  /** The first message waits for its new chat to be open, configured and live. */
-  readonly pendingFirstSend: { readonly sessionId: string; readonly delivery?: Delivery; readonly overrideText?: string } | null;
-  /** The open chat's configuration, only ever for `openChat`. */
-  readonly config: SessionConfigRecord | null;
-  /** Model or effort picked in the open chat, applied before its next message. */
-  readonly staged: StagedConfig | null;
-  readonly composer: Composer;
-  readonly notices: Notices;
-  /** A message on its way: the staged picks are being applied, or the message is being submitted. */
-  readonly sending: OutgoingMessage | null;
-  /** The transcript follows new output. */
-  readonly pinned: boolean;
-  /** The page's live status line; a deferred one is shown only once its timer fires. */
-  readonly liveStatus: { readonly text: string | null; readonly defer: boolean; readonly shown: string | null; readonly timer: number };
-  /** The background-notice boundary last asked about, and whether its one retry was used. */
-  readonly drain: { readonly boundary: string; readonly retried: boolean } | null;
-  readonly panels: Panels;
-};
-
-/** The facts of the open chat the page reports with a send. */
-export type SendContext = { readonly runningTurnId: string | null };
-
-export type ShellAction =
-  | { readonly type: 'URL_CHANGED'; readonly sessionId: string | null }
-  | { readonly type: 'NEW_DRAFT'; readonly workspaceId: string }
-  /** Back to the welcome screen: no draft and no chat. */
-  | { readonly type: 'DRAFT_DISCARDED' }
-  | { readonly type: 'FOLDER_CHOSEN'; readonly workspaceId: string | null }
-  | { readonly type: 'DRAFT_CONFIG_PICKED'; readonly selection: DraftConfig }
-  /**
-   * Send pressed, or an Edit or Retry. In a draft it starts the first send; in a chat it applies any staged picks
-   * first (unless a turn is running: a steer or queued message leaves them staged), then submits.
-   */
-  | {
-      readonly type: 'SEND_REQUESTED';
-      readonly requestId: string;
-      readonly context: SendContext;
-      readonly delivery?: Delivery;
-      readonly overrideText?: string;
-      /** Edit and Retry resend one message's text without the composer's attachments or skill. */
-      readonly textOnly?: boolean;
-    }
-  | { readonly type: 'SESSION_CREATED'; readonly tag: Tag; readonly sessionId: string }
-  | { readonly type: 'DRAFT_CONFIG_APPLIED'; readonly tag: Tag; readonly sessionId: string }
-  | { readonly type: 'DRAFT_START_FAILED'; readonly tag: Tag; readonly message: string }
-  | { readonly type: 'CONFIG_LOADED'; readonly tag: Tag; readonly config: SessionConfigRecord }
-  | { readonly type: 'STAGED_CHANGED'; readonly staged: StagedConfig | null }
-  | { readonly type: 'STAGED_APPLIED'; readonly tag: Tag; readonly requestId: string; readonly ok: boolean }
-  | { readonly type: 'SUBMIT_SETTLED'; readonly tag: Tag; readonly requestId: string; readonly accepted: boolean }
-  /** Fed from the page: the open chat's config is loaded, sending is not blocked and its stream is live. */
-  | { readonly type: 'READY_TO_SEND'; readonly sessionId: string; readonly context: SendContext; readonly requestId: string }
-  /** The user edits the message box. */
-  | { readonly type: 'COMPOSER_EDITED'; readonly patch: Partial<Composer> }
-  /** Text put back into the message box after an await (a rewind that restores its prompt). */
-  | { readonly type: 'TEXT_RESTORED'; readonly tag: Tag; readonly text: string }
-  | { readonly type: 'ATTACHMENTS_ADDED'; readonly tag: Tag; readonly images: readonly ComposerImage[]; readonly error: string | null }
-  | { readonly type: 'NOTICE'; readonly tag: Tag; readonly key: NoticeKey; readonly message: string | null }
-  | { readonly type: 'SCROLLED'; readonly pinned: boolean }
-  /** Fed from the page whenever its status line or whether it follows a tool row changes. */
-  | { readonly type: 'LIVE_STATUS'; readonly text: string | null; readonly defer: boolean }
-  | { readonly type: 'STATUS_TIMER_FIRED'; readonly timer: number }
-  /** Fed from the page: the open chat is idle with undelivered background notices at this accepted boundary. */
-  | { readonly type: 'BOUNDARY'; readonly sessionId: string; readonly boundary: string }
-  | { readonly type: 'DRAIN_ANSWERED'; readonly tag: Tag; readonly boundary: string; readonly retry: boolean }
-  | { readonly type: 'DRAIN_RETRY_DUE'; readonly tag: Tag; readonly boundary: string }
-  | { readonly type: 'TASKS_PANEL_TOGGLED' }
-  | { readonly type: 'TASKS_PANEL_CLOSED' }
-  /** The user opens or closes the sidebar (the page also closes it after a pick on a small screen). */
-  | { readonly type: 'SIDEBAR_SET'; readonly open: boolean }
-  | { readonly type: 'DIALOG_OPENED'; readonly dialog: Dialog }
-  | { readonly type: 'DIALOG_CLOSED' }
-  | { readonly type: 'SKILLS_SET'; readonly open: boolean };
-
-export type ShellCommand =
-  | { readonly type: 'createSession'; readonly tag: Tag; readonly workspaceId: string }
-  | { readonly type: 'applyDraftConfig'; readonly tag: Tag; readonly sessionId: string; readonly config: DraftConfig }
-  | { readonly type: 'navigate'; readonly sessionId: string | null }
-  | { readonly type: 'loadConfig'; readonly tag: Tag }
-  | { readonly type: 'applyStaged'; readonly tag: Tag; readonly requestId: string; readonly changes: StagedConfig }
-  | { readonly type: 'submit'; readonly tag: Tag; readonly message: OutgoingMessage }
-  /** The message was accepted: remember it in the prompt history. */
-  | { readonly type: 'rememberPrompt'; readonly text: string }
-  | { readonly type: 'drainNotifications'; readonly tag: Tag; readonly boundary: string }
-  /** Dispatch `action` after `ms`. A stale one is dropped like any other result. */
-  | { readonly type: 'later'; readonly ms: number; readonly action: ShellAction };
-
-export const EMPTY_COMPOSER: Composer = { input: '', attachments: [], armedSkill: null, historyIndex: null, paletteOpen: false };
-export const NO_NOTICES: Notices = { resend: null, config: null, attachment: null };
-const NO_LIVE_STATUS = { text: null, defer: false, shown: null, timer: 0 };
-const CLOSED_PANELS: Panels = { tasks: false, sidebar: false, dialog: null, skills: false };
-
-export const initialShellState = (openChat: string | null): ShellState => ({
-  openChat,
-  generation: 0,
-  chosenFolder: null,
-  draft: null,
-  starting: false,
-  sendIntent: null,
-  startError: null,
-  pendingFirstSend: null,
-  config: null,
-  staged: null,
-  composer: EMPTY_COMPOSER,
-  notices: NO_NOTICES,
-  sending: null,
-  pinned: true,
-  liveStatus: NO_LIVE_STATUS,
-  drain: null,
-  panels: CLOSED_PANELS,
-});
-
-/** The tag a command issued now carries. */
-export const currentTag = (state: ShellState): Tag => ({ sessionId: state.openChat, generation: state.generation });
-/** Whether a result issued under `tag` still belongs to what the page shows. */
-export const isCurrentTag = (state: ShellState, tag: Tag) =>
-  tag.generation === state.generation && tag.sessionId === state.openChat;
 const isCurrent = isCurrentTag;
 const result = (state: ShellState, commands: readonly ShellCommand[] = []) => ({ state, commands });
 
@@ -224,6 +48,13 @@ const LEFT_SCREEN: Pick<ShellState, 'composer' | 'notices' | 'sending' | 'pinned
   sending: null,
   pinned: true,
   drain: null,
+};
+
+/** Per-chat intent: cleared by every transition that changes what the page shows (it bumps `generation`). */
+const NO_CHAT_INTENT: Pick<ShellState, 'configApply' | 'retryError' | 'retryDraft'> = {
+  configApply: null,
+  retryError: null,
+  retryDraft: null,
 };
 
 /**
@@ -281,6 +112,7 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
       const next: ShellState = {
         ...state,
         ...(handoff ? { pinned: true } : LEFT_SCREEN),
+        ...NO_CHAT_INTENT,
         panels: panelsLeaving(state.panels),
         openChat: action.sessionId,
         generation: state.generation + 1,
@@ -305,10 +137,12 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
         {
           ...state,
           ...LEFT_SCREEN,
+          ...NO_CHAT_INTENT,
           panels: panelsLeaving(state.panels),
           // A new draft is a new thing on screen: results for an earlier draft no longer apply.
           generation: state.generation + 1,
           chosenFolder: action.workspaceId,
+          pageError: null,
           draft: { workspaceId: action.workspaceId, config: {}, ...(created ? { createdSessionId: created } : {}) },
           startError: null,
           staged: null,
@@ -321,6 +155,7 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
         {
           ...state,
           ...LEFT_SCREEN,
+          ...NO_CHAT_INTENT,
           panels: panelsLeaving(state.panels),
           generation: state.generation + 1,
           draft: null,
@@ -392,7 +227,7 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
     }
     case 'DRAFT_START_FAILED': {
       if (!isCurrent(state, action.tag)) return result(state);
-      return result({ ...state, starting: false, sendIntent: null, startError: action.message });
+      return result({ ...state, starting: false, sendIntent: null, startError: action.message, pageError: action.message });
     }
     case 'CONFIG_LOADED':
       return isCurrent(state, action.tag) && action.config.sessionId === state.openChat
@@ -536,5 +371,41 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
       return state.panels.skills === action.open
         ? result(state)
         : result({ ...state, panels: { ...state.panels, skills: action.open } });
+    case 'CONFIG_APPLY_STARTED':
+      // One change at a time per chat.
+      return isCurrent(state, action.tag) && state.openChat && !state.configApply
+        ? result({ ...state, configApply: { requestId: action.requestId } })
+        : result(state);
+    case 'CONFIG_APPLY_SETTLED':
+      return isCurrent(state, action.tag) && state.configApply?.requestId === action.requestId
+        ? result({ ...state, configApply: null })
+        : result(state);
+    case 'RETRY_ERROR':
+      return isCurrent(state, action.tag) ? result({ ...state, retryError: action.error }) : result(state);
+    case 'RETRY_DRAFT':
+      return isCurrent(state, action.tag) ? result({ ...state, retryDraft: action.draft }) : result(state);
+    case 'PAGE_ERROR':
+      return action.message === state.pageError ? result(state) : result({ ...state, pageError: action.message });
+    case 'CHAT_PICKED':
+      // Always navigates, also to the chat already open: picking it adds a history entry, as before.
+      return result(action.workspaceId ? { ...state, chosenFolder: action.workspaceId } : state, [
+        { type: 'navigate', sessionId: action.sessionId },
+      ]);
+    case 'USER_CHANGED':
+      return result(
+        {
+          ...state,
+          ...LEFT_SCREEN,
+          ...NO_CHAT_INTENT,
+          panels: panelsLeaving(state.panels),
+          generation: state.generation + 1,
+          draft: null,
+          starting: false,
+          sendIntent: null,
+          startError: null,
+          pendingFirstSend: null,
+        },
+        [{ type: 'navigate', sessionId: null, history: 'replace' }],
+      );
   }
 }

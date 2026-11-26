@@ -385,3 +385,81 @@ test('editing the first message is sent even when the rewound chat would block a
   await expect(turns(page).first()).toContainText('reply edited');
   expect(app.model.turn('edited a')).toHaveLength(1);
 });
+
+test('a settings change still in flight in one chat does not lock the next chat’s controls', async ({
+  page,
+  launch,
+}) => {
+  const app = await launch({ scripts: { 'chat a': [{ text: 'reply a' }], 'chat b': [{ text: 'reply b' }] } });
+  const chatA = await twoChatsWithAOpen(page, app);
+  // Chat A's approval change is held at the boundary while the user moves on to chat B.
+  const held = await hold(
+    page,
+    (url, method) => method === 'POST' && url.pathname === `/api/term2/sessions/${chatA}/config`,
+  );
+  await approvalChip(page).click();
+  await page.getByRole('menuitemradio', { name: /Smart auto-approve/ }).click();
+  await held.arrived;
+  await page
+    .getByRole('button', { name: /^chat b,/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'chat b' })).toBeVisible();
+  // Chat B's own controls work while A's change is still on its way.
+  await expect(approvalChip(page)).toBeEnabled();
+  await approvalChip(page).click();
+  await page.getByRole('menuitemradio', { name: /Smart auto-approve/ }).click();
+  await expect(approvalChip(page)).toHaveAccessibleName(/Approval mode: Smart auto-approve/);
+  held.release();
+  await page.reload();
+  await expect(approvalChip(page)).toHaveAccessibleName(/Approval mode: Smart auto-approve/);
+});
+
+test('a failed Retry’s error does not wait for the user in the chat they left', async ({ page, launch }) => {
+  const app = await launch({ scripts: { 'chat a': [{ text: 'reply a' }], 'chat b': [{ text: 'reply b' }] } });
+  const chatA = await twoChatsWithAOpen(page, app);
+  // The Retry's first step, reading the chat's rewind points, fails once.
+  let failed = false;
+  await page.route(`**/api/agent/sessions/${chatA}/rewind-targets`, async (route) => {
+    if (!failed) {
+      failed = true;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: '{"error":{"code":"internal","message":"rewind points unavailable"}}',
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await turns(page).first().getByRole('button', { name: 'Retry reply' }).click();
+  await expect(turns(page).first().getByRole('alert')).toBeVisible();
+  // Leave and come back: the error belonged to that moment, not to the chat.
+  await page
+    .getByRole('button', { name: /^chat b,/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'chat b' })).toBeVisible();
+  await page
+    .getByRole('button', { name: /^chat a,/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'chat a' })).toBeVisible();
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expect(turns(page).first().getByRole('alert')).toHaveCount(0);
+});
+
+test('removing the open chat’s folder leaves the chat', async ({ page, launch }) => {
+  const app = await launch({ scripts: { 'chat a': [{ text: 'reply a' }] } });
+  await openDraftChat(page, app);
+  await send(page, 'chat a');
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  const list = page.getByRole('region', { name: 'Chats and folders' });
+  await list.getByRole('button', { name: new RegExp(`^Folder options for .*${app.workspaceName}`) }).click();
+  await page.getByRole('menuitem', { name: /Remove folder/ }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove folder' }).click();
+  // Its chats no longer open: the page goes back to the welcome screen and the address bar names no chat.
+  await expect(page.getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('agentSession')).toBeNull();
+});

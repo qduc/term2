@@ -24,11 +24,11 @@ import {
   type StagedConfig,
   type Tag,
 } from '../shell-machine';
-import type { ReadableStore, Store } from '../store';
+import type { ReadableStore } from '../store';
 import type { ModelSummary, RewindTargetSummary, SessionConfigUpdate } from '../types';
 import type { ChatFacts } from './chat-facts';
 import type { OpenSession } from './open-session';
-import type { ComposerHandle, ShellLocalState } from './shell-runtime';
+import type { ComposerHandle } from './shell-runtime';
 
 type ConfigSelection = Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>;
 
@@ -46,6 +46,8 @@ export interface ShellOperations {
   send(delivery?: Delivery, overrideText?: string, options?: { textOnly?: boolean }): Promise<boolean>;
   retryLastTurn(model?: ModelSummary): Promise<void>;
   resendFromTurn: ResendFromTurn;
+  /** Retry under a reply: resendFromTurn, and its failure shown under that turn until the page shows something else. */
+  retryReply: ResendFromTurn;
   rewind(target: RewindTargetSummary, restoreText: boolean): Promise<void>;
   toggleSkills(): void;
   openProviderSetup(): void;
@@ -61,13 +63,11 @@ export function createShellOperations(runtime: {
   readonly session: OpenSession;
   readonly data: ServerData;
   readonly prefs: BrowserPrefs;
-  readonly local: Store<ShellLocalState>;
   readonly facts: ReadableStore<ChatFacts>;
   readonly composer: { current: ComposerHandle | null };
 }): ShellOperations {
-  const { store, dispatch, session, data, local, facts } = runtime;
-  const setLocal = (change: Partial<ShellLocalState>) => local.set((current) => ({ ...current, ...change }));
-  const setPageError = (pageError: string | null) => setLocal({ pageError });
+  const { store, dispatch, session, data, facts } = runtime;
+  const setPageError = (message: string | null) => dispatch({ type: 'PAGE_ERROR', message });
   const notice = (key: NoticeKey, message: string | null, tag: Tag = currentTag(store.get())) =>
     dispatch({ type: 'NOTICE', tag, key, message });
   const focusComposer = () => runtime.composer.current?.focus();
@@ -130,7 +130,7 @@ export function createShellOperations(runtime: {
       const { selectedWorkspaceId, startingChat } = facts.get();
       const targetWorkspace = workspaceOverride ?? selectedWorkspaceId;
       if (!targetWorkspace || startingChat) return;
-      setPageError(null);
+      // NEW_DRAFT also clears the page's error banner.
       dispatch({ type: 'NEW_DRAFT', workspaceId: targetWorkspace });
       if (window.innerWidth < 768) dispatch({ type: 'SIDEBAR_SET', open: false });
       window.setTimeout(focusComposer, 50);
@@ -138,8 +138,7 @@ export function createShellOperations(runtime: {
 
     selectChat(id) {
       const selected = data.chats.get().data.sessions.find((item) => item.id === id);
-      if (selected) dispatch({ type: 'FOLDER_CHOSEN', workspaceId: selected.workspaceId });
-      navigation.openChat(id);
+      dispatch({ type: 'CHAT_PICKED', sessionId: id, workspaceId: selected?.workspaceId ?? null });
       if (window.innerWidth < 768) dispatch({ type: 'SIDEBAR_SET', open: false });
     },
 
@@ -173,7 +172,8 @@ export function createShellOperations(runtime: {
         );
       }
       const openChatWorkspace = sessionId ? openChatFolder ?? selectedWorkspaceId : null;
-      if (change.kind === 'removed' && openChatWorkspace === workspaceId) navigation.leaveRemovedFolderChat();
+      // Its chats no longer open: back to the welcome screen (the machine navigates away from the open chat).
+      if (change.kind === 'removed' && openChatWorkspace === workspaceId) dispatch({ type: 'DRAFT_DISCARDED' });
       void data.chats.refresh().catch(() => undefined);
       try {
         await data.folders.refresh();
@@ -189,11 +189,14 @@ export function createShellOperations(runtime: {
     async applySessionConfig(selection, tag = currentTag(store.get())) {
       const { sessionId } = facts.get();
       const discoveredConfig = store.get().config;
-      if (!sessionId || !discoveredConfig || local.get().configBusy) return false;
+      if (!sessionId || !discoveredConfig || store.get().configApply) return false;
       // Results apply only while this chat is still open (the tag); a late answer for another chat is dropped.
       const stillOpen = () => isCurrentTag(store.get(), tag);
       const configNotice = (message: string | null) => notice('config', message, tag);
-      setLocal({ configBusy: true });
+      // One change at a time in this chat; the machine refuses a second, and forgets it when the chat changes.
+      const requestId = crypto.randomUUID();
+      dispatch({ type: 'CONFIG_APPLY_STARTED', tag, requestId });
+      if (store.get().configApply?.requestId !== requestId) return false;
       configNotice(null);
       try {
         const latest = await term2Client.readSessionConfig(sessionId);
@@ -219,7 +222,7 @@ export function createShellOperations(runtime: {
         configNotice(reason instanceof Error ? reason.message : 'Could not update session configuration.');
         return false;
       } finally {
-        setLocal({ configBusy: false });
+        dispatch({ type: 'CONFIG_APPLY_SETTLED', tag, requestId });
       }
     },
 
@@ -315,7 +318,8 @@ export function createShellOperations(runtime: {
 
     async retryLastTurn(model) {
       const { sessionId, lastTurn, commandDisabled, modelBlocked, stagedForChat } = facts.get();
-      const { configBusy } = local.get();
+      const configBusy = store.get().configApply !== null;
+      const tag = currentTag(store.get());
       const models = data.models.get().data;
       if (commandDisabled || configBusy || !lastTurn || !['failed', 'aborted'].includes(lastTurn.status)) return;
       if (!model && modelBlocked) return;
@@ -327,12 +331,12 @@ export function createShellOperations(runtime: {
             model ??
             models.find((item) => item.provider === modelSelection?.provider && item.id === modelSelection.model);
           if (sessionId && replacement && lastTurn.userText)
-            setLocal({ retryDraft: { sessionId, turnId: lastTurn.turnId, model: replacement } });
+            dispatch({ type: 'RETRY_DRAFT', tag, draft: { turnId: lastTurn.turnId, model: replacement } });
           return;
         }
         dispatch({ type: 'STAGED_CHANGED', staged: null });
       }
-      setLocal({ retryDraft: null });
+      dispatch({ type: 'RETRY_DRAFT', tag, draft: null });
       await session.invokeCommand('retry-turn');
     },
 
@@ -342,7 +346,7 @@ export function createShellOperations(runtime: {
       const { sessionId, sendBlocked } = entry;
       if (!sessionId) return 'This chat is not open.';
       if (sendBlocked) return 'Choose a model that can reply before resending.';
-      setLocal({ retryError: null });
+      dispatch({ type: 'RETRY_ERROR', tag: currentTag(store.get()), error: null });
       let targets: RewindTargetSummary[];
       // Rewind targets name the user message; every presented turn carries its opening message's id.
       const messageId = session.view.get().turns.find((item) => item.turnId === turnId)?.userMessageId;
@@ -358,6 +362,13 @@ export function createShellOperations(runtime: {
       // If it is refused, the machine puts the text back in this chat's message box with the resend notice.
       await sendWith(entry, 'auto', text, { textOnly: true });
       return null;
+    },
+
+    async retryReply(turnId, text) {
+      const tag = currentTag(store.get());
+      const failure = await ops.resendFromTurn(turnId, text);
+      if (failure) dispatch({ type: 'RETRY_ERROR', tag, error: { turnId, message: failure } });
+      return failure;
     },
 
     async rewind(target, restoreText) {

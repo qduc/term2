@@ -1,6 +1,7 @@
 /**
- * Every write the chat shell makes to the address bar. The address bar owns which chat is open: these change it
- * and the page reports the change back as `URL_CHANGED` (lib/term2/shell-machine.ts). No React here.
+ * The settings page's address-bar writes (`?settings=`, `?provider=`). They are not the open chat: the machine keeps
+ * no copy of either, so they stay plain functions (docs/plans/web-client/web-shell-decomposition-part2.md, section
+ * 5.4). The open chat's writes are in chat-navigation.ts. No React here.
  */
 import type { SettingsSectionId } from '../../components/term2/settings/settings-catalog';
 
@@ -14,41 +15,6 @@ export function settingsUrl(section: SettingsSectionId | null, provider?: string
     if (provider) url.searchParams.set('provider', provider);
   }
   return url.toString();
-}
-
-/** Opens a chat as a new history entry. */
-export function openChat(sessionId: string): void {
-  const params = new URLSearchParams(window.location.search);
-  params.delete('c');
-  params.set('term2', '1');
-  params.set('agentSession', sessionId);
-  window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-
-/** Leaves the open chat (back to a draft or the welcome screen) as a new history entry. */
-export function leaveChat(): void {
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has('agentSession')) return;
-  url.searchParams.delete('agentSession');
-  window.history.pushState({}, '', url.toString());
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-
-/** Leaves a chat whose folder was removed. */
-export function leaveRemovedFolderChat(): void {
-  const params = new URLSearchParams(window.location.search);
-  params.delete('agentSession');
-  window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-
-/** Drops the chat from the address bar without a history entry or a popstate (another user signed in). */
-export function forgetChatSilently(): void {
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has('agentSession')) return;
-  url.searchParams.delete('agentSession');
-  window.history.replaceState(null, '', url.toString());
 }
 
 /** Opens the settings page as a new history entry, so browser Back returns to the chat. */

@@ -242,6 +242,8 @@ export class Term2SessionStore {
           if (error.status === 410 || error.code === 'cursor_compacted' || error.code === 'replay_unavailable')
             return this.#reloadRequired('This session can no longer be resumed from here. Reload to load its current state.');
           if ([401, 403, 404].includes(error.status)) {
+            // A terminal error is shown even while a history replacement is held.
+            this.#held = false;
             this.#connection = { phase: 'closed', error: error.message };
             this.#publish(true);
             return;

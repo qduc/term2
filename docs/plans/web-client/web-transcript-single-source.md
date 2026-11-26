@@ -106,10 +106,14 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   submit/abort overlays clear on any accepted frame; a pending request with no DTO shows the status line only, no
   card; a cancelled turn's running command reads `unknown`, because the fold settles `started` to `unknown` at turn
   end (as the old reload view did). No persistent check covers the pre-live SSE buffer path.
-- **Next:** verifier round three for these fixes, then phase 3. The acceptance example's steer and the second
-  example (a background subagent's panel steps) are not in the integration test yet; phase 2's browser flows
-  cover the steer end to end. Phases
-  are in order; 3 is independent of 1 and 2 and can be scheduled separately.
+- **Independent verifier, round three** (on `53ec5fff`): **phase 2 accepted**, with no deviation blocking. Its one
+  suggestion, a 401/403/404 arriving while a history replacement is held stays hidden, is fixed (the store releases
+  the hold on a terminal error).
+- **Next:** phase 3 (shell state machine), and phase L once the owner has made its two settings and the spike runs
+  on a throwaway pull request. CI has not yet run any of this branch: the `web-browser` job's time budget is
+  unproven. The acceptance example's steer is not in the stream integration test (it needs real queue state); the
+  browser steer flow covers it end to end. The second example (a background subagent) was added in `c7bf7333`.
+  Phase 3 is independent of 1 and 2.
 - **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
   lockfile lines; use the pinned version for dependency changes.
 

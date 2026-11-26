@@ -23,6 +23,11 @@ export type WireFoldOptions = {
   readonly formatToolLabel?: (toolName: string, input: unknown) => string;
 };
 
+function replaceTool(tools: WireSnapshot['tools'], next: WireSnapshot['tools'][number]): WireSnapshot['tools'] {
+  const index = tools.findIndex((tool) => tool.executionId === next.executionId);
+  return index < 0 ? [...tools, next] : tools.map((tool, at) => (at === index ? next : tool));
+}
+
 /** Reject cross-session input; seq only advances on actual durable event references. */
 export function reduceWireEvent(state: WireSnapshot, event: WireEvent, options: WireFoldOptions = {}): WireSnapshot {
   if (event.sessionId !== state.sessionId) throw new Error('Wire event belongs to a different session');
@@ -111,10 +116,8 @@ function reducePayload(state: WireSnapshot, event: WireEvent, options: WireFoldO
         ...state,
         thinking: false,
         timeline: timeline(state, [{ kind: 'tool', id: event.payload.tool.executionId }]),
-        tools: replace(
-          state.tools.map((tool) => ({ ...tool, id: tool.executionId })),
-          { ...event.payload.tool, id: event.payload.tool.executionId },
-        ).map(({ id: _id, ...tool }) => tool),
+        // Replaced in place by execution: untouched tools keep their identity, so clients can reuse their rows.
+        tools: replaceTool(state.tools, event.payload.tool),
       };
     case 'tool_progress':
       return {

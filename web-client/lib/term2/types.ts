@@ -1,3 +1,4 @@
+import type { WireBranchSnapshot, WireSnapshot, WireTask } from './generated/wire-fold.js';
 import type { NativeState } from './native-state';
 import type { SessionHydration, NativeBranchHydration } from './hydration';
 export const TERM2_CONTRACT_VERSION = 2 as const;
@@ -163,6 +164,8 @@ export interface Term2SubagentIdentity {
 
 export type InteractionProjection =
   | null
+  /** A request is pending but no answerable DTO reached this client; shown as pending, never as nothing. */
+  | { state: 'unavailable'; requestId: string; turnId: string }
   | {
       state: 'pending';
       interaction: PendingInteraction;
@@ -440,7 +443,7 @@ export interface Term2SubagentCard {
   commands: Term2Command[];
 }
 export type Term2TurnItem =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; content?: readonly unknown[] }
   | { kind: 'reasoning'; id: string; text: string; streaming?: boolean; modelStep?: number }
   | { kind: 'text'; id: string; text: string; draft?: boolean; modelStep?: number }
   | { kind: 'tool'; executionId: string };
@@ -453,6 +456,8 @@ export interface Term2TurnView {
    * `turnId`; live turns use the message id as their `turnId`, so this is unset there.
    */
   userMessageId?: string;
+  /** The opening message's content parts (text and images), as accepted. */
+  userContent?: readonly unknown[];
   text: string;
   reasoning: string;
   status: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted' | 'rejected' | 'unknown';
@@ -468,8 +473,31 @@ export interface Term2TurnView {
   error?: string;
   errorMessage?: string;
 }
+/** The parts of a session snapshot the panels read, filled by present.ts; components never read the snapshot. */
+export interface Term2SessionFacts {
+  /** Each task with its subagent branch (steps, turns, usage) when it has one. */
+  tasks: readonly (WireTask & { readonly branch: WireBranchSnapshot | null })[];
+  queue: WireSnapshot['queue'];
+  queueState: WireSnapshot['queueState'];
+  queuePauseReason: NonNullable<WireSnapshot['queuePauseReason']> | null;
+  notifications: NonNullable<WireSnapshot['notifications']>;
+  requestCosts: NonNullable<WireSnapshot['requestCosts']>;
+  usage: WireSnapshot['usage'];
+  lastUsage: NonNullable<WireSnapshot['lastUsage']> | null;
+  cost: WireSnapshot['cost'];
+  goal: WireSnapshot['goal'];
+  verification: WireSnapshot['verification'];
+  notices: WireSnapshot['notices'];
+  /** Rule 13: a session-level fault, shown once instead of a live-only overlay. */
+  lastError: WireSnapshot['lastError'];
+  /** Rule 2: the snapshot has tools but no timeline, so no order can be shown. */
+  unorderedTranscript: boolean;
+}
+
 export interface Term2SessionView {
   sessionId: string;
+  /** Filled by present.ts from the snapshot; absent before the first one. */
+  session?: Term2SessionFacts;
   hydration?: SessionHydration;
   nativeBranch?: NativeBranchHydration;
   rootEvidence?: Readonly<Record<string, unknown>>;

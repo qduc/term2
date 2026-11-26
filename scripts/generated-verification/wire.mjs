@@ -8,6 +8,7 @@ import { EventEmitter } from 'node:events';
 import { DirectEventQueue, directBatch } from '../../src/host/in-process-direct-queue.ts';
 import { directWireV2EventStream } from '../../src/host/server-sse.ts';
 import { ServerInteractions } from '../../src/host/server-interactions.ts';
+import { present } from '../../web-client/lib/term2/present.ts';
 
 /*
  * Reload equals live, where two producers of the same state still exist.
@@ -23,6 +24,10 @@ import { ServerInteractions } from '../../src/host/server-interactions.ts';
  * cut, a projection that folded updates 1..k is synchronized with the Session state built from the same facts;
  * the accepted part of its snapshot must not move. Fields that only rebuild from Session state are really
  * checked; fields carried over from the previous snapshot compare with themselves.
+ *
+ * web.present-reuse: the browser's present() (web-client/lib/term2/present.ts) is deterministic, never mutates
+ * the snapshot, and after one more publication changes the identity of at most the turns it touched, so one
+ * streaming delta re-renders one turn.
  *
  * Bounds: at most 30 commands per case, no model, network or filesystem.
  */
@@ -440,6 +445,50 @@ export const wireProperties = [
           asSent(snapshot),
           `browser fold differs from the server after frame ${index} (${frame.kind})`,
         );
+      }
+    }),
+  },
+  {
+    name: 'web.present-reuse',
+    property: fc.property(sessionCommands, (commands) => {
+      const projection = DirectProjection.forReplay(initialDirectState(SESSION, WORKSPACE, MODEL));
+      const live = { phase: 'live', error: null };
+      const none = new Map();
+      let previousSnapshot = projection.snapshot;
+      let previousView = present(SESSION, previousSnapshot, none, live);
+      for (const [index, update] of sessionUpdates(commands).entries()) {
+        const events = projection.update(update);
+        const snapshot = projection.snapshot;
+        const before = JSON.stringify(snapshot);
+        const view = present(SESSION, snapshot, none, live, previousView);
+        assert.equal(JSON.stringify(snapshot), before, `present mutated the snapshot at update ${index}`);
+        assert.deepEqual(
+          present(SESSION, snapshot, none, live),
+          view,
+          `present is not deterministic at update ${index}`,
+        );
+        const touched = new Set(
+          [
+            ...events.map((event) => event.turnId),
+            previousSnapshot.activeTurnId,
+            snapshot.activeTurnId,
+            previousSnapshot.terminal?.turnId,
+            snapshot.terminal?.turnId,
+            ...(previousSnapshot.status !== snapshot.status
+              ? previousView.turns.map((turn) => turn.turnId).slice(-1)
+              : []),
+          ].filter(Boolean),
+        );
+        const earlier = new Map(previousView.turns.map((turn) => [turn.turnId, turn]));
+        for (const turn of view.turns)
+          if (!touched.has(turn.turnId) && earlier.has(turn.turnId))
+            assert.equal(
+              turn,
+              earlier.get(turn.turnId),
+              `turn ${turn.turnId} was rebuilt by update ${index} that did not touch it`,
+            );
+        previousSnapshot = snapshot;
+        previousView = view;
       }
     }),
   },

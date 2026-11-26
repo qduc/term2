@@ -1177,6 +1177,27 @@ export const term2Client = {
       signal,
     );
   },
+  /**
+   * The session's direct-wire-v2 stream (native events, one frame per publication). With no cursor the first
+   * frame is the current snapshot, which is how a page loads; with `after` it is the accepted tail after it.
+   */
+  async openDirectEvents(sessionId: string, after: number | null, signal?: AbortSignal): Promise<HttpResponse<Response>> {
+    try {
+      const cursor = after !== null && after > 0 ? String(after) : null;
+      return await httpClient.get<Response>(
+        `/agent/sessions/${encodeURIComponent(id(sessionId))}/events?format=direct-wire-v2${cursor ? `&after=${cursor}` : ''}`,
+        {
+          signal,
+          skipAuth: true,
+          skipRetry: true,
+          headers: { Accept: 'text/event-stream', ...(cursor ? { 'Last-Event-ID': cursor } : {}) },
+        },
+      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      throw apiError(error);
+    }
+  },
   async openEvents(sessionId: string, after: number, signal?: AbortSignal): Promise<HttpResponse<Response>> {
     try {
       return await httpClient.get<Response>(

@@ -710,7 +710,7 @@ function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedCha
       const interactionId = id(payload.interactionId);
       if (!['approved', 'rejected', 'cancelled', 'continued'].includes(String(payload.outcome)))
         throw new Term2ProtocolError('Invalid interaction outcome');
-      if (view.pendingInteraction && view.pendingInteraction.interaction.interactionId !== interactionId)
+      if (view.pendingInteraction && 'interaction' in view.pendingInteraction && view.pendingInteraction.interaction.interactionId !== interactionId)
         throw new Term2ProtocolError('Resolved interaction is not current');
       replaceInteraction(view, null);
       // Like the TUI reducer: a resolution resumes a running root turn; a background task's

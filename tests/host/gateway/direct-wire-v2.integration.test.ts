@@ -16,6 +16,8 @@ import type { DirectSession, DirectSessionUpdate } from '../../../src/session/fa
 import type { Fact } from '../../../src/session/facts.js';
 import type { ExecutionId } from '../../../src/tools/index.js';
 import { initialDirectState, reduceDirectFact } from '../../../src/session/state.js';
+// The browser's present(), loaded at the runtime boundary like the other web-client modules gateway tests read.
+const { present } = await import(new URL('../../../web-client/lib/term2/present.ts', import.meta.url).href);
 
 /**
  * The direct-wire-v2 stream over real HTTP: a scripted Session behind the real attachment, the real encoder and
@@ -348,6 +350,22 @@ it('a client that connects mid-turn folds the opening snapshot and every later f
   expect(client.turnUsage).toEqual([
     { turnId: 'turn-1', usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 0 } },
   ]);
+  // Section 3's expected view, as the browser presents the folded snapshot (without the steer).
+  const presented = present(SESSION, client, new Map(), { phase: 'live', error: null });
+  const describe = (item: { kind: string; id?: string; executionId?: string }) =>
+    `${item.kind} ${item.kind === 'tool' ? item.executionId : item.id}`;
+  expect(presented.turns.map((turn: { turnId: string }) => turn.turnId)).toEqual(['turn-1', 'turn-2']);
+  const [first, second] = presented.turns;
+  expect(first.userText).toBe('first prompt');
+  expect(first.items.map(describe)).toEqual(['reasoning rs-1', 'text asst-1', 'tool exec-1', 'text asst-2']);
+  expect(first.commands).toMatchObject([{ callId: 'exec-1', status: 'completed', output: 'a.txt\nb.txt' }]);
+  expect(first.usage).toEqual({ inputTokens: 100, outputTokens: 20, totalTokens: 120 });
+  expect(first.status).toBe('completed');
+  expect(second.userText).toBe('second prompt');
+  expect(second.items.map(describe)).toEqual(['tool exec-2']);
+  expect(second.commands).toMatchObject([{ callId: 'exec-2', status: 'failed', error: 'exit 1' }]);
+  expect(second).toMatchObject({ status: 'failed', error: 'rate_limit', errorMessage: '429 slow down' });
+  expect(second.usage).toBeUndefined();
   expect(client.turnResults?.map((result) => [result.turnId, result.outcome, result.error?.message])).toEqual([
     ['turn-1', 'completed', undefined],
     ['turn-2', 'failed', '429 slow down'],

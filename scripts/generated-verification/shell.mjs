@@ -38,13 +38,15 @@ const user = fc.oneof(
     sessionId: fc.constantFrom(...CHATS),
     workspaceId: fc.constantFrom(null, ...FOLDERS),
   }),
-  fc.record({ kind: fc.constant('user') }),
+  { arbitrary: fc.record({ kind: fc.constant('user') }), weight: 3 },
   // A whole first send in one step (a draft, some text, Send), so later steps reach a chat being created.
-  fc.record({ kind: fc.constant('draft_send'), workspaceId: fc.constantFrom(...FOLDERS) }),
+  { arbitrary: fc.record({ kind: fc.constant('draft_send'), workspaceId: fc.constantFrom(...FOLDERS) }), weight: 3 },
   // From now on the page reports address-bar changes late (as the router does), or at once again.
   fc.record({ kind: fc.constant('router'), late: fc.boolean() }),
   // A settings change in the open chat; its end arrives later, or never.
   fc.record({ kind: fc.constant('config') }),
+  // A settings change whose start names an earlier screen (it must change nothing).
+  fc.record({ kind: fc.constant('config_stale') }),
   // A Retry's failure, or a failed switch's draft offer, arriving later for what is shown now.
   fc.record({ kind: fc.constant('retry_fail') }),
   fc.record({ kind: fc.constant('retry_offer') }),
@@ -77,9 +79,10 @@ const user = fc.oneof(
   // then its second answer) are reached.
   { arbitrary: fc.record({ kind: fc.constant('settle'), index: fc.nat(7), ok: fc.boolean() }), weight: 6 },
 );
-const script = fc.array(user, { minLength: 1, maxLength: 30, size: 'max' });
+// Whether the page reports address-bar changes late from the start (the `router` step can change it later).
+const script = fc.tuple(fc.boolean(), fc.array(user, { minLength: 1, maxLength: 30, size: 'max' }));
 
-function run(actions) {
+function run([lateFromStart, actions]) {
   let state = initialShellState(null);
   const pending = []; // commands and late results waiting to resolve
   let created = 0;
@@ -96,7 +99,7 @@ function run(actions) {
   const retryAnswered = new Set(); // `${generation}|${boundary}` whose ask was answered busy
   let firedTimer = null; // the last status timer that fired while current
   let configStarts = 0;
-  let lateReports = false; // the page reports a navigate later, as a pending result
+  let lateReports = lateFromStart; // the page reports a navigate later, as a pending result
   let configStartTag = null; // the tag of the settings change the machine accepted last
   let boundaries = 0;
 
@@ -306,6 +309,14 @@ function run(actions) {
         dispatch({ type: 'SEND_REQUESTED', requestId, context: sendContext(false) });
         break;
       }
+      case 'config_stale':
+        if (state.generation > 0)
+          dispatch({
+            type: 'CONFIG_APPLY_STARTED',
+            tag: { sessionId: state.openChat, generation: state.generation - 1 },
+            requestId: `config-${++configStarts}`,
+          });
+        break;
       case 'router':
         lateReports = action.late;
         break;

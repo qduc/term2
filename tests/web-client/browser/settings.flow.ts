@@ -59,3 +59,20 @@ test('two settings changed one after the other on the settings page are both sav
   await expect(page).not.toHaveURL(/settings=/);
   await expect(page.getByRole('navigation', { name: 'Settings sections' })).toHaveCount(0);
 });
+
+test('opening the settings page by its address never shows its load error on the way', async ({ page, launch }) => {
+  const app = await launch({ scripts: {} });
+  // Records whether the load-error screen was ever on the page, however briefly.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __settingsError: boolean };
+    w.__settingsError = false;
+    new MutationObserver(() => {
+      if (document.body?.innerText.includes('Settings could not be loaded')) w.__settingsError = true;
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await page.goto(`${app.origin}/?settings=conversation`);
+    await expect(page.getByRole('switch', { name: 'Personal memory' })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __settingsError: boolean }).__settingsError)).toBe(false);
+  }
+});

@@ -165,7 +165,14 @@ export function Term2SettingsPage({
   const data = useServerData();
   const settings = useStoreSelector(data.settings, (state) => state);
   const [opening, setOpening] = useState<'loading' | 'failed' | 'ready'>('loading');
-  const projection = opening === 'ready' ? settings.data : null;
+  // What this opening read. A newer read of the same settings (the page's own start-up read, on a direct load) can
+  // be in flight when ours answers, so ours is not installed: show it until the store installs something after it
+  // (that newer read, or a write's answer).
+  const [ownRead, setOwnRead] = useState<{ read: SettingsProjection | null; storeAtAnswer: SettingsProjection | null } | null>(
+    null,
+  );
+  const projection =
+    opening !== 'ready' ? null : ownRead && settings.data === ownRead.storeAtAnswer ? ownRead.read : settings.data;
   const loading = opening === 'loading';
   const loadError = settings.error;
   const catalog = useLoadOnOpen(data.providerCatalog);
@@ -183,6 +190,7 @@ export function Term2SettingsPage({
   const reload = useCallback(async () => {
     try {
       const latest = await data.settings.refresh();
+      setOwnRead({ read: latest, storeAtAnswer: data.settings.get().data });
       setOpening('ready');
       return latest;
     } catch {

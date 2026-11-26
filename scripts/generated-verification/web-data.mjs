@@ -205,7 +205,14 @@ async function runWriter(steps) {
           problems.push('a settings write started while another was unanswered');
         if (input.expectedRevision !== settings.get().data?.revision)
           problems.push('a write did not use the revision held when it was made');
-        calls.push({ expectedRevision: input.expectedRevision, resolve, reject, answered: false });
+        // The change carries its caller's record, so each answer is checked against that caller's promise.
+        calls.push({
+          expectedRevision: input.expectedRevision,
+          resolve,
+          reject,
+          answered: false,
+          record: input.changes[0].value,
+        });
       }),
     conflictProjection: (error) => error.projection ?? null,
   });
@@ -223,7 +230,7 @@ async function runWriter(steps) {
         const before = calls.length;
         const record = { outcome: undefined, loaded };
         outcomes.push(record);
-        writer([{ key: 'k', value: revisions }]).then(
+        writer([{ key: 'k', value: record }]).then(
           (value) => (record.outcome = { resolved: value }),
           (error) => (record.outcome = { rejected: error }),
         );
@@ -244,16 +251,19 @@ async function runWriter(steps) {
           call.resolve({ projection: next });
           await flush();
           assert.equal(settings.get().data, next, 'a successful write did not install its projection');
+          assert.equal(call.record.outcome?.resolved, next, "a successful write's caller did not get its projection");
         } else if (action.outcome === 'conflict') {
           const server = projection(`r${++revisions}`);
           const error = Object.assign(new Error('conflict'), { projection: server });
           call.reject(error);
           await flush();
           assert.equal(settings.get().data, server, "a conflict did not install the server's projection");
+          assert.ok(call.record.outcome && 'rejected' in call.record.outcome, "a conflict's caller did not reject");
         } else {
           call.reject(new Error('failed'));
           await flush();
           assert.equal(settings.get().data, storeBefore, 'a failed write changed the store');
+          assert.ok(call.record.outcome && 'rejected' in call.record.outcome, "a failed write's caller did not reject");
         }
         break;
       }

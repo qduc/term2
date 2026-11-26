@@ -472,7 +472,7 @@ Everything else is meant to be unchanged. "Property" is `shell.machine-rules` un
 | 4 | A Retry error or draft offer whose request answers after the user left is dropped (today it is stored and shown on return) | The tag rule | The property's existing stale-result assertion, which now sees the two new tagged actions |
 | 5 | After leaving chat A mid-change and returning, a second change to A can start while the first is in flight (today one global flag blocks it). The gateway's revision check refuses one of them | Follows from 1. Race window only | Not exercised |
 | 6 | Leaving a chat whose folder was removed: the message box empties at once (not when the address change is reported); the URL keeps its hash and never ends in a bare `?`; no history entry is added when the address bar names no chat | It now goes through `navigate` and `leaveChat` | Flow C |
-| 7 | A user change also drops a first message waiting for its new chat (`pendingFirstSend`), and the address bar is cleared even when the machine has no chat open yet | The previous user's send must not run for the next user. Reached only between a first send's `navigate` and its report | Property P6 |
+| 7 | A user change also drops a first message waiting for its new chat (`pendingFirstSend`). (Clearing the address bar when no chat is open is not new: the old feed called `forgetChatSilently()` unconditionally) | The previous user's send must not run for the next user. Reached only between a first send's `navigate` and its report | Property P6 |
 | 8 | The chat's two settings writes (favourite, blank-chat default) wait their turn behind other settings writes, and after a conflict the store holds the server's projection, so the next write works (today every later write conflicts until a reload; inferred from `writeSettings` having no `catch`) | One write path (section 1, item 4) | Property `web.settings-writes-in-order` |
 | 9 | Quota, rewind-target and preset requests are no longer aborted when their screen closes; a late answer is dropped | `Resource` has no cancel | Request probe: same list |
 | 10 | A load failure that is not an `Error` shows its string form instead of the fallback sentence, in the rewind dialog only | `Resource.error` is `messageOf(error)`. The facade throws `Term2ApiError` (inferred: not reachable) | Not exercised |
@@ -787,7 +787,26 @@ What the build did beyond or differently from the sections above, and what it fo
   behaviour change 5, and adding or removing an API key on a provider.
 - **Guards.** `web-shell-requests` now scans every component and hook, with three recorded exceptions.
   `web-chat-navigation` is new, and `webShellEffects` for `ShellFeeds.tsx` is 6. Ceilings: `shell-machine.ts`
-  removed (413 lines; types in `shell-state.ts`, 226 lines), `Term2SettingsPage.tsx` 910, `ProvidersSection.tsx`
+  removed (413 lines; types in `shell-state.ts`, 226 lines), `Term2SettingsPage.tsx` 918, `ProvidersSection.tsx`
   977. Both new seeds in `prove-checks.sh` are caught. The two older seeds that report NOT CAUGHT (duplicate basename,
   folder fan-out) do so on `main` too.
+- **Independent verifier, round one (on `16999b8a`): rejected**, with one blocking defect, now fixed:
+  - **A direct load or refresh of a `?settings=` address flashed "Settings could not be loaded."** (13-51 ms on
+    loopback, with an alert role). React runs child effects first: the page's own `refresh()` was request 1 and the
+    runtime's start-up `load()` request 2, so the page's answer resolved but was not installed, and the page went
+    "ready" with an empty store. The page now keeps its own read and shows it until the store installs something
+    after it answered. `useLoadOnOpen` does the same, so a screen never shows an earlier opening's data either.
+  - New flow "opening the settings page by its address never shows its load error on the way" (`settings.flow.ts`,
+    a MutationObserver over five direct loads): red on `16999b8a`, green after the fix.
+  - Non-blocking, also fixed:
+    - `web.settings-writes-in-order` now checks each caller's own outcome: a success resolves to exactly its
+      projection, and a conflict or failure rejects. Red on the two seeds that survived ("conflict resolves",
+      "success resolves to the old projection").
+    - `shell.machine-rules` sends stale-tagged `CONFIG_APPLY_STARTED` too; red with the tag check removed.
+    - The P6 seed was caught in about 2 of 10 default runs. The router can now start late and the `user` and
+      `draft_send` steps weigh more, so it is caught in 18 of 20 random runs and under CI's fixed seed (424242).
+    - Section 7, item 7 overstated the change: see the row.
+  - Confirmed by the verifier and left: an `export ... from` re-export of the facade, `@/lib/api/term2.ts`, and the
+    `contexts/` and `app/` folders are outside `web-shell-requests`' scan (none exist today); presets are now asked
+    for before settings when the settings page opens (independent reads).
 

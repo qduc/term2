@@ -14,7 +14,14 @@ decision D1, which the owner asked to talk through before choosing.
 
 - Add `@playwright/test` (Chromium only) as a root dev dependency, in its own CI lane.
 - Deliver by pushing to the working branch; the owner opens pull requests.
-- D1 (which stream the browser folds): open.
+- D1 (which stream the browser folds): open, but the owner stated the goal that decides it: `@qduc/agent-wire`
+  is to become a public library for building agent interface layers, so that nobody has to reinvent this. The
+  package today ships the event vocabulary and envelope parsers and leaves state and replay to each application
+  (its README says so), which is the part the web client reinvented. Proposed reading, not yet confirmed: option A,
+  with the state shape and `reduceWireEvent` incubated here and then graduated into `packages/wire` in
+  qduc/agent-runtime as the next schema version, the way `@qduc/agent-core` graduated; the web client consumes
+  them from the package. Open with it: whether the snapshot is published term2-shaped or split into a portable
+  core plus host extensions first.
 
 ## What the code shows (2026-11-26, `main` at `6fcad34`)
 

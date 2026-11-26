@@ -360,7 +360,7 @@ const LONG_REASONING = Array.from(
   (_, i) => `Step ${i + 1}: checking the workspace files and comparing the candidate implementation details.`,
 ).join('\n\n');
 
-test('concise mode keeps turn height monotonic across thinking, tool calls, and completion', async ({
+test('concise mode keeps the tool row and turn height stable across tool calls and completion', async ({
   page,
   launch,
 }) => {
@@ -397,6 +397,22 @@ test('concise mode keeps turn height monotonic across thinking, tool calls, and 
   await expect(turn.locator('details')).toHaveCount(0);
   const h1 = await turnHeight();
 
+  // Watch every label the row takes between held steps: a pending tool must not replace the
+  // settled work with a "waiting to start" line before the next call completes.
+  await page.evaluate(() => {
+    const w = window as unknown as { __toolLabels: string[] };
+    w.__toolLabels = [];
+    const article = document.querySelector('article:not(article article)');
+    const record = () => {
+      const labels = [...(article?.querySelectorAll('section[aria-label="Tool calls"] > button') ?? [])].map(
+        (button) => button.textContent?.trim() ?? '',
+      );
+      if (labels.length > 0 && w.__toolLabels.at(-1) !== labels[0]) w.__toolLabels.push(labels[0]!);
+    };
+    record();
+    if (article) new MutationObserver(record).observe(article, { subtree: true, childList: true, characterData: true });
+  });
+
   app.model.release('think-1');
   await app.model.held('think-2');
   await expect(turn.getByRole('button', { name: 'Read 1 file' })).toBeVisible();
@@ -422,6 +438,8 @@ test('concise mode keeps turn height monotonic across thinking, tool calls, and 
   expect(hDone).toBeGreaterThanOrEqual(h3);
   // The reserved status tail matches the finished action bar height so completion does not bounce the layout.
   expect(bottomWhenDone).toBe(bottomWhileStreaming);
+  const labels = await page.evaluate(() => (window as unknown as { __toolLabels: string[] }).__toolLabels);
+  expect(labels).not.toContain('1 action waiting to start');
 
   await expectSameTranscriptAfterReload(page, await transcript(page));
   expect(app.model.unscripted()).toEqual([]);

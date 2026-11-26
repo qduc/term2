@@ -101,16 +101,24 @@ export function Term2ToolGroup({
   }
 
   // Concise: the whole run is one line, plus a quiet line naming any failures.
-  const running = commands.filter((c) => c.status === 'running');
-  const pending = commands.filter((c) => c.status === 'pending').length;
+  const active = commands.filter((c) => c.status === 'running' || c.status === 'pending');
+  const settled = commands.filter((c) => c.status !== 'running' && c.status !== 'pending');
   const failed = commands.filter((c) => c.status === 'failed').length;
   const allFailed = failed === commands.length;
-  const current = running[0] ? describeCommand(running[0]) : null;
-  const summary = current
-    ? `${current.verb}${current.target ? ` ${current.target}` : ''}${running.length > 1 ? ` and ${running.length - 1} more` : ''}…`
-    : pending > 0
-      ? `${pending} ${pending === 1 ? 'action' : 'actions'} waiting to start`
-      : asSentence(summarizeCompletedTools(commands));
+  // A call that was issued but hasn't started yet is still the same action: reading it as `running`
+  // keeps the row from cycling through "waiting" -> "running" -> "done" on every call. Keep the
+  // settled work in the label while another call is active, so a new call doesn't erase the count
+  // the row just reported.
+  const current = active[0] ? describeCommand({ ...active[0], status: 'running' }) : null;
+  const currentText = current
+    ? `${current.verb}${current.target ? ` ${current.target}` : ''}${active.length > 1 ? ` and ${active.length - 1} more` : ''}…`
+    : null;
+  const settledSummary = settled.length > 0 ? asSentence(summarizeCompletedTools(settled)) : null;
+  const summary = currentText
+    ? settledSummary
+      ? `${settledSummary}, ${currentText.charAt(0).toLowerCase() + currentText.slice(1)}`
+      : currentText
+    : asSentence(summarizeCompletedTools(commands));
   // Keep any failure summary steady once a call in the run has failed so it doesn't
   // toggle the row height on and off as subsequent tools in the same run start and finish.
   const failures = describeFailures(commands);
@@ -125,7 +133,7 @@ export function Term2ToolGroup({
         onClick={() => setUserOpen(!open)}
       >
         <span className="flex h-5 shrink-0 items-center">
-          {running.length > 0 ? (
+          {active.length > 0 ? (
             <span aria-hidden className="flex h-4 w-4 items-center justify-center">
               <span className="t2-heartbeat h-2 w-2 rounded-full bg-teal-500 ring-2 ring-teal-500/25" />
             </span>
@@ -137,7 +145,7 @@ export function Term2ToolGroup({
         </span>
         <span className="min-w-0">
           <span className="flex items-center gap-1.5 leading-5">
-            <span className={`truncate ${running.length > 0 ? 't2-shimmer' : ''}`}>{summary}</span>
+            <span className={`truncate ${active.length > 0 ? 't2-shimmer' : ''}`}>{summary}</span>
             <ChevronRight
               aria-hidden
               className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}

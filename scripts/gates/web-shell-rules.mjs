@@ -1,7 +1,8 @@
 // The chat shell's component rules (docs/plans/web-client/web-shell-decomposition.md, section 7.2). Reminders for an
 // accidental step, in the existing gate pattern. Both scan web-client/components/term2/Term2SessionShell.tsx and
 // every file under web-client/components/term2/shell/. Parse-only.
-//   web-shell-effects   no useState/useReducer setter or `dispatch` call directly in an effect body
+//   web-shell-effects   no useState/useReducer setter or `dispatch` call directly in an effect body (the hooks
+//                       called bare or as React.useEffect / React.useState)
 //                       (per-file ceiling in rule-baseline.json webShellEffects; ShellFeeds.tsx holds the feeds)
 //   web-shell-requests  no value import from lib/api/term2 (server data lives in lib/term2/data/server-data.ts)
 import fs from 'node:fs';
@@ -27,6 +28,15 @@ function scannedFiles(repo) {
 }
 
 const calleeName = (expression) => (ts.isIdentifier(expression) ? expression.text : undefined);
+/** A React hook's name, called bare (`useEffect`) or through the namespace (`React.useEffect`). */
+const hookName = (expression) =>
+  ts.isIdentifier(expression)
+    ? expression.text
+    : ts.isPropertyAccessExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === 'React'
+    ? expression.name.text
+    : undefined;
 
 /** Setter names bound by `const [x, setX] = useState(...)` or `useReducer(...)` in this file. */
 function stateSetters(sf) {
@@ -37,7 +47,7 @@ function stateSetters(sf) {
       ts.isArrayBindingPattern(node.name) &&
       node.initializer &&
       ts.isCallExpression(node.initializer) &&
-      ['useState', 'useReducer'].includes(calleeName(node.initializer.expression) ?? '')
+      ['useState', 'useReducer'].includes(hookName(node.initializer.expression) ?? '')
     ) {
       const second = node.name.elements[1];
       if (second && ts.isBindingElement(second) && ts.isIdentifier(second.name)) setters.add(second.name.text);
@@ -68,7 +78,7 @@ function effectWrites(sf) {
     ts.forEachChild(node, scanBody);
   };
   const visit = (node) => {
-    if (ts.isCallExpression(node) && EFFECT_HOOKS.has(calleeName(node.expression) ?? '')) {
+    if (ts.isCallExpression(node) && EFFECT_HOOKS.has(hookName(node.expression) ?? '')) {
       const [effect] = node.arguments;
       if (effect && (ts.isArrowFunction(effect) || ts.isFunctionExpression(effect))) {
         // The effect function itself is scanned; functions inside it are not.

@@ -25,6 +25,11 @@ export type ResourceState<T> = {
 export interface Resource<T> extends ReadableStore<ResourceState<T>> {
   /** Fetches and shows loading. Resolves to the data, or null when it failed or a newer request replaced it. */
   load(key?: string | null): Promise<T | null>;
+  /**
+   * `load`, for a caller that must tell its own failure apart from being replaced: rejects only when this request
+   * failed, and resolves to what it fetched even when a newer request replaced it (so nothing was installed).
+   */
+  loadOrFail(key?: string | null): Promise<T>;
   /** Fetches without the loading flag. Rejects on failure so the caller can word the error. */
   refresh(key?: string | null): Promise<T>;
   /** `load(key)` unless this key is loaded or loading. */
@@ -88,6 +93,7 @@ export function createResource<T>(options: { initial: T; fetch: (key: string | n
         return null;
       }
     },
+    loadOrFail: (key = null) => run(key, 'loading'),
     refresh: (key = null) => run(key, 'refreshing'),
     ensure(key = null) {
       const state = store.get();

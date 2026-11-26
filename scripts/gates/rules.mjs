@@ -253,7 +253,7 @@ export const RULES = {
       'for one render the two disagree, and a run that fires late lands on another chat. Six fixes went into effects ' +
       "of this kind before the shell's policy moved into web-client/lib/term2/shell-machine.ts. Shapes detected (the " +
       'list is not complete): a useState or useReducer setter, or a call named dispatch, made directly in the body of ' +
-      'useEffect, useLayoutEffect or useInsertionEffect. Calls inside a listener, timer, promise callback or the ' +
+      'useEffect, useLayoutEffect or useInsertionEffect, each called bare or as React.<hook>. Calls inside a listener, timer, promise callback or the ' +
       'cleanup are not flagged.',
     fix:
       'Derive the value while rendering (a selector, or web-client/lib/term2/shell/chat-facts.ts), or make the change ' +

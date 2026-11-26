@@ -1045,4 +1045,22 @@ What the build did differently from the sections above, and what it found.
 - **Not changed, as section 13 says, and noticed:** `retryError` is never reset on a chat change; `configBusy` is
   shared across chats; `selectChat`, `openSettings` and the folder-removal leave write history directly rather
   than through a `navigate` command.
+- **Independent verifier, round one (on `73705219`): rejected**, with one blocking defect, now fixed:
+  - **Edit or Retry of the first message rewound the chat and then dropped the text.** `resendFromTurn` re-read
+    `sendBlocked` after the rewind. An emptied chat counts as a first send, which a model the catalog does not list
+    blocks, so `send` refused without dispatching anything. The old closure used the values from before the
+    rewind. `resendFromTurn` now sends with the facts it read on entry (`sendWith` in shell-operations.ts). The
+    verifier's reproduction is now a permanent flow, `shell-hazards.flow.ts` ("editing the first message is
+    sent..."): red on `73705219`, green after the fix.
+  - Non-blocking, also fixed:
+    - `web.resource-latest-wins` did not check `load()`'s return value, `ensure()`'s dedupe or `refresh()`'s
+      rejection. It now does, and is red on each of those three seeded faults.
+    - `web-shell-effects` missed `React.useEffect` / `React.useState`. It now catches them, with a new seed in
+      `prove-checks.sh`.
+    - `reloadLists` stopped before loading chats when a concurrent folder refresh failed. It now stops only on its
+      own request's failure (`Resource.loadOrFail`).
+  - The verifier's own probes found the same DOM in 20 states and the same request lists in three journeys on both
+    builds, the same stream open/close sequence across chat switches, and no difference in `chat-facts.ts` field by
+    field. Not exercised by anyone: folder removal and access change, loading more chats, desktop notifications,
+    drag-and-drop, and the `@` listing after a failure or across a scope change.
 

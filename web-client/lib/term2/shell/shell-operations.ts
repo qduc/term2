@@ -74,15 +74,55 @@ export function createShellOperations(runtime: {
   // A send's outcome for the caller that asked (an Edit keeps its box busy until then), by request id.
   const sendWaiters = new Map<string, (accepted: boolean) => void>();
 
+  /**
+   * Sends with the facts the caller read when its action started. An Edit or Retry reads them before it rewinds:
+   * the rewind can empty the chat, which turns a resend into a "first send" that a fresh read would block, and the
+   * text would be lost. The machine still decides; a refused resend puts its text back with the resend notice.
+   */
+  const sendWith = (
+    entry: Pick<ChatFacts, 'sendBlocked' | 'runningTurnId' | 'isDraft'>,
+    delivery?: Delivery,
+    overrideText?: string,
+    options?: { textOnly?: boolean },
+  ): Promise<boolean> => {
+    if (entry.sendBlocked) return Promise.resolve(false);
+    const requestId = crypto.randomUUID();
+    const action: ShellAction = {
+      type: 'SEND_REQUESTED',
+      requestId,
+      context: { runningTurnId: entry.runningTurnId },
+      ...(delivery ? { delivery } : {}),
+      ...(overrideText !== undefined ? { overrideText } : {}),
+      ...(options?.textOnly ? { textOnly: true } : {}),
+    };
+    if (entry.isDraft) {
+      setPageError(null);
+      dispatch(action);
+      return Promise.resolve(false);
+    }
+    return new Promise((resolve) => {
+      sendWaiters.set(requestId, resolve);
+      dispatch(action);
+      // Nothing to send, or a message already on its way.
+      if (store.get().sending?.requestId !== requestId) ops.sendSettled(requestId, false);
+    });
+  };
+
   const ops: ShellOperations = {
     async reloadLists() {
       setPageError(null);
-      if ((await data.folders.load()) === null && data.folders.get().error !== null) {
-        setPageError(data.folders.get().error || 'Agent control plane is unavailable');
+      // Stop only on this load's own failure: a folder refresh that starts and fails meanwhile is not it.
+      try {
+        await data.folders.loadOrFail();
+      } catch (error) {
+        setPageError(error instanceof Error && error.message ? error.message : 'Agent control plane is unavailable');
         return;
       }
-      if ((await data.chats.load()) === null && data.chats.get().error !== null)
-        setPageError(data.chats.get().error || 'Agent sessions are unavailable');
+      try {
+        await data.chats.loadOrFail();
+      } catch (error) {
+        setPageError(error instanceof Error && error.message ? error.message : 'Agent sessions are unavailable');
+      }
     },
 
     /** Opens an empty draft chat in a folder; the gateway session is created on first send. */
@@ -264,28 +304,7 @@ export function createShellOperations(runtime: {
      * no turn is running, and puts an Edit or Retry's text back if it is refused. In a draft it creates the chat.
      */
     send(delivery, overrideText, options) {
-      const { sendBlocked, runningTurnId, isDraft } = facts.get();
-      if (sendBlocked) return Promise.resolve(false);
-      const requestId = crypto.randomUUID();
-      const action: ShellAction = {
-        type: 'SEND_REQUESTED',
-        requestId,
-        context: { runningTurnId },
-        ...(delivery ? { delivery } : {}),
-        ...(overrideText !== undefined ? { overrideText } : {}),
-        ...(options?.textOnly ? { textOnly: true } : {}),
-      };
-      if (isDraft) {
-        setPageError(null);
-        dispatch(action);
-        return Promise.resolve(false);
-      }
-      return new Promise((resolve) => {
-        sendWaiters.set(requestId, resolve);
-        dispatch(action);
-        // Nothing to send, or a message already on its way.
-        if (store.get().sending?.requestId !== requestId) ops.sendSettled(requestId, false);
-      });
+      return sendWith(facts.get(), delivery, overrideText, options);
     },
 
     sendSettled(requestId, accepted) {
@@ -319,7 +338,8 @@ export function createShellOperations(runtime: {
 
     // Edit and Retry: rewind to just before the turn's message, then send `text` as a new turn.
     async resendFromTurn(turnId, text) {
-      const { sessionId, sendBlocked } = facts.get();
+      const entry = facts.get();
+      const { sessionId, sendBlocked } = entry;
       if (!sessionId) return 'This chat is not open.';
       if (sendBlocked) return 'Choose a model that can reply before resending.';
       setLocal({ retryError: null });
@@ -336,7 +356,7 @@ export function createShellOperations(runtime: {
       if ((target.imageCount ?? 0) > 0) return 'Messages with images can’t be edited or retried yet.';
       if (!(await session.rewind(target.targetId, undefined, { forResend: true }))) return 'Could not rewind the chat.';
       // If it is refused, the machine puts the text back in this chat's message box with the resend notice.
-      await ops.send('auto', text, { textOnly: true });
+      await sendWith(entry, 'auto', text, { textOnly: true });
       return null;
     },
 

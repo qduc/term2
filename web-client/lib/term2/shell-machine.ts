@@ -1,6 +1,6 @@
 /**
  * The chat shell's policy as one pure function: `step(state, action) → { state, commands }`. No React, no I/O.
- * Term2SessionShell holds the state and runs the returned commands in one place
+ * `shell/shell-runtime.ts` holds the state and runs the returned commands in one place
  * (docs/plans/web-client/web-transcript-single-source-spec.md, section 5).
  *
  * The address bar owns which chat is open: `URL_CHANGED` is the only action that changes it. Every change of

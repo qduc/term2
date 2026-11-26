@@ -39,6 +39,18 @@ const walk = (dir) => {
   if (tsCount > 0) folderCounts.set(relFolder, tsCount);
 };
 walk(path.join(repo, 'src'));
+// The web client joins the file-size check only (its folders keep no fan-out budget). Generated and build output
+// is skipped.
+const walkWeb = (dir) => {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (!['node_modules', '.next', 'generated'].includes(entry.name)) walkWeb(full);
+    } else if (/\.tsx?$/.test(entry.name)) files.push(full);
+  }
+};
+for (const folder of ['app', 'components', 'contexts', 'hooks', 'lib']) walkWeb(path.join(repo, 'web-client', folder));
 
 // The line limit is a prompt to look for a second job, not a target: a file that
 // reads better whole keeps a ceiling, with the reason written next to it.

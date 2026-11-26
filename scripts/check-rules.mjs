@@ -15,6 +15,8 @@
 //      outside itself; only the session store (and present.ts, for types) imports the browser's fold bundle; the
 //      browser's old reducers stay deleted; the fold's interface report is current (this one builds a TypeScript
 //      program, about two seconds).
+//   11-12. The chat shell's components (scripts/gates/web-shell-rules.mjs): no state setter or dispatch directly in
+//      an effect body (per-file ceiling in rule-baseline.json webShellEffects), and no import of the HTTP facade.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +24,7 @@ import ts from 'typescript';
 import { exceptionKeys, failureMap, reportAndExit } from './gates/rules.mjs';
 import { findFixedSleeps, slowTierFiles } from './gates/fixed-sleeps.mjs';
 import { checkArchitecture } from './gates/architecture-rules.mjs';
+import { checkWebShell } from './gates/web-shell-rules.mjs';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
@@ -273,6 +276,9 @@ for (const [file, ceiling] of sleepCeilings) {
 
 // 7-10. The settled web-transcript architecture (scripts/gates/architecture-rules.mjs).
 checkArchitecture(repo, (rule) => add(rule));
+
+// 11-12. The chat shell's components (scripts/gates/web-shell-rules.mjs).
+checkWebShell(repo, (rule) => add(rule), baseline);
 
 reportAndExit(
   failures,

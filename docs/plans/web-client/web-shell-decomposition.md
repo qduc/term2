@@ -1,9 +1,9 @@
 # Design: decompose the web chat shell
 
-Status: design, not built. Written 2026-11-26 against `main` at `d6467f44`, from
-[the brief](web-shell-decomposition-brief.md). Nothing here was run: the claims about today's code come from
-reading it, and where a claim is inferred rather than read it says so. Paths are relative to `web-client/` unless
-they start with `scripts/`, `tests/` or `docs/`.
+Status: built on `claude/optimistic-brown-2d0lrp` (2026-11-26), from
+[the brief](web-shell-decomposition-brief.md). Owner's defaults taken: the in-house data layer, the race-window
+differences in section 6.3, the nine ceilings in section 7.1. Where the build departs from this design, see
+[section 15](#15-build-notes). The claims below about the old code come from reading it.
 
 ## 1. Where the brief is wrong or in conflict
 
@@ -1007,3 +1007,42 @@ Then the independent verifier, with the diff, the claims in section 9 and the pr
    told otherwise.
 2. The five race-window differences in section 6.3: accept, or keep any of the old rules?
 3. Nine ceilings in section 7.1, including one for `shell-machine.ts` itself: acceptable as the starting line?
+
+## 15. Build notes
+
+What the build did differently from the sections above, and what it found.
+
+- **One pass, not ten commits.** The modules were written straight to the target structure, then checked as a
+  whole: typecheck, the 18 browser flows (all green on the first run), every generated property, and the
+  temporary probes from section 9.
+- **Probes against `d6467f44`** (temporary, not committed):
+  - DOM: 15 states (welcome, folder dialog, draft, `/` palette, `@` popover, chat, tool row, failed turn, pending
+    approval, approved turn, help, rewind, settings, reload, 390 px). The baseline was run twice to calibrate the
+    masking and the two runs were byte-identical. 12 of 15 states matched at once. In the other three the
+    textarea gained an inline height on mount: the old height effect never ran on mount because the textarea did not
+    exist when the shell mounted, while `Composer` mounts with it. `Composer` now sizes only when the text changes.
+  - Requests: the multiset is equal. The order differs only where it also differed between two baseline runs (the
+    usage popover's quota reads).
+  - Render counts: 20 keystrokes in a chat with three turns rendered `Composer` 40 times (text and caret) and
+    `TranscriptTurns`, every `TranscriptTurn`, `ChatSidebar`, `ChatHeaderRegion`, `ChatColumn` and
+    `WelcomeChecklist` 0 times. `EmptyChatCard` rendered once, when the box stopped being empty. The baseline table
+    was not measured: the old shell held the composer text in state at its top, so it re-rendered whole on every
+    keystroke by construction. A send and a short streamed reply re-rendered each earlier turn 3-4 times: the turn
+    count changes (`laterTurns`) and `commandDisabled`/`sendBlocked` flip as the chat starts and stops running.
+    The probe's held step streams a single chunk, so the per-frame claim (one turn per frame) is not measured.
+- **Interfaces that differ from section 4:**
+  - `createChatFacts()` returns the deriver, so its memos live for the page; facts gained `startingChat` and
+    `fileScopeKey`.
+  - `ShellOperations` gained `sendSettled`, which the command runner calls.
+  - `navigation.ts` also has `leaveRemovedFolderChat` and `forgetChatSilently`, keeping the two history writes
+    that differ from `leaveChat` byte for byte.
+  - With local control off, `data.models` is the catalog resource with `load`/`ensure` that make no request.
+  - The new property lives in `scripts/generated-verification/web-data.mjs`, as target `data`.
+- **`webShellEffects` records 7 for `ShellFeeds.tsx`**, not 6: the user-change feed dispatches twice.
+- **Guards** caught each seeded violation in `prove-checks.sh`: a state setter in an effect, a facade import, and a
+  520-line file. Two older seeds report NOT CAUGHT on this branch and also on `d6467f44` (duplicate basename, folder
+  fan-out), so this change did not break them; they are left for their owners.
+- **Not changed, as section 13 says, and noticed:** `retryError` is never reset on a chat change; `configBusy` is
+  shared across chats; `selectChat`, `openSettings` and the folder-removal leave write history directly rather
+  than through a `navigate` command.
+

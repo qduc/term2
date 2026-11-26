@@ -71,6 +71,16 @@ export function createShellOperations(runtime: {
   const notice = (key: NoticeKey, message: string | null, tag: Tag = currentTag(store.get())) =>
     dispatch({ type: 'NOTICE', tag, key, message });
   const focusComposer = () => runtime.composer.current?.focus();
+  // A delayed focus after opening a draft or rewinding must not pull focus out of an already-open popover or dialog.
+  const focusComposerIfIdle = () => {
+    if (
+      typeof document !== 'undefined' &&
+      document.querySelector('[data-slot="popover-content"], [role="dialog"], [role="alertdialog"]')
+    ) {
+      return;
+    }
+    focusComposer();
+  };
   // A send's outcome for the caller that asked (an Edit keeps its box busy until then), by request id.
   const sendWaiters = new Map<string, (accepted: boolean) => void>();
 
@@ -133,7 +143,7 @@ export function createShellOperations(runtime: {
       // NEW_DRAFT also clears the page's error banner.
       dispatch({ type: 'NEW_DRAFT', workspaceId: targetWorkspace });
       if (window.innerWidth < 768) dispatch({ type: 'SIDEBAR_SET', open: false });
-      window.setTimeout(focusComposer, 50);
+      window.setTimeout(focusComposerIfIdle, 50);
     },
 
     selectChat(id) {
@@ -378,7 +388,7 @@ export function createShellOperations(runtime: {
       // The prompt goes back into the message box of the chat that was rewound, if it is still the one shown.
       if (ok && restoreText && target.text && isCurrentTag(store.get(), tag)) {
         dispatch({ type: 'TEXT_RESTORED', tag, text: target.text });
-        window.setTimeout(focusComposer, 50);
+        window.setTimeout(focusComposerIfIdle, 50);
       }
     },
 

@@ -278,24 +278,34 @@ function validateModels(value: unknown): { models: ModelSummary[] } {
   const input = object(value);
   only(input, ['models']);
   if (!Array.isArray(input.models)) throw new Term2ApiError(503, 'Invalid agent response');
+  // One provider's odd entry (a custom server's multi-paragraph `name`) must not blank every provider's list:
+  // a bad name is dropped (the id shows instead) and any other malformed entry is skipped on its own.
   return {
-    models: input.models.map((model) => {
-      const item = object(model);
-      only(item, ['provider', 'id', 'name', 'default_reasoning_level', 'contextWindow', 'maxOutputTokens', 'pricing']);
-      for (const key of ['contextWindow', 'maxOutputTokens'] as const)
-        if (item[key] !== undefined && (!Number.isSafeInteger(item[key]) || (item[key] as number) < 0))
-          throw new Term2ApiError(503, 'Invalid agent response');
-      return {
-        provider: text(item.provider, 256),
-        id: text(item.id, 512),
-        ...(item.name === undefined ? {} : { name: text(item.name, 512) }),
-        ...(item.default_reasoning_level === undefined
-          ? {}
-          : { default_reasoning_level: text(item.default_reasoning_level, 128) }),
-        ...(item.contextWindow === undefined ? {} : { contextWindow: item.contextWindow as number }),
-        ...(item.maxOutputTokens === undefined ? {} : { maxOutputTokens: item.maxOutputTokens as number }),
-        ...(item.pricing === undefined ? {} : { pricing: validatePricing(item.pricing) }),
-      };
+    models: input.models.flatMap((model) => {
+      try {
+        const item = object(model);
+        only(item, ['provider', 'id', 'name', 'default_reasoning_level', 'contextWindow', 'maxOutputTokens', 'pricing']);
+        for (const key of ['contextWindow', 'maxOutputTokens'] as const)
+          if (item[key] !== undefined && (!Number.isSafeInteger(item[key]) || (item[key] as number) < 0))
+            throw new Term2ApiError(503, 'Invalid agent response');
+        const name = typeof item.name === 'string' && item.name.length <= 512 && !/[\u0000-\u001f\u007f]/u.test(item.name);
+        return [
+          {
+            provider: text(item.provider, 256),
+            id: text(item.id, 512),
+            ...(name ? { name: item.name as string } : {}),
+            ...(item.default_reasoning_level === undefined
+              ? {}
+              : { default_reasoning_level: text(item.default_reasoning_level, 128) }),
+            ...(item.contextWindow === undefined ? {} : { contextWindow: item.contextWindow as number }),
+            ...(item.maxOutputTokens === undefined ? {} : { maxOutputTokens: item.maxOutputTokens as number }),
+            ...(item.pricing === undefined ? {} : { pricing: validatePricing(item.pricing) }),
+          },
+        ];
+      } catch (error) {
+        if (error instanceof Term2ApiError) return [];
+        throw error;
+      }
     }),
   };
 }

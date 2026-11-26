@@ -6,9 +6,10 @@
  * defaults to `off` (ask) and can be configured per session or via safe settings.
  */
 import { appendFile } from 'node:fs/promises';
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { getProfileLabel } from '../config/profiles/labels.js';
 import { injectSkillIntoTurn } from '../shared/types/user-turn.js';
 import { defaultServeStateDir } from '../host/gateway/serve-args.js';
@@ -55,6 +56,65 @@ function prepareStateDir(requested: string): string {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
   return realpathSync(directory);
+}
+
+function readLockOwnerPid(pidPath: string): number | undefined {
+  let pid: number;
+  try {
+    const text = readFileSync(pidPath, 'utf8').trim();
+    if (!/^\d+$/.test(text)) return undefined;
+    pid = Number(text);
+    if (!Number.isSafeInteger(pid) || pid <= 0) return undefined;
+  } catch {
+    return undefined;
+  }
+  try {
+    process.kill(pid, 0);
+    return pid;
+  } catch (error) {
+    return (error as { code?: string }).code === 'EPERM' ? pid : undefined;
+  }
+}
+
+/**
+ * Exclusive server ownership for a state directory. A SQLite write transaction
+ * provides cross-platform process-death recovery; the database stays permanent
+ * so unlinking it never splits authority across inodes.
+ */
+function acquireStateDirLock(stateDir: string): () => void {
+  const lockPath = path.join(stateDir, 'serve.lock.sqlite');
+  const pidPath = path.join(stateDir, 'serve.lock.pid');
+  let database: Database.Database | undefined;
+  try {
+    database = new Database(lockPath, { timeout: 0 });
+    database.exec('BEGIN IMMEDIATE');
+  } catch (error) {
+    database?.close();
+    if ((error as { code?: string }).code === 'SQLITE_BUSY') {
+      const holder = readLockOwnerPid(pidPath);
+      const detail = holder !== undefined ? ` (pid ${holder})` : '';
+      throw new ServeRefused(
+        `state directory ${stateDir} is already in use by another term2 serve process${detail}; stop it or pass a different --state-dir.`,
+      );
+    }
+    throw error;
+  }
+  try {
+    writeFileSync(pidPath, `${process.pid}\n`, { mode: 0o600 });
+  } catch {
+    // Diagnostic metadata only; the SQLite lock is the authority.
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    try {
+      unlinkSync(pidPath);
+    } catch {
+      // Best-effort cleanup before releasing the SQLite lock.
+    }
+    database!.close();
+  };
 }
 
 function publicKeys({ bffKeys }: ServeRequest['args']): Map<string, string> {
@@ -210,6 +270,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
   let stateDir: string;
   let keys: Map<string, string>;
   let transportOptions: ServerTransportOptions;
+  let releaseLock: () => void;
   try {
     stateDir = prepareStateDir(args.stateDir);
     keys = publicKeys(args);
@@ -217,109 +278,116 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       throw new ServeRefused('provide at least one --bff-key <kid>=<pem path> or enable --pairing');
     }
     transportOptions = transportOf(args);
+    releaseLock = acquireStateDirLock(stateDir);
   } catch (error) {
     if (!(error instanceof ServeRefused)) throw error;
     process.stderr.write(`term2 serve: ${error.message}\n`);
     return 1;
   }
-  await warnIfSandboxUnavailable('serve', (line) => process.stderr.write(`${line}\n`));
-
-  // Grants and globals live here, in this state directory, and never in a conversation.
-  const grants = new DirectWorkspaceAuthority({
-    allowWrite: args.allowWrite,
-    stateDirectory: stateDir,
-  });
-  const product = createDirectProductPorts();
-  const configuration = new DirectGlobalConfiguration(
-    product.settings,
-    product.credentials,
-    product.providers,
-    product.oauth,
-    product.models,
-    args.allowWrite,
-  );
-  const directory = path.join(stateDir, 'conversations');
-  const ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));
-  const app = await createDirectApplication({
-    conversationsDir: directory,
-    selection,
-    surface: () => ({
-      autoApprove: false,
-      interactive: true,
-      allowUnsandboxed: false,
-      shellEscapeApproval: true,
-      preserveSandboxedShellApproval: true,
-    }),
-    async authorizeModel(next, previous) {
-      // A same-selection refresh/rollover does not depend on a fresh catalog.
-      if (next.provider === previous.provider && next.model === previous.model) return;
-      await configuration.assertModel(next.provider, next.model);
-    },
-    authority: serverAuthority(grants, directory, args.localOwnerUserId),
-  });
-  const auditPath = path.join(stateDir, 'server-audit.jsonl');
-  // Grant edits must release live sessions; a host without this would keep stale authority.
-  const closeWorkspaceSessions = app.host.closeWorkspaceSessions?.bind(app.host);
-  if (!closeWorkspaceSessions) throw new Error('The direct host cannot close workspace sessions.');
-  const transport = createDirectServerHost(
-    {
-      host: app.host,
-      workspaces: serverWorkspaceAdministration(grants, closeWorkspaceSessions),
-      models: () => configuration.listModels(),
-      skills: () =>
-        app
-          .skills(homedir())
-          .map((skill) => ({ name: skill.name, description: skill.description, isProjectLevel: skill.isProjectLevel })),
-      configuration,
-      presentation: presentation({ app, directory, grants, configuration, allowWrite: args.allowWrite }),
-      localOwnerUserId: args.localOwnerUserId,
-      audit: (event) => appendFile(auditPath, `${JSON.stringify(event)}\n`, { mode: 0o600 }),
-    },
-    {
-      transport: transportOptions,
-      authentication: createServerAuthentication({
-        issuer: args.issuer,
-        audience: args.audience,
-        publicKeys: keys,
-        replayLedger: ledger,
-        ...(args.pairing
-          ? {
-              pairing: {
-                enabled: true,
-                trustFilePath: path.join(stateDir, 'trusted-clients.json'),
-                // The OTP is the operator's out-of-band secret, so it never reaches stdout.
-                printOtp: (otp: string) => process.stderr.write(`PAIRING OTP: ${otp}\n`),
-              },
-            }
-          : {}),
-      }),
-    },
-  );
-
-  const stopped = new Promise<void>((resolve) => {
-    process.once('SIGINT', () => resolve());
-    process.once('SIGTERM', () => resolve());
-  });
-  let exitCode = 0;
   try {
-    await transport.start();
-    const endpoint =
-      args.transport.kind === 'socket'
-        ? `transport=socket path=${args.transport.socketPath}`
-        : `transport=tls host=${args.transport.host} port=${args.transport.port}`;
-    process.stderr.write(`GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${args.pairing ? 'on' : 'off'}\n`);
-    await stopped;
-  } catch (error) {
-    process.stderr.write(`term2 serve: server failed to start: ${messageOf(error)}\n`);
-    exitCode = 1;
-  } finally {
-    // Sessions end only after no client can reach them; the ledger goes last, once nothing verifies.
+    await warnIfSandboxUnavailable('serve', (line) => process.stderr.write(`${line}\n`));
+
+    // Grants and globals live here, in this state directory, and never in a conversation.
+    const grants = new DirectWorkspaceAuthority({
+      allowWrite: args.allowWrite,
+      stateDirectory: stateDir,
+    });
+    const product = createDirectProductPorts();
+    const configuration = new DirectGlobalConfiguration(
+      product.settings,
+      product.credentials,
+      product.providers,
+      product.oauth,
+      product.models,
+      args.allowWrite,
+    );
+    const directory = path.join(stateDir, 'conversations');
+    const ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));
+    const app = await createDirectApplication({
+      conversationsDir: directory,
+      selection,
+      surface: () => ({
+        autoApprove: false,
+        interactive: true,
+        allowUnsandboxed: false,
+        shellEscapeApproval: true,
+        preserveSandboxedShellApproval: true,
+      }),
+      async authorizeModel(next, previous) {
+        // A same-selection refresh/rollover does not depend on a fresh catalog.
+        if (next.provider === previous.provider && next.model === previous.model) return;
+        await configuration.assertModel(next.provider, next.model);
+      },
+      authority: serverAuthority(grants, directory, args.localOwnerUserId),
+    });
+    const auditPath = path.join(stateDir, 'server-audit.jsonl');
+    // Grant edits must release live sessions; a host without this would keep stale authority.
+    const closeWorkspaceSessions = app.host.closeWorkspaceSessions?.bind(app.host);
+    if (!closeWorkspaceSessions) throw new Error('The direct host cannot close workspace sessions.');
+    const transport = createDirectServerHost(
+      {
+        host: app.host,
+        workspaces: serverWorkspaceAdministration(grants, closeWorkspaceSessions),
+        models: () => configuration.listModels(),
+        skills: () =>
+          app.skills(homedir()).map((skill) => ({
+            name: skill.name,
+            description: skill.description,
+            isProjectLevel: skill.isProjectLevel,
+          })),
+        configuration,
+        presentation: presentation({ app, directory, grants, configuration, allowWrite: args.allowWrite }),
+        localOwnerUserId: args.localOwnerUserId,
+        audit: (event) => appendFile(auditPath, `${JSON.stringify(event)}\n`, { mode: 0o600 }),
+      },
+      {
+        transport: transportOptions,
+        authentication: createServerAuthentication({
+          issuer: args.issuer,
+          audience: args.audience,
+          publicKeys: keys,
+          replayLedger: ledger,
+          ...(args.pairing
+            ? {
+                pairing: {
+                  enabled: true,
+                  trustFilePath: path.join(stateDir, 'trusted-clients.json'),
+                  // The OTP is the operator's out-of-band secret, so it never reaches stdout.
+                  printOtp: (otp: string) => process.stderr.write(`PAIRING OTP: ${otp}\n`),
+                },
+              }
+            : {}),
+        }),
+      },
+    );
+
+    const stopped = new Promise<void>((resolve) => {
+      process.once('SIGINT', () => resolve());
+      process.once('SIGTERM', () => resolve());
+    });
+    let exitCode = 0;
     try {
-      await transport.stop();
-      await app.close();
+      await transport.start();
+      const endpoint =
+        args.transport.kind === 'socket'
+          ? `transport=socket path=${args.transport.socketPath}`
+          : `transport=tls host=${args.transport.host} port=${args.transport.port}`;
+      process.stderr.write(`GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${args.pairing ? 'on' : 'off'}\n`);
+      await stopped;
+    } catch (error) {
+      process.stderr.write(`term2 serve: server failed to start: ${messageOf(error)}\n`);
+      exitCode = 1;
     } finally {
-      ledger.close();
+      // Sessions end only after no client can reach them; the ledger goes last, once nothing verifies.
+      try {
+        await transport.stop();
+        await app.close();
+      } finally {
+        ledger.close();
+      }
     }
+    return exitCode;
+  } finally {
+    releaseLock();
   }
-  return exitCode;
 }

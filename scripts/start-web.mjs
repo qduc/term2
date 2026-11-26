@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -52,6 +52,14 @@ for (let index = 0; index < argv.length; index += 1) {
 if (dev && !existsSync(fileURLToPath(new URL('../dist/cli.js', import.meta.url)))) {
   console.error('Run pnpm build (or pnpm dev) first: the web dev server needs the built term2 CLI.');
   process.exit(1);
+}
+if (dev) {
+  // `next dev` serves web-client sources that import the generated fold bundle, which is not committed
+  // and is otherwise only produced by build-web.mjs and CI. Regenerate it so a fresh checkout starts
+  // and an edited src/protocol/fold/ is picked up on restart.
+  execFileSync(process.execPath, [fileURLToPath(new URL('./build-web-fold.mjs', import.meta.url))], {
+    stdio: 'inherit',
+  });
 }
 if (!dev && !existsSync(path.join(project, '.next', 'BUILD_ID'))) {
   console.error('The term2 web build is missing. Reinstall the npm package, or pack it after running pnpm build.');

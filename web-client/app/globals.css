@@ -361,16 +361,12 @@ del {
 }
 
 /* Pause infinite CSS animations when the tab is backgrounded, the window loses
- * focus, or a panel is inert/hidden. */
-html[data-page-hidden="true"] *,
-html[data-page-hidden="true"] *::before,
-html[data-page-hidden="true"] *::after,
-html[data-window-blurred="true"] *,
-html[data-window-blurred="true"] *::before,
-html[data-window-blurred="true"] *::after,
-[inert] *,
-[inert] *::before,
-[inert] *::after {
+ * focus, or a panel is inert/hidden. Name the infinite ones rather than `*`:
+ * pausing a finite entrance or exit (`t2-enter`, `animate-in`/`animate-out`)
+ * freezes it on its first frame, and `t2-enter`'s `both` fill holds new content
+ * at opacity 0 for as long as the window stays unfocused. */
+:is(html[data-page-hidden="true"], html[data-window-blurred="true"], [inert])
+  :is(.animate-spin, .animate-pulse, .pulse) {
   animation-play-state: paused !important;
 }
 

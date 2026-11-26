@@ -11,8 +11,10 @@
  *
  * Slices: selection and draft (the open chat, the draft and its first send, the open chat's config and the staged
  * model/effort); the composer (the message box, sending, notices, the user's chosen folder, the transcript pin, the
- * delayed post-tool status and the background-notice drain); and the panels (running tasks, sidebar, dialogs, the
- * skills picker).
+ * delayed post-tool status and the background-notice drain); the panels (running tasks, sidebar, dialogs, the skills
+ * picker); and per-chat intent (a settings change in flight, a Retry's error, a switch's draft offer) with the page's
+ * error banner. Handlers that change the open chat emit `navigate`; only the command runner writes the address bar
+ * (lib/term2/chat-navigation.ts). Types and constants are in shell-state.ts.
  */
 export * from './shell-state';
 import {

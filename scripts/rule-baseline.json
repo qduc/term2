@@ -939,5 +939,18 @@
       "reason": "The six places a prop or a fact derived from the open chat becomes a machine action (address bar, first mount, user change, first send, notice drain, status line). They are kept in this one file so a seventh is visible; each could go only if the machine read the session view itself."
     }
   ],
-  "webShellRequests": []
+  "webShellRequests": [
+    {
+      "file": "web-client/components/term2/Term2FolderSelector.tsx",
+      "reason": "Its validate, browse and select calls each spend a capability token the previous answer issued, inside one dialog: nothing to cache or share. Its result reaches the data layer through ops.folderSelected."
+    },
+    {
+      "file": "web-client/components/term2/Term2SavedFolderMenu.tsx",
+      "reason": "Two writes (change access, remove) with the menu's own busy and error line; the result goes to ops.savedFolderChanged, which refreshes folders and chats. Move them behind ServerData if a third caller appears."
+    },
+    {
+      "file": "web-client/components/term2/Term2SessionConfig.tsx",
+      "reason": "The diagnostics panel owns one configure command's original request and receipt for retry (SOURCE.md); it holds no fetched data and reports discovery to the machine as CONFIG_LOADED."
+    }
+  ]
 }

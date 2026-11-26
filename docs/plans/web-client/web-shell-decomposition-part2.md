@@ -1,6 +1,9 @@
 # Design: finish the web chat shell decomposition (part two)
 
-Design only; nothing here is built. It finishes what
+Status: built on `claude/optimistic-brown-2d0lrp` (2026-11-26). The owner took the recommended answer to each question
+in section 14 (in-house data layer, retry draft cleared on leaving, page error not cleared on a chat change, no
+visual change, queued settings writes, the third rule kept). Where the build departs from this design, see
+[section 15](#15-build-notes). It finishes what
 [part one](web-shell-decomposition.md) (merged as `f13a1ee0`, #432) left in its sections 11 and 15. Claims about the
 code come from reading `main` at `f13a1ee0`; inferences are marked. Paths are relative to `web-client/` unless they
 start with `scripts/`, `tests/` or `docs/`.
@@ -745,3 +748,46 @@ required; give them the diff, section 7 and the probe outputs.
    settings, presets and rewind targets at once and refresh behind them (a visible change, a small follow-up)?
 5. **The chat's settings writes** now queue and recover from a conflict (section 7, change 8). Accept?
 6. **A third reminder rule**, `web-chat-navigation` (section 9.2). Keep, or rely on the file split alone?
+
+## 15. Build notes
+
+What the build did beyond or differently from the sections above, and what it found.
+
+- **Order.** Built in the order of section 10, committed in three steps (machine and navigation; data layer and
+  leaves; guards and docs). After each, the typecheck, every generated property and every flow passed.
+- **Flows.** A and B were red on `f13a1ee0` for the reasons named (chat B's approval chip disabled while A's change
+  was held; the Retry alert still under the turn after leaving and returning) and are green on the branch. C passed
+  on `f13a1ee0` and on the branch: it covers an old path that nobody exercised before. D:
+  - The two server-backed switch rows are in different sections (`memory.enabled` in Conversation,
+    `shell.showReview` in Approvals and safety). The flow holds the first write at the boundary while it makes the
+    second, so the queue is actually exercised.
+  - It passed on the old page, which had its own queue, and is red with an unqueued writer (one change lost after
+    the reload).
+  - After the reload the draft is gone, so Back lands on the welcome screen; the flow checks that Back leaves the
+    settings page.
+- **`shell.machine-rules`.** The P6 seed (`USER_CHANGED` keeping `pendingFirstSend`) stayed green at first. The
+  harness reported every `navigate` back at once, so it never reached the gap between a first send's navigate and its
+  report. The harness now has a `router` step that makes later reports arrive as pending results, and a `draft_send`
+  macro (draft, text, Send) so the path is reachable in 1000 runs. All existing invariants hold under late reports.
+  Each of the four seeds in section 8.1 is red.
+- **`web.settings-writes-in-order`.** Its first version asserted inside the mock's promise executor, where a failed
+  assertion only rejects that write: the "no chain" seed stayed green. Violations are now collected and asserted
+  after each step; the seed is red. Each of the three seeds in section 8.2 is red.
+- **Probes against `f13a1ee0`** (temporary, not committed):
+  - DOM: 14 states, byte-identical after masking, and the baseline was run twice to calibrate. The states: the page
+    error banner, the usage popover open, the rewind dialog loading and loaded, a failed Retry's alert, the settings
+    page in each of its eight sections, and a provider's detail.
+  - Requests: the set of `/api/` requests was identical for a journey covering a provider toggle off and on, a
+    server setting change, the rewind dialog, Retry and the usage chip.
+  - Part one's probe (15 chat states) also still matches.
+  - Render counts: 20 keystrokes render `Composer` 40 times and every `TranscriptTurn`, `ChatSidebar`,
+    `ChatHeaderRegion` and `ChatColumn` 0 times, the same as part one.
+- **Not probed or exercised:** the provider dialog's three paths (it opens only with no provider configured; the
+  fixture has one), the settings page's credential rows, OAuth sign-in, a real user change (property only),
+  behaviour change 5, and adding or removing an API key on a provider.
+- **Guards.** `web-shell-requests` now scans every component and hook, with three recorded exceptions.
+  `web-chat-navigation` is new, and `webShellEffects` for `ShellFeeds.tsx` is 6. Ceilings: `shell-machine.ts`
+  removed (413 lines; types in `shell-state.ts`, 226 lines), `Term2SettingsPage.tsx` 910, `ProvidersSection.tsx`
+  977. Both new seeds in `prove-checks.sh` are caught. The two older seeds that report NOT CAUGHT (duplicate basename,
+  folder fan-out) do so on `main` too.
+

@@ -269,19 +269,36 @@ export const RULES = {
     },
   },
   'web-shell-requests': {
-    title: 'Shell components do not call the server',
+    title: 'Components do not call the server',
     why:
       'Server data has one home, web-client/lib/term2/data/server-data.ts, with one meaning of loading, failed and ' +
-      'refreshed, and one rule for a response that arrives late. A request made from a component brings back its own ' +
-      'loading flag, error string and stale check: the dozen hand-written flags this layout replaced.',
+      'refreshed, one rule for a response that arrives late, and one queue for settings writes. A request made from ' +
+      'a component brings back its own loading flag, error string, stale check and copy of the data: the settings ' +
+      'page once kept a second settings projection this way and reported it to the shell through a callback.',
     fix:
-      'Read through a resource in server-data.ts (add one there for new data). Put an action with several steps in ' +
+      'Read through a resource in server-data.ts (add one there for new data) with useStoreSelector, or ' +
+      'hooks/useLoadOnOpen.ts for a screen that asks when it opens. Put a write that makes other data stale beside ' +
+      'the re-read it needs (data.providers, data.writeSettings). Put an action with several steps in ' +
       'web-client/lib/term2/shell/shell-operations.ts and call it as shell.ops.<name>.',
     avoid: 'Do not pass term2Client in through props or context, and do not re-export it from another module.',
     exceptions: {
       file: 'scripts/rule-baseline.json',
       entry: 'webShellRequests: { "file": "<component file>", "reason": "..." }',
+      note: 'for a component whose requests are steps of its own flow and leave nothing to share',
     },
+  },
+  'web-chat-navigation': {
+    title: 'Only the navigate command writes the open chat into the address bar',
+    why:
+      'The address bar owns which chat is open, and the shell machine learns of a change only as URL_CHANGED. A ' +
+      'handler that writes history itself changes the chat without the machine deciding it: the machine cannot ' +
+      'clear what belongs to the old chat first, and shell.machine-rules cannot see the move. Three handlers did ' +
+      'this until they were moved (docs/plans/web-client/web-shell-decomposition-part2.md, section 5).',
+    fix:
+      'Dispatch an action whose step() case returns a navigate command (CHAT_PICKED, NEW_DRAFT, DRAFT_DISCARDED, ' +
+      'USER_CHANGED), or add one. The settings parameters are not the open chat: use lib/term2/navigation.ts.',
+    avoid: 'Do not copy the history write into another module or call window.history from a component.',
+    exceptions: null,
   },
   baselines: {
     title: 'Recorded deviations carry reasons',

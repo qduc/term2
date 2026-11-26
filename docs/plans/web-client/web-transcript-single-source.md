@@ -28,8 +28,21 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   a reload that text is gone. After two turns (three provider requests) the composer chip shows 2.5k live and 3.7k
   after reload. The three flows stay green only because the double sends no usage. Keep them that way in the
   required lane; add the usage flow when phase 2 makes it pass.
-- **Next:** settle the six unrun test files and widen `check-no-unit-tests.mjs` to `web-client/` (owner approved,
-  2026-11-26); then phase 1. Phases
+- **The six unrun `node:test` files under `web-client/lib/` are gone** and `check-no-unit-tests.mjs` scans
+  `web-client/` (shown red on a seeded file). Where their rules went:
+  - Host, Origin and content-type guards, body validation (exact fields, opaque IDs, 16,384-character text, control
+    characters), event and page cursors, and the settings-conflict details: `tests/web-client/browser/bff-guards.flow.ts`,
+    against the real packaged BFF over raw HTTP. Red on four seeded regressions (packaged Host check off, Origin
+    check off, text cap raised, conflict details dropped).
+  - Aborting a stream before headers closes the gateway connection: `tests/host/gateway/bff-stream-abort.integration.test.ts`,
+    over a real Unix socket. Red (timeout) with `req.destroy()` removed from the abort handler.
+  - Dropped, with reasons: `chooseListenHost` and the `TERM2_WEB_CLIENT_ALLOWED_HOSTS` LAN opt-in only run under
+    `pnpm dev` / `start` inside `web-client/`; the shipped `term2-web` binds `127.0.0.1` and clears the list
+    (`scripts/build-web.mjs` launcher). The browser API client's normalizers (`validateCandidate`,
+    `validateSelectedCandidate`, `validateSettings`) and `skipAuth` / `skipRetry` are exercised by every flow's
+    folder pick and page load; their rejection of a malformed gateway reply is not checked anywhere now. Hiding
+    `details` on non-conflict gateway errors is not checked either: no route can make the gateway return one.
+- **Next:** phase 1. Phases
   are in order; 3 is independent of 1 and 2 and can be scheduled separately.
 - **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
   lockfile lines; use the pinned version for dependency changes.
@@ -72,7 +85,7 @@ Designer, following from the first one:
   `server/`): for each, check whether an integration test, release smoke or a browser flow already covers the
   behaviour; move what is uncovered and matters (the Host/Origin guard, cursor and request validation) into the
   gateway integration suite; then delete the files and make `scripts/check-no-unit-tests.mjs` scan `web-client/`.
-  Deleting them without that check would drop the only written statement of those rules.
+  Deleting them without that check would drop the only written statement of those rules. (Done; see "Resume here".)
 
 ## What the code shows (2026-11-26, `main` at `6fcad34`)
 
@@ -100,7 +113,7 @@ Each line is labelled **verified** (ran it or read the named symbol) or **inferr
    `Term2SessionShell.tsx` / `useTerm2Session.ts`. *Verified by reading each diff.*
 5. **CI does not look at the web client.** No explicit typecheck, no lint, no browser. It is compiled only as a
    side effect of `pnpm pack` in the `bench` lane; release smoke checks that the page and one API route answer.
-   Seven `node:test` files under `web-client/` are run by nothing. *Verified.*
+   Seven `node:test` files under `web-client/` were run by nothing (all removed since). *Verified.*
 6. **The shared fold fits in the browser.** `esbuild --bundle` of `src/protocol/reducer.ts` tree-shakes to 33 KB
    with no Node built-ins. A browser-platform build fails only at resolve time, because `reducer-nested.ts`
    imports `formatToolCommand` through `protocol/json.ts`, which also re-exports pricing code. *Verified.*

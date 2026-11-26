@@ -24,7 +24,9 @@ export const GUARDS = new Set([
 ]);
 
 export function isUnitTest(file) {
-  if (!/^(tests|scripts|docs)\//.test(file)) return false;
+  // web-client/ is included since 2026-11-26 (owner's decision): its old `node:test` files ran nowhere,
+  // and their rules now live in the gateway integration suite and the web browser flows.
+  if (!/^(tests|scripts|docs|web-client)\//.test(file)) return false;
   if (file.startsWith('scripts/provider-black-box/')) return false;
   if (/\.(e2e|integration)\./.test(file)) return false;
   return /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file);

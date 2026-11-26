@@ -47,6 +47,8 @@ The gateway stays in the foreground and prints the pairing code to stderr. Confi
 
 The browser loads a session snapshot and reconnects from the last sequence it applied. Stored event sequences can have gaps. Live observations have no cursor. Reload restores recorded history without restarting the turn or undoing tool effects.
 
+In the browser model picker, use the Up and Down arrow keys to move through models and Enter to select the highlighted one. Provider tabs filter the list to one provider, and the search box filters by name, matching the terminal picker's ranking.
+
 See [shell sandbox restrictions](/term2/safety/sandbox/#read-only-gateway-sessions) for read-only workspace grants. A physically writable directory may be granted read-only access without granting runtime write permission.
 
 ## Command Syntax

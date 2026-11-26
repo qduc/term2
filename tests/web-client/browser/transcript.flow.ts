@@ -135,6 +135,33 @@ test('a failed turn shows the provider error before and after a reload', async (
   expect(app.model.unscripted()).toEqual([]);
 });
 
+test('retrying a failed turn clears its error once the retry succeeds', async ({ page, launch }) => {
+  const prompt = 'fail once, then answer';
+  const providerMessage = 'scripted provider failure 5821';
+  const reply = 'the retry answered';
+  const app = await launch({
+    scripts: { [prompt]: [{ error: { status: 400, message: providerMessage } }, { text: reply }] },
+  });
+
+  await openDraftChat(page, app);
+  await send(page, prompt);
+  const turn = turns(page).first();
+  await expect(turn).toContainText(providerMessage);
+  await expectNoRunningTurn(page);
+
+  await turn.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(turns(page).last()).toContainText(reply);
+  await expectNoRunningTurn(page);
+  expect(app.model.turn(prompt)).toHaveLength(2);
+
+  // The failure the retry recovered from is no longer reported anywhere in the transcript.
+  await expect(page.getByText(providerMessage)).toHaveCount(0);
+  await expect(page.getByText('Turn failed')).toHaveCount(0);
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  await expect(page.getByText(providerMessage)).toHaveCount(0);
+  expect(app.model.unscripted()).toEqual([]);
+});
+
 test('a tool waiting for approval shows the same prompt after a reload, and the approved turn too', async ({
   page,
   launch,

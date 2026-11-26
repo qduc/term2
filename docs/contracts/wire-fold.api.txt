@@ -879,4 +879,4 @@ type WireEventType = keyof WireEventPayloads
 type WireGrant = "network-allow-once" | "allow-project" | "allow-remember" | "unsandboxed-once" | "allow-folder-session" | "allow-edit-file-session" | "allow-edit-folder-session" | "docker-allow-once" | "docker-allow-session" | "docker-allow-project"
 type WireNativeCommandRequest = { readonly commandId: string; readonly operation: WireNativeCommandOperation; } & WireCommandPreconditions
 type WireStatus = "closed" | "interrupted" | "idle" | "running" | "awaiting_interaction"
-type WireTurnResult = { readonly turnId: string; readonly messages: ReadonlyArray<WireMessage>; } & WireTerminal
+type WireTurnResult = { readonly turnId: string; readonly messages: ReadonlyArray<WireMessage>; readonly retried?: true | undefined; } & WireTerminal

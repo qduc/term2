@@ -333,9 +333,52 @@ describe('term2 serve (child process)', () => {
     expect(fs.existsSync(path.join(stateDir, 'manifest.sha256'))).toBe(false);
     expect(fs.existsSync(path.join(stateDir, 'gateway-data'))).toBe(false);
     expect(fs.existsSync(path.join(stateDir, 'replay.sqlite'))).toBe(true);
+    expect(fs.existsSync(path.join(stateDir, 'serve.lock.sqlite'))).toBe(true);
     expect(fs.existsSync(path.join(stateDir, 'trusted-clients.json'))).toBe(false);
     expect(fs.statSync(stateDir).mode & 0o777).toBe(0o700);
     expect(fs.statSync(socketPath).mode & 0o777).toBe(0o660);
+
+    // A second server pointing at the same state directory (even with a distinct socket,
+    // as term2-web launches) fails fast instead of colliding later on session locks.
+    const duplicateSocketPath = path.join(tempHome, 'duplicate.sock');
+    const duplicate = spawn(
+      'node',
+      [
+        cliPath(),
+        'serve',
+        '--state-dir',
+        stateDir,
+        '--socket',
+        duplicateSocketPath,
+        '--local-owner',
+        'user-1',
+        '--bff-key',
+        `${KID}=${publicKeyPath}`,
+      ],
+      { env: createTestChildEnv({ HOME: tempHome, DISABLE_LOGGING: '1' }), stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    disposables.push(() => {
+      duplicate.kill('SIGKILL');
+    });
+    let duplicateStderr = '';
+    duplicate.stderr.on('data', (chunk: Buffer | string) => {
+      duplicateStderr += String(chunk);
+    });
+    const duplicateExit = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`duplicate serve did not fail fast\nstderr:\n${duplicateStderr}`)),
+        30_000,
+      );
+      duplicate.on('close', (code, signal) => {
+        clearTimeout(timer);
+        resolve({ code, signal });
+      });
+    });
+    expect(duplicateExit.code).toBe(1);
+    expect(duplicateStderr).not.toContain('GATEWAY_READY');
+    expect(duplicateStderr).toContain('already in use');
+    expect(duplicateStderr).toContain(`pid ${child.pid}`);
+    expect(fs.existsSync(duplicateSocketPath)).toBe(false);
 
     const rpc = async (
       method: string,
@@ -594,6 +637,7 @@ describe('term2 serve (child process)', () => {
     });
     expect(exit.code).toBe(0);
     expect(fs.existsSync(socketPath)).toBe(false);
+    expect(fs.existsSync(path.join(stateDir, 'serve.lock.pid'))).toBe(false);
     expect(stdout + stderr).not.toContain('PAIRING OTP');
     const facts = readFacts(logPath);
     expect(facts).toContainEqual(
@@ -1081,5 +1125,6 @@ describe('term2 serve (child process)', () => {
     });
     expect(exit.code).toBe(0);
     expect(fs.existsSync(socketPath)).toBe(false);
+    expect(fs.existsSync(path.join(stateDir, 'serve.lock.pid'))).toBe(false);
   }, 120_000);
 });

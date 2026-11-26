@@ -296,10 +296,6 @@
     "web-client/components/term2/settings/settings-catalog.ts": {
       "lines": 575,
       "reason": "Data: which settings appear where, with labels and keywords. One table reads better whole; recorded when the gate first covered web-client (2026-11)."
-    },
-    "web-client/components/term2/Term2ModelPicker.tsx": {
-      "lines": 509,
-      "reason": "Nine lines over; recorded when the gate first covered web-client (2026-11). Drop the ceiling when the picker is next touched."
     }
   },
   "messagePath": {

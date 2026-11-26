@@ -148,7 +148,7 @@ jobs:
   # Explicit status handling also covers push/workflow_call's skipped changes job.
   # An unexpected skipped, failed or cancelled lane must never make this pass.
   port:
-    needs: [changes, quality, integration, bench, e2e, provider-black-box]
+    needs: [changes, quality, integration, bench, e2e, provider-black-box, web-browser]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -164,7 +164,8 @@ jobs:
             integration: inert ? 'skipped' : 'success',
             bench: inert ? 'skipped' : 'success',
             e2e: inert ? 'skipped' : 'success',
-            'provider-black-box': inert ? 'skipped' : 'success' };
+            'provider-black-box': inert ? 'skipped' : 'success',
+            'web-browser': inert ? 'skipped' : 'success' };
           for (const [lane, result] of Object.entries(expected)) {
             if (needs[lane].result !== result) {
               console.error(`${lane}: expected ${result}, got ${needs[lane].result}`);
@@ -310,3 +311,56 @@ jobs:
           lane: provider-black-box-${{ matrix.shard }}
       - name: Run provider black-box shard ${{ matrix.shard }}/2
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box --shard=${{ matrix.shard }}/2
+
+  # The only lane that opens a browser: Chromium drives the built `term2-web` (gateway plus web UI)
+  # against a loopback model double and requires the same transcript before and after a page reload
+  # (tests/web-client/browser). It builds what `pnpm pack` ships, so a stale `.next` cannot pass.
+  web-browser:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: ./.github/actions/setup-tests
+        with:
+          web-client: 'true'
+      - name: Build the CLI
+        run: node scripts/build.mjs
+      # Same key as the bench lane's packed build: both run `next build` on the same sources.
+      - name: Restore Next.js build cache for web UI
+        uses: actions/cache@v6
+        with:
+          path: web-client/.next/cache
+          key: test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'web-client/**') }}
+          restore-keys: |
+            test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            test-web-next-cache-v1-${{ runner.os }}-${{ runner.arch }}-
+      - name: Build the web UI
+        run: node scripts/build-web.mjs
+      # The browser build is tied to the Playwright version, not to the whole lockfile.
+      - name: Read the locked Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Restore Chromium for Playwright
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: test-playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      # A restored browser skips the download; the system libraries still come from apt.
+      - name: Install Chromium and its system libraries
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run browser flows
+        env:
+          TERM2_WEB_FLOW_OUTPUT: ${{ runner.temp }}/term2-web-flows
+        run: /usr/bin/time -v pnpm test:web-browser
+      - name: Upload failure screenshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-browser-failure-evidence
+          path: ${{ runner.temp }}/term2-web-flows
+          if-no-files-found: ignore
+          retention-days: 7

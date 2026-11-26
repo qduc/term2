@@ -278,41 +278,35 @@ function validateModels(value: unknown): { models: ModelSummary[] } {
   const input = object(value);
   only(input, ['models']);
   if (!Array.isArray(input.models)) throw new Term2ApiError(503, 'Invalid agent response');
-  // The list aggregates every provider's upstream catalog, so one provider's odd entry (a custom server that put a
-  // multi-paragraph description in `name`) must not blank the list for all of them: a bad display name is dropped
-  // (the picker shows the id), and any other malformed entry is skipped on its own.
-  const models: ModelSummary[] = [];
-  for (const model of input.models) {
-    try {
-      models.push(validateModel(model));
-    } catch (error) {
-      if (!(error instanceof Term2ApiError)) throw error;
-    }
-  }
-  return { models };
-}
-function validateModel(model: unknown): ModelSummary {
-  const item = object(model);
-  only(item, ['provider', 'id', 'name', 'default_reasoning_level', 'contextWindow', 'maxOutputTokens', 'pricing']);
-  for (const key of ['contextWindow', 'maxOutputTokens'] as const)
-    if (item[key] !== undefined && (!Number.isSafeInteger(item[key]) || (item[key] as number) < 0))
-      throw new Term2ApiError(503, 'Invalid agent response');
-  let name: string | undefined;
-  try {
-    name = optionalText(item.name, 512);
-  } catch {
-    name = undefined;
-  }
+  // One provider's odd entry (a custom server's multi-paragraph `name`) must not blank every provider's list:
+  // a bad name is dropped (the id shows instead) and any other malformed entry is skipped on its own.
   return {
-    provider: text(item.provider, 256),
-    id: text(item.id, 512),
-    ...(name === undefined ? {} : { name }),
-    ...(item.default_reasoning_level === undefined
-      ? {}
-      : { default_reasoning_level: text(item.default_reasoning_level, 128) }),
-    ...(item.contextWindow === undefined ? {} : { contextWindow: item.contextWindow as number }),
-    ...(item.maxOutputTokens === undefined ? {} : { maxOutputTokens: item.maxOutputTokens as number }),
-    ...(item.pricing === undefined ? {} : { pricing: validatePricing(item.pricing) }),
+    models: input.models.flatMap((model) => {
+      try {
+        const item = object(model);
+        only(item, ['provider', 'id', 'name', 'default_reasoning_level', 'contextWindow', 'maxOutputTokens', 'pricing']);
+        for (const key of ['contextWindow', 'maxOutputTokens'] as const)
+          if (item[key] !== undefined && (!Number.isSafeInteger(item[key]) || (item[key] as number) < 0))
+            throw new Term2ApiError(503, 'Invalid agent response');
+        const name = typeof item.name === 'string' && item.name.length <= 512 && !/[\u0000-\u001f\u007f]/u.test(item.name);
+        return [
+          {
+            provider: text(item.provider, 256),
+            id: text(item.id, 512),
+            ...(name ? { name: item.name as string } : {}),
+            ...(item.default_reasoning_level === undefined
+              ? {}
+              : { default_reasoning_level: text(item.default_reasoning_level, 128) }),
+            ...(item.contextWindow === undefined ? {} : { contextWindow: item.contextWindow as number }),
+            ...(item.maxOutputTokens === undefined ? {} : { maxOutputTokens: item.maxOutputTokens as number }),
+            ...(item.pricing === undefined ? {} : { pricing: validatePricing(item.pricing) }),
+          },
+        ];
+      } catch (error) {
+        if (error instanceof Term2ApiError) return [];
+        throw error;
+      }
+    }),
   };
 }
 const PRICE_KEYS = ['inputPerMTok', 'outputPerMTok', 'cacheReadPerMTok', 'cacheWritePerMTok'] as const;

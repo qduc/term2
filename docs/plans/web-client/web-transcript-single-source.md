@@ -157,10 +157,9 @@ Owner, 2026-11-26:
 
 Designer, following from the first one:
 
-- **Approval is a required reviewer on a GitHub environment, not a label.** Agents act on GitHub as the owner's
-  own account, so a label or a code-owner review cannot tell the owner from an agent. Details and limits in the
-  spec, section 8.
-
+- **The guards are reminders, sized for accidents.** The owner rejected a tamper-resistant lock as overkill:
+  agents are not trying to get around the architecture, they step on it by mistake. So the guard is the existing
+  gate pattern (a red check that explains itself) plus one label for changes the owner should see.
 - **The browser folds native events with the shared reducer (option A below).** The package today ships the event
   vocabulary and envelope parsers and leaves state and replay to each application (its README says so). That is
   the part the web client reinvented, and the part a public library has to supply.
@@ -293,17 +292,12 @@ corrects those and ten smaller ones.
 | 1 | `src/protocol/fold/` with its no-imports gate; branch state moved into the fold; `reasoningBlocks`, `liveReasoning`, `turnUsage`; `direct-wire-v2` frames with explicit batches and empty accepted frames; browser bundle of the fold; `wire.frames-round-trip` and `wire.snapshot-is-fold` | both properties green at 1,000 runs (write `frames-round-trip` first and see it red on a branch); the gate red on a seeded import; a gateway integration test reads the new format; TUI goldens unchanged | high: it changes the state every client renders. Independent verifier |
 | 2 | `session-store.ts` and `present.ts` behind the existing hook interface; delete `event-adapter.ts`, `native-state.ts` and the view half of `hydration.ts`; `web.present-reuse` | the spec's acceptance example holds by fold and by snapshot; every browser flow green, including the ones phase 0 found red; no hydration GET in the network log | high: independent verifier |
 | 3 | `shell-machine.ts`: selection and draft, then composer, then panels | `shell.machine-rules` green; one browser flow per rule that already cost a fix | medium, in slices |
-| L | Lock the settled architecture: a base-branch workflow that makes changes to the guards, the fold's public contract and the CI commands wait for the owner's approval (spec section 8). Entries for phases 1-2 go in after phase 2, the shell ceilings after phase 3 | the spike's five confirmations recorded here; five proof pull requests behave as the spec says | medium; needs two settings only the owner can make |
+| L | Guard the settled architecture with reminders: static rules in `check-rules.mjs` with reason text, a generated report of the fold's public interface, and an `architecture-change` label check for the few changes the owner should see (spec section 8). After phase 2 | each rule red on a seeded violation in `prove-checks.sh`; the label check red on a changed line of the report and green on an added one | low |
 | 4 | Graduate the fold into `@qduc/agent-wire` | the spec's graduation checklist | separate repo |
 
 A flow that phase 0 finds red because reload and live really differ stays red-by-design until phase 2: record it
 in this document with the evidence, keep the assertion, and do not land it in a required lane until it passes.
 
 ## Open, for the owner
-
-- Phase L needs two settings only the owner can make: the `architecture-change` environment with the owner as
-  required reviewer, and `architecture-lock` added to the `main` ruleset's required checks (spec section 8).
-- Whether to move the existing `golden-change` and `ci-budget-change` label gates behind the same approval. Any
-  agent session that can label a pull request can satisfy them today.
 
 - Whether the external consumer should move to the graduated library or stay on v2. Nothing here depends on it.

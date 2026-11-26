@@ -149,7 +149,10 @@ export const RULES = {
     why:
       'A long file usually holds more than one job, and one job is easier to name, review and change. The limit is ' +
       'a prompt to look for the second job, not a target.',
-    fix: 'If the file does two jobs, split along that seam so each part reads on its own.',
+    fix:
+      'If the file does two jobs, split along that seam so each part reads on its own. In web-client/, a component ' +
+      'that outgrows the limit usually renders two regions; a file under components/term2/shell/ over the limit ' +
+      "has taken on a second region's job.",
     avoid:
       'Do not split just to get under the number. Files that only make sense together (a *-policy, *-capability ' +
       'and *-registry for one idea, or a factory for one call site) cost readers more than one long file. If there ' +
@@ -241,6 +244,43 @@ export const RULES = {
       file: 'scripts/rule-baseline.json',
       entry: 'fixedSleeps: { "file": "<test file>", "count": N, "reason": "..." }',
       note: 'the count is a per-file ceiling that only goes down; prefer a sleep-ok comment',
+    },
+  },
+  'web-shell-effects': {
+    title: 'Shell components do not write state from an effect',
+    why:
+      'An effect that sets state or dispatches when other state changes keeps a second, delayed copy of that state: ' +
+      'for one render the two disagree, and a run that fires late lands on another chat. Six fixes went into effects ' +
+      "of this kind before the shell's policy moved into web-client/lib/term2/shell-machine.ts. Shapes detected (the " +
+      'list is not complete): a useState or useReducer setter, or a call named dispatch, made directly in the body of ' +
+      'useEffect, useLayoutEffect or useInsertionEffect, each called bare or as React.<hook>. Calls inside a listener, timer, promise callback or the ' +
+      'cleanup are not flagged.',
+    fix:
+      'Derive the value while rendering (a selector, or web-client/lib/term2/shell/chat-facts.ts), or make the change ' +
+      'part of the transition that causes it in shell-machine.ts. An effect that reads the DOM, subscribes to a ' +
+      'browser event or starts a request is fine.',
+    avoid:
+      'Do not wrap the write in a helper, a timer or a promise so the checker stops seeing it, and do not move the ' +
+      'component out of components/term2/shell/ to leave the scan.',
+    exceptions: {
+      file: 'scripts/rule-baseline.json',
+      entry: 'webShellEffects: { "file": "<component file>", "count": N, "reason": "..." }',
+      note: 'the count is a per-file ceiling that only goes down; a new feed belongs in ShellFeeds.tsx',
+    },
+  },
+  'web-shell-requests': {
+    title: 'Shell components do not call the server',
+    why:
+      'Server data has one home, web-client/lib/term2/data/server-data.ts, with one meaning of loading, failed and ' +
+      'refreshed, and one rule for a response that arrives late. A request made from a component brings back its own ' +
+      'loading flag, error string and stale check: the dozen hand-written flags this layout replaced.',
+    fix:
+      'Read through a resource in server-data.ts (add one there for new data). Put an action with several steps in ' +
+      'web-client/lib/term2/shell/shell-operations.ts and call it as shell.ops.<name>.',
+    avoid: 'Do not pass term2Client in through props or context, and do not re-export it from another module.',
+    exceptions: {
+      file: 'scripts/rule-baseline.json',
+      entry: 'webShellRequests: { "file": "<component file>", "reason": "..." }',
     },
   },
   baselines: {
@@ -347,6 +387,10 @@ export function readDeviations(read) {
     add('duplicate-basenames', 'scripts/rule-baseline.json', entry, 'file', 'duplicateBasenames');
   for (const entry of rules?.fixedSleeps ?? [])
     add('fixed-sleeps', 'scripts/rule-baseline.json', entry, 'file', 'fixedSleeps', { count: entry?.count });
+  for (const entry of rules?.webShellEffects ?? [])
+    add('web-shell-effects', 'scripts/rule-baseline.json', entry, 'file', 'webShellEffects', { count: entry?.count });
+  for (const entry of rules?.webShellRequests ?? [])
+    add('web-shell-requests', 'scripts/rule-baseline.json', entry, 'file', 'webShellRequests');
   for (const entry of rules?.engineCallbackWrites ?? [])
     add('engine-callback-writes', 'scripts/rule-baseline.json', entry, 'callback', 'engineCallbackWrites');
 

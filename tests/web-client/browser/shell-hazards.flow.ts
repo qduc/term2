@@ -356,3 +356,32 @@ test('a chat switch closes the rewind dialog it was opened for', async ({ page, 
   await expect(page.getByRole('heading', { level: 1, name: 'chat b' })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('editing the first message is sent even when the rewound chat would block a first send', async ({
+  page,
+  launch,
+}) => {
+  const app = await launch({ scripts: { 'chat a': [{ text: 'reply a' }], 'edited a': [{ text: 'reply edited' }] } });
+  await openDraftChat(page, app);
+  await send(page, 'chat a');
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  // From now on the catalog does not list the chat's model, which blocks a chat's first message, but not a resend.
+  await page.route('**/api/term2/models', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { models: { id: string }[] };
+    body.models = body.models.filter((model) => model.id !== 'mock-alpha');
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  await expect(turns(page)).toHaveCount(1);
+  await expectNoRunningTurn(page);
+  await turns(page).first().getByRole('button', { name: 'Edit message' }).click();
+  await page.getByRole('textbox', { name: 'Edit message' }).fill('edited a');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  // The rewind empties the chat; the edited text still goes, as it did before the rewind.
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expect(turns(page).first()).toContainText('edited a');
+  await expect(turns(page).first()).toContainText('reply edited');
+  expect(app.model.turn('edited a')).toHaveLength(1);
+});

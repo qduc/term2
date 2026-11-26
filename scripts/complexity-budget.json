@@ -268,6 +268,42 @@
     "src/delegation/direct/subagent-tools.ts": {
       "lines": 504,
       "reason": "The direct child launcher prepares one launch: definition resolution, worktree pinning, the child's tool graph and its instructions. Four lines over the default limit withhold shell from every child of a read session whose sandbox cannot run, at the one point all launch paths (role, agent_spec, run_code, continuation) share. Lower the ceiling if launch preparation is split from tool-graph assembly."
+    },
+    "web-client/lib/api/term2.ts": {
+      "lines": 1203,
+      "reason": "The browser's one HTTP facade and its response validators; recorded when the gate first covered web-client (2026-11). Split validators from the client object when it is next reworked."
+    },
+    "web-client/components/term2/settings/ProvidersSection.tsx": {
+      "lines": 986,
+      "reason": "Recorded when the gate first covered web-client (2026-11); the settings page was out of scope of the shell decomposition. Split per provider form when settings is next reworked."
+    },
+    "web-client/lib/term2/types.ts": {
+      "lines": 958,
+      "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11)."
+    },
+    "web-client/components/term2/settings/Term2SettingsPage.tsx": {
+      "lines": 940,
+      "reason": "Recorded when the gate first covered web-client (2026-11). It keeps its own copy of the settings projection; moving it onto lib/term2/data/server-data.ts is the next step and should shrink it."
+    },
+    "web-client/components/term2/Term2FolderSelector.tsx": {
+      "lines": 816,
+      "reason": "Recorded when the gate first covered web-client (2026-11); one dialog with its own capability-token browse flow, out of scope of the shell decomposition."
+    },
+    "web-client/components/term2/Term2ToolContent.tsx": {
+      "lines": 771,
+      "reason": "Output parsers and previews for every tool row; the transcript flows compare what it renders. Recorded when the gate first covered web-client (2026-11); split parsers from previews in a change of its own."
+    },
+    "web-client/components/term2/settings/settings-catalog.ts": {
+      "lines": 575,
+      "reason": "Data: which settings appear where, with labels and keywords. One table reads better whole; recorded when the gate first covered web-client (2026-11)."
+    },
+    "web-client/lib/term2/shell-machine.ts": {
+      "lines": 540,
+      "reason": "One pure step() whose cases are the shell's rules, checked together by shell.machine-rules; splitting it by slice would hide the cross-slice resets. Recorded when the gate first covered web-client (2026-11)."
+    },
+    "web-client/components/term2/Term2ModelPicker.tsx": {
+      "lines": 509,
+      "reason": "Nine lines over; recorded when the gate first covered web-client (2026-11). Drop the ceiling when the picker is next touched."
     }
   },
   "messagePath": {

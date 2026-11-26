@@ -931,5 +931,13 @@
       "count": 3,
       "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
     }
-  ]
+  ],
+  "webShellEffects": [
+    {
+      "file": "web-client/components/term2/shell/ShellFeeds.tsx",
+      "count": 7,
+      "reason": "The six places a prop or a fact derived from the open chat becomes a machine action (address bar, first mount, user change (two actions), first send, notice drain, status line). They are kept in this one file so a seventh is visible; each could go only if the machine read the session view itself."
+    }
+  ],
+  "webShellRequests": []
 }

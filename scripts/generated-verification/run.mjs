@@ -9,6 +9,7 @@ import { nativeLogProperties } from './native-log.mjs';
 import { approvalProperties } from './approvals.mjs';
 import { wireProperties } from './wire.mjs';
 import { shellProperties } from './shell.mjs';
+import { webDataProperties } from './web-data.mjs';
 
 const targets = {
   history: historyProperties,
@@ -17,6 +18,7 @@ const targets = {
   approvals: approvalProperties,
   wire: wireProperties,
   shell: shellProperties,
+  data: webDataProperties,
 };
 
 // No provider, credential, model, or network dependency: only production APIs
@@ -35,7 +37,7 @@ try {
   });
   if (values.help) {
     console.log(
-      'pnpm verify:generated [--target all|history|opaque|native|approvals|wire|shell] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
+      'pnpm verify:generated [--target all|history|opaque|native|approvals|wire|shell|data] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
     );
   } else {
     const runs = Number(values.runs);

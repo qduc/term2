@@ -1,7 +1,7 @@
 'use client';
 
+import { memo, useCallback, type RefObject } from 'react';
 import { ArrowUp, Square } from 'lucide-react';
-import type { RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { useStoreSelector } from '../../../hooks/useStoreSelector';
@@ -15,7 +15,7 @@ import { Term2UsagePopover } from '../Term2UsagePopover';
 import { useChatFacts, useSessionView, useShell, useShellState } from './ShellContext';
 
 /** Under the message box: skills and commands, the model and approval pickers, usage, and send/steer/stop. */
-export function ComposerToolbar({
+export const ComposerToolbar = memo(function ComposerToolbar({
   composerRef,
   skillPickedRef,
   onAttachImage,
@@ -52,6 +52,18 @@ export function ComposerToolbar({
   const settings = useStoreSelector(shell.data.settings, (s) => s.data);
   const configBusy = useStoreSelector(shell.local, (l) => l.configBusy);
   const { pickerConfig } = f;
+  const handleSelectModel = useCallback(
+    (provider: string, model: string) => void ops.updateSessionConfig({ modelSelection: { provider, model } }),
+    [ops],
+  );
+  const handleSelectEffort = useCallback(
+    (reasoningEffort: NonNullable<Parameters<typeof ops.updateSessionConfig>[0]['reasoningEffort']>) =>
+      void ops.updateSessionConfig({ reasoningEffort }),
+    [ops],
+  );
+  const handleToggleFavorite = useCallback((key: string) => void ops.toggleFavorite(key), [ops]);
+  const handleRefreshModels = useCallback(() => void shell.data.models.load(), [shell.data.models]);
+  const handleOpenSettings = useCallback(() => openSettings(), []);
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -112,11 +124,11 @@ export function ComposerToolbar({
             settings={settings}
             disabled={f.pickerDisabled}
             busy={configBusy}
-            onSelectModel={(provider, model) => void ops.updateSessionConfig({ modelSelection: { provider, model } })}
-            onSelectEffort={(reasoningEffort) => void ops.updateSessionConfig({ reasoningEffort })}
-            onToggleFavorite={settings ? (key) => void ops.toggleFavorite(key) : undefined}
-            onRefreshModels={() => void shell.data.models.load()}
-            onOpenSettings={() => openSettings()}
+            onSelectModel={handleSelectModel}
+            onSelectEffort={handleSelectEffort}
+            onToggleFavorite={settings ? handleToggleFavorite : undefined}
+            onRefreshModels={handleRefreshModels}
+            onOpenSettings={handleOpenSettings}
             pending={f.staged}
             note={f.pickerNote}
             warning={f.pickerWarning}
@@ -184,7 +196,7 @@ export function ComposerToolbar({
       </div>
     </div>
   );
-}
+});
 
 /** The usage popover reads the whole view; it subscribes on its own so a stream frame re-renders only it. */
 function UsageChip({ canCompact }: { canCompact: boolean }) {

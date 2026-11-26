@@ -154,6 +154,7 @@ export const Composer = memo(function Composer() {
     composerRef.current?.focus();
   };
 
+  const handleAttachImage = useCallback(() => fileInputRef.current?.click(), []);
   return (
     <div
       onDragOver={(event) => {
@@ -314,7 +315,7 @@ export const Composer = memo(function Composer() {
       <ComposerToolbar
         composerRef={composerRef}
         skillPickedRef={skillPickedRef}
-        onAttachImage={() => fileInputRef.current?.click()}
+        onAttachImage={handleAttachImage}
         onMentionFile={onMentionFile}
       />
     </div>

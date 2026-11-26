@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { Check, Minus, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -221,30 +222,36 @@ export function ProviderTabBar({
 }
 
 /** One selectable model row with hover tooltip details and favorite toggle. */
-export function ModelOptionRow({
+export const ModelOptionRow = memo(function ModelOptionRow({
   model,
+  favKey,
   providerLabel,
   optionId,
+  ariaSetSize,
+  ariaPosInSet,
   isCurrent,
   isActive,
   isFav,
-  onHover,
-  onSelect,
+  onHoverKey,
+  onSelectModel,
   onToggleFavorite,
 }: {
   model: ModelSummary;
+  favKey: string;
   providerLabel: string;
   optionId?: string;
+  ariaSetSize?: number;
+  ariaPosInSet?: number;
   isCurrent: boolean;
   isActive: boolean;
   isFav: boolean;
-  onHover: () => void;
-  onSelect: () => void;
-  onToggleFavorite?: () => void;
+  onHoverKey: (key: string) => void;
+  onSelectModel: (provider: string, modelId: string) => void;
+  onToggleFavorite?: (key: string) => void;
 }) {
   const ctx = formatContextWindow(model.contextWindow);
   return (
-    <li className="flex items-center gap-1">
+    <div className="flex w-full items-center gap-1">
       <Tooltip delayDuration={350}>
         <TooltipTrigger asChild>
           <button
@@ -252,11 +259,13 @@ export function ModelOptionRow({
             type="button"
             role="option"
             aria-selected={isActive}
+            aria-setsize={ariaSetSize}
+            aria-posinset={ariaPosInSet}
             data-active={isActive ? 'true' : undefined}
             onPointerMove={(event) => {
-              if (event.pointerType === 'mouse') onHover();
+              if (event.pointerType === 'mouse') onHoverKey(favKey);
             }}
-            onClick={onSelect}
+            onClick={() => onSelectModel(model.provider, model.id)}
             className={cn(
               'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs outline-none transition-colors focus-visible:bg-accent',
               isActive && 'bg-accent text-accent-foreground ring-1 ring-inset ring-foreground/10',
@@ -287,15 +296,15 @@ export function ModelOptionRow({
           variant="ghost"
           size="icon-xs"
           aria-label={isFav ? `Remove ${model.id} from favorites` : `Favorite ${model.id}`}
-          onClick={onToggleFavorite}
+          onClick={() => onToggleFavorite(favKey)}
           className={isFav ? 'text-amber-500' : 'text-muted-foreground'}
         >
           <Star className={isFav ? 'fill-current' : ''} />
         </Button>
       )}
-    </li>
+    </div>
   );
-}
+});
 
 /** Segmented reasoning-effort selector with Left/Right keyboard navigation. */
 export function ReasoningEffortSection({

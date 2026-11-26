@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { term2Client } from '../../../lib/api/term2';
+import { useServerData } from '../shell/ShellContext';
 import type { ModelSummary, ProviderPresetEntry, SettingsProjection } from '../../../lib/term2/types';
 import { CredentialField, credentialSourceText } from './CredentialField';
 
@@ -121,8 +121,6 @@ export function ProvidersSection({
   providerTypes,
   routeProvider,
   onNavigate,
-  onReload,
-  onModelsChanged,
   setupPath,
 }: {
   projection: SettingsProjection;
@@ -134,10 +132,9 @@ export function ProvidersSection({
   /** The `?provider=` URL value: a provider id, the add gallery, or nothing (list only on narrow screens). */
   routeProvider: string | null;
   onNavigate: (provider: string | null) => void;
-  onReload: () => Promise<SettingsProjection | null>;
-  onModelsChanged: () => Promise<void>;
   setupPath?: 'sign-in' | 'api-key' | 'server';
 }) {
+  const data = useServerData();
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const providers = projection.settings.providers;
   const oauth = projection.settings.oauthAccounts;
@@ -235,8 +232,8 @@ export function ProvidersSection({
             existingIds={new Set(providers.map((p) => p.id))}
             onOpenExisting={onNavigate}
             onAdded={async (before) => {
-              const latest = await onReload();
-              await onModelsChanged();
+              // The write has already re-read settings and the model list.
+              const latest = data.settings.get().data;
               const added = latest?.settings.providers.find((p) => !before.has(p.id));
               onNavigate(added?.id ?? null);
             }}
@@ -253,8 +250,6 @@ export function ProvidersSection({
             modelsLoading={modelsLoading}
             presets={presets}
             providerTypes={providerTypes}
-            onReload={onReload}
-            onModelsChanged={onModelsChanged}
             onConfirm={setConfirm}
             onRemoved={() => onNavigate(null)}
             setup={Boolean(setupPath)}
@@ -313,8 +308,6 @@ function ProviderDetail({
   modelsLoading,
   presets,
   providerTypes,
-  onReload,
-  onModelsChanged,
   onConfirm,
   onRemoved,
   setup = false,
@@ -328,12 +321,11 @@ function ProviderDetail({
   modelsLoading: boolean;
   presets: ProviderPresetEntry[];
   providerTypes: string[];
-  onReload: () => Promise<SettingsProjection | null>;
-  onModelsChanged: () => Promise<void>;
   onConfirm: (request: ConfirmRequest) => void;
   onRemoved: () => void;
   setup?: boolean;
 }) {
+  const data = useServerData();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [showAllModels, setShowAllModels] = useState(false);
@@ -342,7 +334,7 @@ function ProviderDetail({
   const docsUrl = docsUrlFor(provider, presets);
   const isOAuth = accounts !== undefined;
 
-  /** Runs one change, then refreshes settings and the model list so the status line is current. */
+  /** Runs one change; each write re-reads settings and the model list itself, so the status line is current. */
   const run = async (
     operation: () => Promise<string | null>,
     failure: string,
@@ -352,8 +344,6 @@ function ProviderDetail({
     setNotice(startNotice ? { tone: 'ok', text: startNotice } : null);
     try {
       const done = await operation();
-      await onReload();
-      await onModelsChanged();
       if (done) setNotice({ tone: 'ok', text: done });
       return true;
     } catch (reason) {
@@ -366,7 +356,7 @@ function ProviderDetail({
 
   const toggle = (enabled: boolean) =>
     void run(async () => {
-      const result = await term2Client.writeProvider({ action: 'toggle', id: provider.id, disabled: !enabled });
+      const result = await data.providers.saveProvider({ action: 'toggle', id: provider.id, disabled: !enabled });
       if (!result.ok) throw new Error(result.error ?? `Could not turn ${provider.label} ${enabled ? 'on' : 'off'}.`);
       return null;
     }, `Could not turn ${provider.label} ${enabled ? 'on' : 'off'}.`);
@@ -376,7 +366,7 @@ function ProviderDetail({
       setBusy(true);
       setNotice(null);
       try {
-        await onModelsChanged();
+        await data.models.load();
       } finally {
         setBusy(false);
         setNotice({ tone: 'ok', text: 'Checked just now. The status line above shows the result.' });
@@ -445,7 +435,7 @@ function ProviderDetail({
               disabled={busy}
               onSave={(value) =>
                 run(async () => {
-                  await term2Client.setCredential(provider.id, value);
+                  await data.providers.setCredential(provider.id, value);
                   return 'API key saved.';
                 }, 'The API key was not saved.')
               }
@@ -456,7 +446,7 @@ function ProviderDetail({
                   confirmLabel: 'Remove key',
                   action: async () => {
                     await run(async () => {
-                      await term2Client.deleteCredential(provider.id);
+                      await data.providers.deleteCredential(provider.id);
                       return 'API key removed.';
                     }, 'The API key was not removed.');
                   },
@@ -486,7 +476,7 @@ function ProviderDetail({
                   setSigningIn(true);
                   void run(
                     async () => {
-                      const result = await term2Client.oauthLogin(provider.id);
+                      const result = await data.providers.oauthLogin(provider.id);
                       if (result.status !== 'completed') throw new Error('Sign-in was not completed. Try again.');
                       return `Signed in to ${provider.label}.`;
                     },
@@ -521,7 +511,7 @@ function ProviderDetail({
                           disabled={busy}
                           onClick={() =>
                             void run(async () => {
-                              const result = await term2Client.oauthSelect(provider.id, account.id);
+                              const result = await data.providers.oauthSelect(provider.id, account.id);
                               if (!result.ok) throw new Error('Could not switch accounts.');
                               return `Now using ${account.label}.`;
                             }, 'Could not switch accounts.')
@@ -542,7 +532,7 @@ function ProviderDetail({
                             confirmLabel: 'Sign out',
                             action: async () => {
                               await run(async () => {
-                                const result = await term2Client.oauthDelete(provider.id, account.id);
+                                const result = await data.providers.oauthDelete(provider.id, account.id);
                                 if (!result.ok) throw new Error('Could not sign out.');
                                 return `Signed out of ${account.label}.`;
                               }, 'Could not sign out.');
@@ -569,7 +559,7 @@ function ProviderDetail({
               onCancel={() => setEditingConnection(false)}
               onSubmit={async (draft) => {
                 const ok = await run(async () => {
-                  const result = await term2Client.writeProvider({ action: 'save', originalId: provider.id, ...draft });
+                  const result = await data.providers.saveProvider({ action: 'save', originalId: provider.id, ...draft });
                   if (!result.ok) throw new Error(firstError(result) ?? 'The connection was not saved.');
                   return 'Connection saved.';
                 }, 'The connection was not saved.');
@@ -675,7 +665,7 @@ function ProviderDetail({
                   confirmLabel: 'Remove provider',
                   action: async () => {
                     const ok = await run(async () => {
-                      const result = await term2Client.deleteProvider(provider.id);
+                      const result = await data.providers.deleteProvider(provider.id);
                       if (!result.ok) throw new Error('The provider was not removed.');
                       return null;
                     }, 'The provider was not removed.');
@@ -855,6 +845,7 @@ function AddProvider({
   onAdded: (before: Set<string>) => Promise<void>;
   allowCustom?: boolean;
 }) {
+  const data = useServerData();
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<ProviderPresetEntry | 'custom' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -909,7 +900,7 @@ function AddProvider({
           onSubmit={async (draft) => {
             setError(null);
             try {
-              const result = await term2Client.writeProvider({ action: 'save', ...draft });
+              const result = await data.providers.saveProvider({ action: 'save', ...draft });
               if (!result.ok) {
                 setError(firstError(result) ?? 'The provider was not added.');
                 return false;

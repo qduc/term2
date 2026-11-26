@@ -171,24 +171,22 @@ export function Term2RetryReply({
   disabled,
   laterTurns,
   onResend,
-  onError,
 }: {
   turnId: string;
   userText: string;
   disabled: boolean;
   laterTurns: number;
+  /** Resends the message; its failure is shown under the turn by the caller. */
   onResend: ResendFromTurn;
-  onError: (message: string) => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const retry = async () => {
     setBusy(true);
-    const failure = await onResend(turnId, userText);
+    await onResend(turnId, userText);
     setBusy(false);
     setConfirming(false);
-    if (failure) onError(failure);
   };
 
   return (

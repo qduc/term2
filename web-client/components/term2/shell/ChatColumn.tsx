@@ -1,6 +1,5 @@
 'use client';
 
-import { useStoreSelector } from '../../../hooks/useStoreSelector';
 import { Term2StatusBanner } from '../Term2StatusBanner';
 import { ChatDock } from './ChatDock';
 import { ChatHeaderRegion } from './ChatHeaderRegion';
@@ -18,7 +17,7 @@ export function ChatColumn() {
   const sidebarOpen = useShellState((s) => s.panels.sidebar);
   const sessionId = useChatFacts((f) => f.sessionId);
   const isDraft = useChatFacts((f) => f.isDraft);
-  const pageError = useStoreSelector(shell.local, (l) => l.pageError);
+  const pageError = useShellState((s) => s.pageError);
   const status = useSessionView((v) => v.status);
   const viewError = useSessionView((v) => v.error);
   const { scrollRef, lastScrollTopRef, onScroll, scrollToLatest } = useTranscriptScroll();
@@ -43,7 +42,7 @@ export function ChatColumn() {
               status={status}
               error={pageError ?? viewError}
               onRetry={() => {
-                if (shell.local.get().pageError) void shell.ops.reloadLists();
+                if (shell.store.get().pageError) void shell.ops.reloadLists();
                 else void shell.session.refresh();
               }}
             />

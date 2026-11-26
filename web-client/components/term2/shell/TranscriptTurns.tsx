@@ -9,7 +9,8 @@ import { shallowEqual } from '../../../lib/term2/store';
 import type { Term2TurnView } from '../../../lib/term2/types';
 import { Term2RetryReply, Term2UserMessage } from '../Term2MessageActions';
 import { Term2TurnTimeline } from '../Term2TurnTimeline';
-import { useChatFacts, useSessionView, useShell, useShellEnv } from './ShellContext';
+import { useChatFacts, useSessionView, useShell, useShellEnv, useShellState } from './ShellContext';
+import { currentTag } from '../../../lib/term2/shell-machine';
 
 /** The conversation's turns. Each turn re-renders only when it, or what it reads, changes. */
 export function TranscriptTurns() {
@@ -70,12 +71,12 @@ const TranscriptTurn = memo(function TranscriptTurn({
     }),
     shallowEqual,
   );
-  const local = useStoreSelector(
-    shell.local,
-    (l) => ({
-      configBusy: l.configBusy,
-      retryError: l.retryError?.turnId === turn.turnId ? l.retryError.message : null,
-      retryDraft: l.retryDraft?.turnId === turn.turnId ? l.retryDraft : null,
+  // What this turn reads of the chat's own intent; it goes when the page shows something else.
+  const local = useShellState(
+    (s) => ({
+      configBusy: s.configApply !== null,
+      retryError: s.retryError?.turnId === turn.turnId ? s.retryError.message : null,
+      retryDraft: s.retryDraft?.turnId === turn.turnId ? s.retryDraft : null,
     }),
     shallowEqual,
   );
@@ -219,10 +220,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
                 userText={turn.userText}
                 disabled={commandDisabled}
                 laterTurns={laterTurns}
-                onResend={ops.resendFromTurn}
-                onError={(message) =>
-                  shell.local.set((l) => ({ ...l, retryError: { turnId: turn.turnId, message } }))
-                }
+                onResend={ops.retryReply}
               />
             ) : null}
             {turn.usage?.totalTokens ? (
@@ -237,7 +235,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
             {local.retryError}
           </p>
         )}
-        {retryDraft?.sessionId === f.sessionId && retryDraft && turn.userText && (
+        {retryDraft && turn.userText && (
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
               This chat couldn’t switch models. You can copy the last prompt into a new draft without
@@ -252,7 +250,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
                 void ops.createNewChat();
                 shell.dispatch({ type: 'DRAFT_CONFIG_PICKED', selection: { modelSelection: { provider, model } } });
                 shell.dispatch({ type: 'COMPOSER_EDITED', patch: { input: turn.userText ?? '' } });
-                shell.local.set((l) => ({ ...l, retryDraft: null }));
+                shell.dispatch({ type: 'RETRY_DRAFT', tag: currentTag(shell.store.get()), draft: null });
               }}
             >
               Open a new draft with {retryDraft.model.name ?? retryDraft.model.id}

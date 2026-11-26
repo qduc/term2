@@ -1,10 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useLoadOnOpen } from '../../hooks/useLoadOnOpen';
 import { History, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { term2Client } from '../../lib/api/term2';
 import type { RewindTargetSummary } from '../../lib/term2/types';
+import { useServerData } from './shell/ShellContext';
+
+/** The checkpoint selected when the dialog opens: the one named, else the latest. */
+function defaultTargetId(targets: readonly RewindTargetSummary[], initialTurnId: string | null | undefined): string | null {
+  const match = initialTurnId
+    ? targets.find((t) => t.turnId === initialTurnId || t.targetId === initialTurnId)
+    : targets[targets.length - 1];
+  return match?.targetId ?? targets[0]?.targetId ?? null;
+}
+
+const NO_TARGETS: RewindTargetSummary[] = [];
 
 export function Term2RewindDialog({
   sessionId,
@@ -19,36 +30,18 @@ export function Term2RewindDialog({
   onRewind: (target: RewindTargetSummary, restoreText: boolean) => Promise<void>;
   onClose: () => void;
 }) {
-  const [targets, setTargets] = useState<RewindTargetSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Read each time the dialog opens: a turn or a rewind changes the list.
+  const opened = useLoadOnOpen(useServerData().rewindTargets, sessionId);
+  const targets = opened.status === 'ready' ? opened.data : NO_TARGETS;
+  const loading = opened.status === 'loading';
+  // A failed rewind; a failed load is shown from the resource.
+  const [rewindError, setError] = useState<string | null>(null);
+  const error =
+    rewindError ?? (opened.status === 'failed' ? opened.error || 'Could not load rewind points.' : null);
+  // Null until the user picks: the default checkpoint then.
+  const [pickedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = pickedId ?? defaultTargetId(targets, initialTurnId);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    void term2Client
-      .listRewindTargets(sessionId, controller.signal)
-      .then((res) => {
-        if (controller.signal.aborted) return;
-        setTargets(res.targets);
-        const match = initialTurnId
-          ? res.targets.find((t) => t.turnId === initialTurnId || t.targetId === initialTurnId)
-          : res.targets[res.targets.length - 1];
-        setSelectedId(match?.targetId ?? res.targets[0]?.targetId ?? null);
-      })
-      .catch((err) => {
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Could not load rewind points.');
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [sessionId, initialTurnId]);
 
   const selected = targets.find((t) => t.targetId === selectedId) ?? null;
   const files = selected?.editedFiles ?? selected?.affectedFiles ?? [];

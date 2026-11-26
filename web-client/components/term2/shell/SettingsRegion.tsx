@@ -20,12 +20,8 @@ export function SettingsRegion() {
       provider={settingsProvider}
       onNavigate={navigateSettings}
       onClose={closeSettings}
-      onLoaded={shell.data.settings.set}
       models={models}
       modelsLoading={modelsLoading}
-      onModelsChanged={async () => {
-        await shell.data.models.load();
-      }}
       displayMode={prefs.displayMode}
       onDisplayModeChange={shell.prefs.setDisplayMode}
       notificationsEnabled={prefs.notificationsEnabled}

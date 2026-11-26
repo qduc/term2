@@ -1,18 +1,23 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import { createResource } from '../../web-client/lib/term2/data/resource.ts';
+import { createSettingsWriter } from '../../web-client/lib/term2/data/settings-writer.ts';
 
 /*
  * web.resource-latest-wins: the web client's one data primitive (web-client/lib/term2/data/resource.ts) under random
  * loads, refreshes, local writes and responses that resolve or fail in any order. Invariants after every step:
  *   - the data shown came from the request started last, or from a set/update made after it started;
+ *   - replace() installs its value over every request in flight: none of them installs data or holds loading,
+ *     refreshing or error afterwards, and a load() among them resolves null;
  *   - a response for another key is never installed;
  *   - loading and refreshing are false once the request started last has settled, and true while it runs;
  *   - loaded is true only when data for the current key was installed;
  *   - load() resolves to its data only when no newer request started before it settled, else null (and null on
  *     failure); loadOrFail() and refresh() reject exactly when their own request failed and otherwise resolve to
  *     what they fetched;
- *   - ensure(key) starts a request unless that key is already loaded or loading, and then starts exactly one.
+ *   - ensure(key) starts a request unless that key is already loaded or loading, and then starts exactly one;
+ *   - error holds the described failure of the request started last once it has failed, and is null otherwise (a
+ *     local write does not change it).
  *
  * Bounds: at most 30 steps per case; no React or network.
  */
@@ -25,6 +30,7 @@ const step = fc.oneof(
   fc.record({ kind: fc.constant('ensure'), key: fc.constantFrom(...KEYS) }),
   fc.record({ kind: fc.constant('set') }),
   fc.record({ kind: fc.constant('update') }),
+  fc.record({ kind: fc.constant('replace') }),
   { arbitrary: fc.record({ kind: fc.constant('settle'), index: fc.nat(7), ok: fc.boolean() }), weight: 4 },
 );
 const script = fc.array(step, { minLength: 1, maxLength: 30, size: 'max' });
@@ -41,12 +47,16 @@ async function run(steps) {
         const id = ++started;
         pending.push({ id, key, resolve, reject });
       }),
+    describeError: (error) => `described:${error.message}`,
   });
   let lastStarted = null; // { id, key, flag }
   let lastSettled = false;
+  let lastFailed = false;
   // Where the shown data may have come from: a response id, a local value, or nothing yet for this key.
   let allowed = new Set(['initial']);
   let localWrites = 0;
+  // Requests a replace() came after: they install nothing when they answer.
+  const replacedIds = new Set();
   // Each request's caller: what it called, and what its promise did (filled in when it settles).
   const calls = new Map(); // id -> { kind, outcome }
   const track = (id, kind, promise) => {
@@ -63,6 +73,7 @@ async function run(steps) {
     if (lastStarted?.key !== key) allowed = new Set(['initial']);
     lastStarted = { id, key, flag };
     lastSettled = false;
+    lastFailed = false;
     // Data on screen until this request answers: whatever was allowed for this key.
     allowed.add(`response:${id}`);
   };
@@ -99,13 +110,28 @@ async function run(steps) {
         if (action.kind === 'set') resource.set(value);
         else resource.update(() => value);
         // A local write replaces what is shown; the request started last may still answer over it.
-        allowed = new Set([value, ...(lastStarted && !lastSettled ? [`response:${lastStarted.id}`] : [])]);
+        allowed = new Set([
+          value,
+          ...(lastStarted && !lastSettled && !replacedIds.has(lastStarted.id) ? [`response:${lastStarted.id}`] : []),
+        ]);
+        break;
+      }
+      case 'replace': {
+        const value = `local:${++localWrites}`;
+        resource.replace(value);
+        for (const request of pending) replacedIds.add(request.id);
+        if (lastStarted) replacedIds.add(lastStarted.id);
+        allowed = new Set([value]);
+        if (lastStarted) {
+          lastSettled = true;
+          lastFailed = false;
+        }
         break;
       }
       case 'settle': {
         if (pending.length === 0) break;
         const [request] = pending.splice(action.index % pending.length, 1);
-        const replaced = started > request.id;
+        const replaced = started > request.id || replacedIds.has(request.id);
         if (action.ok) request.resolve(`response:${request.id}`);
         else request.reject(new Error(`failed ${request.id}`));
         await flush();
@@ -122,8 +148,9 @@ async function run(steps) {
             action.ok ? { resolved: `response:${request.id}` } : { rejected: true },
             `${call.kind}() did not report its own outcome`,
           );
-        if (lastStarted && request.id === lastStarted.id) {
+        if (lastStarted && request.id === lastStarted.id && !replacedIds.has(request.id)) {
           lastSettled = true;
+          lastFailed = !action.ok;
           if (action.ok) allowed = new Set([`response:${request.id}`]);
         }
         break;
@@ -153,9 +180,151 @@ async function run(steps) {
       );
     }
     if (state.loaded) assert.notEqual(state.data, 'initial', 'loaded without data for this key');
+    assert.equal(
+      state.error,
+      lastStarted && lastSettled && lastFailed ? `described:failed ${lastStarted.id}` : null,
+      'error does not describe the failure of the request started last',
+    );
   }
+}
+
+/*
+ * web.settings-writes-in-order: the settings write queue (web-client/lib/term2/data/settings-writer.ts) under writes,
+ * re-reads that install a new revision, and answers (ok, conflict, failure) in order. Invariants:
+ *   - at most one write call is unanswered at any time;
+ *   - each call's expectedRevision is the revision the store held when the call was made;
+ *   - a successful write's projection is installed and its caller resolves to it;
+ *   - a conflict's projection is installed and its caller rejects;
+ *   - a failed write leaves the store alone and the next write still runs;
+ *   - a write with nothing loaded rejects without a call;
+ *   - a settings read sent before a write's answer (ok or conflict) never installs over that answer.
+ */
+const writerStep = fc.oneof(
+  fc.record({ kind: fc.constant('write') }),
+  fc.record({ kind: fc.constant('reread') }),
+  fc.record({ kind: fc.constant('load') }),
+  fc.record({ kind: fc.constant('read') }),
+  { arbitrary: fc.record({ kind: fc.constant('readAnswer'), ok: fc.boolean() }), weight: 2 },
+  {
+    arbitrary: fc.record({ kind: fc.constant('settle'), outcome: fc.constantFrom('ok', 'conflict', 'fail') }),
+    weight: 3,
+  },
+);
+const writerScript = fc.array(writerStep, { minLength: 1, maxLength: 30, size: 'max' });
+
+const projection = (revision) => ({ revision, settings: {} });
+
+async function runWriter(steps) {
+  // Settings reads are held until a readAnswer step: { id, sentAt, resolve, reject }.
+  const reads = [];
+  let clock = 0;
+  let readIds = 0;
+  let lastWriteAnswerAt = -1;
+  const settings = createResource({
+    initial: null,
+    fetch: () => new Promise((resolve, reject) => reads.push({ id: ++readIds, sentAt: ++clock, resolve, reject })),
+  });
+  let revisions = 0;
+  const calls = []; // { expectedRevision, resolve, reject, answered }
+  const problems = [];
+  const writer = createSettingsWriter({
+    settings,
+    // Checked here and asserted after the step: a throw inside the executor would only reject that one write.
+    write: (input) =>
+      new Promise((resolve, reject) => {
+        if (!calls.every((call) => call.answered))
+          problems.push('a settings write started while another was unanswered');
+        if (input.expectedRevision !== settings.get().data?.revision)
+          problems.push('a write did not use the revision held when it was made');
+        // The change carries its caller's record, so each answer is checked against that caller's promise.
+        calls.push({
+          expectedRevision: input.expectedRevision,
+          resolve,
+          reject,
+          answered: false,
+          record: input.changes[0].value,
+        });
+      }),
+    conflictProjection: (error) => error.projection ?? null,
+  });
+  const outcomes = []; // per writer() call: { outcome } once settled
+  for (const action of steps) {
+    switch (action.kind) {
+      case 'load':
+        settings.set(projection(`r${++revisions}`));
+        break;
+      case 'reread':
+        if (settings.get().data) settings.set(projection(`r${++revisions}`));
+        break;
+      case 'read':
+        settings.refresh().catch(() => undefined);
+        break;
+      case 'readAnswer': {
+        const read = reads.shift();
+        if (!read) break;
+        const value = projection(`read${read.id}`);
+        if (action.ok) read.resolve(value);
+        else read.reject(new Error('read failed'));
+        await flush();
+        if (read.sentAt < lastWriteAnswerAt)
+          assert.notEqual(settings.get().data, value, "a read sent before a write's answer installed over it");
+        break;
+      }
+      case 'write': {
+        const loaded = Boolean(settings.get().data);
+        const before = calls.length;
+        const record = { outcome: undefined, loaded };
+        outcomes.push(record);
+        writer([{ key: 'k', value: record }]).then(
+          (value) => (record.outcome = { resolved: value }),
+          (error) => (record.outcome = { rejected: error }),
+        );
+        await flush();
+        if (!loaded && calls.length === before && calls.every((call) => call.answered)) {
+          // Nothing loaded and nothing ahead of it: it rejects without a call.
+          assert.ok(record.outcome && 'rejected' in record.outcome, 'a write with nothing loaded did not reject');
+        }
+        break;
+      }
+      case 'settle': {
+        const call = calls.find((item) => !item.answered);
+        if (!call) break;
+        call.answered = true;
+        const storeBefore = settings.get().data;
+        if (action.outcome === 'ok') {
+          const next = projection(`r${++revisions}`);
+          call.resolve({ projection: next });
+          await flush();
+          lastWriteAnswerAt = ++clock;
+          assert.equal(settings.get().data, next, 'a successful write did not install its projection');
+          assert.equal(call.record.outcome?.resolved, next, "a successful write's caller did not get its projection");
+        } else if (action.outcome === 'conflict') {
+          const server = projection(`r${++revisions}`);
+          const error = Object.assign(new Error('conflict'), { projection: server });
+          call.reject(error);
+          await flush();
+          lastWriteAnswerAt = ++clock;
+          assert.equal(settings.get().data, server, "a conflict did not install the server's projection");
+          assert.ok(call.record.outcome && 'rejected' in call.record.outcome, "a conflict's caller did not reject");
+        } else {
+          call.reject(new Error('failed'));
+          await flush();
+          assert.equal(settings.get().data, storeBefore, 'a failed write changed the store');
+          assert.ok(call.record.outcome && 'rejected' in call.record.outcome, "a failed write's caller did not reject");
+        }
+        break;
+      }
+    }
+    await flush();
+    assert.deepEqual(problems, [], problems[0]);
+  }
+  // Every caller got its own write's outcome: ok resolves to a projection, conflict and failure reject.
+  for (const record of outcomes)
+    if (record.outcome && 'resolved' in record.outcome)
+      assert.ok(record.outcome.resolved?.revision, 'a write resolved to nothing');
 }
 
 export const webDataProperties = [
   { name: 'web.resource-latest-wins', property: fc.asyncProperty(script, (steps) => run(steps)) },
+  { name: 'web.settings-writes-in-order', property: fc.asyncProperty(writerScript, (steps) => runWriter(steps)) },
 ];

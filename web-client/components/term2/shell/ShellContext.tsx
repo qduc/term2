@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useStoreSelector } from '../../../hooks/useStoreSelector';
 import type { ChatFacts } from '../../../lib/term2/shell/chat-facts';
+import type { ServerData } from '../../../lib/term2/data/server-data';
 import { createShellRuntime, type ShellRuntime } from '../../../lib/term2/shell/shell-runtime';
 import type { ShellState } from '../../../lib/term2/shell-machine';
 import type { Term2SessionView } from '../../../lib/term2/types';
@@ -78,6 +79,9 @@ export function useSessionView<T>(selector: (view: Term2SessionView) => T, isEqu
 export function useChatFacts<T>(selector: (facts: ChatFacts) => T, isEqual?: (a: T, b: T) => boolean): T {
   return useStoreSelector(useShell().facts, selector, isEqual);
 }
+
+/** The page's server data, for a leaf that reads or writes it (the settings page, the dialogs, the usage chip). */
+export const useServerData = (): ServerData => useShell().data;
 
 /** The launcher's --allow-write, or the saved setting that grants read and write access. */
 export function useAllowWrite(): boolean {

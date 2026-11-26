@@ -15,8 +15,9 @@
 //      outside itself; only the session store (and present.ts, for types) imports the browser's fold bundle; the
 //      browser's old reducers stay deleted; the fold's interface report is current (this one builds a TypeScript
 //      program, about two seconds).
-//   11-12. The chat shell's components (scripts/gates/web-shell-rules.mjs): no state setter or dispatch directly in
-//      an effect body (per-file ceiling in rule-baseline.json webShellEffects), and no import of the HTTP facade.
+//   11-13. The web client's components (scripts/gates/web-shell-rules.mjs): no state setter or dispatch directly in
+//      a shell component's effect body (per-file ceiling in rule-baseline.json webShellEffects); no component imports
+//      the HTTP facade (recorded exceptions in webShellRequests); only the command runner imports chat-navigation.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -277,7 +278,7 @@ for (const [file, ceiling] of sleepCeilings) {
 // 7-10. The settled web-transcript architecture (scripts/gates/architecture-rules.mjs).
 checkArchitecture(repo, (rule) => add(rule));
 
-// 11-12. The chat shell's components (scripts/gates/web-shell-rules.mjs).
+// 11-13. The web client's components (scripts/gates/web-shell-rules.mjs).
 checkWebShell(repo, (rule) => add(rule), baseline);
 
 reportAndExit(

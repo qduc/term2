@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useStoreSelector } from '../../hooks/useStoreSelector';
 import { Archive, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { term2Client } from '../../lib/api/term2';
 import { summarizeReceiptCosts } from '../../lib/term2/receipt-cost';
+import { useServerData } from './shell/ShellContext';
 import type {
   ModelSummary,
   SessionConfigRecord,
@@ -35,17 +36,12 @@ function formatReset(resetAt: number): string {
  * tool loop, not only when the turn ends.
  */
 function useSessionQuota(sessionId: string, refresh: string): SessionQuota | null {
-  const [quota, setQuota] = useState<{ sessionId: string; value: SessionQuota } | null>(null);
+  const data = useServerData();
   useEffect(() => {
-    if (!sessionId) return;
-    const controller = new AbortController();
-    term2Client
-      .readSessionQuota(sessionId, controller.signal)
-      .then((value) => setQuota({ sessionId, value }))
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [sessionId, refresh]);
-  return quota?.sessionId === sessionId ? quota.value : null;
+    // A failed read keeps the value shown; another chat's key empties it (lib/term2/data/resource.ts).
+    if (sessionId) void data.quota.refresh(sessionId).catch(() => undefined);
+  }, [data, sessionId, refresh]);
+  return useStoreSelector(data.quota, (s) => (s.key === sessionId ? s.data : null));
 }
 
 const QUOTA_WINDOWS = [

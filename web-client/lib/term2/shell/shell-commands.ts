@@ -6,11 +6,9 @@
 import { term2Client, Term2ApiError } from '../../api/term2';
 import type { BrowserPrefs } from '../browser-prefs';
 import type { ServerData } from '../data/server-data';
-import * as navigation from '../navigation';
-import { isCurrentTag, type ShellAction, type ShellCommand, type ShellState, type Tag } from '../shell-machine';
-import type { Store } from '../store';
+import * as chatNavigation from '../chat-navigation';
+import { type ShellAction, type ShellCommand, type ShellState, type Tag } from '../shell-machine';
 import type { OpenSession } from './open-session';
-import type { ShellLocalState } from './shell-runtime';
 import type { ShellOperations } from './shell-operations';
 
 export function createCommandRunner(deps: {
@@ -19,7 +17,6 @@ export function createCommandRunner(deps: {
   session: OpenSession;
   data: ServerData;
   prefs: BrowserPrefs;
-  local: Store<ShellLocalState>;
   ops: () => Pick<ShellOperations, 'applySessionConfig'>;
   /** Resolves the promise `ops.send` returned for this request id. */
   sendSettled(requestId: string, accepted: boolean): void;
@@ -34,15 +31,19 @@ export function createCommandRunner(deps: {
       error instanceof Error && error.message
         ? error.message
         : 'Could not start a new chat. Try again or choose a different folder.';
-    if (isCurrentTag(deps.getState(), tag)) deps.local.set((local) => ({ ...local, pageError: message }));
+    // DRAFT_START_FAILED also shows the message in the page's error banner, while the tag is current.
     dispatch({ type: 'DRAFT_START_FAILED', tag, message });
   };
 
   return (command) => {
     switch (command.type) {
       case 'navigate':
-        if (command.sessionId) navigation.openChat(command.sessionId);
-        else navigation.leaveChat();
+        if (command.history === 'replace') {
+          // No history entry and no popstate, so nothing reports this change back: report it here.
+          chatNavigation.forgetChatSilently();
+          dispatch({ type: 'URL_CHANGED', sessionId: null });
+        } else if (command.sessionId) chatNavigation.openChat(command.sessionId);
+        else chatNavigation.leaveChat();
         return;
       case 'loadConfig': {
         const id = command.tag.sessionId;

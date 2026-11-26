@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { forgetChatSilently } from '../../../lib/term2/navigation';
 import { useChatFacts, useShell, useShellState } from './ShellContext';
 
 /**
@@ -30,9 +29,7 @@ export function ShellFeeds({ initialSessionId, authUserId }: { initialSessionId:
   useEffect(() => {
     if (prevUserIdRef.current !== authUserId) {
       prevUserIdRef.current = authUserId;
-      forgetChatSilently();
-      dispatch({ type: 'URL_CHANGED', sessionId: null });
-      dispatch({ type: 'DRAFT_DISCARDED' });
+      dispatch({ type: 'USER_CHANGED' });
     }
   }, [authUserId, dispatch]);
 

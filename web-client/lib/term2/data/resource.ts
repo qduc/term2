@@ -5,7 +5,8 @@
  *
  * The rule: each request takes a number, and only the request started last may install its data or clear
  * `loading`/`refreshing`. A request for another `key` empties the value when it starts. `set` and `update` install
- * what the caller already has (a write's answer, a local insert) and do not cancel a request in flight.
+ * what the caller already has (a local insert) and do not cancel a request in flight. `replace` installs what is newer
+ * than every request in flight (a write's answer): those still answer their callers but install nothing.
  */
 import { createStore, type ReadableStore } from '../store';
 
@@ -34,14 +35,25 @@ export interface Resource<T> extends ReadableStore<ResourceState<T>> {
   refresh(key?: string | null): Promise<T>;
   /** `load(key)` unless this key is loaded or loading. */
   ensure(key?: string | null): void;
-  /** Installs data the caller already has; marks it loaded. */
+  /** Installs data the caller already has; marks it loaded. A request in flight may still answer over it. */
   set(data: T): void;
+  /**
+   * Installs data newer than every request in flight (a write's answer), for the current key: those requests install
+   * nothing when they answer (`load` resolves null), and `loading`, `refreshing` and `error` clear.
+   */
+  replace(data: T): void;
   update(change: (data: T) => T): void;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error ?? ''));
 
-export function createResource<T>(options: { initial: T; fetch: (key: string | null) => Promise<T> }): Resource<T> {
+export function createResource<T>(options: {
+  initial: T;
+  fetch: (key: string | null) => Promise<T>;
+  /** The words `error` holds for a failed request. Default: the error's message. */
+  describeError?: (error: unknown) => string;
+}): Resource<T> {
+  const describe = options.describeError ?? messageOf;
   const store = createStore<ResourceState<T>>({
     data: options.initial,
     loading: false,
@@ -76,7 +88,7 @@ export function createResource<T>(options: { initial: T; fetch: (key: string | n
       settle(request, { data, loaded: true });
       return data;
     } catch (error) {
-      settle(request, { error: messageOf(error) });
+      settle(request, { error: describe(error) });
       throw error;
     }
   };
@@ -102,6 +114,10 @@ export function createResource<T>(options: { initial: T; fetch: (key: string | n
     },
     set(data) {
       store.set((state) => ({ ...state, data, loaded: true }));
+    },
+    replace(data) {
+      latest++;
+      store.set((state) => ({ ...state, data, loaded: true, loading: false, refreshing: false, error: null }));
     },
     update(change) {
       store.set((state) => ({ ...state, data: change(state.data), loaded: true }));

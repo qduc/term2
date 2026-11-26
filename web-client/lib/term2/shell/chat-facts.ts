@@ -30,7 +30,6 @@ export type ChatFactInputs = {
   readonly folders: readonly WorkspaceAlias[];
   readonly chats: readonly SessionListItem[];
   readonly folderDetails: Readonly<Record<string, FolderDetail>>;
-  readonly configBusy: boolean;
   readonly localControlEnabled: boolean;
 };
 
@@ -195,7 +194,8 @@ export function createChatFacts(): (inputs: ChatFactInputs) => ChatFacts {
   });
 
   return (inputs) => {
-    const { shell, view, feedback, settings, models: modelsState, configBusy, localControlEnabled } = inputs;
+    const { shell, view, feedback, settings, models: modelsState, localControlEnabled } = inputs;
+    const configBusy = shell.configApply !== null;
     const models = modelsState.data;
     const loadingModels = modelsState.loading;
     const modelsChecked = modelsState.loaded;

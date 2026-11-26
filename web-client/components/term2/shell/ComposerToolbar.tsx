@@ -50,7 +50,7 @@ export function ComposerToolbar({
   const skills = useStoreSelector(shell.data.skills, (s) => s);
   const models = useStoreSelector(shell.data.models, (s) => s);
   const settings = useStoreSelector(shell.data.settings, (s) => s.data);
-  const configBusy = useStoreSelector(shell.local, (l) => l.configBusy);
+  const configBusy = useShellState((s) => s.configApply !== null);
   const { pickerConfig } = f;
 
   return (

@@ -1,26 +1,18 @@
 /**
  * The chat page's runtime, one per page (docs/plans/web-client/web-shell-decomposition.md, section 4.4): the shell
- * machine and its one command runner, the open chat, the server data, browser preferences, a little local state, the
+ * machine and its one command runner, the open chat, the server data, browser preferences, the
  * facts derived from all of them, and the multi-step operations. Components reach it through
  * components/term2/shell/ShellContext.tsx and read it by selector. No React here.
  */
 import { createBrowserPrefs, type BrowserPrefs } from '../browser-prefs';
 import { createServerData, type ServerData } from '../data/server-data';
 import { initialShellState, step, type ShellAction, type ShellState } from '../shell-machine';
-import { createStore, derivedStore, type ReadableStore, type Store } from '../store';
+import { derivedStore, type ReadableStore } from '../store';
 import type { ModelSummary } from '../types';
 import { createChatFacts, type ChatFacts } from './chat-facts';
 import { OpenSession } from './open-session';
 import { createCommandRunner } from './shell-commands';
 import { createShellOperations, type ShellOperations } from './shell-operations';
-
-export type ShellLocalState = {
-  readonly configBusy: boolean;
-  /** The page's one error banner: a failed list load, a failed first send, a failed default save. */
-  readonly pageError: string | null;
-  readonly retryError: { readonly turnId: string; readonly message: string } | null;
-  readonly retryDraft: { readonly sessionId: string; readonly turnId: string; readonly model: ModelSummary } | null;
-};
 
 export interface ComposerHandle {
   focus(): void;
@@ -36,7 +28,6 @@ export interface ShellRuntime {
   readonly session: OpenSession;
   readonly data: ServerData;
   readonly prefs: BrowserPrefs;
-  readonly local: Store<ShellLocalState>;
   readonly facts: ReadableStore<ChatFacts>;
   readonly ops: ShellOperations;
   /** Set by `Composer` while mounted. */
@@ -62,10 +53,9 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
   const data = createServerData({ localControlEnabled });
   const session = new OpenSession({ chatTitled: data.chatTitled });
   const prefs = createBrowserPrefs();
-  const local = createStore<ShellLocalState>({ configBusy: false, pageError: null, retryError: null, retryDraft: null });
   const deriveFacts = createChatFacts();
   const facts = derivedStore(
-    [store, session.view, session.feedback, data.settings, data.models, data.folders, data.chats, data.folderDetails, local],
+    [store, session.view, session.feedback, data.settings, data.models, data.folders, data.chats, data.folderDetails],
     () =>
       deriveFacts({
         shell: state,
@@ -76,7 +66,6 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
         folders: data.folders.get().data,
         chats: data.chats.get().data.sessions,
         folderDetails: data.folderDetails.get(),
-        configBusy: local.get().configBusy,
         localControlEnabled,
       }),
   );
@@ -94,14 +83,13 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
     for (const command of commands) runCommand(command);
   }
 
-  const ops = createShellOperations({ store, dispatch, session, data, prefs, local, facts, composer });
+  const ops = createShellOperations({ store, dispatch, session, data, prefs, facts, composer });
   runCommand = createCommandRunner({
     getState: () => state,
     dispatch,
     session,
     data,
     prefs,
-    local,
     ops: () => ops,
     sendSettled: ops.sendSettled,
     localControlEnabled,
@@ -114,7 +102,6 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
     session,
     data,
     prefs,
-    local,
     facts,
     ops,
     composer,

@@ -56,7 +56,7 @@ export function ModelBlockedCard() {
     shallowEqual,
   );
   const settingsLoaded = useStoreSelector(shell.data.settings, (s) => Boolean(s.data));
-  const configBusy = useStoreSelector(shell.local, (l) => l.configBusy);
+  const configBusy = useShellState((s) => s.configApply !== null);
   if (!(f.modelBlocked || (f.needsModelChoice && settingsLoaded))) return null;
   const { suggestedModel } = f;
   return (

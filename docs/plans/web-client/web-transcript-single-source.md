@@ -109,7 +109,32 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
 - **Independent verifier, round three** (on `53ec5fff`): **phase 2 accepted**, with no deviation blocking. Its one
   suggestion, a 401/403/404 arriving while a history replacement is held stays hidden, is fixed (the store releases
   the hold on a terminal error).
-- **Next:** phase 3 (shell state machine), and phase L once the owner has made its two settings and the spike runs
+- **Phase 3, slice 1 (selection and draft), done on `claude/optimistic-brown-2d0lrp`** (stacked on the phases 0-2
+  branch): `web-client/lib/term2/shell-machine.ts` holds the open chat (from `URL_CHANGED` only), the draft and its
+  picks, the first send, the open chat's config and the staged model/effort. Commands run in one place in the
+  shell; every result carries the `{ sessionId, generation }` it was issued under and a stale one is dropped. The
+  effects at the old TSX 492 (config load), 885 (draft end) and 1032 (first send) and the refs
+  `pendingFirstSendIdRef`'s setter, `draftSessionIdRef`'s draft role and the discovered-config state are gone; the
+  page feeds `READY_TO_SEND` when the open chat is configured, unblocked and live.
+  - Hazards, reproduced first in `tests/web-client/browser/shell-hazards.flow.ts`:
+    1. **Reproduced:** an approval change for chat A that resolved after switching to chat B replaced B's config
+       with A's, and B's model and approval chips disappeared. Fixed by the tag rule; red with it off.
+    2. **Reproduced:** a first send whose settings write failed left its created chat behind, and sending again
+       created a second chat. The draft now keeps the chat it created and a retry reuses it; red without that.
+    3. **Not reproduced:** a chat list requested before the first send did not hide the created chat. The flow stays
+       as a guard; no change was made for it.
+  - `shell.machine-rules` (generated, `--target shell`): stale results change nothing, the shown config is the open
+    chat's, `createSession` is for the chosen folder, a folder's unopened created chat is never followed by a second
+    one, a created chat only joins a draft for its own folder, and a first message is sent once, only when ready.
+    It found two more defects while it was written, both fixed: New chat during a first send dropped the created
+    chat, and a draft discarded mid-send let its late result attach to the next draft (the generation now also moves
+    on a new or discarded draft). The guard "no New chat while a first send runs" is now a second layer: removing it
+    no longer shows in the property, because the late result is dropped as stale.
+  - Rule flows: a new chat opens in the folder just chosen while another chat is open (#389); nothing can be sent
+    before the chat's stream attaches (`a9de6e9`). Each red on a seeded regression. #375 is the existing first-send flow.
+  - Not in this slice: `selectedWorkspaceId` still lives in the hook and the folder auto-select/alignment effects
+    (old TSX 458, 465) and the composer reset (342) remain; they belong to the composer and panels slices.
+- **Next:** phase 3 slices 2 (composer) and 3 (panels), and phase L once the owner has made its two settings and the spike runs
   on a throwaway pull request. CI has not yet run any of this branch: the `web-browser` job's time budget is
   unproven. The acceptance example's steer is not in the stream integration test (it needs real queue state); the
   browser steer flow covers it end to end. The second example (a background subagent) was added in `c7bf7333`.

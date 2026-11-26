@@ -1,5 +1,17 @@
 'use client';
 
+import {
+  currentTag,
+  initialShellState,
+  isCurrentTag,
+  step,
+  type DraftConfig,
+  type ShellAction,
+  type ShellCommand,
+  type ShellState,
+  type StagedConfig,
+  type Tag,
+} from '../../lib/term2/shell-machine';
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import {
   Archive,
@@ -171,6 +183,9 @@ function extractAtMention(text: string, cursor: number): { start: number; query:
   return { start, query };
 }
 
+/** No picks yet: a stable empty value, so a draft without picks does not re-render on every pass. */
+const NO_DRAFT_CONFIG: DraftConfig = {};
+
 export function Term2SessionShell({
   initialSessionId,
   authUserId,
@@ -189,12 +204,22 @@ export function Term2SessionShell({
   /** `?provider=` URL value: the provider shown on the settings page's Providers section. */
   settingsProvider?: string | null;
 }) {
-  const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
-  const [prevInitialSessionId, setPrevInitialSessionId] = useState(initialSessionId);
-  if (initialSessionId !== prevInitialSessionId) {
-    setPrevInitialSessionId(initialSessionId);
-    setSessionId(initialSessionId);
-  }
+  // Selection, draft and first-send policy (lib/term2/shell-machine.ts). The address bar owns the open chat.
+  // It starts with no chat open: the first URL_CHANGED below opens the address bar's chat like any later change,
+  // so the open chat always gets its config loaded.
+  const [shell, setShell] = useState<ShellState>(() => initialShellState(null));
+  const shellRef = useRef(shell);
+  const runShellCommandRef = useRef<(command: ShellCommand) => void>(() => undefined);
+  const dispatchShell = useCallback((action: ShellAction) => {
+    const { state, commands } = step(shellRef.current, action);
+    shellRef.current = state;
+    setShell(state);
+    for (const command of commands) runShellCommandRef.current(command);
+  }, []);
+  useEffect(() => {
+    dispatchShell({ type: 'URL_CHANGED', sessionId: initialSessionId });
+  }, [initialSessionId, dispatchShell]);
+  const sessionId = shell.openChat;
 
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<DraftImage[]>([]);
@@ -210,32 +235,28 @@ export function Term2SessionShell({
   /** Only the user opens or closes the running tasks panel; nothing toggles it on its own. */
   const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
-  const [startingChat, setStartingChat] = useState(false);
+  const startingChat = shell.starting;
   // "New chat" opens a draft: a folder and a composer, but no gateway session
   // until the first message is sent, so clicking around leaves no empty chats.
-  const [draftWorkspaceId, setDraftWorkspaceId] = useState<string | null>(null);
-  const [draftConfig, setDraftConfig] = useState<
-    Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'approvalMode'>
-  >({});
-  const [pendingFirstSend, setPendingFirstSend] = useState<{
-    sessionId: string;
-    delivery?: 'auto' | 'steer' | 'follow_up';
-    overrideText?: string;
-  } | null>(null);
+  const draftWorkspaceId = shell.draft?.workspaceId ?? null;
+  const draftConfig = shell.draft?.config ?? NO_DRAFT_CONFIG;
+  const pendingFirstSend = shell.pendingFirstSend;
   const isDraft = !sessionId && draftWorkspaceId !== null;
   // Model and effort picked in an existing chat wait here until the next message is sent;
   // leaving the chat discards them, so browsing never changes a conversation's model.
-  const [stagedConfig, setStagedConfig] = useState<{
-    sessionId: string;
-    modelSelection?: { provider: string; model: string };
-    reasoningEffort?: SessionConfigUpdate['reasoningEffort'];
-  } | null>(null);
+  const stagedConfig = shell.staged && sessionId ? { sessionId, ...shell.staged } : null;
+  const setStagedConfig = (staged: StagedConfig | null) => dispatchShell({ type: 'STAGED_CHANGED', staged });
   const pendingFirstSendIdRef = useRef<string | null>(null);
   pendingFirstSendIdRef.current = pendingFirstSend?.sessionId ?? null;
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [discoveredConfig, setDiscoveredConfig] = useState<SessionConfigRecord | null>(null);
+  const discoveredConfig = shell.config;
+  /** A config read for the chat that is open now; dropped if the user has moved on (it carries its tag). */
+  const configLoaded = useCallback(
+    (tag: Tag, config: SessionConfigRecord) => dispatchShell({ type: 'CONFIG_LOADED', tag, config }),
+    [dispatchShell],
+  );
   const [configBusy, setConfigBusy] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsProjection | null>(null);
@@ -405,15 +426,15 @@ export function Term2SessionShell({
     const currentUserId = authUserId ?? null;
     if (prevUserIdRef.current !== currentUserId) {
       prevUserIdRef.current = currentUserId;
-      setSessionId(null);
       setInput('');
       const url = new URL(window.location.href);
       if (url.searchParams.has('agentSession')) {
         url.searchParams.delete('agentSession');
         window.history.replaceState(null, '', url.toString());
       }
+      dispatchShell({ type: 'URL_CHANGED', sessionId: null });
     }
-  }, [authUserId]);
+  }, [authUserId, dispatchShell]);
 
   const reloadModels = useCallback(async () => {
     if (!localControlEnabled) return;
@@ -489,18 +510,6 @@ export function Term2SessionShell({
     void reloadModels();
   }, [localControlEnabled, reloadSetupSettings, reloadModels]);
 
-  useEffect(() => {
-    setDiscoveredConfig(null);
-    if (!localControlEnabled || !sessionId) return;
-    const controller = new AbortController();
-    void term2Client
-      .readSessionConfig(sessionId, controller.signal)
-      .then((config) => {
-        if (!controller.signal.aborted) setDiscoveredConfig(config);
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [localControlEnabled, sessionId]);
 
   const ensureSessionFiles = useCallback(() => {
     const workspaceId = session.selectedWorkspaceId;
@@ -557,52 +566,19 @@ export function Term2SessionShell({
       if (!targetWorkspace || startingChat) return;
       setLoadError(null);
       session.setSelectedWorkspaceId(targetWorkspace);
-      setDraftWorkspaceId(targetWorkspace);
-      setDraftConfig({});
       setInput('');
-      leaveSession();
+      dispatchShell({ type: 'NEW_DRAFT', workspaceId: targetWorkspace });
       if (window.innerWidth < 768) setSidebarOpen(false);
       window.setTimeout(() => composerRef.current?.focus(), 50);
     },
-    [leaveSession, session, startingChat],
+    [dispatchShell, session, startingChat],
   );
 
-  /** Creates the gateway session for a draft, applies draft picks, then hands the first send to it. */
+  /** A draft's first send: the machine creates the chat, applies the draft's picks, then sends (runShellCommand). */
   const startDraftChat = async (delivery?: 'auto' | 'steer' | 'follow_up', overrideText?: string) => {
     if (!draftWorkspaceId || startingChat) return;
-    setStartingChat(true);
     setLoadError(null);
-    try {
-      const projection = await session.createSession(draftWorkspaceId);
-      const toApply = draftConfig;
-      if (Object.keys(toApply).length > 0) {
-        const latest = await term2Client.readSessionConfig(projection.id);
-        const { result } = await term2Client.updateSessionConfig(projection.id, {
-          clientRequestId: crypto.randomUUID(),
-          expectedRevision: latest.configRevision,
-          admission: 'idle',
-          ...toApply,
-        });
-        if (!result.ok || result.kind !== 'command_finished') {
-          throw new Error(!result.ok ? result.message : 'The chat settings have not taken effect.');
-        }
-      }
-      setPendingFirstSend({ sessionId: projection.id, delivery, overrideText });
-      setDraftWorkspaceId(null);
-      setDraftConfig({});
-      session.selectSession(projection.id);
-    } catch (error) {
-      if (error instanceof Term2ApiError && error.status === 409) {
-        await session.refreshSessions().catch(() => undefined);
-      }
-      setLoadError(
-        error instanceof Error && error.message
-          ? error.message
-          : 'Could not start a new chat. Try again or choose a different folder.',
-      );
-    } finally {
-      setStartingChat(false);
-    }
+    dispatchShell({ type: 'DRAFT_SEND_REQUESTED', ...(delivery ? { delivery } : {}), ...(overrideText !== undefined ? { overrideText } : {}) });
   };
 
   const onFolderSelected = (folder: SelectedTerm2Workspace) => {
@@ -665,11 +641,14 @@ export function Term2SessionShell({
     selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>,
   ): Promise<boolean> => {
     if (!sessionId || !discoveredConfig || configBusy) return false;
+    // Results apply only while this chat is still open (the tag); a late answer for another chat is dropped.
+    const tag = currentTag(shellRef.current);
+    const stillOpen = () => isCurrentTag(shellRef.current, tag);
     setConfigBusy(true);
     setConfigError(null);
     try {
       const latest = await term2Client.readSessionConfig(sessionId);
-      setDiscoveredConfig(latest);
+      configLoaded(tag, latest);
       const response = await term2Client.updateSessionConfig(sessionId, {
         clientRequestId: crypto.randomUUID(),
         expectedRevision: latest.configRevision,
@@ -678,9 +657,10 @@ export function Term2SessionShell({
       });
       if (response.result.ok && response.result.kind === 'command_finished') {
         const refreshed = await term2Client.readSessionConfig(sessionId);
-        setDiscoveredConfig(refreshed);
-        return true;
+        configLoaded(tag, refreshed);
+        return stillOpen();
       }
+      if (!stillOpen()) return false;
       if (!response.result.ok) {
         setConfigError(response.result.message || 'Could not update session configuration.');
         return false;
@@ -688,7 +668,7 @@ export function Term2SessionShell({
       setConfigError('The chat settings have not taken effect yet. Try again.');
       return false;
     } catch (reason) {
-      setConfigError(reason instanceof Error ? reason.message : 'Could not update session configuration.');
+      if (stillOpen()) setConfigError(reason instanceof Error ? reason.message : 'Could not update session configuration.');
       return false;
     } finally {
       setConfigBusy(false);
@@ -713,15 +693,16 @@ export function Term2SessionShell({
     selection: Pick<SessionConfigUpdate, 'modelSelection' | 'reasoningEffort' | 'mode' | 'approvalMode'>,
   ) => {
     if (isDraft) {
-      setDraftConfig((current) => ({ ...current, ...selection }));
+      dispatchShell({ type: 'DRAFT_CONFIG_PICKED', selection });
       void saveBlankChatDefault(selection);
       return;
     }
     if (!sessionId) return;
     const { modelSelection, reasoningEffort, ...immediate } = selection;
     if (modelSelection || reasoningEffort) {
-      setStagedConfig((current) => {
-        const next: NonNullable<typeof current> = current?.sessionId === sessionId ? { ...current } : { sessionId };
+      {
+        const current = shellRef.current.staged;
+        const next: StagedConfig = { ...current };
         if (modelSelection) {
           const unchanged =
             sessionConfig?.providerId === modelSelection.provider && sessionConfig?.modelId === modelSelection.model;
@@ -732,8 +713,8 @@ export function Term2SessionShell({
           if ((sessionConfig?.reasoningEffort || 'default') === reasoningEffort) delete next.reasoningEffort;
           else next.reasoningEffort = reasoningEffort;
         }
-        return next.modelSelection || next.reasoningEffort ? next : null;
-      });
+        setStagedConfig(next.modelSelection || next.reasoningEffort ? next : null);
+      }
     }
     // Approval and mode are safety and behaviour controls: they apply now.
     if (Object.keys(immediate).length > 0) await applySessionConfig(immediate);
@@ -879,13 +860,64 @@ export function Term2SessionShell({
     return accepted;
   };
 
+  /** A draft's first send failed; the machine keeps any chat it already created for the retry. */
+  const failDraftStart = (tag: Tag, error: unknown) => {
+    if (error instanceof Term2ApiError && error.status === 409) void session.refreshSessions().catch(() => undefined);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : 'Could not start a new chat. Try again or choose a different folder.';
+    if (isCurrentTag(shellRef.current, tag)) setLoadError(message);
+    dispatchShell({ type: 'DRAFT_START_FAILED', tag, message });
+  };
+  // The one place the machine's commands run. Every result goes back as an action carrying its command's tag.
+  runShellCommandRef.current = (command: ShellCommand) => {
+    switch (command.type) {
+      case 'navigate':
+        if (command.sessionId) session.selectSession(command.sessionId);
+        else leaveSession();
+        return;
+      case 'loadConfig': {
+        const id = command.tag.sessionId;
+        if (!localControlEnabled || !id) return;
+        void term2Client
+          .readSessionConfig(id)
+          .then((config) => configLoaded(command.tag, config))
+          .catch(() => undefined);
+        return;
+      }
+      case 'createSession':
+        void session.createSession(command.workspaceId).then(
+          (projection) => dispatchShell({ type: 'SESSION_CREATED', tag: command.tag, sessionId: projection.id }),
+          (error: unknown) => failDraftStart(command.tag, error),
+        );
+        return;
+      case 'applyDraftConfig': {
+        const { tag, sessionId: id, config } = command;
+        void (async () => {
+          if (Object.keys(config).length > 0) {
+            const latest = await term2Client.readSessionConfig(id);
+            const { result } = await term2Client.updateSessionConfig(id, {
+              clientRequestId: crypto.randomUUID(),
+              expectedRevision: latest.configRevision,
+              admission: 'idle',
+              ...config,
+            });
+            if (!result.ok || result.kind !== 'command_finished')
+              throw new Error(!result.ok ? result.message : 'The chat settings have not taken effect.');
+          }
+          dispatchShell({ type: 'DRAFT_CONFIG_APPLIED', tag, sessionId: id });
+        })().catch((error: unknown) => failDraftStart(tag, error));
+        return;
+      }
+      case 'submitFirst':
+        void submitMessage(command.delivery, command.overrideText);
+        return;
+    }
+  };
+
   const sessionConfig = discoveredConfig?.sessionId === sessionId ? discoveredConfig : null;
 
-  // Opening any real chat ends the draft.
-  useEffect(() => {
-    if (sessionId) setDraftWorkspaceId(null);
-    setStagedConfig((current) => (current && current.sessionId === sessionId ? current : null));
-  }, [sessionId]);
 
   // The blank-chat default model. It is never swapped for another model behind the
   // user's back: when it isn't available, the draft keeps it and says so.
@@ -1028,17 +1060,19 @@ export function Term2SessionShell({
     await session.invokeCommand('retry-turn');
   };
 
-  // Send a draft's first message only after its new session and selected model are ready.
+  // Tell the machine when the open chat can take a message: its config is loaded, sending is not blocked and its
+  // stream is live. It sends a draft's first message then, exactly once.
+  const readyToSend = Boolean(
+    sessionId &&
+      sessionConfig &&
+      !sendBlocked &&
+      session.view.sessionId === sessionId &&
+      canSubmitSessionMessage(session.view.status),
+  );
   useEffect(() => {
-    if (!pendingFirstSend || sessionId !== pendingFirstSend.sessionId) return;
-    if (!sessionConfig || sendBlocked) return;
-    if (session.view.sessionId !== sessionId || !canSubmitSessionMessage(session.view.status)) return;
-    const pending = pendingFirstSend;
-    setPendingFirstSend(null);
-    void submitMessage(pending.delivery, pending.overrideText);
-    // submitMessage reads the current composer state; it is intentionally not a dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingFirstSend, sessionId, sessionConfig, session.view.sessionId, session.view.status, sendBlocked]);
+    if (readyToSend && sessionId && pendingFirstSend?.sessionId === sessionId)
+      dispatchShell({ type: 'READY_TO_SEND', sessionId });
+  }, [readyToSend, sessionId, pendingFirstSend, dispatchShell]);
 
   const liveStatus = interactionPending
     ? 'Waiting for your approval'
@@ -1406,11 +1440,7 @@ export function Term2SessionShell({
           <button
             type="button"
             onClick={() => {
-              setDraftWorkspaceId(null);
-              const url = new URL(window.location.href);
-              url.searchParams.delete('agentSession');
-              window.history.pushState({}, '', url.toString());
-              window.dispatchEvent(new PopStateEvent('popstate'));
+              dispatchShell({ type: 'DRAFT_DISCARDED' });
             }}
             className="text-[15px] hover:opacity-80"
             title="Go to welcome screen"
@@ -1949,7 +1979,7 @@ export function Term2SessionShell({
                             onClick={() => {
                               const { provider, id: model } = retryDraft.model;
                               void createNewChat();
-                              setDraftConfig({ modelSelection: { provider, model } });
+                              dispatchShell({ type: 'DRAFT_CONFIG_PICKED', selection: { modelSelection: { provider, model } } });
                               setInput(turn.userText ?? '');
                               setRetryDraft(null);
                             }}
@@ -2014,7 +2044,7 @@ export function Term2SessionShell({
                         <Term2SessionConfig
                           key={sessionId}
                           config={sessionConfig}
-                          onDiscovered={setDiscoveredConfig}
+                          onDiscovered={(config) => configLoaded(currentTag(shellRef.current), config)}
                           settings={settings}
                           sessionId={sessionId}
                           onCreateNewSession={() => void createNewChat()}

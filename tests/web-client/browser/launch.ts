@@ -228,6 +228,8 @@ export async function launchWebApp(options: {
   readonly scripts: Record<string, readonly ModelStep[]>;
   /** Files to create in the workspace before the gateway starts, by relative path. */
   readonly files?: Record<string, string>;
+  /** More folders to create beside the workspace, under the launch's HOME, for flows that switch folders. */
+  readonly folders?: readonly string[];
 }): Promise<WebApp> {
   if (!fs.existsSync(webLauncher) || !fs.existsSync(path.join(repoRoot, 'dist', 'web-client', '.next', 'BUILD_ID'))) {
     throw new Error('The built web UI is missing. Run `pnpm build && node scripts/build-web.mjs` first.');
@@ -239,6 +241,7 @@ export async function launchWebApp(options: {
   const workspaceName = 'flow-workspace';
   const workspace = path.join(world.home, workspaceName);
   fs.mkdirSync(workspace);
+  for (const folder of options.folders ?? []) fs.mkdirSync(path.join(world.home, folder));
   for (const [name, content] of Object.entries(options.files ?? {})) {
     fs.writeFileSync(path.join(workspace, name), content);
   }

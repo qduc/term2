@@ -1,3 +1,25 @@
+## [2.2.0] - 2026-11-26
+
+### Features
+
+- Navigate the web model picker with arrow keys, filter it by provider tabs, and rank search results the same way as the terminal picker.
+
+### Improvements
+
+- Show one transcript for live and reloaded web chats, so a reloaded chat matches what you saw while it ran.
+- Virtualize the web model picker and keep smooth animations without draining battery.
+- Report sandbox denials in approvals and treat `$TMPDIR` as scratch space.
+- Fail fast when `term2 serve` finds another server already owns the state directory.
+- Keep the web status line, tool row labels, and sidebar status dots steady while the agent works, with less layout shift.
+
+### Bug Fixes
+
+- Keep one malformed model entry from blanking every provider's model list in the web interface.
+- Clear a failed web turn's error once a retry succeeds.
+- Show images attached to messages in the web transcript.
+- List files for draft `@` mentions in the web interface.
+- Take the shell sandbox lease only when a command can run.
+
 ## [2.1.1] - 2026-11-25
 
 ### Improvements

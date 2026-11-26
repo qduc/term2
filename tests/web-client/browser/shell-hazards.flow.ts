@@ -309,3 +309,50 @@ test('after a tool row finishes, the status line appears once the short delay ha
   await expectNoRunningTurn(page);
   await expect(page.getByRole('status').filter({ hasText: 'Working…' })).toHaveCount(0);
 });
+
+test('the running tasks panel opens and closes only when the user says so, across a background task (#394, #396)', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'start a helper';
+  const app = await launch({
+    scripts: {
+      [prompt]: [
+        { call: { tool: 'run_subagent', args: { execution: 'background', role: 'explorer', task: 'look around' } } },
+        { text: 'started it' },
+      ],
+      'look around': [{ text: 'looked around', hold: 'helper' }],
+    },
+  });
+  const closePanel = page.getByRole('button', { name: 'Close running tasks' });
+  await openDraftChat(page, app);
+  await send(page, prompt);
+  await app.model.held('helper');
+  await expect(turns(page).first().getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  const pill = page.getByRole('button', { name: /1 running/ });
+  await expect(pill).toBeVisible();
+  // A task starting does not open the panel (#396).
+  await expect(closePanel).toHaveCount(0);
+  await pill.click();
+  await expect(closePanel).toBeVisible();
+  // The task finishing does not close it either: it says nothing is running (#394, #396).
+  app.model.release('helper');
+  await expect(page.getByText('Nothing is running.')).toBeVisible();
+  await expect(closePanel).toBeVisible();
+  await closePanel.click();
+  await expect(closePanel).toHaveCount(0);
+});
+
+test('a chat switch closes the rewind dialog it was opened for', async ({ page, launch }) => {
+  const app = await launch({ scripts: { 'chat a': [{ text: 'reply a' }], 'chat b': [{ text: 'reply b' }] } });
+  await twoChatsWithAOpen(page, app);
+  await page.getByRole('textbox', { name: 'Message' }).fill('/rewind');
+  await page
+    .getByRole('listbox', { name: 'Quick actions' })
+    .getByRole('option', { name: /Rewind conversation/ })
+    .click();
+  await expect(page.getByRole('dialog', { name: 'Rewind conversation' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'chat b' })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});

@@ -172,7 +172,23 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   - Not covered by a flow: the drain end to end (no flow has a background task finishing while idle; the property
     covers the rule and the command is the old request unchanged). The rewind dialog stays open across a Back to
     another chat; that is the panels slice.
-- **Next:** phase 3 slice 3 (panels: `tasksPanelOpen`, `sidebarOpen`, `dialog`, `skillsOpen`).
+- **Phase 3, slice 3 (panels), done on `claude/optimistic-brown-2d0lrp`:** the running tasks panel, sidebar, dialog
+  and skills picker are machine state. Only `TASKS_PANEL_TOGGLED`/`TASKS_PANEL_CLOSED` move the tasks panel and
+  only `SIDEBAR_SET` moves the sidebar; a change of chat or draft closes the rewind dialog and the skills picker.
+  The rewind dialog's `initialTurnId` was only ever null and is no longer passed.
+  - **Reproduced first:** after Back to chat B, chat A's rewind dialog stayed open over B (found while writing the
+    slice 2 rewind flow, which had to press Escape). Now closed by the chat change; the flow was red before.
+  - #394/#396 flow: a background subagent starting does not open the panel, the user opens it, the subagent
+    finishing leaves it open on "Nothing is running.", and the user closes it. It passed before the change (the
+    fixes already held); it is red with an auto-open effect seeded back in.
+  - `shell.machine-rules` gained: no action but the user's moves the tasks panel or the sidebar; a change of what
+    the page shows leaves no rewind dialog or skills picker open. Three seeded regressions, each red.
+- **Phase 3 done.** `Term2SessionShell.tsx` has 16 effects (20 at `6fcad34`) and `useTerm2Session.ts` 2 (3): every
+  effect that copied or reset state, or turned state into a command, is gone. Four new ones only report facts to
+  the machine (`URL_CHANGED`, `READY_TO_SEND`, `BOUNDARY`, `LIVE_STATUS`). The browser suite is 18 flows, about
+  45-55 s locally; the `web-browser` job's 120 s budget is still unproven on GitHub.
+- **Next:** the owner opens the PR(s): phases 0-2 and L on `claude/beautiful-planck-2aliiz`, phase 3 stacked on
+  `claude/optimistic-brown-2d0lrp`. Phase 3 is medium risk in the plan's table; no independent verifier ran on it.
   CI has not yet run any of this branch: the `web-browser` job's time budget is
   unproven. The acceptance example's steer is not in the stream integration test (it needs real queue state); the
   browser steer flow covers it end to end. The second example (a background subagent) was added in `c7bf7333`.

@@ -9,9 +9,10 @@
  * longer current is dropped. That single rule is what stops a late response from one chat landing on another:
  * a config read, a send's outcome, a rewound prompt put back, an image that finished reading.
  *
- * Slices so far: selection and draft (the open chat, the draft and its first send, the open chat's config and the
- * staged model/effort), then the composer (the message box, sending, notices, the user's chosen folder, the
- * transcript pin, the delayed post-tool status and the background-notice drain).
+ * Slices: selection and draft (the open chat, the draft and its first send, the open chat's config and the staged
+ * model/effort); the composer (the message box, sending, notices, the user's chosen folder, the transcript pin, the
+ * delayed post-tool status and the background-notice drain); and the panels (running tasks, sidebar, dialogs, the
+ * skills picker).
  */
 import type { ImageAttachmentPayload, SessionConfigRecord, SessionConfigUpdate } from './types';
 
@@ -49,6 +50,16 @@ export type Notices = {
   readonly attachment: string | null;
 };
 export type NoticeKey = keyof Notices;
+
+export type Dialog = 'folder' | 'help' | 'rewind' | 'provider';
+
+export type Panels = {
+  /** The running tasks panel: only the user opens or closes it (#394, #396). */
+  readonly tasks: boolean;
+  readonly sidebar: boolean;
+  readonly dialog: Dialog | null;
+  readonly skills: boolean;
+};
 
 /** One message as the user sent it, fixed when Send was pressed. */
 export type OutgoingMessage = {
@@ -96,6 +107,7 @@ export type ShellState = {
   readonly liveStatus: { readonly text: string | null; readonly defer: boolean; readonly shown: string | null; readonly timer: number };
   /** The background-notice boundary last asked about, and whether its one retry was used. */
   readonly drain: { readonly boundary: string; readonly retried: boolean } | null;
+  readonly panels: Panels;
 };
 
 /** The facts of the open chat the page reports with a send. */
@@ -143,7 +155,14 @@ export type ShellAction =
   /** Fed from the page: the open chat is idle with undelivered background notices at this accepted boundary. */
   | { readonly type: 'BOUNDARY'; readonly sessionId: string; readonly boundary: string }
   | { readonly type: 'DRAIN_ANSWERED'; readonly tag: Tag; readonly boundary: string; readonly retry: boolean }
-  | { readonly type: 'DRAIN_RETRY_DUE'; readonly tag: Tag; readonly boundary: string };
+  | { readonly type: 'DRAIN_RETRY_DUE'; readonly tag: Tag; readonly boundary: string }
+  | { readonly type: 'TASKS_PANEL_TOGGLED' }
+  | { readonly type: 'TASKS_PANEL_CLOSED' }
+  /** The user opens or closes the sidebar (the page also closes it after a pick on a small screen). */
+  | { readonly type: 'SIDEBAR_SET'; readonly open: boolean }
+  | { readonly type: 'DIALOG_OPENED'; readonly dialog: Dialog }
+  | { readonly type: 'DIALOG_CLOSED' }
+  | { readonly type: 'SKILLS_SET'; readonly open: boolean };
 
 export type ShellCommand =
   | { readonly type: 'createSession'; readonly tag: Tag; readonly workspaceId: string }
@@ -161,6 +180,7 @@ export type ShellCommand =
 export const EMPTY_COMPOSER: Composer = { input: '', attachments: [], armedSkill: null, historyIndex: null, paletteOpen: false };
 export const NO_NOTICES: Notices = { resend: null, config: null, attachment: null };
 const NO_LIVE_STATUS = { text: null, defer: false, shown: null, timer: 0 };
+const CLOSED_PANELS: Panels = { tasks: false, sidebar: false, dialog: null, skills: false };
 
 export const initialShellState = (openChat: string | null): ShellState => ({
   openChat,
@@ -179,6 +199,7 @@ export const initialShellState = (openChat: string | null): ShellState => ({
   pinned: true,
   liveStatus: NO_LIVE_STATUS,
   drain: null,
+  panels: CLOSED_PANELS,
 });
 
 /** The tag a command issued now carries. */
@@ -204,6 +225,16 @@ const LEFT_SCREEN: Pick<ShellState, 'composer' | 'notices' | 'sending' | 'pinned
   pinned: true,
   drain: null,
 };
+
+/**
+ * Panels that belong to the chat on screen close when it changes: the rewind dialog (it rewinds that chat) and
+ * the skills picker (it arms a skill in that chat's message). The running tasks panel and the sidebar stay as
+ * the user left them.
+ */
+const panelsLeaving = (panels: Panels): Panels =>
+  panels.dialog === 'rewind' || panels.skills
+    ? { ...panels, dialog: panels.dialog === 'rewind' ? null : panels.dialog, skills: false }
+    : panels;
 
 /** The message a send carries, fixed now; null when there is nothing to send. */
 function outgoing(
@@ -250,6 +281,7 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
       const next: ShellState = {
         ...state,
         ...(handoff ? { pinned: true } : LEFT_SCREEN),
+        panels: panelsLeaving(state.panels),
         openChat: action.sessionId,
         generation: state.generation + 1,
         // Opening a real chat ends the draft; leaving one (no chat named) keeps a draft just opened.
@@ -273,6 +305,7 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
         {
           ...state,
           ...LEFT_SCREEN,
+          panels: panelsLeaving(state.panels),
           // A new draft is a new thing on screen: results for an earlier draft no longer apply.
           generation: state.generation + 1,
           chosenFolder: action.workspaceId,
@@ -288,6 +321,7 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
         {
           ...state,
           ...LEFT_SCREEN,
+          panels: panelsLeaving(state.panels),
           generation: state.generation + 1,
           draft: null,
           starting: false,
@@ -481,5 +515,26 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
     case 'DRAIN_RETRY_DUE':
       if (!isCurrent(state, action.tag) || state.drain?.boundary !== action.boundary) return result(state);
       return result(state, [{ type: 'drainNotifications', tag: action.tag, boundary: action.boundary }]);
+    case 'TASKS_PANEL_TOGGLED':
+      return result({ ...state, panels: { ...state.panels, tasks: !state.panels.tasks } });
+    case 'TASKS_PANEL_CLOSED':
+      return state.panels.tasks ? result({ ...state, panels: { ...state.panels, tasks: false } }) : result(state);
+    case 'SIDEBAR_SET':
+      return state.panels.sidebar === action.open
+        ? result(state)
+        : result({ ...state, panels: { ...state.panels, sidebar: action.open } });
+    case 'DIALOG_OPENED':
+      return result({
+        ...state,
+        panels: { ...state.panels, dialog: action.dialog },
+      });
+    case 'DIALOG_CLOSED':
+      return state.panels.dialog === null
+        ? result(state)
+        : result({ ...state, panels: { ...state.panels, dialog: null } });
+    case 'SKILLS_SET':
+      return state.panels.skills === action.open
+        ? result(state)
+        : result({ ...state, panels: { ...state.panels, skills: action.open } });
   }
 }

@@ -32,6 +32,19 @@ const user = fc.oneof(
     edit: fc.boolean(),
   }),
   fc.record({ kind: fc.constant('discard') }),
+  fc.record({
+    kind: fc.constant('panel'),
+    action: fc.constantFrom(
+      { type: 'TASKS_PANEL_TOGGLED' },
+      { type: 'TASKS_PANEL_CLOSED' },
+      { type: 'SIDEBAR_SET', open: true },
+      { type: 'SIDEBAR_SET', open: false },
+      { type: 'DIALOG_OPENED', dialog: 'rewind' },
+      { type: 'DIALOG_OPENED', dialog: 'folder' },
+      { type: 'DIALOG_CLOSED' },
+      { type: 'SKILLS_SET', open: true },
+    ),
+  }),
   fc.record({ kind: fc.constant('ready') }),
   // A late result that started from what is shown now: an image read, a rewound prompt put back.
   fc.record({ kind: fc.constant('attach') }),
@@ -86,6 +99,16 @@ function run(actions) {
         assert.deepEqual(state.notices, NO_NOTICES, 'a notice survived a chat change');
         assert.equal(state.sending, null, 'a send survived a chat change');
       }
+    }
+    // Only the user opens or closes the running tasks panel and the sidebar (#394, #396).
+    if (!action.type.startsWith('TASKS_PANEL_'))
+      assert.equal(state.panels.tasks, before.panels.tasks, `${action.type} moved the running tasks panel`);
+    if (action.type !== 'SIDEBAR_SET')
+      assert.equal(state.panels.sidebar, before.panels.sidebar, `${action.type} moved the sidebar`);
+    // What the page shows changed: the panels that belong to the old chat are closed.
+    if (state.generation !== before.generation) {
+      assert.notEqual(state.panels.dialog, 'rewind', "another chat's rewind dialog stayed open");
+      assert.equal(state.panels.skills, false, "another chat's skills picker stayed open");
     }
     if (action.type === 'STATUS_TIMER_FIRED' && action.timer === before.liveStatus.timer) firedTimer = action.timer;
     // A deferred status shows only once its own timer fired; a shown status is always the current one.
@@ -182,6 +205,9 @@ function run(actions) {
       }
       case 'discard':
         dispatch({ type: 'DRAFT_DISCARDED' });
+        break;
+      case 'panel':
+        dispatch(action.action);
         break;
       case 'ready': {
         if (!state.openChat) break;

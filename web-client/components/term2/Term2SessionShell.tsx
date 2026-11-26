@@ -7,6 +7,7 @@ import {
   step,
   type Composer,
   type ComposerImage,
+  type Dialog,
   type DraftConfig,
   type NoticeKey,
   type ShellAction,
@@ -244,14 +245,22 @@ export function Term2SessionShell({
   const setAttachmentError = (message: string | null) => setNotice('attachment', message);
   const setConfigError = (message: string | null) => setNotice('config', message);
   const [draggingFile, setDraggingFile] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [dialog, setDialog] = useState<'folder' | 'help' | 'rewind' | 'provider' | null>(null);
-  const [rewindInitialTurnId, setRewindInitialTurnId] = useState<string | null>(null);
+  // Panels and dialogs (the machine): the running tasks panel moves only on the user's word, and the rewind dialog
+  // and skills picker close when the chat on screen changes.
+  const { sidebar: sidebarOpen, dialog, skills: skillsOpen, tasks: tasksPanelOpen } = shell.panels;
+  const setSidebarOpen = useCallback(
+    (next: boolean | ((open: boolean) => boolean)) =>
+      dispatchShell({
+        type: 'SIDEBAR_SET',
+        open: typeof next === 'function' ? next(shellRef.current.panels.sidebar) : next,
+      }),
+    [dispatchShell],
+  );
+  const setDialog = (next: Dialog | null) =>
+    dispatchShell(next ? { type: 'DIALOG_OPENED', dialog: next } : { type: 'DIALOG_CLOSED' });
+  const setSkillsOpen = (open: boolean) => dispatchShell({ type: 'SKILLS_SET', open });
   const [retryError, setRetryError] = useState<{ turnId: string; message: string } | null>(null);
   const [retryDraft, setRetryDraft] = useState<{ sessionId: string; turnId: string; model: ModelSummary } | null>(null);
-  // The running tasks panel: which chat it is open for, and chats where the user closed it.
-  /** Only the user opens or closes the running tasks panel; nothing toggles it on its own. */
-  const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
   const startingChat = shell.starting;
   // "New chat" opens a draft: a folder and a composer, but no gateway session
   // until the first message is sent, so clicking around leaves no empty chats.
@@ -279,7 +288,6 @@ export function Term2SessionShell({
   const [modelsChecked, setModelsChecked] = useState(false);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [loadingSkills, setLoadingSkills] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
   const [sessionFiles, setSessionFiles] = useState<WorkspaceFileEntry[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [filesLoadedFor, setFilesLoadedFor] = useState<string | null>(null);
@@ -521,18 +529,16 @@ export function Term2SessionShell({
   }, [currentFileScope, sessionId, selectedWorkspaceId, loadingFiles, filesLoadedFor]);
 
   const openSkillsMenu = () => {
-    setSkillsOpen((open) => {
-      const next = !open;
-      if (next && skills.length === 0 && !loadingSkills) {
-        setLoadingSkills(true);
-        void term2Client
-          .listSkills()
-          .then((res) => setSkills(res.skills))
-          .catch(() => undefined)
-          .finally(() => setLoadingSkills(false));
-      }
-      return next;
-    });
+    const next = !shellRef.current.panels.skills;
+    setSkillsOpen(next);
+    if (next && skills.length === 0 && !loadingSkills) {
+      setLoadingSkills(true);
+      void term2Client
+        .listSkills()
+        .then((res) => setSkills(res.skills))
+        .catch(() => undefined)
+        .finally(() => setLoadingSkills(false));
+    }
   };
 
   const effectiveAllowWrite = allowWrite || settings?.settings.safety.workspaceAccess === 'read_write';
@@ -1339,7 +1345,6 @@ export function Term2SessionShell({
         disabled: commandDisabled || session.view.turns.length === 0,
         run: () => {
           clearPalette();
-          setRewindInitialTurnId(null);
           setDialog('rewind');
         },
       },
@@ -1441,7 +1446,7 @@ export function Term2SessionShell({
 
   const runningTasks = useRunningTasks(session.view);
   const tasksPanelVisible = Boolean(sessionId) && tasksPanelOpen;
-  const closeTasksPanel = () => setTasksPanelOpen(false);
+  const closeTasksPanel = () => dispatchShell({ type: 'TASKS_PANEL_CLOSED' });
 
   const handleRewind = async (target: RewindTargetSummary, restoreText: boolean) => {
     const tag = currentTag(shellRef.current);
@@ -1576,7 +1581,7 @@ export function Term2SessionShell({
                     count: runningTasks.runningCount,
                     needsYou: runningTasks.needsYouCount,
                     open: tasksPanelVisible,
-                    onClick: () => setTasksPanelOpen((open) => !open),
+                    onClick: () => dispatchShell({ type: 'TASKS_PANEL_TOGGLED' }),
                   }
                 : undefined
             }
@@ -2545,7 +2550,6 @@ export function Term2SessionShell({
         <Term2SetupDialog title="Rewind conversation" onClose={() => setDialog(null)}>
           <Term2RewindDialog
             sessionId={sessionId}
-            initialTurnId={rewindInitialTurnId}
             onRewind={handleRewind}
             onClose={() => setDialog(null)}
           />

@@ -175,17 +175,20 @@ export function step(state: ShellState, action: ShellAction): { state: ShellStat
         : result(state);
     case 'SEND_REQUESTED': {
       if (state.openChat) {
-        // A draft's first message still waiting to go (READY_TO_SEND) is the same text: one send at a time.
-        if (state.sending || state.pendingFirstSend?.sessionId === state.openChat) return result(state);
+        if (state.sending) return result(state);
+        // A draft's first message still waiting to go (READY_TO_SEND) is the same text: this send takes its place, so
+        // one message goes and none waits on a chat that never becomes ready.
+        const base =
+          state.pendingFirstSend?.sessionId === state.openChat ? { ...state, pendingFirstSend: null } : state;
         const message = outgoing(
-          state,
+          base,
           action.requestId,
           action.context,
           action.delivery,
           action.overrideText,
           Boolean(action.textOnly),
         );
-        return message ? sendInChat(state, message, Boolean(action.context.runningTurnId)) : result(state);
+        return message ? sendInChat(base, message, Boolean(action.context.runningTurnId)) : result(state);
       }
       // A draft: create its chat first; the message goes once that chat is open and live (READY_TO_SEND).
       if (!state.draft || state.starting) return result(state);

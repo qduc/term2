@@ -826,7 +826,8 @@ What the build did beyond or differently from the sections above, and what it fo
     way"): a draft's first message waiting for `READY_TO_SEND`, plus the user pressing Send in the new chat, sent
     the same text twice, because `READY_TO_SEND` does not check `sending`. It predates this change (f13a1ee0's
     `step()` emits the same two `submit` commands; its harness finds it only at about 20,000 runs); round two's
-    weights made it common. `SEND_REQUESTED` in a chat is now refused while that chat's first send waits. The three
+    weights made it common. `SEND_REQUESTED` in a chat now takes the place of that chat's waiting first send (round four: a refusal left
+    Send enabled but dead with local control off, where the first send never goes on its own). The three
     failing seeds pass; 0 of 30 random `--target shell` runs fail (was about 6).
   - **A slow start-up read could undo a saved change** (non-blocking): once the page installs its own read, a write
     can answer while the start-up read is still on its way, and that read then put the old values back (the next
@@ -839,3 +840,8 @@ What the build did beyond or differently from the sections above, and what it fo
   - Confirmed by the verifier: in all three read orders (start-up read fails first; own read first, then the
     start-up read fails late; own read first, then the start-up read succeeds late) the page shows the settings, never
     the error, and saves, matching the base.
+- **Independent verifier, round four (on `677bd17a`): accepted.** 15 unseeded `pnpm verify:generated` runs pass;
+  26 flows; the flash, failed-start-up-read, three-order and slow-start-up-read probes all match the base. Its one
+  non-blocking finding (with local control off, the refusal above left a Send button that did nothing, where the base
+  sent) is fixed by letting Send take the waiting first send's place: its local-control-off probe now shows
+  `submit`, as on the base.

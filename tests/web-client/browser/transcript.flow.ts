@@ -411,6 +411,21 @@ test('concise mode keeps the tool row and turn height stable across tool calls a
     };
     record();
     if (article) new MutationObserver(record).observe(article, { subtree: true, childList: true, characterData: true });
+    // The status line is a fixed slot: while the turn runs it never goes blank or leaves the page.
+    const sw = window as unknown as { __statusGaps: number };
+    sw.__statusGaps = 0;
+    const log = document.querySelector('[role="log"]');
+    const watchStatus = () => {
+      const line = log?.querySelector('p[role="status"]');
+      if (!line || line.classList.contains('invisible') || !line.textContent?.trim()) sw.__statusGaps += 1;
+    };
+    if (log)
+      new MutationObserver(watchStatus).observe(log, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+      });
   });
 
   app.model.release('think-1');
@@ -429,6 +444,8 @@ test('concise mode keeps the tool row and turn height stable across tool calls a
   const h3 = await turnHeight();
   const bottomWhileStreaming = await tailBottom();
   expect(h3).toBeGreaterThanOrEqual(h2);
+  await expect(status).toContainText('Writing…');
+  expect(await page.evaluate(() => (window as unknown as { __statusGaps: number }).__statusGaps)).toBe(0);
 
   app.model.release('think-3');
   await expect(turn.getByRole('button', { name: 'Copy reply' })).toBeVisible();
@@ -474,12 +491,12 @@ test('standard mode keeps thinking blocks collapsed by default, preserves user-o
   const turn = turns(page).first();
   const status = page.getByRole('log', { name: 'Conversation' }).locator('p[role="status"]');
 
-  // Step 1 thinking: collapsed by default (no auto-expansion) and no duplicate status line.
+  // Step 1 thinking: collapsed by default (no auto-expansion); the fixed status line still says what is happening.
   await app.model.held('think-1');
   const firstReasoning = turn.locator('details').first();
   await expect(firstReasoning.locator('summary')).toHaveText('Thinking…');
   expect(await firstReasoning.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(false);
-  await expect(status).not.toContainText('Thinking…');
+  await expect(status).toContainText('Thinking…');
 
   // If the reader explicitly opens a streaming thinking block, it stays open when accepted and scrolls in a bounded box.
   await firstReasoning.locator('summary').click();

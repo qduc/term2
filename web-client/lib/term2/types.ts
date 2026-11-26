@@ -1,4 +1,4 @@
-import type { WireBranchSnapshot, WireSnapshot, WireTask } from './generated/wire-fold.js';
+import type { Term2SessionFacts } from './present';
 export const TERM2_CONTRACT_VERSION = 2 as const;
 /**
  * Digest of the immutable v1 (P105) identity choices. The M4 event additions
@@ -471,30 +471,7 @@ export interface Term2TurnView {
   error?: string;
   errorMessage?: string;
 }
-/** The parts of a session snapshot the panels read, filled by present.ts; components never read the snapshot. */
-export interface Term2SessionFacts {
-  /** Each task with its subagent branch (steps, turns, usage) when it has one. */
-  tasks: readonly (WireTask & {
-    readonly branch: WireBranchSnapshot | null;
-    /** The branch's turns, presented like the root's (the running-tasks panel's activity). */
-    readonly branchTurns: readonly Term2TurnView[];
-  })[];
-  queue: WireSnapshot['queue'];
-  queueState: WireSnapshot['queueState'];
-  queuePauseReason: NonNullable<WireSnapshot['queuePauseReason']> | null;
-  notifications: NonNullable<WireSnapshot['notifications']>;
-  requestCosts: NonNullable<WireSnapshot['requestCosts']>;
-  usage: WireSnapshot['usage'];
-  lastUsage: NonNullable<WireSnapshot['lastUsage']> | null;
-  cost: WireSnapshot['cost'];
-  goal: WireSnapshot['goal'];
-  verification: WireSnapshot['verification'];
-  notices: WireSnapshot['notices'];
-  /** Rule 13: a session-level fault, shown once instead of a live-only overlay. */
-  lastError: WireSnapshot['lastError'];
-  /** Rule 2: the snapshot has tools but no timeline, so no order can be shown. */
-  unorderedTranscript: boolean;
-}
+export type { Term2SessionFacts } from './present';
 
 export interface Term2SessionView {
   sessionId: string;

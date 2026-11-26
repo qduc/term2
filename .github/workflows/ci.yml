@@ -125,6 +125,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/check-ci-budget.mjs
+      # A reminder, not a lock: changing the shared fold's interface report, deleting a transcript check, or changing
+      # the architecture rules asks for the owner's architecture-change label (web-transcript spec, section 8).
+      - name: Ask the owner about architecture changes
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-architecture-change.mjs
       - uses: ./.github/actions/setup-tests
       - name: Typecheck production and check layer boundaries
         run: |

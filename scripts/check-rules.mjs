@@ -11,14 +11,17 @@
 //   6. Fixed sleeps: integration, e2e and provider black-box tests wait for conditions; a sleep needs a
 //      `// sleep-ok: <observed>; <why long enough>` comment or a per-file ceiling in rule-baseline.json
 //      (shapes detected are listed in scripts/gates/fixed-sleeps.mjs).
-//   7. Fold boundary: nothing under src/protocol/fold/ imports from outside that folder, packages and inline
-//      `import('...')` types included.
+//   7-10. The settled web-transcript architecture (scripts/gates/architecture-rules.mjs): the fold imports nothing
+//      outside itself; only the session store (and present.ts, for types) imports the browser's fold bundle; the
+//      browser's old reducers stay deleted; the fold's interface report is current (this one builds a TypeScript
+//      program, about two seconds).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { exceptionKeys, failureMap, reportAndExit } from './gates/rules.mjs';
 import { findFixedSleeps, slowTierFiles } from './gates/fixed-sleeps.mjs';
+import { checkArchitecture } from './gates/architecture-rules.mjs';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
@@ -30,7 +33,6 @@ const projection = add('one-projection');
 const jobNames = add('names-are-jobs');
 const unused = add('unused-exports');
 const fold = add('one-fold');
-const foldBoundary = add('fold-boundary');
 
 const walk = (dir) =>
   fs
@@ -269,46 +271,8 @@ for (const [file, ceiling] of sleepCeilings) {
     );
 }
 
-// 7. Fold boundary: every module specifier under protocol/fold/ resolves inside protocol/fold/.
-const foldDir = path.join(src, 'protocol', 'fold');
-for (const file of files.filter((file) => file.startsWith(foldDir + path.sep))) {
-  const sf = parse(file);
-  const check = (node, specifier) => {
-    const inside =
-      specifier.startsWith('./') && path.resolve(path.dirname(file), specifier).startsWith(foldDir + path.sep);
-    if (!inside) foldBoundary(`${rel(file)}:${lineOf(sf, node)}: imports '${specifier}' from outside protocol/fold/`);
-  };
-  const visit = (node) => {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    )
-      check(node, node.moduleSpecifier.text);
-    if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal))
-      check(node, node.argument.literal.text);
-    if (
-      ts.isCallExpression(node) &&
-      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
-    ) {
-      const [first] = node.arguments;
-      check(node, first && ts.isStringLiteralLike(first) ? first.text : '<computed>');
-    }
-    if (ts.isModuleDeclaration(node) && ts.isStringLiteral(node.name)) check(node, node.name.text);
-    if (
-      ts.isImportEqualsDeclaration(node) &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      ts.isStringLiteral(node.moduleReference.expression)
-    )
-      check(node, node.moduleReference.expression.text);
-    ts.forEachChild(node, visit);
-  };
-  visit(sf);
-  // Triple-slash references pull in files or type packages without an import statement.
-  for (const reference of [...sf.referencedFiles, ...sf.typeReferenceDirectives])
-    foldBoundary(`${rel(file)}: references '${reference.fileName}' with a triple-slash directive`);
-}
+// 7-10. The settled web-transcript architecture (scripts/gates/architecture-rules.mjs).
+checkArchitecture(repo, (rule) => add(rule));
 
 reportAndExit(
   failures,

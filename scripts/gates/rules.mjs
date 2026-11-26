@@ -101,6 +101,37 @@ export const RULES = {
     avoid: 'Do not move the outside module into the folder unless it is itself part of the fold.',
     exceptions: null,
   },
+  'web-fold-imports': {
+    title: 'Only the session store folds events in the browser',
+    why:
+      'The web client shows what the shared fold holds, folded in one place (web-client/lib/term2/session-store.ts) ' +
+      'and turned into the view in one place (present.ts). A second module that folds events or reads the snapshot ' +
+      'is how reload and live came to disagree before.',
+    fix:
+      'Add the field to present.ts (or to Term2SessionFacts) and read it from the view. A new event type belongs in ' +
+      'src/protocol/fold/, which every client shares.',
+    avoid:
+      'Do not copy wire types into the component or re-export the bundle from another module to get past the check.',
+    exceptions: null,
+  },
+  'browser-owns-no-reducer': {
+    title: 'The browser owns no reducer',
+    why:
+      "event-adapter.ts and native-state.ts were the browser's own folds of session events, kept beside the snapshot " +
+      'path; the two disagreed. The browser now folds with the shared fold only.',
+    fix: 'Put the transcript rule in web-client/lib/term2/present.ts, or the state change in src/protocol/fold/.',
+    avoid: 'Do not bring the module back under another name.',
+    exceptions: null,
+  },
+  'wire-fold-api-current': {
+    title: 'The fold interface report is current',
+    why:
+      'docs/contracts/wire-fold.api.txt is the readable interface of the shared fold, which is meant to become a ' +
+      'public library. A changed or removed line is a breaking change the owner approves (architecture-change label).',
+    fix: 'Run node scripts/wire-fold-api.mjs --write and commit the diff. Added lines need no approval.',
+    avoid: 'Do not edit the report by hand.',
+    exceptions: null,
+  },
   reachability: {
     title: 'Every file is reached from src/app/cli.ts',
     why:

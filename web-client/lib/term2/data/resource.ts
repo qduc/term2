@@ -41,7 +41,13 @@ export interface Resource<T> extends ReadableStore<ResourceState<T>> {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error ?? ''));
 
-export function createResource<T>(options: { initial: T; fetch: (key: string | null) => Promise<T> }): Resource<T> {
+export function createResource<T>(options: {
+  initial: T;
+  fetch: (key: string | null) => Promise<T>;
+  /** The words `error` holds for a failed request. Default: the error's message. */
+  describeError?: (error: unknown) => string;
+}): Resource<T> {
+  const describe = options.describeError ?? messageOf;
   const store = createStore<ResourceState<T>>({
     data: options.initial,
     loading: false,
@@ -76,7 +82,7 @@ export function createResource<T>(options: { initial: T; fetch: (key: string | n
       settle(request, { data, loaded: true });
       return data;
     } catch (error) {
-      settle(request, { error: messageOf(error) });
+      settle(request, { error: describe(error) });
       throw error;
     }
   };

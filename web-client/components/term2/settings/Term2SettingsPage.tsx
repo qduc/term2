@@ -18,8 +18,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { SettingsConflictError, Term2ApiError, term2Client } from '../../../lib/api/term2';
+import { useLoadOnOpen } from '../../../hooks/useLoadOnOpen';
+import { useStoreSelector } from '../../../hooks/useStoreSelector';
+import { errorStatus, isSettingsConflict } from '../../../lib/term2/data/server-data';
 import type { ModelSummary, ProviderPresetEntry, SettingsProjection } from '../../../lib/term2/types';
+import { useServerData } from '../shell/ShellContext';
 import { CredentialField } from './CredentialField';
 import { ModelsSummary } from './ModelsSummary';
 import { FavoriteModelsControl, ModelPoolControl, NicknamesControl, RevokeListControl } from './ListSettingControls';
@@ -123,15 +126,16 @@ function providerKeywords(
  * The full-page settings view. It replaces the chat while open; the section and provider live in
  * the URL (`?settings=<section>&provider=<id>`), so Back and refresh return to the same place.
  */
+const NO_PRESETS: ProviderPresetEntry[] = [];
+const DEFAULT_PROVIDER_TYPES = ['openai-compatible', 'anthropic', 'google', 'openai', 'llama.cpp'];
+
 export function Term2SettingsPage({
   section,
   provider,
   onNavigate,
   onClose,
-  onLoaded,
   models,
   modelsLoading,
-  onModelsChanged,
   displayMode,
   onDisplayModeChange,
   notificationsEnabled,
@@ -144,10 +148,8 @@ export function Term2SettingsPage({
   provider: string | null;
   onNavigate: (section: SettingsSectionId, provider?: string | null) => void;
   onClose: () => void;
-  onLoaded?: (settings: SettingsProjection) => void;
   models: ModelSummary[];
   modelsLoading: boolean;
-  onModelsChanged: () => Promise<void>;
   displayMode: DisplayMode;
   onDisplayModeChange: (mode: DisplayMode) => void;
   notificationsEnabled: boolean;
@@ -158,17 +160,18 @@ export function Term2SettingsPage({
   approvalWaiting?: boolean;
 }) {
   const { theme, setTheme } = useTheme();
-  const [projection, setProjection] = useState<SettingsProjection | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [presets, setPresets] = useState<ProviderPresetEntry[]>([]);
-  const [providerTypes, setProviderTypes] = useState<string[]>([
-    'openai-compatible',
-    'anthropic',
-    'google',
-    'openai',
-    'llama.cpp',
-  ]);
+  // The settings projection is the page's shared one (lib/term2/data/server-data.ts). This opening shows nothing it
+  // did not read itself: the page stays on its loading line until its own read answers.
+  const data = useServerData();
+  const settings = useStoreSelector(data.settings, (state) => state);
+  const [opening, setOpening] = useState<'loading' | 'failed' | 'ready'>('loading');
+  const projection = opening === 'ready' ? settings.data : null;
+  const loading = opening === 'loading';
+  const loadError = settings.error;
+  const catalog = useLoadOnOpen(data.providerCatalog);
+  const presets = catalog.status === 'ready' ? catalog.data.presets : NO_PRESETS;
+  const providerTypes =
+    catalog.status === 'ready' && catalog.data.types.length > 0 ? catalog.data.types : DEFAULT_PROVIDER_TYPES;
   const [rowStatus, setRowStatus] = useState<Record<string, RowStatus>>({});
   const [query, setQuery] = useState('');
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -176,51 +179,23 @@ export function Term2SettingsPage({
   const searchRefs = useRef<Array<HTMLInputElement | null>>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const savedTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  // Writes run one at a time against the newest revision, so a second change made while the
-  // first is saving is not rejected as a conflict.
-  const revisionRef = useRef<string | null>(null);
-  const writeChain = useRef<Promise<void>>(Promise.resolve());
 
-  const applyProjection = useCallback(
-    (next: SettingsProjection) => {
-      revisionRef.current = next.revision;
-      setProjection(next);
-      onLoaded?.(next);
-    },
-    [onLoaded],
-  );
-
-  const reload = useCallback(async (): Promise<SettingsProjection | null> => {
-    setLoadError(null);
+  const reload = useCallback(async () => {
     try {
-      const latest = await term2Client.readSettings();
-      applyProjection(latest);
+      const latest = await data.settings.refresh();
+      setOpening('ready');
       return latest;
-    } catch (reason) {
-      setLoadError(
-        reason instanceof Term2ApiError && reason.status === 503
-          ? 'Local settings are not available in this deployment.'
-          : reason instanceof Error && reason.message
-            ? reason.message
-            : 'Settings could not be loaded.',
-      );
+    } catch {
+      // A later failed read keeps the page as it is; a failed first read shows the error.
+      setOpening((current) => (current === 'ready' ? current : 'failed'));
       return null;
-    } finally {
-      setLoading(false);
     }
-  }, [applyProjection]);
+  }, [data]);
 
   useEffect(() => {
     void reload();
-    void term2Client
-      .listProviderPresets()
-      .then((result) => {
-        setPresets(result.presets);
-        if (result.types.length > 0) setProviderTypes(result.types);
-      })
-      .catch(() => undefined);
     // A fresh model list makes each provider's status line current.
-    void onModelsChanged().finally(() => setModelsChecked(true));
+    void data.models.load().finally(() => setModelsChecked(true));
     // Runs once per opening of the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -303,24 +278,22 @@ export function Term2SettingsPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, theme, displayMode, notificationsEnabled, showDiagnostics]);
 
-  /** Saves one row's keys in a single settings write. */
+  /**
+   * Saves one row's keys in a single settings write. Writes queue in the data layer, each against the newest
+   * revision, so a second change made while the first is saving is not rejected as a conflict.
+   */
   const saveServer = (statusId: string, changes: Change[]): Promise<void> => {
     setStatus(statusId, { state: 'saving' });
-    const write = () => writeOne(statusId, changes);
-    writeChain.current = writeChain.current.then(write, write);
-    return writeChain.current;
+    return writeOne(statusId, changes);
   };
 
   const writeOne = async (statusId: string, changes: Change[]) => {
-    const revision = revisionRef.current;
-    if (!revision) return;
     try {
-      const result = await term2Client.writeSettings({ expectedRevision: revision, changes });
-      applyProjection(result.projection);
+      await data.writeSettings(changes);
       setStatus(statusId, { state: 'saved' });
     } catch (reason) {
-      if (reason instanceof SettingsConflictError) {
-        applyProjection(reason.projection);
+      // After a conflict the data layer has installed the server's projection.
+      if (isSettingsConflict(reason)) {
         setStatus(statusId, {
           state: 'error',
           message: 'Settings changed somewhere else. The latest values are shown; make your change again.',
@@ -329,7 +302,7 @@ export function Term2SettingsPage({
         setStatus(statusId, {
           state: 'error',
           message:
-            reason instanceof Term2ApiError && reason.status === 400
+            errorStatus(reason) === 400
               ? 'Not saved: term2 doesn’t accept that value.'
               : reason instanceof Error && reason.message
                 ? `Not saved: ${reason.message}`
@@ -411,8 +384,8 @@ export function Term2SettingsPage({
         onSave={async (value) => {
           setStatus(item.id, { state: 'saving' });
           try {
-            await term2Client.setCredential(id, value);
-            await reload();
+            // Re-reads settings itself (a web-search key changes no model list).
+            await data.providers.setCredential(id, value, 'settings');
             setStatus(item.id, { state: 'saved' });
             return true;
           } catch (reason) {
@@ -433,8 +406,7 @@ export function Term2SettingsPage({
               void (async () => {
                 setStatus(item.id, { state: 'saving' });
                 try {
-                  await term2Client.deleteCredential(id);
-                  await reload();
+                  await data.providers.deleteCredential(id, 'settings');
                   setStatus(item.id, { state: 'saved' });
                 } catch (reason) {
                   setStatus(item.id, {
@@ -773,8 +745,6 @@ export function Term2SettingsPage({
         providerTypes={providerTypes}
         routeProvider={provider}
         onNavigate={(id) => onNavigate('providers', id)}
-        onReload={reload}
-        onModelsChanged={onModelsChanged}
       />
     );
   } else if (section === 'models') {

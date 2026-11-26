@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useLoadOnOpen } from '../../hooks/useLoadOnOpen';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { term2Client } from '../../lib/api/term2';
-import type { ModelSummary, ProviderPresetEntry, SettingsProjection } from '../../lib/term2/types';
+import type { ModelSummary, SettingsProjection } from '../../lib/term2/types';
+import { useServerData } from './shell/ShellContext';
 import { ADD_PROVIDER_ROUTE, ProvidersSection } from './settings/ProvidersSection';
 import { Term2SetupDialog } from './Term2SetupDialog';
 
@@ -19,36 +20,22 @@ export function Term2ProviderSetup({
   projection,
   models,
   modelsLoading,
-  onReload,
-  onModelsChanged,
   onContinue,
   onClose,
 }: {
   projection: SettingsProjection;
   models: ModelSummary[];
   modelsLoading: boolean;
-  onReload: () => Promise<SettingsProjection | null>;
-  onModelsChanged: () => Promise<void>;
   onContinue: (model: ModelSummary) => void;
   onClose: () => void;
 }) {
   const [path, setPath] = useState<(typeof paths)[number]['id'] | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<{ presets: ProviderPresetEntry[]; types: string[] } | null>(null);
-  const [catalogError, setCatalogError] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void term2Client
-      .listProviderPresets(controller.signal)
-      .then(setCatalog)
-      .catch(() => {
-        if (!controller.signal.aborted) setCatalogError(true);
-      });
-    return () => controller.abort();
-  }, [attempt]);
+  // The services this dialog offers, read each time it opens.
+  const opened = useLoadOnOpen(useServerData().providerCatalog);
+  const catalog = opened.status === 'ready' ? opened.data : null;
+  const catalogError = opened.status === 'failed';
 
   const currentProvider = projection.settings.providers.find((item) => item.id === provider);
   const available =
@@ -117,10 +104,7 @@ export function Term2ProviderSetup({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => {
-                    setCatalogError(false);
-                    setAttempt(attempt + 1);
-                  }}
+                  onClick={opened.reload}
                 >
                   Try again
                 </Button>
@@ -141,8 +125,6 @@ export function Term2ProviderSetup({
               routeProvider={provider}
               setupPath={path}
               onNavigate={navigate}
-              onReload={onReload}
-              onModelsChanged={onModelsChanged}
             />
           )}
           {available.length > 0 && !modelsLoading && (

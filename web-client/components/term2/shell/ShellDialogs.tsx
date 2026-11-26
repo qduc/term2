@@ -26,10 +26,6 @@ export function ProviderDialog() {
       projection={settings}
       models={models.data}
       modelsLoading={models.loading}
-      onReload={() => shell.data.settings.load()}
-      onModelsChanged={async () => {
-        await shell.data.models.load();
-      }}
       onContinue={shell.ops.providerChosen}
       onClose={close}
     />

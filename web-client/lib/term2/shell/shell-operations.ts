@@ -351,7 +351,8 @@ export function createShellOperations(runtime: {
       // Rewind targets name the user message; every presented turn carries its opening message's id.
       const messageId = session.view.get().turns.find((item) => item.turnId === turnId)?.userMessageId;
       try {
-        ({ targets } = await term2Client.listRewindTargets(sessionId));
+        // The same read path as the rewind dialog; it uses what its own request returned.
+        targets = await data.rewindTargets.loadOrFail(sessionId);
       } catch (error) {
         return error instanceof Error ? error.message : 'Could not load this chat’s history.';
       }

@@ -47,7 +47,6 @@ export function ChatColumn() {
               }}
             />
           )}
-          <TranscriptPin scrollRef={scrollRef} lastScrollTopRef={lastScrollTopRef} />
           <div
             ref={scrollRef}
             onScroll={onScroll}
@@ -66,6 +65,7 @@ export function ChatColumn() {
               <DiagnosticsDetails />
             </div>
           </div>
+          <TranscriptPin scrollRef={scrollRef} lastScrollTopRef={lastScrollTopRef} />
           <ChatDock scrollToLatest={scrollToLatest} />
         </section>
       </div>

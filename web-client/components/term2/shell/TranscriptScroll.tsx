@@ -7,7 +7,10 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
 
 type ScrollRefs = { scrollRef: RefObject<HTMLDivElement | null>; lastScrollTopRef: RefObject<number> };
 
-/** Smart auto-scroll pinning: the transcript follows new output while the reader is at its end. */
+function isNearBottom(el: HTMLDivElement) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+
 export function useTranscriptScroll() {
   const { dispatch, store } = useShell();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -18,10 +21,9 @@ export function useTranscriptScroll() {
     if (!el || el.clientHeight === 0) return;
     const prevTop = lastScrollTopRef.current;
     lastScrollTopRef.current = el.scrollTop;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     // Only unpin when the reader actually scrolls up; streaming growth between frames must not
     // falsely unpin and flash the "Jump to latest" button.
-    if (atBottom) {
+    if (isNearBottom(el)) {
       dispatch({ type: 'SCROLLED', pinned: true });
     } else if (!store.get().pinned || el.scrollTop < prevTop) {
       dispatch({ type: 'SCROLLED', pinned: false });
@@ -29,35 +31,68 @@ export function useTranscriptScroll() {
   }, [dispatch, store]);
   const scrollToLatest = useCallback(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-    dispatch({ type: 'SCROLLED', pinned: true });
-  }, [dispatch]);
+  }, []);
   return { scrollRef, lastScrollTopRef, onScroll, scrollToLatest };
 }
 
-/** Renders nothing. Keeps a pinned transcript at its end, and restores the offset settings hid. */
+/** Positions each live reply once and preserves the reading position as its text grows. */
 export function TranscriptPin({ scrollRef, lastScrollTopRef }: ScrollRefs) {
+  const { dispatch } = useShell();
   const { settingsOpen } = useShellEnv();
   const pinned = useShellState((s) => s.pinned);
+  const sessionId = useSessionView((v) => v.sessionId);
   const turns = useSessionView((v) => v.turns);
   const pendingInteraction = useSessionView((v) => v.pendingInteraction);
   const liveStatus = useChatFacts((f) => f.liveStatus);
-  // Pin before browser paint so streaming growth doesn't flash at the old scrollTop for one frame.
+  const replyRef = useRef<{ sessionId: string; turnId: string; positioned: boolean } | null>(null);
+  const wasHiddenRef = useRef(false);
+
   useIsomorphicLayoutEffect(() => {
     const el = scrollRef.current;
-    if (pinned && el) {
-      el.scrollTop = el.scrollHeight;
-      lastScrollTopRef.current = el.scrollTop;
+    const latestTurn = turns.at(-1);
+    if (replyRef.current && (replyRef.current.sessionId !== sessionId || replyRef.current.turnId !== latestTurn?.turnId)) {
+      replyRef.current = null;
     }
-  }, [turns, pendingInteraction, liveStatus, pinned, scrollRef, lastScrollTopRef]);
-  // The transcript was display:none while settings was open, which loses its scroll offset.
-  useIsomorphicLayoutEffect(() => {
-    if (settingsOpen) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = pinned ? el.scrollHeight : lastScrollTopRef.current;
+    if (!replyRef.current && (latestTurn?.status === 'streaming' || latestTurn?.status === 'pending')) {
+      replyRef.current = { sessionId, turnId: latestTurn.turnId, positioned: false };
+    }
+    const reply = replyRef.current;
+    const wasHidden = wasHiddenRef.current;
+    wasHiddenRef.current = settingsOpen;
+    if (!el || settingsOpen || el.clientHeight === 0) return;
+
+    if (wasHidden) el.scrollTop = lastScrollTopRef.current;
+    if (reply && !reply.positioned && latestTurn?.text) {
+      const start = el.querySelector(`[data-turn-id="${CSS.escape(reply.turnId)}"] [data-reply-start]`);
+      if (start) {
+        const inset = Number.parseFloat(getComputedStyle(el).paddingTop);
+        el.scrollTop += start.getBoundingClientRect().top - el.getBoundingClientRect().top - inset;
+        reply.positioned = true;
+      }
+    }
+
+    if (reply?.positioned) {
+      // The dock still needs to know when there is more output below the viewport.
+      dispatch({ type: 'SCROLLED', pinned: isNearBottom(el) });
+    } else if (pinned) {
+      el.scrollTop = el.scrollHeight;
+    }
     lastScrollTopRef.current = el.scrollTop;
-    // Only on closing settings; `pinned` is read, not tracked.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsOpen]);
+  }, [dispatch, turns, pendingInteraction, liveStatus, pinned, sessionId, settingsOpen, scrollRef, lastScrollTopRef]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    const content = el?.firstElementChild;
+    if (!el || !content) return;
+    // Paced text can grow between session updates. Keep the jump button in sync without moving the viewport.
+    const observer = new ResizeObserver(() => {
+      if (replyRef.current?.positioned && el.clientHeight > 0) {
+        dispatch({ type: 'SCROLLED', pinned: isNearBottom(el) });
+      }
+    });
+    observer.observe(content);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [dispatch, scrollRef]);
   return null;
 }

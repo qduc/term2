@@ -85,7 +85,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
   const { configBusy, retryDraft } = local;
 
   return (
-    <article className="t2-enter group space-y-5">
+    <article data-turn-id={turn.turnId} className="t2-enter group space-y-5">
       {turn.userText !== undefined && (
         <Term2UserMessage
           turnId={turn.turnId}

@@ -45,6 +45,8 @@ export type DirectHeadlessOptions = {
   readonly signal?: AbortSignal;
   /** App-composed policy. When absent, the conservative headless policy below is used. */
   readonly decideApproval?: HeadlessApprovalDecider;
+  /** True when the session itself settles headless interactions by policy (D003); client only observes wire events. */
+  readonly sessionHandlesHeadlessApprovals?: boolean;
   /** Fields merged into the old `--json` `session_start` record (profile metadata). */
   readonly profileMetadata?: Readonly<Record<string, unknown>>;
   /** Old `agent.backgroundWaitTimeoutMs`; defaults to one hour. */

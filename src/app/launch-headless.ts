@@ -79,7 +79,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         ...(request.showReasoning === undefined ? {} : { showReasoning: request.showReasoning }),
         ...(request.quiet === undefined ? {} : { quiet: request.quiet }),
         signal: stop.signal,
-        decideApproval: app.headlessPolicy(connection.sessionId, autoApprove, stop.signal),
+        sessionHandlesHeadlessApprovals: true,
         ...(sessionId === undefined ? {} : { expectedSessionId: sessionId }),
       });
       switch (outcome) {

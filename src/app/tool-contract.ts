@@ -111,13 +111,15 @@ export type AgentSurface = {
   approvalRoute?(request: InteractionRequest): import('../session/approval/approval-route.js').ApprovalRoute;
   /** This generation's live mode is `unattended`: no request waits for a person except a question. */
   unattended?(): boolean;
+  /** True when the session runs without an interactive user (headless policy settles unapproved requests). */
+  readonly headlessPolicy?: boolean;
   /** Review an open approval through the shared decision table (session/approval/approval-route.ts). */
   reviewApproval?(
     request: InteractionRequest,
     history: readonly Item[],
     signal: AbortSignal,
   ): Promise<ApprovalReviewResult>;
-  /** Headless policy only; caller commits its decision through Session's Turn.answer. */
+  /** Headless policy only; settled atomically by Session's approval arbiter. */
   decideInteraction(
     request: InteractionRequest,
     history: readonly Item[],

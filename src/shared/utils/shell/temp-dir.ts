@@ -124,6 +124,18 @@ export function resolveSandboxXdgLayout(cwd: string): SandboxXdgLayout {
   return { root, config, cache, data, state };
 }
 
+/** Per-workspace private scratch directory under SANDBOX_TEMP_DIR so concurrent/sequential workspaces do not share TMPDIR. */
+export function resolveWorkspaceSandboxTempDir(cwd: string): string {
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const workspaceHash = createHash('sha256').update(workspaceRoot).digest('hex').slice(0, 16);
+  const wsRoot = join(SANDBOX_TEMP_DIR, 'ws');
+  const dir = join(wsRoot, workspaceHash);
+  ensurePrivateDir(SANDBOX_TEMP_DIR);
+  ensurePrivateDir(wsRoot);
+  ensurePrivateDir(dir);
+  return dir;
+}
+
 /**
  * One line pointing the model at its scratch area when `text` (a command, or a sandbox error) names a path
  * under plain `/tmp` outside it, or undefined. Models reach for `/tmp` for one-shot files; the sandbox and

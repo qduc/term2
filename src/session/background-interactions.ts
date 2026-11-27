@@ -9,7 +9,7 @@ import type {
 } from './background-types.js';
 import { directTaskAbortError, directTaskError } from './background-types.js';
 import { grantOffered } from './conversation-turn.js';
-import { REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
+import { resolveApprovalDecision, REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
 import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
 import { UnattendedRefusals } from './approval/unattended-refusals.js';
 
@@ -74,43 +74,42 @@ export class DirectBackgroundInteractions {
     return { kind: 'accepted' };
   }
 
-  #settleReview(entry: Pending, review: ApprovalReviewResult): void {
+  #settleReview(entry: Pending, review: ApprovalReviewResult | undefined, policyDecision?: InteractionDecision): void {
     if (this.#pending.get(entry.request.requestId) !== entry) return;
     if (entry.unattendedOnly && !this.#reviews?.unattended()) {
       this.#remove(entry);
       entry.reject(new Error('Background task cannot wait for approval.'));
       return;
     }
-    const decision: InteractionDecision | undefined = review.approved
-      ? review.grant
-        ? { kind: 'allow', grant: review.grant }
-        : { kind: 'allow' }
-      : undefined;
-    const automatic = decision && validDecision(entry.request, decision) ? decision : undefined;
-    // Unattended never opens an approval for a person, even when an approval cannot be applied.
-    if (!automatic && this.#reviews?.unattended())
-      return this.#refuse(entry, { ...review, approved: false } as ApprovalReviewResult);
+    const { automatic, decision, recordedReview } = resolveApprovalDecision(
+      entry.request,
+      review,
+      policyDecision,
+      validDecision,
+    );
+    if (!decision && this.#reviews?.unattended())
+      return this.#refuse(entry, { ...(review ?? { kind: 'not_reviewed' }), approved: false } as ApprovalReviewResult);
     try {
       this.#accept({
         type: 'task_interaction_opened',
         request: entry.request,
-        review: automatic ? review : ({ ...review, approved: false } as ApprovalReviewResult),
+        ...(recordedReview ? { review: recordedReview } : {}),
       });
-      if (!automatic) return;
+      if (!decision) return;
       this.#accept({
         type: 'task_interaction_closed',
         taskId: entry.request.taskId,
         requestId: entry.request.requestId,
-        resolution: { kind: 'decision', decision: automatic },
+        resolution: { kind: 'decision', decision },
         resolutionSource: 'policy',
-        automaticApproval: true,
+        ...(automatic ? { automaticApproval: true } : {}),
       });
     } catch (error) {
       this.poison(new Error(directTaskError(error).message));
       return;
     }
     this.#remove(entry);
-    entry.resolve(automatic);
+    entry.resolve(decision);
   }
 
   /**
@@ -186,11 +185,11 @@ export class DirectBackgroundInteractions {
       };
       this.#pending.set(request.requestId, entry);
       try {
-        // A reviewable request stays unopened until its review settles or a person steps in.
+        // A reviewable or headless-policy request stays unopened until settled or a person steps in.
         const reviewing =
-          acceptedRequest.kind === 'approval' &&
+          (acceptedRequest.kind === 'approval' || this.#reviews?.isHeadless()) &&
           this.#reviews?.begin(acceptedRequest, {
-            settle: (_request, review) => this.#settleReview(entry, review),
+            settle: (_request, review, decision) => this.#settleReview(entry, review, decision),
             refuse: (_request, review) => this.#refuse(entry, review),
           });
         const unreviewed =

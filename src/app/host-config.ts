@@ -42,7 +42,9 @@ import type { DirectSettingsBackend } from './host-config-settings.js';
 export function createDirectProductPorts(options: { settingsDir?: string } = {}): {
   readonly settings: DirectSettingsBackend;
 } & ReturnType<typeof createDirectAccountPorts> {
-  const service = createSettingsService(options.settingsDir ? { settingsDir: options.settingsDir } : {});
+  const service = createSettingsService(
+    options.settingsDir ? { settingsDir: options.settingsDir, disableFilePersistence: false } : {},
+  );
   return {
     settings: {
       get: (key) => service.getDynamic(key),

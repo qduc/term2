@@ -72,6 +72,7 @@ export interface SessionIndex {
     principal: Principal,
     options?: { readonly limit?: number; readonly cursor?: string; readonly workspaceId?: string },
   ): Promise<{ readonly sessions: ClientApiSessionListItem[]; readonly nextCursor: string | null }>;
+  get(principal: Principal, sessionId: string): Promise<ClientApiSessionListItem | null>;
   subscribe(
     principal: Principal,
     options: { readonly workspaceId?: string; readonly limit?: number },
@@ -438,6 +439,14 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
           subscribers.delete(subscriber);
         },
       };
+    },
+
+    async get(principal, sessionId) {
+      const record = records.get(sessionId);
+      if (!record) return null;
+      const vis = await deps.resolveVisibility(principal, record);
+      if (!vis.visible) return null;
+      return projectItem(record, vis);
     },
 
     counts() {

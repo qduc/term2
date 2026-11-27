@@ -357,6 +357,7 @@ export type ServerHostDependencies = {
   models?(): readonly ModelCatalogEntry[] | Promise<readonly ModelCatalogEntry[]>;
   skills?(principal: Principal, workspaceId?: string): readonly SkillSummary[] | Promise<readonly SkillSummary[]>;
   configuration?: ServerConfiguration;
+  mutations?: import('./daemon/global-mutations.js').GlobalMutationCoordinator;
   presentation?: ServerSessionPresentation;
   sessionIndex?: import('./daemon/session-index.js').SessionIndex;
   daemonId?: string;

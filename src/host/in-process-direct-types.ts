@@ -32,6 +32,8 @@ export interface DirectHost {
   createSession(principal: Principal, grant: WorkspaceGrant): Promise<DirectConnection>;
   connect(principal: Principal, sessionId: string): Promise<DirectConnection>;
   connect(principal: Principal, sessionId: string, fromSeq: number): Promise<DirectReplayConnection>;
+  /** Dispatch a command directly against a session without allocating an event subscriber queue. */
+  sendCommand?(principal: Principal, sessionId: string, command: WireCommand): Promise<WireCommandResult>;
   /** Explicitly drain/release a live Session and its subscriptions; retained logs remain reopenable. */
   closeSession?(principal: Principal, sessionId: string): Promise<void>;
   /**

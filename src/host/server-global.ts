@@ -10,11 +10,14 @@ import type { PrivateRoute } from './server-routes.js';
 import { publicError } from './server-errors.js';
 import * as validate from './server-validation.js';
 
+import { GlobalMutationCoordinator } from './daemon/global-mutations.js';
+
 /** Serializes the existing two mutation lanes; delegates actual transactions to the app authority. */
 export class ServerGlobalRoutes {
-  #settingsMutation: Promise<unknown> = Promise.resolve();
-  #oauthMutation: Promise<unknown> = Promise.resolve();
-  constructor(readonly dependencies: ServerHostDependencies) {}
+  readonly #mutations: GlobalMutationCoordinator;
+  constructor(readonly dependencies: ServerHostDependencies) {
+    this.#mutations = dependencies.mutations ?? new GlobalMutationCoordinator();
+  }
   async handle(route: PrivateRoute, input: ServerRequest, principal: Principal): Promise<ServerResult | null> {
     const { body, url } = input;
     const { workspaces, configuration: config } = this.dependencies;
@@ -80,6 +83,7 @@ export class ServerGlobalRoutes {
             body.expectedRevision,
             body.changes as { key: string; value: SafeSettingValue }[],
           );
+          this.#mutations.publishSettings(projection);
           return { status: 200, body: { committed: true, revision: projection.revision, projection } };
         });
       case 'credential_write':
@@ -160,11 +164,7 @@ export class ServerGlobalRoutes {
     }
   }
   async #serialize(lane: 'settings' | 'oauth', operation: () => Promise<ServerResult>): Promise<ServerResult> {
-    const previous = lane === 'settings' ? this.#settingsMutation : this.#oauthMutation;
-    const result = previous.then(operation, operation);
-    if (lane === 'settings') this.#settingsMutation = result.catch(() => undefined);
-    else this.#oauthMutation = result.catch(() => undefined);
-    return result;
+    return lane === 'settings' ? this.#mutations.runSettings(operation) : this.#mutations.runOAuth(operation);
   }
 }
 function invalid(kind: string): ServerResult {

@@ -270,6 +270,24 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
         ? connection({ ...principal }, attached)
         : connection({ ...principal }, attached, fromSeq);
     }) as DirectHost['connect'],
+    async sendCommand(principal, sessionId, command) {
+      open();
+      try {
+        const readOnly =
+          command.type === 'list_rewind_targets' ||
+          command.type === 'preview' ||
+          command.type === 'command_status' ||
+          command.type === 'command_revision';
+        await deps.authorize(principal, { kind: readOnly ? 'read' : 'write', sessionId });
+        open();
+        const attached = await attachment(sessionId);
+        open();
+        return await applyDirectCommand(attached.session, command, deps.capabilities?.(attached.session));
+      } catch (error) {
+        if (error instanceof DirectProtocolError) return { ok: false, code: error.code, message: error.message };
+        return { ok: false, code: 'internal_error', message: 'Host command failed.' };
+      }
+    },
     dispose() {
       if (!disposal) {
         disposed = true;

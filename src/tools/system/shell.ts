@@ -30,11 +30,12 @@ import { beginForegroundSandboxNetworkApproval } from '../shell/sandbox/sandbox-
 import { isProjectListenerAllowed } from '../shell/sandbox/sandbox-network-store.js';
 import { prepareSandboxProjectCache } from '../shell/sandbox/sandbox-project.js';
 import { createSandboxEnvironment } from '../shell/sandbox/sandbox-env.js';
-import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
+import { SANDBOX_TEMP_DIR, resolveWorkspaceSandboxTempDir } from '../../shared/utils/shell/temp-dir.js';
 import {
   SANDBOX_ESCAPE_INSTRUCTION,
   createSandboxRuntimeConfig,
   type SandboxAvailability,
+  type SandboxLeaseRelease,
   type ShellSandboxRunner,
 } from '../shell/sandbox/sandbox-policy.js';
 import {
@@ -936,7 +937,8 @@ export function createShellToolDefinition(deps: {
       let sandboxed = false;
       let networkApproval: ReturnType<typeof beginForegroundSandboxNetworkApproval>;
       let cacheDirectory: string | undefined;
-      let sandboxLeaseRelease: (() => void) | undefined;
+      let sandboxLeaseRelease: SandboxLeaseRelease | undefined;
+      let sandboxTmpDir: string | undefined;
       let dockerHostControl: DockerHostControl | undefined;
       let backgroundCleanupDeferred = false;
       let transferred = false;
@@ -1152,6 +1154,7 @@ export function createShellToolDefinition(deps: {
           try {
             const projectAllowRead = getProjectAllowReadStore(cwd).load();
             if (!readOnlyFilesystem) cacheDirectory = prepareSandboxProjectCache(cwd);
+            sandboxTmpDir = resolveWorkspaceSandboxTempDir(cwd);
             const sandboxConfig = createSandboxRuntimeConfig({
               cwd,
               tmpDir: SANDBOX_TEMP_DIR,
@@ -1177,6 +1180,8 @@ export function createShellToolDefinition(deps: {
               cwd,
               config: sandboxConfig,
               signal,
+              lease: sandboxLeaseRelease,
+              tmpDir: sandboxTmpDir,
             });
             commandToRun = wrapped.command;
             sandboxed = true;
@@ -1217,11 +1222,12 @@ export function createShellToolDefinition(deps: {
                   cacheDirectory,
                   readPolicy: settingsService.get('sandbox.readPolicy'),
                   dockerHostControl,
-                  tmpDir: SANDBOX_TEMP_DIR,
+                  tmpDir: sandboxTmpDir,
                 })
               : undefined,
             pauseOnSandboxNetworkApproval: sandboxed,
-            registerSandboxNetworkPauseController,
+            registerSandboxNetworkPauseController:
+              registerSandboxNetworkPauseController ?? sandboxLeaseRelease?.networkScope?.registerPauseController,
             signal,
             sshService,
             childRegistry: sandboxed ? sandboxChildRegistry ?? shellChildRegistry : shellChildRegistry,
@@ -1408,7 +1414,7 @@ export function createShellToolDefinition(deps: {
         const cleanupAfterExecution = async () => {
           networkApproval?.dispose();
           try {
-            if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.();
+            if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.(sandboxLeaseRelease);
           } finally {
             sandboxLeaseRelease?.();
             sandboxLeaseRelease = undefined;
@@ -1496,7 +1502,12 @@ export function createShellToolDefinition(deps: {
 
         const refusal = await acquireAndWrapSandbox(toolSignal);
         if (refusal !== undefined) return refusal;
-        if (sandboxed) networkApproval = beginForegroundSandboxNetworkApproval(_context, toolSignal);
+        if (sandboxed)
+          networkApproval = beginForegroundSandboxNetworkApproval(
+            _context,
+            toolSignal,
+            sandboxLeaseRelease?.networkScope,
+          );
         const foregroundOutput = ({ status, output }: BackgroundShellExecutionResult): string =>
           status === 'failed' ? networkApproval?.annotateFailure(output) ?? output : output;
 
@@ -1534,7 +1545,7 @@ export function createShellToolDefinition(deps: {
         networkApproval?.dispose();
         if (!backgroundCleanupDeferred) {
           try {
-            if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.();
+            if (sandboxed) await shellSandboxRunner.cleanupAfterCommand?.(sandboxLeaseRelease);
           } finally {
             sandboxLeaseRelease?.();
             sandboxLeaseRelease = undefined;

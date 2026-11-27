@@ -167,6 +167,28 @@ function approvalHistory(history: readonly Item[]): ProviderInputItem[] {
   });
 }
 
+/** Cancellation stops waiting on advisory policy; surface disposal stops the policy itself. */
+async function untilAborted(
+  operation: Promise<import('../../engine/index.js').InteractionDecision>,
+  signal: AbortSignal,
+): Promise<import('../../engine/index.js').InteractionDecision> {
+  const cancelled: import('../../engine/index.js').InteractionDecision = { kind: 'deny' };
+  if (signal.aborted) {
+    void operation.catch(() => undefined);
+    return cancelled;
+  }
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<import('../../engine/index.js').InteractionDecision>((resolve) => {
+    onAbort = () => resolve(cancelled);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([operation, aborted]);
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
 /**
  * The session's reviewer (src/session/approval/approval-arbiter.ts), read from the
  * session's current tool generation for every request, so a rebuilt surface and
@@ -186,6 +208,16 @@ export function sessionApprovalReview(
     },
     route: (request) => record()?.surface.approvalRoute?.(request) ?? { kind: 'ask_user' },
     unattended: () => record()?.surface.unattended?.() === true,
+    isHeadless: () => record()?.surface.headlessPolicy === true,
+    async decideHeadless(request, history, review, signal) {
+      const current = record();
+      if (!current) {
+        return request.kind === 'question'
+          ? { kind: 'answer', answer: '', stopAfterApprovalResolution: true }
+          : { kind: 'deny', reason: 'No person is available to approve this in a non-interactive run.' };
+      }
+      return current.scope(() => untilAborted(current.surface.decideInteraction(request, history, review), signal));
+    },
     async review(request, history, signal) {
       const current = record();
       const review = current?.surface.reviewApproval;

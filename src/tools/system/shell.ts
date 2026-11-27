@@ -30,7 +30,7 @@ import { beginForegroundSandboxNetworkApproval } from '../shell/sandbox/sandbox-
 import { isProjectListenerAllowed } from '../shell/sandbox/sandbox-network-store.js';
 import { prepareSandboxProjectCache } from '../shell/sandbox/sandbox-project.js';
 import { createSandboxEnvironment } from '../shell/sandbox/sandbox-env.js';
-import { resolveWorkspaceSandboxTempDir } from '../../shared/utils/shell/temp-dir.js';
+import { SANDBOX_TEMP_DIR, resolveWorkspaceSandboxTempDir } from '../../shared/utils/shell/temp-dir.js';
 import {
   SANDBOX_ESCAPE_INSTRUCTION,
   createSandboxRuntimeConfig,
@@ -1157,7 +1157,7 @@ export function createShellToolDefinition(deps: {
             sandboxTmpDir = resolveWorkspaceSandboxTempDir(cwd);
             const sandboxConfig = createSandboxRuntimeConfig({
               cwd,
-              tmpDir: sandboxTmpDir,
+              tmpDir: SANDBOX_TEMP_DIR,
               allowWrite: !readOnlyFilesystem,
               readPolicy: settingsService.get('sandbox.readPolicy'),
               allowNetworking: settingsService.get('sandbox.allowNetworking') === true,

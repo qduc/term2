@@ -180,11 +180,15 @@ function sessionStart(
   };
 }
 
-export const directServeToolPosture = (allowWrite: boolean, autoApprove = false) => ({
+export const directServeToolPosture = (
+  allowWrite: boolean,
+  autoApprove = false,
+  options: { readonly allowUnsandboxed?: boolean; readonly sshEnabled?: boolean } = {},
+) => ({
   allowWrite,
   autoApprove,
-  allowUnsandboxed: false as const,
-  sshEnabled: false as const,
+  allowUnsandboxed: options.allowUnsandboxed ?? false,
+  sshEnabled: options.sshEnabled ?? false,
 });
 
 function forbidden(): DirectProtocolError {

@@ -20,6 +20,8 @@ export function WelcomeChecklist() {
   const isDraft = useChatFacts((f) => f.isDraft);
   const hasAnyConfiguredProvider = useChatFacts((f) => f.hasAnyConfiguredProvider);
   const selectedWorkspaceId = useChatFacts((f) => f.selectedWorkspaceId);
+  const hostWorkspaceId = useChatFacts((f) => f.hostWorkspaceId);
+  const selectedWorkspaceKind = useChatFacts((f) => f.selectedWorkspaceKind);
   const selectedWorkspaceInfo = useChatFacts((f) => f.selectedWorkspaceInfo, shallowEqual);
   const startingChat = useChatFacts((f) => f.startingChat);
   const settingsLoaded = useStoreSelector(shell.data.settings, (s) => Boolean(s.data));
@@ -98,29 +100,50 @@ export function WelcomeChecklist() {
               <div>
                 <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                   {selectedWorkspaceId
-                    ? `Folder ready: ${selectedWorkspaceInfo.displayName}`
+                    ? selectedWorkspaceKind === 'host'
+                      ? `Ready: ${selectedWorkspaceInfo.displayName}`
+                      : `Folder ready: ${selectedWorkspaceInfo.displayName}`
                     : 'Choose a folder to work in'}
                 </h3>
                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
                   {selectedWorkspaceId
-                    ? `${
-                        selectedWorkspaceInfo.access === 'read_write'
-                          ? 'Read & write access'
-                          : 'Read-only access'
-                      } · only files inside this folder are visible to Term2.`
-                    : 'Pick a local folder so Term2 can read and answer questions about your files.'}
+                    ? selectedWorkspaceKind === 'host'
+                      ? `${
+                          selectedWorkspaceInfo.access === 'read_write'
+                            ? 'Read & write access'
+                            : 'Read-only access'
+                        } · free-roaming mode across any directory you approve.`
+                      : `${
+                          selectedWorkspaceInfo.access === 'read_write'
+                            ? 'Read & write access'
+                            : 'Read-only access'
+                        } · only files inside this folder are visible to Term2.`
+                    : 'Pick a local folder, or start directly on this machine without pinning to one directory.'}
                 </p>
               </div>
             </div>
             {localControlEnabled && (
-              <Button
-                type="button"
-                size="sm"
-                variant={!selectedWorkspaceId && hasAnyConfiguredProvider ? 'default' : 'outline'}
-                onClick={openFolderDialog}
-              >
-                {selectedWorkspaceId ? 'Change' : 'Browse'}
-              </Button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {!selectedWorkspaceId && hostWorkspaceId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={startingChat}
+                    onClick={() => void ops.createNewChat(hostWorkspaceId)}
+                  >
+                    This machine (~)
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={!selectedWorkspaceId && hasAnyConfiguredProvider ? 'default' : 'outline'}
+                  onClick={openFolderDialog}
+                >
+                  {selectedWorkspaceId ? 'Change' : 'Browse'}
+                </Button>
+              </div>
             )}
           </div>
 

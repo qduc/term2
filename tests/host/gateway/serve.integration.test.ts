@@ -953,7 +953,11 @@ describe('term2 serve (child process)', () => {
     expect(removed).toMatchObject({ workspaceId, removed: true });
     expect(removed.closedSessions).toBeGreaterThanOrEqual(2);
     expect(storedGrants()).toEqual([]);
-    expect((await ok('GET', '/workspaces', undefined, 'workspace_list')).workspaces).toEqual([]);
+    expect(
+      (await ok('GET', '/workspaces', undefined, 'workspace_list')).workspaces.filter(
+        (w: { kind?: string }) => w.kind !== 'host',
+      ),
+    ).toEqual([]);
     expect((await ok('GET', '/sessions', undefined, 'session_list')).sessions).toEqual([]);
     expect(await call('POST', `/sessions/${sessionId}`, {}, 'session_read', { sessionId })).toMatchObject(forbidden);
     expect(

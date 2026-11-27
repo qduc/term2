@@ -6,7 +6,17 @@
  * defaults to `off` (ask) and can be configured per session or via safe settings.
  */
 import { appendFile } from 'node:fs/promises';
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -235,6 +245,7 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         toolPolicy: directServeToolPosture(
           workspace.access === 'read_write' && current.workspaceAccess === 'read_write' && allowWrite,
           current.approvalMode !== 'off',
+          { allowUnsandboxed: grants.kindOf(grant.workspaceId) === 'host' },
         ),
         configRevision: current.commandRevision,
         defaultsRevision,
@@ -243,6 +254,7 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
     async listFiles(principal, snapshot) {
       const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
       const { workspace } = grants.resolveWorkspace(principal, grant);
+      if (grants.kindOf(grant.workspaceId) === 'host') return { entries: [], truncated: true };
       const scanned = await scanDirectoryEntries(workspace.root, { maxDepth: 12, maxTotalEntries: 2_000 });
       return { entries: scanned.entries, truncated: scanned.truncated };
     },
@@ -331,9 +343,30 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     await warnIfSandboxUnavailable('serve', (line) => process.stderr.write(`${line}\n`));
 
     // Grants and globals live here, in this state directory, and never in a conversation.
+    const hostRoot = realpathSync(homedir());
+    const hostWritable =
+      args.allowWrite &&
+      (() => {
+        try {
+          accessSync(hostRoot, constants.W_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      })();
     const grants = new DirectWorkspaceAuthority({
       allowWrite: args.allowWrite,
       stateDirectory: stateDir,
+      staticGrants: [
+        {
+          workspaceId: 'host',
+          ownerUserId: args.localOwnerUserId,
+          label: 'This machine (~)',
+          root: hostRoot,
+          access: hostWritable ? 'read_write' : 'read',
+          kind: 'host',
+        },
+      ],
     });
     const product = createDirectProductPorts();
     const capabilities = {
@@ -361,11 +394,11 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       // The browser changes global settings through `configuration`; launch-time
       // selection settings are a stale copy and must not seed a new chat's model.
       resolveDefaultModel: () => configuration.currentModelSelection(),
-      surface: () => ({
+      surface: (_sessionId, ctx) => ({
         autoApprove: false,
         interactive: true,
         sessionBrowser: true,
-        allowUnsandboxed: false,
+        allowUnsandboxed: ctx?.binding ? grants.kindOf(ctx.binding.id) === 'host' : false,
         shellEscapeApproval: true,
         preserveSandboxedShellApproval: true,
         // By-design: see scripts/surface-parity-exceptions.json (appWiring.mcp).

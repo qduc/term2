@@ -14,6 +14,7 @@ import type { DirectRolloverPreparer } from '../session/session-rotation.js';
 import type { DirectVerificationOperations } from '../session/goal-verification.js';
 import { DEFAULT_BUDGETS } from '../session/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/store.js';
+import type { Workspace } from '../tools/index.js';
 import { createToolSurface, probeReadSessionSandbox } from './tool-surface.js';
 import { sessionApprovalReview, workspaceSnapshotPort } from './lib/approval-model.js';
 import type { DirectHookRuntime } from './application-hooks.js';
@@ -76,7 +77,10 @@ export type DirectRuntimeOptions = {
   /** Stamped on every session this application creates, and required of every one it opens. */
   readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
-  readonly surface: (sessionId: string) => DirectLauncherSurface;
+  readonly surface: (
+    sessionId: string,
+    context?: { readonly workspace: Workspace; readonly binding?: DirectBinding },
+  ) => DirectLauncherSurface;
   /** Decides whether a session may move to another model. Without it, none may. */
   readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void | Promise<void>;
   /** After any resumed selection is restored, so this reports what actually runs. */
@@ -182,7 +186,7 @@ export function createDirectRuntimes(
         if (key === 'shell.maxOutputLines') trimConfig.maxLines = settings.get('shell.maxOutputLines');
       });
       const suppliedSurfaceOptions = {
-        ...options.surface(context.id),
+        ...options.surface(context.id, { workspace: context.workspace, binding: context.binding }),
         trimConfig: () => trimConfig,
         sandboxAvailable,
       };

@@ -34,6 +34,7 @@ export interface WorkspaceAlias {
   workspaceId: string;
   label: string;
   access: 'read' | 'read_write';
+  kind?: 'directory' | 'host' | 'ssh';
 }
 
 export type SessionStatus = 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';

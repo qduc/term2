@@ -123,46 +123,55 @@ export function Term2SavedFolderMenu({
               <DropdownMenuSeparator />
             </>
           )}
-          <DropdownMenuLabel className="text-xs text-muted-foreground">Access</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={workspace.access}>
-            <DropdownMenuRadioItem
-              value="read_write"
-              disabled={busy || (!allowWrite && workspace.access !== 'read_write')}
-              title={!allowWrite ? 'The server was started with --read-only' : undefined}
-              onSelect={(event) => {
-                event.preventDefault();
-                void changeAccess('read_write');
-              }}
-            >
-              Read and write
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem
-              value="read"
-              disabled={busy}
-              onSelect={(event) => {
-                event.preventDefault();
-                void changeAccess('read');
-              }}
-            >
-              Read only
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-          <p className="px-2 pb-1.5 pt-1 text-xs leading-snug text-muted-foreground">
-            Open chats in this folder restart. Existing chats never get more access than they started with.
-          </p>
-          {error && !confirmingRemove && <p className="px-2 pb-1.5 text-xs text-destructive">{error}</p>}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={busy}
-            onSelect={() => {
-              setError(null);
-              setConfirmingRemove(true);
-            }}
-          >
-            <Trash2 aria-hidden />
-            Remove folder…
-          </DropdownMenuItem>
+          {workspace.kind === 'host' ? (
+            <p className="px-2 py-1.5 text-xs leading-snug text-muted-foreground">
+              Free-roaming mode · starts in ~ and can access any directory you approve (
+              {workspace.access === 'read_write' ? 'read & write' : 'read only'}).
+            </p>
+          ) : (
+            <>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Access</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={workspace.access}>
+                <DropdownMenuRadioItem
+                  value="read_write"
+                  disabled={busy || (!allowWrite && workspace.access !== 'read_write')}
+                  title={!allowWrite ? 'The server was started with --read-only' : undefined}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    void changeAccess('read_write');
+                  }}
+                >
+                  Read and write
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem
+                  value="read"
+                  disabled={busy}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    void changeAccess('read');
+                  }}
+                >
+                  Read only
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <p className="px-2 pb-1.5 pt-1 text-xs leading-snug text-muted-foreground">
+                Open chats in this folder restart. Existing chats never get more access than they started with.
+              </p>
+              {error && !confirmingRemove && <p className="px-2 pb-1.5 text-xs text-destructive">{error}</p>}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={busy}
+                onSelect={() => {
+                  setError(null);
+                  setConfirmingRemove(true);
+                }}
+              >
+                <Trash2 aria-hidden />
+                Remove folder…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

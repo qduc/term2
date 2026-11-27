@@ -18,9 +18,9 @@ Tracks every step of [the singleton daemon plan](README.md), its status, key art
 | 11 | Sub-module zoom-ins (Host full, Web client, Runtime shallow) | Done | `zoom/host-and-runtime.md`, `zoom/web-client.md` | `3c37277` |
 | 13 | Prototype session-list stream (web sidebar) & feed back into review | Done | `SessionIndex`, `GET /sessions/events`, BFF + web sidebar live push (17/17 browser flows pass) | `3c37277` |
 | 12 | Recheck draft spec & freeze Client API v1.0 | Done | Frozen 2026-11-27 (D008) | `3c37277` |
-| 14a | Daemon core (Unix socket + lifecycle + headless policy + sandbox lease fix) | Done | `DaemonUnixServer`, `DaemonRpc`, `GlobalMutationCoordinator`, `startTerm2Daemon`, `connectOrStartDaemon`, `term2 daemon [start\|status\|stop]`, D003 session-owned headless approvals, scoped sandbox leases | pending PR |
-| 14b | Remote `DirectConnection` over Unix socket | Next | Depends on Step 14a | — |
-| 14c | Headless client over daemon | Pending | Depends on Step 14b | — |
-| 14d | TUI zoom-in + TUI client over daemon | Pending | Depends on Step 14c | — |
+| 14a | Daemon core (Unix socket + lifecycle + headless policy + sandbox lease fix) | Done | `DaemonUnixServer`, `DaemonRpc`, `GlobalMutationCoordinator`, `startTerm2Daemon`, `connectOrStartDaemon`, `term2 daemon [start\|status\|stop]`, D003 session-owned headless approvals, scoped sandbox leases | `bf0ef68` |
+| 14b | Remote `DirectConnection` over Unix socket | Done | `UnixRpcClient`, `createRemoteDirectHost`, `connectRemoteDirectHost`, `remote-direct-host.integration.test.ts` | pending PR |
+| 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | pending PR |
+| 14d | TUI zoom-in + TUI client over daemon | Next | Depends on Step 14c | — |
 | 14e | Control socket, Discord (and ACP) clients over daemon | Pending | Depends on Step 14d | — |
 | 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e | — |

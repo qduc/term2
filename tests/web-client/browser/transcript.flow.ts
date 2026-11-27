@@ -559,3 +559,95 @@ test('standard mode keeps thinking blocks collapsed by default, preserves user-o
   await expectSameTranscriptAfterReload(page, await transcript(page));
   expect(app.model.unscripted()).toEqual([]);
 });
+
+const LONG_REPLY = Array.from({ length: 8 }, (_, i) => `Sentence ${i + 1} of a long reply arrives in one chunk.`).join(
+  ' ',
+);
+
+/** Samples the reply paragraph every frame: how many characters it shows and the most fading spans it held. */
+async function watchReply(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __replyLengths: number[]; __fadeSpans: number };
+    w.__replyLengths = [];
+    w.__fadeSpans = 0;
+    const loop = () => {
+      const reply = [...document.querySelectorAll('[role="log"] article .md-content p')].find((p) =>
+        p.textContent?.startsWith('Sentence 1'),
+      );
+      if (reply) {
+        const length = reply.textContent?.length ?? 0;
+        if (w.__replyLengths.at(-1) !== length) w.__replyLengths.push(length);
+        w.__fadeSpans = Math.max(w.__fadeSpans, reply.querySelectorAll('.t2-fade').length);
+      }
+      requestAnimationFrame(loop);
+    };
+    loop();
+  });
+}
+
+async function replySamples(page: import('@playwright/test').Page): Promise<{ lengths: number[]; fadeSpans: number }> {
+  return page.evaluate(() => {
+    const w = window as unknown as { __replyLengths: number[]; __fadeSpans: number };
+    return { lengths: w.__replyLengths, fadeSpans: w.__fadeSpans };
+  });
+}
+
+test('a reply that arrives in one chunk is revealed at a steady pace with a fade, then settles to plain text', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'stream a long reply smoothly';
+  const app = await launch({ scripts: { [prompt]: [{ text: LONG_REPLY, hold: 'long-reply' }] } });
+
+  await openDraftChat(page, app);
+  await watchReply(page);
+  await send(page, prompt);
+  await app.model.held('long-reply');
+  const turn = turns(page).first();
+  await expect(turn).toContainText(LONG_REPLY);
+
+  // The whole reply arrived at once, but the page grew it over many frames, fading the newest text in.
+  // The sampler reads the page once per frame; let it see the finished reply.
+  await expect.poll(async () => (await replySamples(page)).lengths.at(-1)).toBe(LONG_REPLY.length);
+  const { lengths, fadeSpans } = await replySamples(page);
+  expect(lengths.length).toBeGreaterThan(10);
+  expect(lengths[0]).toBeLessThan(LONG_REPLY.length / 4);
+  expect(lengths).toEqual([...lengths].sort((a, b) => a - b));
+  expect(fadeSpans).toBeGreaterThan(0);
+
+  // Once the turn ends and the fade has run, the reply is plain markdown again.
+  app.model.release('long-reply');
+  await expect(turn.getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  await expect(turn.locator('.t2-fade')).toHaveCount(0);
+
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  expect(app.model.unscripted()).toEqual([]);
+});
+
+test('with reduced motion a streaming reply shows as it arrives, without pacing or fading', async ({
+  page,
+  launch,
+}) => {
+  const prompt = 'stream a long reply without motion';
+  const app = await launch({ scripts: { [prompt]: [{ text: LONG_REPLY, hold: 'long-reply' }] } });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+
+  await openDraftChat(page, app);
+  await watchReply(page);
+  await send(page, prompt);
+  await app.model.held('long-reply');
+  const turn = turns(page).first();
+  await expect(turn).toContainText(LONG_REPLY);
+
+  // The sampler reads the page once per frame; let it see the finished reply.
+  await expect.poll(async () => (await replySamples(page)).lengths.at(-1)).toBe(LONG_REPLY.length);
+  const { lengths, fadeSpans } = await replySamples(page);
+  expect(lengths).toEqual([LONG_REPLY.length]);
+  expect(fadeSpans).toBe(0);
+
+  app.model.release('long-reply');
+  await expect(turn.getByRole('button', { name: 'Copy reply' })).toBeVisible();
+  await expectNoRunningTurn(page);
+  expect(app.model.unscripted()).toEqual([]);
+});

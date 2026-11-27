@@ -5,6 +5,7 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import hljs from 'highlight.js/lib/common';
 import { Check, Copy } from 'lucide-react';
+import type { RevealFade } from './useSmoothText';
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -123,15 +124,78 @@ const components: Components = {
 
 const remarkPlugins = [remarkGfm];
 
+/** The slice of the HTML syntax tree the fade plugin touches. */
+type HastNode = {
+  type: string;
+  tagName?: string;
+  value?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+  position?: { start: { offset?: number }; end: { offset?: number } };
+};
+
+/**
+ * Wraps the newest characters of a streaming reply in fading spans. Each run of characters that
+ * appeared together gets one span whose animation is backdated to when it appeared, so a re-render,
+ * or markdown closing around it (`**bold**`), continues the fade instead of restarting it. Source
+ * offsets map to text offsets one to one except inside escapes, where a fade may start a character
+ * early or late. Code is left alone: fading tokens inside highlighted code reads as noise.
+ */
+function rehypeRevealFade(fade: RevealFade) {
+  const split = (node: HastNode): HastNode[] | null => {
+    const from = node.position?.start.offset;
+    const to = node.position?.end.offset;
+    if (from === undefined || to === undefined || to <= fade.start) return null;
+    const out: HastNode[] = [];
+    const value = node.value ?? '';
+    const at = (offset: number) => Math.max(0, Math.min(value.length, offset - from));
+    let cursor = at(fade.start);
+    if (cursor > 0) out.push({ type: 'text', value: value.slice(0, cursor) });
+    for (const batch of fade.batches) {
+      const end = at(batch.end);
+      if (end <= cursor) continue;
+      out.push({
+        type: 'element',
+        tagName: 'span',
+        properties: { className: ['t2-fade'], style: `animation-delay:-${Math.round(fade.now - batch.at)}ms` },
+        children: [{ type: 'text', value: value.slice(cursor, end) }],
+      });
+      cursor = end;
+    }
+    if (cursor < value.length) out.push({ type: 'text', value: value.slice(cursor) });
+    return out;
+  };
+  const walk = (node: HastNode) => {
+    if (!node.children) return;
+    if (node.tagName === 'code' || node.tagName === 'pre') return;
+    node.children = node.children.flatMap((child) => {
+      if (child.type === 'text') return split(child) ?? [child];
+      walk(child);
+      return [child];
+    });
+  };
+  return () => (tree: HastNode) => walk(tree);
+}
+
 /**
  * Renders agent text as GitHub-flavoured markdown. Raw HTML is not enabled
  * (react-markdown ignores it by default), so model output cannot inject markup.
  * Memoised on the text so earlier turns do not re-parse while the latest streams.
+ * `fade`, given only while a reply streams, fades in its newest characters.
  */
-export const Term2Markdown = memo(function Term2Markdown({ text, className }: { text: string; className?: string }) {
+export const Term2Markdown = memo(function Term2Markdown({
+  text,
+  className,
+  fade,
+}: {
+  text: string;
+  className?: string;
+  fade?: RevealFade | null;
+}) {
+  const rehypePlugins = useMemo(() => (fade ? [rehypeRevealFade(fade)] : []), [fade]);
   return (
     <div className={`md-content text-[15px] leading-[1.7] text-zinc-800 dark:text-zinc-200 ${className ?? ''}`}>
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
         {text}
       </ReactMarkdown>
     </div>

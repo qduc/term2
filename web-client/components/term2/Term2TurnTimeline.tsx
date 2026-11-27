@@ -6,6 +6,7 @@ import type { Term2Command, Term2TurnItem, Term2TurnView } from '../../lib/term2
 import { Term2Markdown } from './Term2Markdown';
 import { Term2ToolGroup } from './Term2ToolGroup';
 import { Term2UserContent } from './Term2UserContent';
+import { useSmoothText } from './useSmoothText';
 
 /**
  * How tool activity reads, matching the TUI's `ui.displayMode`: `standard` shows one
@@ -140,6 +141,12 @@ function ReasoningBlock({ text, streaming }: { text: string; streaming: boolean 
   );
 }
 
+/** Reply text: paced and faded in while it streams, plain markdown otherwise. */
+function ReplyText({ text, streaming }: { text: string; streaming: boolean }) {
+  const smooth = useSmoothText(text, streaming);
+  return <Term2Markdown text={smooth.text} fade={smooth.fade} />;
+}
+
 export const Term2TurnTimeline = memo(function Term2TurnTimeline({
   turn,
   displayMode,
@@ -184,7 +191,14 @@ export const Term2TurnTimeline = memo(function Term2TurnTimeline({
           );
         }
 
-        return <Term2Markdown key={`text:${textOrdinal++}`} text={segment.text} />;
+        return (
+          <ReplyText
+            key={`text:${textOrdinal++}`}
+            text={segment.text}
+            // Only the turn's newest segment can still grow.
+            streaming={turn.status === 'streaming' && index === segments.length - 1}
+          />
+        );
       })}
     </>
   );

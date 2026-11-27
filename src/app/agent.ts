@@ -386,6 +386,9 @@ export const getAgentDefinition = (
     workspaceWritable: !readOnly,
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
     fileReadEnabled: filesystemReadEnabled,
+    backgroundShellEnabled: Boolean(
+      backgroundTasksEnabled && allowBackgroundShell && !shellWithheld && backgroundShellRegistry,
+    ),
   });
   let prompt = promptSpec.basePromptContent;
   for (const inlineSection of promptSpec.inlineSections) {

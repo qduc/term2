@@ -5,7 +5,12 @@ export type ScriptEditorSurface = 'patch' | 'editors' | 'none';
 /** Render Bare's tool guidance from the same effective surface used by registration. */
 export function renderBareToolGuidance(
   content: string,
-  options: { fileReadEnabled: boolean; shellEnabled: boolean; editorSurface: ScriptEditorSurface },
+  options: {
+    fileReadEnabled: boolean;
+    shellEnabled: boolean;
+    backgroundShellEnabled?: boolean;
+    editorSurface: ScriptEditorSurface;
+  },
 ): string {
   const tools: string[] = [];
   const rules: string[] = [];
@@ -13,6 +18,11 @@ export function renderBareToolGuidance(
   if (options.shellEnabled) {
     tools.push('- shell: Execute shell commands');
     rules.push('- Use shell for file operations like ls, rg, and find.');
+  }
+  if (options.backgroundShellEnabled) {
+    rules.push(
+      '- To wait for something (CI, a deploy, a slow command), start one background shell command that exits when the wait is over, then end your turn: its exit wakes you. Make it exit on every final state (success, failure, cancelled, timeout), not only success. Never sleep or poll in the foreground.',
+    );
   }
   if (options.fileReadEnabled) rules.push('- Use read_file to examine files instead of cat or sed.');
   if (options.editorSurface === 'editors') {

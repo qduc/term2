@@ -20,12 +20,12 @@ export function ChatColumn() {
   const pageError = useShellState((s) => s.pageError);
   const status = useSessionView((v) => v.status);
   const viewError = useSessionView((v) => v.error);
-  const { scrollRef, lastScrollTopRef, onScroll, scrollToLatest } = useTranscriptScroll();
+  const { scrollRef, lastScrollTopRef, readerScrollsRef, onScroll, scrollToLatest } = useTranscriptScroll();
 
   return (
     // Hidden, not unmounted, while settings is open so the chat keeps its draft and running stream.
     <div
-      className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen ? '' : 'md:pl-2'} ${
+      className={`flex min-w-0 flex-1 flex-col md:py-2 md:pr-2 ${sidebarOpen === false ? 'md:pl-2' : ''} ${
         settingsOpen ? 'hidden!' : ''
       }`}
     >
@@ -66,7 +66,7 @@ export function ChatColumn() {
               <DiagnosticsDetails />
             </div>
           </div>
-          <TranscriptPin scrollRef={scrollRef} lastScrollTopRef={lastScrollTopRef} />
+          <TranscriptPin scrollRef={scrollRef} lastScrollTopRef={lastScrollTopRef} readerScrollsRef={readerScrollsRef} />
           <ChatDock scrollToLatest={scrollToLatest} />
         </section>
       </div>

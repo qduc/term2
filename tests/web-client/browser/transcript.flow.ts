@@ -651,3 +651,94 @@ test('with reduced motion a streaming reply shows as it arrives, without pacing 
   await expectNoRunningTurn(page);
   expect(app.model.unscripted()).toEqual([]);
 });
+
+const SCROLL_ROOM = Array.from(
+  { length: 30 },
+  (_, i) => `Paragraph ${i + 1}: an earlier reply long enough that the conversation scrolls.`,
+).join('\n\n');
+
+/** The conversation's scroll offset and height, and where the newest reply's first line sits in the visible area. */
+async function scrollState(
+  page: import('@playwright/test').Page,
+): Promise<{ top: number; height: number; replyOffset: number | null }> {
+  return page.getByRole('log', { name: 'Conversation' }).evaluate((log) => {
+    const scroller = log.querySelector('[data-turn-id]')?.closest('.overflow-y-auto') as HTMLElement | null;
+    const starts = log.querySelectorAll('[data-reply-start]');
+    const start = starts[starts.length - 1];
+    return {
+      top: Math.round(scroller?.scrollTop ?? -1),
+      height: scroller?.clientHeight ?? 0,
+      replyOffset:
+        scroller && start ? Math.round(start.getBoundingClientRect().top - scroller.getBoundingClientRect().top) : null,
+    };
+  });
+}
+
+/** Scrolls the conversation to its very top with the mouse wheel, as a reader would. */
+async function scrollToTop(page: import('@playwright/test').Page): Promise<void> {
+  const box = (await page.getByRole('log', { name: 'Conversation' }).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+  await page.mouse.wheel(0, -100_000);
+  await expect.poll(async () => (await scrollState(page)).top).toBe(0);
+}
+
+test('a reply brings a reader who just sent into view, and leaves a reader who scrolled up afterwards where they are', async ({
+  page,
+  launch,
+}) => {
+  const first = 'give me a long answer to scroll through';
+  const sentFromAbove = 'look at a.txt';
+  const scrolledAway = 'look at b.txt while I read back';
+  const app = await launch({
+    files: { 'a.txt': 'alpha\n', 'b.txt': 'beta\n' },
+    scripts: {
+      [first]: [{ text: SCROLL_ROOM }],
+      [sentFromAbove]: [
+        { call: { tool: 'read_file', args: { path: 'a.txt' } }, hold: 'sent-tool' },
+        { text: 'The reader who sent from above sees this.', hold: 'sent-reply' },
+      ],
+      [scrolledAway]: [
+        { call: { tool: 'read_file', args: { path: 'b.txt' } }, hold: 'away-tool' },
+        { text: 'The reader who scrolled up is not pulled down to this.', hold: 'away-reply' },
+      ],
+    },
+  });
+
+  await openDraftChat(page, app);
+  await send(page, first);
+  await expect(turns(page).first()).toContainText('Paragraph 30');
+  await expectNoRunningTurn(page);
+
+  // Sending is asking for the answer: a reader who scrolled up and then sent is brought to the reply.
+  await scrollToTop(page);
+  await send(page, sentFromAbove);
+  await app.model.held('sent-tool');
+  app.model.release('sent-tool');
+  await app.model.held('sent-reply');
+  await expect(turns(page).nth(1)).toContainText('The reader who sent from above');
+  await expect
+    .poll(async () => {
+      const { replyOffset, height } = await scrollState(page);
+      return replyOffset !== null && replyOffset >= 0 && replyOffset < height;
+    })
+    .toBe(true);
+  app.model.release('sent-reply');
+  await expectNoRunningTurn(page);
+
+  // Scrolling up after sending means reading something else: the first reply text must not move the view.
+  await send(page, scrolledAway);
+  await app.model.held('away-tool');
+  await scrollToTop(page);
+  app.model.release('away-tool');
+  await app.model.held('away-reply');
+  await expect(turns(page).nth(2)).toContainText('The reader who scrolled up');
+  // Give the page a few frames to (wrongly) reposition before reading the offset.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect((await scrollState(page)).top).toBe(0);
+  app.model.release('away-reply');
+  await expectNoRunningTurn(page);
+  expect((await scrollState(page)).top).toBe(0);
+
+  await expectSameTranscriptAfterReload(page, await transcript(page));
+  expect(app.model.unscripted()).toEqual([]);
+});

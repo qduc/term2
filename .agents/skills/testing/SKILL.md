@@ -111,6 +111,10 @@ its own `dist/web.js` (gateway plus the built web UI) in an isolated world again
 double (`launch.ts`), drives the page, records the transcript once the turn has settled, reloads, and
 requires the same transcript.
 
+- CI runs three workers (`playwright.config.ts`). The flows are wait-bound, so more workers cut wall time,
+  but at four (2026-11-27, `fc45b4f`) the concise tool-row flow in `transcript.flow.ts` failed 1 in 68 runs:
+  under load the settled "Read b.txt" label and the reply's first chunk landed in one render, so its
+  MutationObserver never saw the label. Re-measure that flow under load before raising the count.
 - Build first, in this order: `pnpm build`, then `node scripts/build-web.mjs`. `pnpm build` replaces
   `dist/`, which removes `dist/web.js` and `dist/web-client`; the flows read the built page, so a web
   source change needs `build-web.mjs` again before it shows.

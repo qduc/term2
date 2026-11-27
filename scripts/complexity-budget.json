@@ -270,16 +270,16 @@
       "reason": "The direct child launcher prepares one launch: definition resolution, worktree pinning, the child's tool graph and its instructions. Four lines over the default limit withhold shell from every child of a read session whose sandbox cannot run, at the one point all launch paths (role, agent_spec, run_code, continuation) share. Lower the ceiling if launch preparation is split from tool-graph assembly."
     },
     "web-client/lib/api/term2.ts": {
-      "lines": 1213,
-      "reason": "The browser's one HTTP facade and its response validators; recorded when the gate first covered web-client (2026-11). Split validators from the client object when it is next reworked. Ten lines (#444) make validateModels skip one malformed entry and drop an invalid display name instead of rejecting the whole aggregated model list; a custom provider's multi-paragraph `name` had blanked every provider's models in Settings."
+      "lines": 1247,
+      "reason": "The browser's one HTTP facade and its response validators; recorded when the gate first covered web-client (2026-11). Split validators from the client object when it is next reworked. Ten lines (#444) make validateModels skip one malformed entry and drop an invalid display name; 34 lines add validateServerCapabilities inside validateSettings so the browser validates server-advertised capabilities alongside safety."
     },
     "web-client/components/term2/settings/ProvidersSection.tsx": {
       "lines": 977,
       "reason": "Recorded when the gate first covered web-client (2026-11); the settings page was out of scope of the shell decomposition. Split per provider form when settings is next reworked."
     },
     "web-client/lib/term2/types.ts": {
-      "lines": 958,
-      "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11)."
+      "lines": 969,
+      "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11). Eleven lines add ServerTaskAction and ServerCapabilities to SettingsProjection."
     },
     "web-client/components/term2/settings/Term2SettingsPage.tsx": {
       "lines": 920,

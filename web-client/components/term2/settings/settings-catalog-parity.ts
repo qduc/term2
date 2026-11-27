@@ -108,6 +108,7 @@ export const CONTEXT_ITEMS: SettingItem[] = [
     label: 'Session rollover reminders',
     keywords: ['rollover', 'new session', 'handoff', 'milestone'],
     description: 'Remind the agent as the context fills up, so it can plan to continue in a fresh session.',
+    visibleWhen: (projection) => projection.capabilities?.rollover !== false,
   },
   {
     id: 'agent.sessionRollover.autoBrief',
@@ -118,7 +119,8 @@ export const CONTEXT_ITEMS: SettingItem[] = [
     label: 'Carry the handoff brief over',
     keywords: ['rollover', 'brief', 'handoff'],
     description: 'Pass the agent’s handoff brief into the new session automatically.',
-    visibleWhen: isOn('agent.sessionRollover.enabled'),
+    visibleWhen: (projection) =>
+      projection.capabilities?.rollover !== false && isOn('agent.sessionRollover.enabled')(projection),
   },
   {
     id: 'memory.directory',

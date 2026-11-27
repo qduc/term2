@@ -295,14 +295,25 @@ export interface SettingsProjection {
       sandbox: 'enabled' | 'disabled' | 'unavailable';
       showReview?: boolean;
       approval: 'off' | 'advisory' | 'auto' | 'unattended' | 'unsafe-active' | 'hidden';
-      backgroundShell: 'disabled-by-gateway';
+      backgroundShell: 'enabled' | 'disabled-by-gateway';
       workspaceAccess: 'read' | 'read_write';
       network: 'denied' | 'configured' | 'confirmation-required';
     };
   };
   /** Display-only machine fact. Absent when the shell sandbox can run. */
   shellSandboxNotice?: ShellSandboxNotice;
+  /** Runtime capabilities advertised by the server so the UI hides unsupported controls. */
+  capabilities?: ServerCapabilities;
   session?: SessionConfigRecord;
+}
+export type ServerTaskAction = 'cancel' | 'background' | 'check_in' | 'foreground';
+export interface ServerCapabilities {
+  readonly sessionBrowser: boolean;
+  readonly rollover: boolean;
+  readonly backgroundShell: boolean;
+  readonly goalsWrite: boolean;
+  readonly approvalReviewTakeover: boolean;
+  readonly taskActions: readonly ServerTaskAction[];
 }
 export interface ShellSandboxNotice {
   code: string;

@@ -5,16 +5,16 @@
       "reason": "launch-serve.ts does not yet wire sessionBrowser: true, which disables session_list/search/read tools, contextMilestones reminders, and model-initiated session_rollover on the web server; remove once serve enables sessionBrowser and web-client renders rollover boundaries."
     },
     "mcp": {
-      "status": "deferred",
-      "reason": "launch-serve.ts does not yet open per-workspace MCP connections or expose MCP OAuth/status endpoints; remove once MCP lifecycle and HTTP endpoints are wired for term2 serve."
+      "status": "by-design",
+      "reason": "MCP server lifecycle and OAuth are intentionally terminal-only for now; web chats run without per-workspace MCP server processes."
     },
     "mcpCatalog": {
-      "status": "deferred",
-      "reason": "launch-serve.ts omits mcpCatalog alongside per-session mcp wiring because no MCP manager runs in the web server process yet; remove together with appWiring.mcp."
+      "status": "by-design",
+      "reason": "MCP catalog refresh is intentionally terminal-only alongside appWiring.mcp because no MCP manager runs in term2 serve."
     },
     "hooks": {
-      "status": "deferred",
-      "reason": "launch-serve.ts passes hooks: null because public hook execution and trusted-root management are only wired for local CLI modes (TUI and headless); remove once serve supports hooks safely."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (TUI and headless) to keep term2 serve's sandboxed execution boundary narrow."
     }
   },
   "serverCommands": {
@@ -31,28 +31,28 @@
       "reason": "POST /sessions/:id/commands supports retry-turn and retry-tool when idle, but does not yet accept an executionId target for retrying a specific tool call; remove once executionId is validated and forwarded."
     },
     "configure": {
-      "status": "deferred",
-      "reason": "POST /sessions/:id/config supports modelSelection, reasoningEffort, mode, and approvalMode, but does not yet accept per-session temperature overrides; remove once temperature is exposed or retired."
+      "status": "by-design",
+      "reason": "POST /sessions/:id/config intentionally omits per-session temperature overrides because agent.temperature is deliberately hidden in the web UI (NEVER_SHOWN_KEYS)."
     },
     "queue_edit": {
       "status": "deferred",
       "reason": "POST /sessions/:id/queue validates text-only edits for queued messages and does not yet allow editing attachments; remove once attachment edits are validated and forwarded."
     },
     "command_status": {
-      "status": "deferred",
-      "reason": "src/host/server*.ts has no standalone command_status lookup endpoint because clients currently rely on idempotent command retries and snapshot.commands; remove once a status route is added."
+      "status": "by-design",
+      "reason": "src/host/server*.ts intentionally omits a standalone command_status endpoint because web clients rely on idempotent command retries and snapshot.commands."
     },
     "reset": {
-      "status": "deferred",
-      "reason": "src/host/server*.ts does not expose the native reset (/clear) command; web-client starts a new chat instead of resetting a logical session in place; remove once reset is routed or retired."
+      "status": "by-design",
+      "reason": "Web intentionally uses draft-first New chat in the sidebar instead of resetting an existing logical session in place via /clear."
     },
     "rollover": {
       "status": "deferred",
       "reason": "server-commands.ts rejects rollover with 422 command_not_allowed because sessionBrowser and rollover UI boundaries are not yet wired for web; remove alongside appWiring.sessionBrowser."
     },
     "preview": {
-      "status": "deferred",
-      "reason": "src/host/server*.ts does not expose the pre-send input preview command for input-surge or large-uncached-context confirmation; remove once preview is routed and wired in web-client."
+      "status": "by-design",
+      "reason": "Pre-send input-surge and large-uncached-context confirmation is intentionally terminal-only for now; web submits directly without a preview round-trip."
     }
   },
   "webEvents": {
@@ -123,32 +123,32 @@
       "reason": "Web uses a single browser-local notification toggle rather than per-event terminal notification flags; revisit if granular browser notification toggles are added."
     },
     "hooks.includeToolArguments": {
-      "status": "deferred",
-      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
     },
     "hooks.includeToolResults": {
-      "status": "deferred",
-      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
     },
     "hooks.includeUserText": {
-      "status": "deferred",
-      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
     },
     "hooks.project.enabled": {
-      "status": "deferred",
-      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
     },
     "hooks.timeoutMs": {
-      "status": "deferred",
-      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
     },
     "hooks.trustedProjectRoots": {
-      "status": "deferred",
-      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
     },
     "hooks.user.enabled": {
-      "status": "deferred",
-      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+      "status": "by-design",
+      "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
     },
     "shell.backgroundTimeout": {
       "status": "deferred",

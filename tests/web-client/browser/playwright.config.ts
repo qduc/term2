@@ -17,6 +17,10 @@ export default defineConfig({
   outputDir: process.env.TERM2_WEB_FLOW_OUTPUT,
   // Each flow launches its own gateway, web server and model double, so flows can run side by side.
   fullyParallel: true,
+  // Flows mostly wait on their servers: on the 4-vCPU CI runner two workers (Playwright's default there) used
+  // 133-144% CPU, and the lane reached its 120 s budget. Three took the suite from 82 s to 60-65 s locally with
+  // 102 flow runs passing; four (54 s) let the concise tool-row flow miss a transient label under load.
+  workers: process.env.CI ? 3 : undefined,
   forbidOnly: Boolean(process.env.CI),
   // A flow that passes only on a second attempt is a finding, not a pass.
   retries: 0,

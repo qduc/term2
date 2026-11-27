@@ -404,3 +404,24 @@ input[type="password"]::-webkit-credentials-auto-fill-button,
 input[type="password"]::-webkit-textfield-decoration-container {
   display: none !important;
 }
+
+/* Newly revealed reply text fades in while it streams (components/term2/useSmoothText.ts).
+ * Each span's animation-delay is backdated to when its characters appeared. */
+.t2-fade {
+  animation: t2-fade 400ms ease-out both;
+}
+
+@keyframes t2-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t2-fade {
+    animation: none;
+  }
+}

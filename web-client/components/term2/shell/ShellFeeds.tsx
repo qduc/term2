@@ -18,9 +18,9 @@ export function ShellFeeds({ initialSessionId, authUserId }: { initialSessionId:
     dispatch({ type: 'URL_CHANGED', sessionId: initialSessionId });
   }, [initialSessionId, dispatch]);
 
-  // Open the sidebar by default on desktop screens and load saved UI preferences.
+  // Settle the sidebar to what CSS already shows (open on desktop screens) and load saved UI preferences.
   useEffect(() => {
-    if (window.innerWidth >= 768) dispatch({ type: 'SIDEBAR_SET', open: true });
+    dispatch({ type: 'SIDEBAR_SET', open: window.innerWidth >= 768 });
     shell.prefs.hydrate();
   }, [dispatch, shell.prefs]);
 

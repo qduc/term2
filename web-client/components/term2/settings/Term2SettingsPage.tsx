@@ -871,12 +871,10 @@ export function Term2SettingsPage({
               </SelectContent>
             </Select>
           </div>
-          <div
-            className={cn(
-              'mx-auto px-4 py-6 sm:px-6',
-              section === 'providers' && !needle ? 'max-w-5xl' : 'max-w-[720px]',
-            )}
-          >
+          {/* One frame for every section, so the heading keeps its place when switching; the two-pane Providers
+              section uses the frame's full width, the others a readable column at its left. */}
+          <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+            <div className={section === 'providers' && !needle ? undefined : 'max-w-[720px]'}>
             {approvalWaiting && (
               <div
                 role="status"
@@ -890,6 +888,7 @@ export function Term2SettingsPage({
             )}
             {heading}
             {body}
+            </div>
           </div>
         </div>
       </div>

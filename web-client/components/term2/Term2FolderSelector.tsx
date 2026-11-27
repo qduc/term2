@@ -310,6 +310,7 @@ export function Term2FolderSelector({
     return {
       totalVisible: visible.length,
       hiddenCount: dirs.length - visible.length,
+      dotFolderCount: dirs.filter((entry) => entry.name.startsWith('.')).length,
       selectable: matched.filter((entry) => entry.selectable),
       unavailable: matched.filter((entry) => !entry.selectable),
     };
@@ -480,7 +481,7 @@ export function Term2FolderSelector({
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <nav
                 aria-label="Folder breadcrumbs"
-                className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 py-0.5 text-xs scrollbar-thin"
+                className="flex min-h-6 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 py-0.5 text-xs scrollbar-thin"
               >
                 {rootPath && (
                   <button
@@ -578,7 +579,8 @@ export function Term2FolderSelector({
             }`}
           >
             {showHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-            Hidden{!showHidden && directoryEntries.hiddenCount > 0 ? ` (${directoryEntries.hiddenCount})` : ''}
+            {/* The count stays while they are shown, so the toggle keeps its width. */}
+            Hidden{directoryEntries.dotFolderCount > 0 ? ` (${directoryEntries.dotFolderCount})` : ''}
           </button>
         </div>
 
@@ -627,14 +629,15 @@ export function Term2FolderSelector({
         )}
 
         {/* Directory list */}
-        <div className="relative max-h-64 min-h-[12rem] overflow-y-auto scrollbar-thin">
+        {/* A fixed height: showing hidden folders or opening a fuller folder must not resize the dialog. */}
+        <div className="relative h-64 overflow-y-auto scrollbar-thin">
           {busy ? (
-            <div className="flex h-48 items-center justify-center gap-2 text-xs text-zinc-500">
+            <div className="flex h-full items-center justify-center gap-2 text-xs text-zinc-500">
               <Loader2 className="h-4 w-4 animate-spin text-teal-600 dark:text-teal-400" />
               Loading folders…
             </div>
           ) : directoryEntries.selectable.length === 0 && directoryEntries.unavailable.length === 0 ? (
-            <div className="flex h-48 flex-col items-center justify-center gap-1.5 px-4 text-center">
+            <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
               <FolderOpen className="h-7 w-7 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
               {filter ? (
                 <>

@@ -43,7 +43,11 @@ export type Dialog = 'folder' | 'help' | 'rewind' | 'provider';
 export type Panels = {
   /** The running tasks panel: only the user opens or closes it (#394, #396). */
   readonly tasks: boolean;
-  readonly sidebar: boolean;
+  /**
+   * Null until the page has measured the screen: CSS then shows it on wide screens and hides it on small ones, so the
+   * server-rendered first paint already matches and the page does not slide the sidebar in on load.
+   */
+  readonly sidebar: boolean | null;
   readonly dialog: Dialog | null;
   readonly skills: boolean;
 };
@@ -203,7 +207,7 @@ export const initialShellState = (openChat: string | null): ShellState => ({
   sending: null,
   pinned: true,
   drain: null,
-  panels: CLOSED_PANELS,
+  panels: { ...CLOSED_PANELS, sidebar: null },
   configApply: null,
   retryError: null,
   retryDraft: null,

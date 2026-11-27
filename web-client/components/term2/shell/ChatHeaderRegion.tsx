@@ -29,14 +29,15 @@ export function ChatHeaderRegion() {
       subtitle={selectedWorkspaceInfo.displayName || undefined}
       subtitleTooltip={selectedWorkspaceInfo.fullPath || undefined}
       onOpenFolder={localControlEnabled ? () => dispatch({ type: 'DIALOG_OPENED', dialog: 'folder' }) : undefined}
-      onNewChat={!sidebarOpen && selectedWorkspaceId ? () => void ops.createNewChat() : undefined}
+      onNewChat={sidebarOpen === false && selectedWorkspaceId ? () => void ops.createNewChat() : undefined}
       newChatLabel="New chat"
       onOpenHelp={() => dispatch({ type: 'DIALOG_OPENED', dialog: 'help' })}
       onOpenSettings={() => openSettings()}
       showSettingsButton={localControlEnabled}
       onToggleLeftSidebar={() => dispatch({ type: 'SIDEBAR_SET', open: !shell.store.get().panels.sidebar })}
-      showLeftSidebarButton={!sidebarOpen}
-      alwaysShowLeftSidebarButton
+      showLeftSidebarButton={sidebarOpen !== true}
+      // Before the page measures the screen the sidebar shows on desktop only, so its button does too.
+      alwaysShowLeftSidebarButton={sidebarOpen === false}
       leftSidebarToggleLabel="Open chat history"
       showRightSidebarButton={false}
       runningTasks={

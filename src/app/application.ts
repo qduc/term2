@@ -50,6 +50,8 @@ export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly resolveDefaultModel?: () => ModelRef | Promise<ModelRef>;
   /** Automatically drain idle background check-in/completion notices on the host (term2 serve). */
   readonly autoDrainBackgroundNotifications?: boolean;
+  /** Optional lifecycle observer feeding a host-owned SessionIndex without reading logs. */
+  readonly onSessionLifecycle?: import('../host/in-process-direct-types.js').DirectHostDeps['onSessionLifecycle'];
 };
 
 /** Read from the session's own log and runtime, for clients that report it. */
@@ -93,6 +95,8 @@ export type DirectApplication = {
   sessionRoot(principal: Principal, sessionId: string): Promise<string>;
   /** Sessions in one project, without parsing logs from any other project. */
   listWorkspaceSessions(root: string): ReturnType<DirectLocalStore['listWorkspace']>;
+  /** Unfiltered stored session metadata for host-owned SessionIndex seeding. */
+  listStoredSessions(): ReturnType<DirectLocalStore['list']>;
   /** Copies a session this mode may run into a new one, without opening the source. Returns the new id. */
   forkSession(sourceId: string): Promise<string>;
   /** Apply explicit local CLI selection through Session acceptance, without saving defaults. */
@@ -197,6 +201,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     defaultModel: selection.settings.get('agent.modelSelection') as ModelRef,
     ...(options.resolveDefaultModel ? { resolveDefaultModel: options.resolveDefaultModel } : {}),
     ...(options.autoDrainBackgroundNotifications ? { autoDrainBackgroundNotifications: true } : {}),
+    ...(options.onSessionLifecycle ? { onSessionLifecycle: options.onSessionLifecycle } : {}),
     authorize: (principal, access) => authority.authorize(principal, access),
     resolveWorkspace: (principal, grant) => authority.resolveGrant(principal, grant),
     capabilities: (session) => applicationCapabilities(store, runtimes, options.conversationsDir, session),
@@ -223,6 +228,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
         (workspaceRoot, identity) => authority.resolveStored(workspaceRoot, identity),
       );
     },
+    listStoredSessions: () => store.list(),
     async sessionRoot(principal, sessionId) {
       const { sessions } = await host.listSessions(principal);
       const session = sessions.find((candidate) => candidate.id === sessionId);

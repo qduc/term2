@@ -45,19 +45,66 @@ export async function projectServerSession(
       : null,
   };
 }
-export function sessionListItem(snapshot: WireSnapshot, metadata: SessionMetadata) {
+export type DerivedSnapshotSummary = {
+  readonly status: WireSnapshot['status'];
+  readonly awaitingKind?: 'approval' | 'question' | 'budget';
+  readonly title?: string;
+  readonly model?: { readonly provider: string; readonly model: string };
+  readonly latestSequence: number;
+  readonly pendingInteractionCount: number;
+  readonly activeBackgroundTaskCount: number;
+};
+
+/** Normative Client API §5.1 status precedence + summary derivation from a WireSnapshot. */
+export function deriveSnapshotSummary(snapshot: WireSnapshot): DerivedSnapshotSummary {
   const firstUser = snapshot.messages.find((message) => message.role === 'user' && message.text.trim().length > 0);
   const firstLine = firstUser ? firstUser.text.trim().split('\n')[0]!.trim() : '';
   const title = firstLine ? projectionText(firstLine, 120) : undefined;
+  const pendingBudgets = snapshot.pendingBudgets?.length ?? 0;
+  const pendingInteractions = snapshot.pendingInteractions.length;
+  const pendingInteractionCount = pendingInteractions + pendingBudgets;
+  const activeBackgroundTaskCount = (snapshot.tasks ?? []).filter(
+    (task) => task.status === 'running' || task.status === 'awaiting_interaction' || task.status === 'cancelling',
+  ).length;
+  let status: WireSnapshot['status'] = snapshot.status;
+  let awaitingKind: 'approval' | 'question' | 'budget' | undefined;
+  if (snapshot.status === 'closed') {
+    status = 'closed';
+  } else if (pendingBudgets > 0) {
+    status = 'awaiting_interaction';
+    awaitingKind = 'budget';
+  } else if (pendingInteractions > 0) {
+    status = 'awaiting_interaction';
+    awaitingKind = snapshot.pendingInteractions[0]?.kind === 'question' ? 'question' : 'approval';
+  } else if (snapshot.status === 'running') {
+    status = 'running';
+  } else if (snapshot.status === 'interrupted') {
+    status = 'interrupted';
+  } else {
+    status = 'idle';
+  }
+  return {
+    status,
+    ...(awaitingKind ? { awaitingKind } : {}),
+    ...(title ? { title } : {}),
+    ...(snapshot.model ? { model: { provider: snapshot.model.provider, model: snapshot.model.model } } : {}),
+    latestSequence: snapshot.seq ?? 0,
+    pendingInteractionCount,
+    activeBackgroundTaskCount,
+  };
+}
+
+export function sessionListItem(snapshot: WireSnapshot, metadata: SessionMetadata) {
+  const summary = deriveSnapshotSummary(snapshot);
   return {
     id: snapshot.sessionId,
     workspaceId: metadata.workspaceId,
-    status: snapshot.status,
+    status: summary.status,
     createdAt: metadata.createdAt,
     updatedAt: metadata.updatedAt,
     latestSequence: snapshot.seq,
-    ...(title ? { title } : {}),
-    ...(snapshot.model ? { model: { provider: snapshot.model.provider, model: snapshot.model.model } } : {}),
+    ...(summary.title ? { title: summary.title } : {}),
+    ...(summary.model ? { model: summary.model } : {}),
   };
 }
 function transcriptMessages(snapshot: WireSnapshot): Message[] {

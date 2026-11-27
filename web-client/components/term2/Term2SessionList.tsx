@@ -184,7 +184,9 @@ export function Term2SessionList({
   const entries: Entry[] = useMemo(
     () =>
       [...sessions]
-        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .sort((a, b) =>
+          a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+        )
         .map((session) => {
           const name = folderName(session.workspaceId);
           return { session, folderName: name, title: sessionTitle(session, firstMessages?.[session.id], name) };

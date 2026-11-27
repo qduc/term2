@@ -1,0 +1,1480 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://term2.dev/schemas/client-api/1.0/schema.json",
+  "title": "Term2 Client API v1.0",
+  "description": "Generated from src/protocol/client-api/client-api-schema.ts. Do not hand-edit; run `node --import tsx scripts/generate-client-api-schema.mjs`.",
+  "$defs": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "protocol_incompatible",
+            "unauthorized",
+            "forbidden",
+            "not_found",
+            "invalid_request",
+            "stale_revision",
+            "stale_interaction",
+            "busy",
+            "cursor_out_of_range",
+            "env_disconnected",
+            "unavailable",
+            "closed",
+            "internal_error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": {}
+    },
+    "protocolHelloParams": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "minSupportedVersion": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "clientKind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "clientVersion": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+          }
+        }
+      },
+      "required": ["protocolVersion", "minSupportedVersion", "clientKind", "clientVersion"],
+      "additionalProperties": false
+    },
+    "protocolWelcomeResult": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "daemonId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "daemonVersion": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+          }
+        },
+        "upgradeRecommended": {
+          "type": "boolean"
+        }
+      },
+      "required": ["protocolVersion", "daemonId", "daemonVersion", "capabilities"],
+      "additionalProperties": {}
+    },
+    "daemonStatusResult": {
+      "type": "object",
+      "properties": {
+        "daemonId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "daemonVersion": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "protocolVersion": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "startedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "activeSessionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "activeTurnCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "activeBackgroundTaskCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "attachedClientCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "daemonId",
+        "daemonVersion",
+        "protocolVersion",
+        "pid",
+        "startedAt",
+        "activeSessionCount",
+        "activeTurnCount",
+        "activeBackgroundTaskCount",
+        "attachedClientCount"
+      ],
+      "additionalProperties": {}
+    },
+    "daemonShutdownParams": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["graceful", "immediate"]
+        },
+        "whenIdle": {
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "onTimeout": {
+          "type": "string",
+          "enum": ["cancel", "abort"]
+        }
+      },
+      "required": ["mode"],
+      "additionalProperties": false
+    },
+    "daemonDrainingEvent": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": ["shutdown", "restart"]
+        },
+        "gracePeriodMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["reason", "gracePeriodMs"],
+      "additionalProperties": {}
+    },
+    "protocolHeartbeatEvent": {
+      "type": "object",
+      "properties": {
+        "now": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        }
+      },
+      "required": ["now"],
+      "additionalProperties": {}
+    },
+    "sessionListItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "workspaceId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "workspaceRoot": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["idle", "running", "awaiting_interaction", "interrupted", "closed"]
+        },
+        "awaitingKind": {
+          "type": "string",
+          "enum": ["approval", "question", "budget"]
+        },
+        "createdAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "latestSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "model": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            }
+          },
+          "required": ["provider", "model"],
+          "additionalProperties": {}
+        },
+        "pendingInteractionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "activeBackgroundTaskCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["id", "workspaceId", "status", "createdAt", "updatedAt", "latestSequence"],
+      "additionalProperties": {}
+    },
+    "sessionListParams": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sessionListResult": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+              },
+              "workspaceId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,256}$"
+              },
+              "workspaceRoot": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["idle", "running", "awaiting_interaction", "interrupted", "closed"]
+              },
+              "awaitingKind": {
+                "type": "string",
+                "enum": ["approval", "question", "budget"]
+              },
+              "createdAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "updatedAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "latestSequence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                  }
+                },
+                "required": ["provider", "model"],
+                "additionalProperties": {}
+              },
+              "pendingInteractionCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "activeBackgroundTaskCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["id", "workspaceId", "status", "createdAt", "updatedAt", "latestSequence"],
+            "additionalProperties": {}
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["sessions", "nextCursor"],
+      "additionalProperties": {}
+    },
+    "sessionListSubscribeParams": {
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      },
+      "additionalProperties": false
+    },
+    "sessionListSnapshotEvent": {
+      "type": "object",
+      "properties": {
+        "streamEpoch": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+              },
+              "workspaceId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,256}$"
+              },
+              "workspaceRoot": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["idle", "running", "awaiting_interaction", "interrupted", "closed"]
+              },
+              "awaitingKind": {
+                "type": "string",
+                "enum": ["approval", "question", "budget"]
+              },
+              "createdAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "updatedAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "latestSequence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                  }
+                },
+                "required": ["provider", "model"],
+                "additionalProperties": {}
+              },
+              "pendingInteractionCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "activeBackgroundTaskCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["id", "workspaceId", "status", "createdAt", "updatedAt", "latestSequence"],
+            "additionalProperties": {}
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["streamEpoch", "sessions", "truncated", "nextCursor"],
+      "additionalProperties": {}
+    },
+    "sessionListUpsertEvent": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "workspaceId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,256}$"
+            },
+            "workspaceRoot": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["idle", "running", "awaiting_interaction", "interrupted", "closed"]
+            },
+            "awaitingKind": {
+              "type": "string",
+              "enum": ["approval", "question", "budget"]
+            },
+            "createdAt": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+            },
+            "updatedAt": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+            },
+            "latestSequence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                }
+              },
+              "required": ["provider", "model"],
+              "additionalProperties": {}
+            },
+            "pendingInteractionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "activeBackgroundTaskCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["id", "workspaceId", "status", "createdAt", "updatedAt", "latestSequence"],
+          "additionalProperties": {}
+        }
+      },
+      "required": ["session"],
+      "additionalProperties": {}
+    },
+    "sessionListRemoveEvent": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["workspace_revoked", "deleted"]
+        }
+      },
+      "required": ["sessionId", "reason"],
+      "additionalProperties": {}
+    },
+    "sessionListResyncRequiredEvent": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": ["slow_consumer", "epoch_changed"]
+        }
+      },
+      "required": ["reason"],
+      "additionalProperties": {}
+    },
+    "sessionApprovalPolicy": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "interactive"
+            }
+          },
+          "required": ["mode"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "headless"
+            },
+            "autoApprove": {
+              "type": "boolean"
+            }
+          },
+          "required": ["mode", "autoApprove"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "sessionCreateParams": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "workspaceId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,256}$"
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                }
+              },
+              "required": ["provider", "model"],
+              "additionalProperties": false
+            },
+            "approvalPolicy": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "interactive"
+                    }
+                  },
+                  "required": ["mode"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "headless"
+                    },
+                    "autoApprove": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["mode", "autoApprove"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "includeSnapshot": {
+              "type": "boolean"
+            }
+          },
+          "required": ["workspaceId"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cwd": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                }
+              },
+              "required": ["provider", "model"],
+              "additionalProperties": false
+            },
+            "approvalPolicy": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "interactive"
+                    }
+                  },
+                  "required": ["mode"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "headless"
+                    },
+                    "autoApprove": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["mode", "autoApprove"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "includeSnapshot": {
+              "type": "boolean"
+            }
+          },
+          "required": ["cwd"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "sessionCreateResult": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "workspaceId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,256}$"
+            },
+            "workspaceRoot": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["idle", "running", "awaiting_interaction", "interrupted", "closed"]
+            },
+            "awaitingKind": {
+              "type": "string",
+              "enum": ["approval", "question", "budget"]
+            },
+            "createdAt": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+            },
+            "updatedAt": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+            },
+            "latestSequence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                }
+              },
+              "required": ["provider", "model"],
+              "additionalProperties": {}
+            },
+            "pendingInteractionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "activeBackgroundTaskCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["id", "workspaceId", "status", "createdAt", "updatedAt", "latestSequence"],
+          "additionalProperties": {}
+        },
+        "snapshot": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": ["session"],
+      "additionalProperties": {}
+    },
+    "sessionForkParams": {
+      "type": "object",
+      "properties": {
+        "sourceSessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        }
+      },
+      "required": ["sourceSessionId"],
+      "additionalProperties": false
+    },
+    "sessionHandoffParams": {
+      "type": "object",
+      "properties": {
+        "sourceSessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": ["sourceSessionId"],
+      "additionalProperties": false
+    },
+    "sessionCloseParams": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "force": {
+          "type": "boolean"
+        }
+      },
+      "required": ["sessionId"],
+      "additionalProperties": false
+    },
+    "sessionAttachParams": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "fromSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sessionEpoch": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        }
+      },
+      "required": ["sessionId"],
+      "additionalProperties": false
+    },
+    "sessionSnapshotEvent": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "earliestReplayableSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "sessionEpoch": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "snapshot": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": ["sessionId", "seq", "earliestReplayableSequence", "sessionEpoch", "snapshot"],
+      "additionalProperties": {}
+    },
+    "sessionAcceptedEvent": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "occurredAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": ["sessionId", "seq", "occurredAt", "events"],
+      "additionalProperties": {}
+    },
+    "sessionLiveEvent": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "events": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": ["sessionId", "events"],
+      "additionalProperties": {}
+    },
+    "sessionResyncRequiredEvent": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["slow_consumer", "session_rotated"]
+        },
+        "earliestReplayableSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "latestSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["sessionId", "reason", "earliestReplayableSequence", "latestSequence"],
+      "additionalProperties": {}
+    },
+    "sessionClosedEvent": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["closed", "workspace_revoked", "daemon_shutdown"]
+        }
+      },
+      "required": ["sessionId", "reason"],
+      "additionalProperties": {}
+    },
+    "sessionCommandParams": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "command": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": ["sessionId", "command"],
+      "additionalProperties": false
+    },
+    "settingsUpdateParams": {
+      "type": "object",
+      "properties": {
+        "expectedRevision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "changes": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+              },
+              "value": {}
+            },
+            "required": ["key", "value"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["expectedRevision", "changes"],
+      "additionalProperties": false
+    },
+    "settingsStateEvent": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "settings": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": ["revision", "settings"],
+      "additionalProperties": {}
+    },
+    "unixSessionAttachResult": {
+      "type": "object",
+      "properties": {
+        "streamId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["snapshot", "replay"]
+        },
+        "sessionEpoch": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "earliestReplayableSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["streamId", "mode", "sessionEpoch", "earliestReplayableSequence"],
+      "additionalProperties": {}
+    },
+    "unixStreamUnsubscribeParams": {
+      "type": "object",
+      "properties": {
+        "streamId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        }
+      },
+      "required": ["streamId"],
+      "additionalProperties": false
+    },
+    "unixRequestFrame": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "request"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "params": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": ["kind", "id", "method"],
+      "additionalProperties": false
+    },
+    "unixResponseFrame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "response"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "ok": {
+              "type": "boolean",
+              "const": true
+            },
+            "result": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": ["kind", "id", "ok", "result"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "response"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "ok": {
+              "type": "boolean",
+              "const": false
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "protocol_incompatible",
+                    "unauthorized",
+                    "forbidden",
+                    "not_found",
+                    "invalid_request",
+                    "stale_revision",
+                    "stale_interaction",
+                    "busy",
+                    "cursor_out_of_range",
+                    "env_disconnected",
+                    "unavailable",
+                    "closed",
+                    "internal_error"
+                  ]
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "details": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": {}
+            }
+          },
+          "required": ["kind", "id", "ok", "error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "unixEventFrame": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "event"
+        },
+        "streamId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "event": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "payload": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": ["kind", "event", "payload"],
+      "additionalProperties": false
+    },
+    "unixFrame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "request"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "method": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "params": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": ["kind", "id", "method"],
+          "additionalProperties": false
+        },
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "response"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                },
+                "ok": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "result": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": ["kind", "id", "ok", "result"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "response"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+                },
+                "ok": {
+                  "type": "boolean",
+                  "const": false
+                },
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "protocol_incompatible",
+                        "unauthorized",
+                        "forbidden",
+                        "not_found",
+                        "invalid_request",
+                        "stale_revision",
+                        "stale_interaction",
+                        "busy",
+                        "cursor_out_of_range",
+                        "env_disconnected",
+                        "unavailable",
+                        "closed",
+                        "internal_error"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    },
+                    "details": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": ["code", "message"],
+                  "additionalProperties": {}
+                }
+              },
+              "required": ["kind", "id", "ok", "error"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "event"
+            },
+            "streamId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,256}$"
+            },
+            "event": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+            },
+            "payload": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": ["kind", "event", "payload"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

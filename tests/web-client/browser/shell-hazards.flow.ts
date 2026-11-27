@@ -181,7 +181,10 @@ test('a message cannot be sent before the chat is connected', async ({ page, lau
   await expectNoRunningTurn(page);
 
   // Reload with the chat's event stream held: the page has no live connection yet.
-  const held = await hold(page, (url, method) => method === 'GET' && url.pathname.endsWith('/events'));
+  const held = await hold(
+    page,
+    (url, method) => method === 'GET' && /^\/api\/agent\/sessions\/[^/]+\/events$/u.test(url.pathname),
+  );
   await page.reload();
   await held.arrived;
   // Nothing can be sent: the composer stays disabled until the stream attaches.

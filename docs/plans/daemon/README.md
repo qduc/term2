@@ -4,16 +4,18 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–9 complete; starting Step 10 (draft RFC-style Client API spec, TypeScript + generated JSON Schema, conformance test suite, and independent review rounds).
+- **Current phase:** Steps 0–13 complete and Client API v1.0 **frozen** (Step 12); starting Step 14a (singleton daemon core: Unix socket Client API server, daemon lifecycle/lock/auto-start, headless approval policy in Runtime, and `AnthropicShellSandboxRunner` multi-workspace safety).
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
   - [Step 8 scenario validation](step8-scenarios.md)
   - [Step 9 Client API inventory](step9-client-api-inventory.md)
+  - [Client API v1.0 Core Spec (Frozen)](spec/client-api.md) · [Unix Binding](spec/transport-unix.md) · [HTTP+SSE Binding](spec/transport-http-sse.md) · [JSON Schema](spec/client-api.schema.json)
+  - [Step 11 Host & Runtime Zoom-In](zoom/host-and-runtime.md) · [Web Client Zoom-In](zoom/web-client.md)
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Complete Step 10 (RFC spec + TS/JSON schema + conformance suite + independent review rounds), Step 11 (Host/Web/Runtime zoom-ins), Step 13 (session-list stream prototype + web sidebar), Step 12 (spec recheck & freeze), and Step 14 (daemon build-out through the default flip).
+- **Next concrete actions:** Step 14a (daemon core + Unix socket transport + `headlessPolicy` in session + sandbox multi-workspace lease fix), Step 14b (remote `DirectConnection` over Unix socket), Step 14c (headless client over daemon), Step 14d (TUI zoom-in + TUI client over daemon), Step 14e (control socket + Discord + ACP over daemon), Step 14f (flip daemon mode to default + full verification + smoke runs).
 
 
 ## Goal

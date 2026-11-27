@@ -1,6 +1,7 @@
 /** Direct private server composition. The app supplies one DirectHost and global authorities;
  * this module never constructs a Session/store, drives a turn, or writes conversation state.
  */
+import { randomUUID } from 'node:crypto';
 import type { DirectConnection, Principal } from './in-process-direct-types.js';
 import type {
   ServerHostDependencies,
@@ -20,6 +21,14 @@ import { DIRECT_WIRE_V2, agentWireV2EventStream, directEventStream, directWireV2
 import { AGENT_WIRE_V2_RUNTIME_AVAILABLE, encodeAgentWireV2 } from './server-wire-v2.js';
 import { mapServerError, publicError, ServerHttpError, unavailable } from './server-errors.js';
 import * as validate from './server-validation.js';
+import { sessionListEventStream } from './daemon/session-list-sse.js';
+import {
+  CLIENT_API_MIN_SUPPORTED_VERSION,
+  CLIENT_API_VERSION,
+  negotiateCapabilities,
+  negotiateSingleProtocolVersion,
+} from '../protocol/client-api/version-negotiation.js';
+import { CLIENT_API_CAPABILITIES } from '../protocol/client-api/client-api-schema.js';
 
 export type {
   ServerHostDependencies,
@@ -39,6 +48,7 @@ export { createServerAuthentication } from './server-auth.js';
 export type { ServerAuthentication, ServerAuthenticationOptions } from './server-auth.js';
 
 const LOCAL_OWNER_PURPOSES = new Set([
+  'daemon_status',
   'settings_read',
   'settings_write',
   'credential_write',
@@ -74,6 +84,9 @@ function createDirectServerHandler(
 ): (input: ServerRequest) => Promise<ServerResult> {
   const globals = new ServerGlobalRoutes(dependencies);
   const interactions = new ServerInteractions();
+  const daemonId = dependencies.daemonId ?? `dmn_${randomUUID().replaceAll('-', '')}`;
+  const daemonVersion = dependencies.daemonVersion ?? '0.0.0-dev';
+  const daemonStartedAt = dependencies.daemonStartedAt ?? new Date().toISOString();
   return async (input) => {
     const { claims } = input;
     const route = matchPrivateRoute(input.request.method ?? 'GET', input.url.pathname);
@@ -87,6 +100,13 @@ function createDirectServerHandler(
       return publicError(400, 'protocol_conflict', 'gateway purpose does not match route');
     if (LOCAL_OWNER_PURPOSES.has(claims.purpose) && claims.sub !== dependencies.localOwnerUserId)
       return publicError(403, 'settings_forbidden', 'local owner authorization is required');
+    const versionCheck = negotiateRequestVersion(
+      input,
+      daemonVersion,
+      dependencies,
+      claims.sub === dependencies.localOwnerUserId,
+    );
+    if ('error' in versionCheck) return versionCheck.error;
     const principal: Principal = { userId: claims.sub, via: 'assertion' };
     try {
       await dependencies.audit?.({
@@ -96,6 +116,38 @@ function createDirectServerHandler(
         ...(route.sessionId ? { sessionId: route.sessionId } : {}),
         ...(input.correlationId ? { correlationId: input.correlationId } : {}),
       });
+      if (route.purpose === 'protocol_hello') {
+        const capabilities = negotiateCapabilities(dependencies.sessionIndex ? ['session_list_stream'] : []);
+        return {
+          status: 200,
+          headers: { 'x-term2-client-api-version': versionCheck.version, 'x-term2-daemon-id': daemonId },
+          body: { protocolVersion: versionCheck.version, daemonId, daemonVersion, capabilities },
+        };
+      }
+      if (route.purpose === 'daemon_status') {
+        const counts = dependencies.sessionIndex?.counts() ?? {
+          activeSessionCount: 0,
+          activeTurnCount: 0,
+          activeBackgroundTaskCount: 0,
+        };
+        return {
+          status: 200,
+          headers: { 'x-term2-client-api-version': versionCheck.version, 'x-term2-daemon-id': daemonId },
+          body: {
+            daemonId,
+            daemonVersion,
+            protocolVersion: versionCheck.version,
+            pid: process.pid,
+            startedAt: daemonStartedAt,
+            ...counts,
+            attachedClientCount: 0,
+            supportedCapabilities: [...CLIENT_API_CAPABILITIES],
+          },
+        };
+      }
+      if (route.purpose === 'session_list_events') {
+        return sessionListEvents(dependencies, input, principal, daemonId, versionCheck.version);
+      }
       const global = await globals.handle(route, input, principal);
       if (global) return global;
       if (route.purpose === 'session_create')
@@ -107,6 +159,66 @@ function createDirectServerHandler(
       return mapServerError(error);
     }
   };
+}
+
+function negotiateRequestVersion(
+  input: ServerRequest,
+  daemonVersion: string,
+  dependencies: ServerHostDependencies,
+  isOwner: boolean,
+): { readonly version: string } | { readonly error: ServerResult } {
+  const rawHeader = input.request.headers['x-term2-client-api-version'];
+  if (rawHeader !== undefined && typeof rawHeader !== 'string') {
+    return { error: publicError(400, 'validation_error', 'client API version header is invalid') };
+  }
+  const queryVersion = input.url.searchParams.get('apiVersion');
+  if (rawHeader !== undefined && queryVersion !== null && rawHeader !== queryVersion) {
+    return { error: publicError(400, 'protocol_conflict', 'client API version header and query do not match') };
+  }
+  const requested = rawHeader ?? queryVersion;
+  if (requested === null || requested === undefined) return { version: CLIENT_API_VERSION };
+  const negotiated = negotiateSingleProtocolVersion(requested);
+  if (!negotiated.ok) {
+    const counts = isOwner ? dependencies.sessionIndex?.counts() : undefined;
+    return {
+      error: publicError(400, 'protocol_incompatible', negotiated.reason, false, {
+        daemonProtocolVersion: CLIENT_API_VERSION,
+        daemonMinSupportedVersion: CLIENT_API_MIN_SUPPORTED_VERSION,
+        daemonVersion,
+        ...(counts ? { activeTurnCount: counts.activeTurnCount } : {}),
+      }),
+    };
+  }
+  return { version: negotiated.version };
+}
+
+function sessionListEvents(
+  dependencies: ServerHostDependencies,
+  input: ServerRequest,
+  principal: Principal,
+  daemonId: string,
+  negotiatedVersion: string,
+): ServerResult {
+  if (!dependencies.sessionIndex) return unavailable('session list stream');
+  const workspaceId = input.url.searchParams.get('workspaceId') ?? undefined;
+  if (workspaceId !== undefined && !validate.isOpaqueId(workspaceId)) {
+    return publicError(400, 'validation_error', 'workspace filter is invalid');
+  }
+  const rawLimit = input.url.searchParams.get('limit');
+  let limit: number | undefined;
+  if (rawLimit !== null) {
+    if (!/^\d{1,4}$/u.test(rawLimit)) return publicError(400, 'validation_error', 'limit is invalid');
+    limit = Number(rawLimit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+      return publicError(400, 'validation_error', 'limit must be between 1 and 500');
+    }
+  }
+  return sessionListEventStream(dependencies.sessionIndex, principal, {
+    ...(workspaceId ? { workspaceId } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+    daemonId,
+    negotiatedVersion,
+  });
 }
 async function createSession(
   dependencies: ServerHostDependencies,
@@ -230,6 +342,21 @@ async function listSessions(
   input: ServerRequest,
   principal: Principal,
 ): Promise<ServerResult> {
+  if (dependencies.sessionIndex) {
+    const requestedLimit = validate.parseQueryLimit(input.url.searchParams.get('limit')) ?? 20;
+    const limit = Math.max(1, Math.min(100, requestedLimit));
+    const cursor = input.url.searchParams.get('cursor') ?? undefined;
+    const workspaceId = input.url.searchParams.get('workspaceId') ?? undefined;
+    if (workspaceId !== undefined && !validate.isOpaqueId(workspaceId)) {
+      return publicError(400, 'validation_error', 'workspace filter is invalid');
+    }
+    const page = await dependencies.sessionIndex.list(principal, {
+      limit,
+      ...(cursor ? { cursor } : {}),
+      ...(workspaceId ? { workspaceId } : {}),
+    });
+    return { status: 200, body: page };
+  }
   const presentation = dependencies.presentation;
   if (!presentation) return unavailable('direct session list metadata');
   const requestedLimit = validate.parseQueryLimit(input.url.searchParams.get('limit')) ?? 20;

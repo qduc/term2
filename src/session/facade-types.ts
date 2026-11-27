@@ -277,10 +277,20 @@ export interface DirectSessionStore {
       readonly id: string;
       readonly workspace: Workspace;
       readonly model: ModelRef;
-      /** First user message, shortened; absent before any turn. */
+      /** First user message, shortened to 60 chars for ACP/resume; absent before any turn. */
       readonly title?: string;
+      /** First user message, first line normalized up to 120 chars (canonical Client API title). */
+      readonly fullTitle?: string;
+      /** When the session started (first fact timestamp). */
+      readonly createdAt?: string;
       /** When the last accepted fact was written. */
       readonly updatedAt?: string;
+      /** Sequence number of the last accepted fact (0 when empty). */
+      readonly latestSequence?: number;
+      /** Dormant status normalized across unclean exits. */
+      readonly status?: DirectSessionState['status'];
+      /** Immutable ownership/workspace binding recorded at session start. */
+      readonly binding?: DirectBinding;
       readonly messageCount?: number;
     }[];
     readonly cursor?: string;

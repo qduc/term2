@@ -1,6 +1,8 @@
 /** Bounded reads for a resume row. Never loads a conversation body. */
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import path from 'node:path';
+import type { Fact } from './facts.js';
+import type { DirectSessionState } from './facade-types.js';
 import { directLogicalEnds } from './rolling-log.js';
 
 const TITLE_CAP_BYTES = 8 * 1024 * 1024;
@@ -8,6 +10,43 @@ const TITLE_CAP_BYTES = 8 * 1024 * 1024;
 /** Same shortening as the full-replay title in the session store. */
 function shorten(text: string): string {
   return text.length > 60 ? `${text.slice(0, 59)}…` : text;
+}
+
+export function firstPromptFromFacts(facts: readonly Fact[]): string | undefined {
+  for (const fact of facts) {
+    if (fact.type !== 'turn_started') continue;
+    for (const item of fact.input) {
+      if (item.type !== 'user_message') continue;
+      const text = item.content
+        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (text) return shorten(text);
+    }
+  }
+  return undefined;
+}
+
+export function canonicalTitleFromFacts(facts: readonly Fact[]): string | undefined {
+  for (const fact of facts) {
+    if (fact.type !== 'turn_started') continue;
+    for (const item of fact.input) {
+      if (item.type !== 'user_message') continue;
+      const raw = item.content
+        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+        .join('')
+        .trim();
+      if (!raw) continue;
+      const firstLine = raw.split('\n')[0]!.trim();
+      if (firstLine) return firstLine.slice(0, 120).replace(/[\u0000-\u001f\u007f]/gu, '\uFFFD');
+    }
+  }
+  return undefined;
+}
+
+export function dormantSessionStatus(status: DirectSessionState['status']): DirectSessionState['status'] {
+  return status === 'running' || status === 'awaiting_interaction' ? 'interrupted' : status;
 }
 
 function titleFromLine(line: Buffer): string | undefined {

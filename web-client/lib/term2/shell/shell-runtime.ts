@@ -4,11 +4,12 @@
  * facts derived from all of them, and the multi-step operations. Components reach it through
  * components/term2/shell/ShellContext.tsx and read it by selector. No React here.
  */
+import { term2Client } from '../../api/term2';
 import { createBrowserPrefs, type BrowserPrefs } from '../browser-prefs';
 import { createServerData, type ServerData } from '../data/server-data';
+import { createSessionListStream } from '../data/session-list-stream';
 import { initialShellState, step, type ShellAction, type ShellState } from '../shell-machine';
 import { derivedStore, type ReadableStore } from '../store';
-import type { ModelSummary, SessionStatus, Term2ConnectionStatus } from '../types';
 import { createChatFacts, type ChatFacts } from './chat-facts';
 import { OpenSession } from './open-session';
 import { createCommandRunner } from './shell-commands';
@@ -20,12 +21,6 @@ export interface ComposerHandle {
   setText(text: string): void;
   /** Cmd/Ctrl+K: toggles the palette, resets its highlighted row, focuses. */
   togglePalette(): void;
-}
-
-/** The sidebar's live statuses; every other connection phase is idle in the thread list. */
-function listedStatus(status: Term2ConnectionStatus): SessionStatus {
-  if (status === 'awaiting_interaction') return 'awaiting_interaction';
-  return status === 'running' || status === 'aborting' ? 'running' : 'idle';
 }
 
 export interface ShellRuntime {
@@ -58,6 +53,12 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
   };
   const data = createServerData({ localControlEnabled });
   const session = new OpenSession({ chatTitled: data.chatTitled });
+  const sessionListStream = createSessionListStream({
+    open: (signal) => term2Client.openSessionListEvents(undefined, signal),
+    onSnapshot: (sessions, nextCursor) => data.applySnapshot(sessions, nextCursor),
+    onUpsert: (item) => data.upsertSession(item),
+    onRemove: (sessionId) => data.removeSession(sessionId),
+  });
   const prefs = createBrowserPrefs();
   const deriveFacts = createChatFacts();
   const facts = derivedStore(
@@ -77,20 +78,6 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
   );
   const composer: { current: ComposerHandle | null } = { current: null };
 
-  // The list is a snapshot fetched at startup. Re-read it when the open chat enters or leaves a live
-  // status, so the sidebar dot follows the turn, and when the sidebar opens, so chats running in
-  // other tabs are current when the reader looks at them. No polling: a quiet page stays quiet.
-  let lastListed: { readonly id: string; readonly status: SessionStatus } | null = null;
-  session.view.subscribe(() => {
-    const view = session.view.get();
-    if (!view.sessionId) return;
-    const status = listedStatus(view.status);
-    if (lastListed?.id === view.sessionId && lastListed.status === status) return;
-    const leavingLive = lastListed !== null && lastListed.status !== 'idle';
-    lastListed = { id: view.sessionId, status };
-    if (leavingLive || status !== 'idle') void data.chats.refresh().catch(() => undefined);
-  });
-
   let runCommand: (command: Parameters<ReturnType<typeof createCommandRunner>>[0]) => void = () => undefined;
   function dispatch(action: ShellAction) {
     const previous = state;
@@ -102,7 +89,6 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
     // A stream opened early for a draft's created chat (shell-commands) closes when that draft is gone without
     // opening it (discarded, replaced, or a new user); a failed start keeps it for the retry.
     else if (next.openChat === null && !next.draft?.createdSessionId && session.sessionId !== null) session.open(null);
-    if (next.panels.sidebar && !previous.panels.sidebar) void data.chats.refresh().catch(() => undefined);
     if (next !== previous) for (const listener of [...listeners]) listener();
     for (const command of commands) runCommand(command);
   }
@@ -138,9 +124,11 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
           void data.models.load();
         }
       }
+      sessionListStream.start();
       session.start();
     },
     stop() {
+      sessionListStream.stop();
       session.stop();
     },
   };

@@ -50,9 +50,12 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
   if (method === 'POST' && pathname === '/private/agent/v1/providers') return { purpose: 'provider_write' };
   const providerDelete = pathname.match(/^\/private\/agent\/v1\/providers\/([A-Za-z0-9_.-]{1,256})$/);
   if (providerDelete && method === 'DELETE') return { purpose: 'provider_delete', interactionId: providerDelete[1] };
+  if (method === 'GET' && pathname === '/private/agent/v1/hello') return { purpose: 'protocol_hello' };
+  if (method === 'GET' && pathname === '/private/agent/v1/daemon/status') return { purpose: 'daemon_status' };
   if (method === 'GET' && pathname === '/private/agent/v1/skills') return { purpose: 'skills_list' };
   if (method === 'POST' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_create' };
   if (method === 'GET' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_list' };
+  if (method === 'GET' && pathname === '/private/agent/v1/sessions/events') return { purpose: 'session_list_events' };
   const match = pathname.match(
     /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|rewind-targets|rewind|queue|tasks|files|quota|goal|handoff|interactions\/([A-Za-z0-9_:-]{1,256})))?$/,
   );

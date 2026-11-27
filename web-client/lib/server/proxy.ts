@@ -23,6 +23,7 @@ export const rpc = {
   skills: (workspaceId?: string) =>
     workspaceId ? `/private/agent/v1/skills?workspaceId=${encodeURIComponent(workspaceId)}` : '/private/agent/v1/skills',
   sessions: '/private/agent/v1/sessions',
+  sessionListEvents: '/private/agent/v1/sessions/events',
   session: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}`,
   messages: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/messages`,
   commands: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/commands`,

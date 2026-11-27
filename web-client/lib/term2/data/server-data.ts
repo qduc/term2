@@ -68,6 +68,9 @@ export interface ServerData {
   }): Promise<WorkspaceAlias>;
   ensureFiles(scope: FileScope): void;
   loadMoreChats(): Promise<void>;
+  applySnapshot(sessions: readonly SessionListItem[], nextCursor: string | null): void;
+  upsertSession(session: SessionListItem): void;
+  removeSession(sessionId: string): void;
   chatCreated(projection: SessionProjection): void;
   chatTitled(sessionId: string, firstLine: string): void;
   /** Key: chat id. Never `ensure`d: a turn or a rewind changes the list. */
@@ -88,6 +91,12 @@ const NO_SKILLS: SkillSummary[] = [];
 const NO_FILES: WorkspaceFileEntry[] = [];
 const NO_FOLDERS: WorkspaceAlias[] = [];
 const NO_CHATS: ChatList = { sessions: [], nextCursor: null };
+
+function sortCanonical(sessions: readonly SessionListItem[]): SessionListItem[] {
+  return [...sessions].sort((a, b) =>
+    a.updatedAt > b.updatedAt ? -1 : a.updatedAt < b.updatedAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+  );
+}
 
 export function createServerData(options: { localControlEnabled: boolean }): ServerData {
   const client = term2Client;
@@ -183,17 +192,32 @@ export function createServerData(options: { localControlEnabled: boolean }): Ser
       if (!cursor) return;
       const page = await client.listSessions(20, cursor);
       chats.update((current) => ({
-        sessions: [
+        sessions: sortCanonical([
           ...current.sessions,
           ...page.sessions.filter((item) => !current.sessions.some((existing) => existing.id === item.id)),
-        ],
+        ]),
         nextCursor: page.nextCursor,
+      }));
+    },
+    applySnapshot(sessions, nextCursor) {
+      chats.replace({ sessions: sortCanonical(sessions), nextCursor });
+    },
+    upsertSession(session) {
+      chats.update((current) => ({
+        sessions: sortCanonical([session, ...current.sessions.filter((item) => item.id !== session.id)]),
+        nextCursor: current.nextCursor,
+      }));
+    },
+    removeSession(sessionId) {
+      chats.update((current) => ({
+        sessions: current.sessions.filter((item) => item.id !== sessionId),
+        nextCursor: current.nextCursor,
       }));
     },
     chatCreated(projection) {
       chats.update((current) => ({
         ...current,
-        sessions: [
+        sessions: sortCanonical([
           {
             id: projection.id,
             workspaceId: projection.workspaceId,
@@ -201,18 +225,22 @@ export function createServerData(options: { localControlEnabled: boolean }): Ser
             createdAt: projection.createdAt,
             updatedAt: projection.updatedAt,
             latestSequence: projection.latestSequence,
+            ...(projection.title ? { title: projection.title } : {}),
+            ...(projection.model ? { model: projection.model } : {}),
           },
           ...current.sessions.filter((item) => item.id !== projection.id),
-        ],
+        ]),
       }));
     },
     chatTitled(sessionId, firstLine) {
       chats.update((current) => ({
         ...current,
-        sessions: current.sessions.map((item) =>
-          item.id === sessionId && !item.title
-            ? { ...item, title: firstLine, updatedAt: new Date().toISOString() }
-            : item,
+        sessions: sortCanonical(
+          current.sessions.map((item) =>
+            item.id === sessionId && !item.title
+              ? { ...item, title: firstLine, updatedAt: new Date().toISOString() }
+              : item,
+          ),
         ),
       }));
     },

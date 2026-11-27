@@ -38,7 +38,9 @@ export function presentBareShell(
     ...tool,
     description:
       'Run shell commands (reads, searches, checks, edits); batch steps, return only relevant output. ' +
-      (options.background ? 'Long work: background: true plus monitor, then await shell_output. ' : '') +
+      (options.background
+        ? 'To wait, run a background: true command that exits when the wait is over (on success and on failure), then end your turn; its exit wakes you. Add monitor only for lines you must act on before it exits. '
+        : '') +
       'Unsandboxed runs need approval.',
     parameters: options.background ? backgroundShellParameters : foregroundShellParameters,
     canonicalParameters: shellParametersSchema,

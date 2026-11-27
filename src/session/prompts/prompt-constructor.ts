@@ -12,6 +12,8 @@ type PromptConstructorBaseOptions = {
   shellWithheld?: boolean;
   /** False in a read session: a sandboxed shell may write only $TMPDIR. */
   workspaceWritable?: boolean;
+  /** The root session can start background shell jobs that wake it on exit. */
+  backgroundShellEnabled?: boolean;
 };
 
 export type PromptConstructorOptions = PromptConstructorBaseOptions &
@@ -40,6 +42,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     fileReadEnabled = false,
     shellWithheld = false,
     workspaceWritable = true,
+    backgroundShellEnabled = false,
   } = options;
   const shellOffered = runCodeEnabled && !shellWithheld;
   const inlineSections: string[] = [];
@@ -62,6 +65,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     basePromptContent: renderBareToolGuidance(profile.instructions.identity.content, {
       fileReadEnabled,
       shellEnabled: shellOffered,
+      backgroundShellEnabled: shellOffered && backgroundShellEnabled,
       editorSurface,
     }),
     inlineSections,

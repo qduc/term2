@@ -1480,6 +1480,7 @@ export function createShellToolDefinition(deps: {
             return JSON.stringify({
               jobId: job.id,
               status: job.status,
+              next: 'You will be woken automatically when this job exits. If nothing else needs doing now, end your turn; do not sleep or poll.',
               ...(monitor === undefined
                 ? {}
                 : {

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ModelCatalogEntry, SettingsProjection, ShellSandboxNotice } from '../host/server-contracts.js';
 import { catalogDetails } from '../model/providers/model-catalog/catalog-details.js';
 import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
+import { ModelSelectionSchema, type ModelSelection } from '../config/settings/model-selection.js';
 import { DirectHostConfigError } from './host-config-error.js';
 import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 import { WEB_SETTINGS, onlyRevokes, webSettingValue } from '../config/settings/web-settings-policy.js';
@@ -94,6 +95,14 @@ export class DirectGlobalConfiguration {
 
   async read(): Promise<SettingsProjection> {
     return this.#withSandboxNotice(this.#projection());
+  }
+
+  /**
+   * The global default a new session starts from. This is the same owner the
+   * browser settings API writes, not the selection captured at gateway launch.
+   */
+  currentModelSelection(): ModelSelection {
+    return ModelSelectionSchema.parse(this.settings.get('agent.modelSelection'));
   }
 
   /** The notice is attached after the revision hash. It never changes a write. */

@@ -645,8 +645,9 @@ function page<T>(
 function validateWorkspace(value: unknown): WorkspacePage['workspaces'][number] {
   const input = object(value);
   if (
-    Object.keys(input).some((key) => !['workspaceId', 'label', 'access'].includes(key)) ||
-    !['read', 'read_write'].includes(String(input.access))
+    Object.keys(input).some((key) => !['workspaceId', 'label', 'access', 'kind'].includes(key)) ||
+    !['read', 'read_write'].includes(String(input.access)) ||
+    (input.kind !== undefined && !['directory', 'host', 'ssh'].includes(String(input.kind)))
   )
     throw new Term2ApiError(503, 'Invalid agent response');
   return {
@@ -658,6 +659,7 @@ function validateWorkspace(value: unknown): WorkspacePage['workspaces'][number] 
             throw new Term2ApiError(503, 'Invalid agent response');
           })(),
     access: input.access as 'read' | 'read_write',
+    ...(input.kind ? { kind: input.kind as 'directory' | 'host' | 'ssh' } : {}),
   };
 }
 function validateSessionItem(value: unknown): SessionPage['sessions'][number] {

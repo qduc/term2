@@ -71,7 +71,12 @@ export type ServerRequest = {
   url: URL;
   correlationId?: string;
 };
-export type WorkspaceAlias = { workspaceId: string; label: string; access: 'read' | 'read_write' };
+export type WorkspaceAlias = {
+  workspaceId: string;
+  label: string;
+  access: 'read' | 'read_write';
+  kind?: 'directory' | 'host' | 'ssh';
+};
 export type WorkspaceCheck = {
   name: 'absolute' | 'exists' | 'directory' | 'readable' | 'canonical';
   status: 'ok' | 'error' | 'pending';

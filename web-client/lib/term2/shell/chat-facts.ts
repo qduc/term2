@@ -39,6 +39,8 @@ export type ChatFacts = {
   readonly isDraft: boolean;
   readonly startingChat: boolean;
   readonly selectedWorkspaceId: string | null;
+  readonly hostWorkspaceId: string | null;
+  readonly selectedWorkspaceKind: 'directory' | 'host' | 'ssh';
   readonly openChatFolder: string | null;
   readonly selectedWorkspaceInfo: FolderInfo;
   readonly fileScope: FileScope | null;
@@ -207,9 +209,12 @@ export function createChatFacts(): (inputs: ChatFactInputs) => ChatFacts {
     const isDraft = !sessionId && draftWorkspaceId !== null;
     // The folder in use: an open chat's own folder; otherwise the user's choice, else the first saved one.
     const openChatFolder = sessionId ? inputs.chats.find((item) => item.id === sessionId)?.workspaceId ?? null : null;
+    const hostWorkspaceId = inputs.folders.find((item) => item.kind === 'host')?.workspaceId ?? null;
     const selectedWorkspaceId = sessionId
       ? openChatFolder ?? shell.chosenFolder
-      : shell.chosenFolder ?? inputs.folders[0]?.workspaceId ?? null;
+      : shell.chosenFolder ?? inputs.folders.find((item) => item.kind !== 'host')?.workspaceId ?? null;
+    const selectedWorkspaceKind =
+      inputs.folders.find((item) => item.workspaceId === selectedWorkspaceId)?.kind ?? 'directory';
     const selectedWorkspaceInfo = workspaceInfo(selectedWorkspaceId, inputs.folderDetails, inputs.folders);
     const fileScopeKey = sessionId
       ? `session:${sessionId}`
@@ -343,6 +348,8 @@ export function createChatFacts(): (inputs: ChatFactInputs) => ChatFacts {
       isDraft,
       startingChat,
       selectedWorkspaceId,
+      hostWorkspaceId,
+      selectedWorkspaceKind,
       openChatFolder,
       selectedWorkspaceInfo,
       fileScope: scopeOf(fileScopeKey),

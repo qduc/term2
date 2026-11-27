@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Folder, Plus, Search } from 'lucide-react';
+import { ChevronRight, Folder, Monitor, Plus, Search, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SessionListItem, WorkspaceAlias } from '../../lib/term2/types';
@@ -296,8 +296,16 @@ export function Term2SessionList({
             )}
             <ul className="space-y-px">
               {folders.map((folder) => {
-                const open = !collapsed.has(folder.workspaceId);
                 const current = folder.workspaceId === selectedWorkspaceId;
+                const defaultCollapsed =
+                  folder.saved?.kind === 'host' && folder.chats.length === 0 && !current;
+                const open = defaultCollapsed ? collapsed.has(folder.workspaceId) : !collapsed.has(folder.workspaceId);
+                const WorkspaceIcon =
+                  folder.saved?.kind === 'host'
+                    ? Monitor
+                    : folder.saved?.kind === 'ssh'
+                      ? Server
+                      : Folder;
                 return (
                   <li key={folder.workspaceId}>
                     <div className="group/folder flex items-center rounded-md hover:bg-black/[0.035] dark:hover:bg-white/[0.04]">
@@ -315,7 +323,7 @@ export function Term2SessionList({
                           aria-hidden
                           className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')}
                         />
-                        <Folder aria-hidden className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+                        <WorkspaceIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
                         <span className="truncate">{folder.name}</span>
                         {folder.access && (
                           <span className="shrink-0 rounded bg-black/[0.05] px-1 py-px text-xs font-normal text-muted-foreground dark:bg-white/[0.07]">

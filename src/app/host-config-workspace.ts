@@ -15,13 +15,13 @@ import {
   requireStateDirectory,
   saveDynamicGrants,
 } from './host-config-workspace-grants.js';
-import type { GrantRecord, WorkspaceAccess } from './host-config-workspace-grants.js';
+import type { GrantRecord, WorkspaceAccess, WorkspaceKind } from './host-config-workspace-grants.js';
 import { scanDirectoryEntries } from './file-service.js';
 
-export type { WorkspaceAccess, GrantRecord } from './host-config-workspace-grants.js';
+export type { WorkspaceAccess, WorkspaceKind, GrantRecord } from './host-config-workspace-grants.js';
 export type { CandidateBrowse, CandidateValidation } from './host-config-candidates.js';
 
-export type WorkspaceAlias = { workspaceId: string; label: string; access: WorkspaceAccess };
+export type WorkspaceAlias = { workspaceId: string; label: string; access: WorkspaceAccess; kind?: WorkspaceKind };
 export type CandidateSelection = {
   workspaceId: string;
   displayName: string;
@@ -52,6 +52,7 @@ export type DirectWorkspaceGrantInput = {
   readonly label: string;
   readonly root: string;
   readonly access: WorkspaceAccess;
+  readonly kind?: WorkspaceKind;
 };
 
 /**
@@ -95,7 +96,11 @@ export class DirectWorkspaceAuthority {
     const owner = requirePrincipal(principal);
     return [...this.#grants.values()]
       .filter((grant) => grant.ownerUserId === owner)
-      .map(({ workspaceId, label, access }) => ({ workspaceId, label, access }));
+      .map(({ workspaceId, label, access, kind }) => ({ workspaceId, label, access, ...(kind ? { kind } : {}) }));
+  }
+
+  kindOf(workspaceId: string): WorkspaceKind {
+    return this.#grants.get(workspaceId)?.kind ?? 'directory';
   }
 
   validate(principal: Principal, absolutePath: string): CandidateValidation {
@@ -213,7 +218,8 @@ export class DirectWorkspaceAuthority {
   /** Store callback has only a path. Ambiguous or missing roots fail closed. */
   resolveStoredRoot(root: string): Workspace {
     const canonical = canonicalizeUse(root);
-    const matches = [...this.#grants.values()].filter((grant) => grant.root === canonical);
+    const all = [...this.#grants.values()].filter((grant) => grant.root === canonical);
+    const matches = all.length > 1 ? all.filter((grant) => grant.kind !== 'host') : all;
     if (matches.length !== 1)
       throw new DirectHostConfigError(
         matches.length === 0 ? 'workspace_authority_revoked' : 'workspace_grant_mismatch',
@@ -243,7 +249,7 @@ export class DirectWorkspaceAuthority {
   }
 
   #byRoot(root: string): GrantRecord | undefined {
-    return [...this.#grants.values()].find((grant) => grant.root === root);
+    return [...this.#grants.values()].find((grant) => grant.root === root && grant.kind !== 'host');
   }
 
   #exactRoot(record: GrantRecord): string {
@@ -262,7 +268,7 @@ export class DirectWorkspaceAuthority {
   }
 
   #insert(record: GrantRecord): void {
-    if (this.#grants.has(record.workspaceId) || this.#byRoot(record.root)) {
+    if (this.#grants.has(record.workspaceId) || (record.kind !== 'host' && this.#byRoot(record.root))) {
       throw new DirectHostConfigError('configuration_invalid', 'startup');
     }
     this.#grants.set(record.workspaceId, record);
@@ -314,6 +320,7 @@ export function serverWorkspaceAdministration(
     async listFiles(principal, workspaceId) {
       const grant = grants.resolveGrant(principal, workspaceId);
       const { workspace } = grants.resolveWorkspace(principal, grant);
+      if (grants.kindOf(workspaceId) === 'host') return { entries: [], truncated: true };
       const scanned = await scanDirectoryEntries(workspace.root, { maxDepth: 12, maxTotalEntries: 2_000 });
       return { entries: scanned.entries, truncated: scanned.truncated };
     },

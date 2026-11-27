@@ -4,6 +4,7 @@ import path from 'node:path';
 import { DirectHostConfigError } from './host-config-error.js';
 
 export type WorkspaceAccess = 'read' | 'read_write';
+export type WorkspaceKind = 'directory' | 'host' | 'ssh';
 
 /** Durable local grant. Dynamic grants are the only ones written to the direct grant file. */
 export type GrantRecord = {
@@ -14,6 +15,7 @@ export type GrantRecord = {
   readonly access: WorkspaceAccess;
   readonly grantVersion: number;
   readonly dynamic: boolean;
+  readonly kind?: WorkspaceKind;
 };
 
 const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/;
@@ -145,6 +147,7 @@ export function grantFromInput(value: {
   readonly access: unknown;
   readonly grantVersion: number;
   readonly dynamic: boolean;
+  readonly kind?: WorkspaceKind;
 }): GrantRecord {
   if (!isOpaqueId(value.workspaceId) || !isOwner(value.ownerUserId) || !isLabel(value.label)) {
     throw new DirectHostConfigError('configuration_invalid', 'startup');
@@ -167,6 +170,7 @@ export function grantFromInput(value: {
     access: value.access,
     grantVersion: value.grantVersion,
     dynamic: value.dynamic,
+    ...(value.kind ? { kind: value.kind } : {}),
   };
 }
 

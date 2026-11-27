@@ -144,6 +144,20 @@ export async function handleSessionRoute(
     case 'interaction_resolve': {
       const direct = input.url.searchParams.get('format') === 'direct';
       if (!direct && !validate.isInteractionResolveRequest(body)) return invalid('interaction request is invalid');
+      if (!direct && (body as { answer?: unknown }).answer === 'take_over_review') {
+        const result = await connection.send({ type: 'take_over_review', requestId: route.interactionId! });
+        if (!result.ok) return commandFailure(result);
+        if (result.kind !== 'accepted') return unavailable('review takeover receipt');
+        return {
+          status: 202,
+          body: {
+            sessionId: connection.sessionId,
+            turnId: connection.snapshot.activeTurnId ?? '',
+            interactionId: route.interactionId!,
+            accepted: true,
+          },
+        };
+      }
       const interaction = connection.snapshot.pendingInteractions.find(
         (entry) => entry.requestId === route.interactionId,
       );

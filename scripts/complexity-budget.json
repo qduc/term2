@@ -298,8 +298,8 @@
       "reason": "Output parsers and previews for every tool row; the transcript flows compare what it renders. Recorded when the gate first covered web-client (2026-11); split parsers from previews in a change of its own."
     },
     "web-client/components/term2/settings/settings-catalog.ts": {
-      "lines": 575,
-      "reason": "Data: which settings appear where, with labels and keywords. One table reads better whole; recorded when the gate first covered web-client (2026-11)."
+      "lines": 583,
+      "reason": "Data: which settings appear where, with labels and keywords. One table reads better whole; recorded when the gate first covered web-client (2026-11). Eight lines import and spread LIMIT_ITEMS (runBudget.* and shell.backgroundTimeout) from settings-catalog-parity.ts."
     }
   },
   "messagePath": {

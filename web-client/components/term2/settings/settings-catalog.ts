@@ -1,5 +1,12 @@
 import type { SettingsProjection } from '../../../lib/term2/types';
-import { CONTEXT_ITEMS, MODEL_ITEMS, PARITY_DEFAULTS, PERMISSION_ITEMS, TOOL_ITEMS } from './settings-catalog-parity';
+import {
+  CONTEXT_ITEMS,
+  LIMIT_ITEMS,
+  MODEL_ITEMS,
+  PARITY_DEFAULTS,
+  PERMISSION_ITEMS,
+  TOOL_ITEMS,
+} from './settings-catalog-parity';
 
 /** The settings page's sections, in menu order. The id is the `?settings=` URL value. */
 export const SETTINGS_SECTIONS = [
@@ -226,6 +233,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   ...CONTEXT_ITEMS,
   ...TOOL_ITEMS,
   ...MODEL_ITEMS,
+  ...LIMIT_ITEMS,
 
   // Web search
   {

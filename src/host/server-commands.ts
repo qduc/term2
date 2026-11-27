@@ -15,7 +15,7 @@ type ServerWireCommandParity = 'supported' | 'partial' | 'deferred' | 'by-design
 const SERVER_WIRE_COMMAND_PARITY: Record<WireCommand['type'], ServerWireCommandParity> = {
   submit: 'supported',
   answer: 'supported',
-  take_over_review: 'deferred',
+  take_over_review: 'supported',
   answer_budget: 'supported',
   cancel: 'partial',
   retry: 'partial',

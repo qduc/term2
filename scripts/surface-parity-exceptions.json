@@ -56,22 +56,6 @@
       "status": "deferred",
       "reason": "web-client renders run_budget interactions only when the gateway attaches an interaction DTO; standalone pendingBudgets without a DTO return null in TranscriptTail.tsx; remove once BudgetPanel parity is added."
     },
-    "compaction_completed": {
-      "status": "deferred",
-      "reason": "web-client folds compaction completion into snapshot.notices (visible in Diagnostics), but does not yet render a persistent compaction notice in the main transcript; remove once transcript notices render."
-    },
-    "compaction_failed": {
-      "status": "deferred",
-      "reason": "web-client shows compaction failure transiently during an active turn, but does not yet persist the failure notice in the main transcript after the turn settles; remove once transcript notices render."
-    },
-    "notice": {
-      "status": "deferred",
-      "reason": "web-client exposes snapshot.notices only inside the opt-in Diagnostics panel rather than rendering general runtime notices in the main chat view; remove once a notice surface is added."
-    },
-    "automatic_memory_notice": {
-      "status": "deferred",
-      "reason": "web-client folds automatic_memory_notice into snapshot.notices without surfacing it in the main chat transcript outside Diagnostics; remove once general notices render in chat."
-    },
     "goal_proposed": {
       "status": "deferred",
       "reason": "web-client renders active goals read-only via GoalBanner and does not yet surface or let users accept/dismiss proposed goals; remove once interactive goal management is added to serve and web-client."

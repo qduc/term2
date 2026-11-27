@@ -142,9 +142,9 @@ function ReasoningBlock({ text, streaming }: { text: string; streaming: boolean 
 }
 
 /** Reply text: paced and faded in while it streams, plain markdown otherwise. */
-function ReplyText({ text, streaming }: { text: string; streaming: boolean }) {
+function ReplyText({ text, streaming, replyStart }: { text: string; streaming: boolean; replyStart: boolean }) {
   const smooth = useSmoothText(text, streaming);
-  return <Term2Markdown text={smooth.text} fade={smooth.fade} />;
+  return <Term2Markdown text={smooth.text} fade={smooth.fade} replyStart={replyStart} />;
 }
 
 export const Term2TurnTimeline = memo(function Term2TurnTimeline({
@@ -191,10 +191,12 @@ export const Term2TurnTimeline = memo(function Term2TurnTimeline({
           );
         }
 
+        const ordinal = textOrdinal++;
         return (
           <ReplyText
-            key={`text:${textOrdinal++}`}
+            key={`text:${ordinal}`}
             text={segment.text}
+            replyStart={ordinal === 0}
             // Only the turn's newest segment can still grow.
             streaming={turn.status === 'streaming' && index === segments.length - 1}
           />

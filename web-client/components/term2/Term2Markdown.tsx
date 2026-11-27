@@ -187,14 +187,19 @@ export const Term2Markdown = memo(function Term2Markdown({
   text,
   className,
   fade,
+  replyStart,
 }: {
   text: string;
   className?: string;
   fade?: RevealFade | null;
+  replyStart?: boolean;
 }) {
   const rehypePlugins = useMemo(() => (fade ? [rehypeRevealFade(fade)] : []), [fade]);
   return (
-    <div className={`md-content text-[15px] leading-[1.7] text-zinc-800 dark:text-zinc-200 ${className ?? ''}`}>
+    <div
+      data-reply-start={replyStart || undefined}
+      className={`md-content text-[15px] leading-[1.7] text-zinc-800 dark:text-zinc-200 ${className ?? ''}`}
+    >
       <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
         {text}
       </ReactMarkdown>

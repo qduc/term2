@@ -7,7 +7,7 @@ import { term2Client, Term2ApiError } from '../../api/term2';
 import type { BrowserPrefs } from '../browser-prefs';
 import type { ServerData } from '../data/server-data';
 import * as chatNavigation from '../chat-navigation';
-import { type ShellAction, type ShellCommand, type ShellState, type Tag } from '../shell-machine';
+import { isCurrentTag, type ShellAction, type ShellCommand, type ShellState, type Tag } from '../shell-machine';
 import type { OpenSession } from './open-session';
 import type { ShellOperations } from './shell-operations';
 
@@ -58,6 +58,10 @@ export function createCommandRunner(deps: {
         void term2Client.createSession(command.workspaceId).then(
           (projection) => {
             data.chatCreated(projection);
+            // Open the stream now, while the draft config applies, so connecting overlaps it instead of
+            // starting after navigation. The runtime's open() for the navigated chat is then a no-op, and it
+            // closes this early stream if the draft is discarded before its chat opens.
+            if (isCurrentTag(deps.getState(), command.tag)) session.open(projection.id);
             dispatch({ type: 'SESSION_CREATED', tag: command.tag, sessionId: projection.id });
           },
           (error: unknown) => failDraftStart(command.tag, error),

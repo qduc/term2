@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useCallback, type RefObject } from 'react';
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowUp, LoaderCircle, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { useStoreSelector } from '../../../hooks/useStoreSelector';
@@ -43,6 +43,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
       pickerWarning: facts.pickerWarning,
       staged: Boolean(facts.stagedForChat),
       sendBlocked: facts.sendBlocked,
+      starting: facts.startingChat,
       streaming: facts.canAbort && facts.hasStreamingTurn,
     }),
     shallowEqual,
@@ -185,13 +186,13 @@ export const ComposerToolbar = memo(function ComposerToolbar({
           <Button
             type="button"
             size="icon"
-            aria-label="Send message"
+            aria-label={f.starting ? 'Starting chat…' : 'Send message'}
             title="Send (Enter) · new line (Shift+Enter)"
             className="rounded-full"
             disabled={f.composerDisabled || f.sendBlocked || !hasContent}
             onClick={() => void ops.send()}
           >
-            <ArrowUp strokeWidth={2.25} />
+            {f.starting ? <LoaderCircle className="animate-spin" /> : <ArrowUp strokeWidth={2.25} />}
           </Button>
         )}
       </div>

@@ -26,6 +26,7 @@ export const Composer = memo(function Composer() {
   const paletteOpen = useShellState((s) => s.composer.paletteOpen);
   const resendNotice = useShellState((s) => s.notices.resend);
   const composerDisabled = useChatFacts((f) => f.composerDisabled);
+  const startingChat = useChatFacts((f) => f.startingChat);
   const interactionPending = useChatFacts((f) => f.interactionPending);
   const hasStreamingTurn = useChatFacts((f) => f.hasStreamingTurn);
   const submitError = useChatFacts((f) => f.submitError);
@@ -296,6 +297,8 @@ export const Composer = memo(function Composer() {
         placeholder={
           interactionPending
             ? 'Respond to the approval prompt above to continue…'
+            : startingChat
+            ? 'Starting chat…'
             : hasStreamingTurn
             ? 'Steer (Enter) or queue follow-up (Alt+Enter)…'
             : 'Ask about your files… (@ files, / actions)'

@@ -16,20 +16,23 @@ import { useChatFacts, useSessionView, useShell, useShellEnv } from './ShellCont
 export function LiveStatusLine() {
   const hasStreamingTurn = useChatFacts((f) => f.hasStreamingTurn);
   const liveStatus = useChatFacts((f) => f.liveStatus);
+  const firstSendPending = useChatFacts((f) => f.firstSendPending);
   const interactionPending = useChatFacts((f) => f.interactionPending);
   const runningTurnId = useChatFacts((f) => f.runningTurnId);
+  // A new chat's first send owns the line until its turn streams, so Enter is answered at once.
+  const status = liveStatus ?? (firstSendPending ? 'Starting chat…' : null);
   // While a prompt is pending the card below is the status; a second line would repeat it.
   // The 1-line slot (16px gap + 24px height) matches the reply action bar, so turn completion doesn't bounce the transcript.
-  if (!((hasStreamingTurn || liveStatus) && !interactionPending)) return null;
+  if (!((hasStreamingTurn || status) && !interactionPending)) return null;
   return (
-    <p role="status" className={`-mt-2 flex h-6 items-center gap-2.5 text-sm ${liveStatus ? '' : 'invisible'}`}>
-      {liveStatus && (
+    <p role="status" className={`-mt-2 flex h-6 items-center gap-2.5 text-sm ${status ? '' : 'invisible'}`}>
+      {status && (
         <>
           <span
             aria-hidden
             className="t2-heartbeat h-2 w-2 shrink-0 rounded-full bg-teal-500 ring-2 ring-teal-400/30"
           />
-          <span className="t2-shimmer truncate">{liveStatus}</span>
+          <span className="t2-shimmer truncate">{status}</span>
           {runningTurnId && <TurnElapsed turnId={runningTurnId} />}
         </>
       )}

@@ -15,7 +15,9 @@ Directions:
 
 | Name | Direction | Scenario(s) |
 | --- | --- | --- |
-| `protocol.hello` / `protocol.welcome` (or `protocol.incompatible`) | `C <-> H` | S1, S3, S6, S7 |
+| `protocol.hello` / `protocol.welcome` | `C <-> H` | S1, S3, S6, S7 |
+| `protocol.ping` | `C -> H` | S3 (Unix transport keepalive) |
+| `protocol.heartbeat` | `H -> C` | S3 (Host liveness notification) |
 | `daemon.status` | `C -> H` | S6, S7 |
 | `daemon.shutdown` | `C -> H` | S6, S7 |
 | `daemon.draining` | `H -> C` | S7 |
@@ -29,6 +31,7 @@ Directions:
 | `session.list.snapshot` | `H -> C` | S8, S3 |
 | `session.list.upsert` | `H -> C` | S1, S2, S4, S5, S8 |
 | `session.list.remove` | `H -> C` | S8 (grant revoked / session unavailable) |
+| `session.list.resync_required` | `H -> C` | S3, S8 (slow consumer / epoch change) |
 | `session.create` | `C -> H` | S1, S2 (headless policy), S4 |
 | `session.fork` | `C -> H` | S1 (resume/fork parity) |
 | `session.handoff` | `C -> H` | S1 (TUI `/handoff` & web handoff parity) |
@@ -38,13 +41,13 @@ Directions:
 
 | Name | Direction | Scenario(s) |
 | --- | --- | --- |
-| `session.attach` (with optional `fromSeq`, optional attach policy) | `C -> H` | S1, S2, S3, S4, S10 |
+| `session.attach` (with optional `fromSeq`, `sessionEpoch`) | `C -> H` | S1, S2, S3, S4, S10 |
 | `session.detach` | `C -> H` | S1, S3, S4 |
 | `session.snapshot` | `H -> C` | S1, S3, S4 |
 | `session.accepted` (atomic `seq`-ordered batch of `WireEvent`s) | `H -> C` | S1, S2, S3, S4, S5, S7 |
-| `session.live` (ephemeral `seq: null` batch: deltas, progress, review, quota, retry, error) | `H -> C` | S1, S2, S4, S5 |
-| `session.resync_required` | `H -> C` | S3 (cursor outside retention or slow-consumer detach) |
-| `session.closed` | `H -> C` | S7 (session evicted/released or workspace grant revoked) |
+| `session.live` (ephemeral batch: deltas, progress, review, quota, retry, error) | `H -> C` | S1, S2, S4, S5 |
+| `session.resync_required` | `H -> C` | S3 (slow-consumer detach or incompatible session rotation) |
+| `session.closed` | `H -> C` | S7 (session closed or workspace grant revoked) |
 
 ## 4. Session Commands (Turn, Queue, Approvals, Interactions, Goals, Tasks, Context)
 
@@ -52,20 +55,20 @@ Sent via `session.command` (`C -> H`), authorized per `sessionId`, returning typ
 
 | Command Name | Direction | Scenario(s) |
 | --- | --- | --- |
-| `submit` (with `requestId`, optional `skill`) | `C -> H` | S1, S3, S4 |
+| `submit` (with durable `requestId`, optional `skill`) | `C -> H` | S1, S3, S4 |
 | `preview` (input surge / preflight, optional `skill`) | `C -> H` | S1 |
 | `cancel` (with optional `expectedTurnId`, `discardQueue`, `returnSteers`) | `C -> H` | S1, S4 |
-| `retry` (`turn` or `tool`) | `C -> H` | S3, S7 |
-| `queue_edit` | `C -> H` | S4 |
-| `queue_retract` | `C -> H` | S4 |
-| `queue_resume` | `C -> H` | S4 |
-| `queue_discard` | `C -> H` | S4 |
-| `answer` (approval or `ask_user` interaction decision) | `C -> H` | S2, S4, S10 |
-| `take_over_review` | `C -> H` | S2, S4 |
-| `answer_budget` | `C -> H` | S4 (run-budget pause/continue) |
+| `retry` (`turn` or `tool`, with `requestId`, `expectedTurnId?`) | `C -> H` | S3, S7 |
+| `queue_edit` (`expectedRevision`) | `C -> H` | S4 |
+| `queue_retract` (`expectedRevision`) | `C -> H` | S4 |
+| `queue_resume` (`expectedRevision`) | `C -> H` | S4 |
+| `queue_discard` (`expectedRevision`) | `C -> H` | S4 |
+| `answer` (`requestId`, approval or `ask_user` interaction decision) | `C -> H` | S2, S4, S10 |
+| `take_over_review` (`requestId`) | `C -> H` | S2, S4 |
+| `answer_budget` (`requestId`, decision) | `C -> H` | S4 (run-budget pause/continue) |
 | `set_goal` (set / achieved / abandon / clear / accept proposal, with `expectedGeneration`) | `C -> H` | S4, S7 |
-| `configure` (`model`, `reasoning`, `temperature`, `approvalMode`, session overrides, `expectedRevision`) | `C -> H` | S2, S4 |
-| `task_control` (`cancel`, `background`) | `C -> H` | S4, S5, S7 |
+| `configure` (`model`, `reasoning`, `temperature`, `approvalMode`, `sandboxEnabled`, `expectedRevision`, `clientRequestId`) | `C -> H` | S2, S4 |
+| `task_control` (`cancel`, `background`, `check_in`, `foreground`) | `C -> H` | S4, S5, S7 |
 | `compact` | `C -> H` | S4 (manual `/compact`) |
 | `rollover` | `C -> H` | S4 (manual rollover) |
 | `rewind` / `list_rewind_targets` | `C -> H` | S1, S4 |
@@ -78,8 +81,10 @@ Sent via `session.command` (`C -> H`), authorized per `sessionId`, returning typ
 | --- | --- | --- |
 | `settings.get` (returns redacted projection + schema metadata + revision) | `C -> H` | S4 (TUI `/settings` & web settings) |
 | `settings.update` (with `expectedRevision`) | `C -> H` | S4 |
+| `settings.subscribe` / `settings.unsubscribe` | `C -> H` | S4 (live TUI settings sync) |
+| `settings.snapshot` | `H -> C` | S4 (atomic initial settings state on subscribe) |
 | `settings.changed` | `H -> C` | S4 (live TUI/web sync on global setting change) |
-| `models.list` (catalog + favorites + nicknames) | `C -> H` | S1, S4 (TUI `/model` & web model picker) |
+| `models.list` (catalog + optional favorites + nicknames) | `C -> H` | S1, S4 (TUI `/model` & web model picker) |
 | `providers.presets` | `C -> H` | S4 (provider management) |
 | `providers.upsert` / `providers.delete` | `C -> H` | S4 |
 | `credentials.set` / `credentials.delete` | `C -> H` | S4 (write-only API keys) |

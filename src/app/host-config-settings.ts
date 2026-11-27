@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { ModelCatalogEntry, SettingsProjection, ShellSandboxNotice } from '../host/server-contracts.js';
+import type {
+  ModelCatalogEntry,
+  ServerCapabilities,
+  SettingsProjection,
+  ShellSandboxNotice,
+} from '../host/server-contracts.js';
 import { catalogDetails } from '../model/providers/model-catalog/catalog-details.js';
 import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 import { ModelSelectionSchema, type ModelSelection } from '../config/settings/model-selection.js';
@@ -73,6 +78,7 @@ export class DirectGlobalConfiguration {
     private readonly oauth: DirectOAuthBackend,
     private readonly models: DirectModelBackend,
     private readonly allowWrite: boolean,
+    private readonly capabilities?: ServerCapabilities,
   ) {
     this.#sandboxNotice = this.#probeSandbox();
   }
@@ -328,7 +334,7 @@ export class DirectGlobalConfiguration {
             : approval === 'auto' || approval === 'unattended' || approval === 'off'
             ? approval
             : ('hidden' as const),
-        backgroundShell: 'disabled-by-gateway' as const,
+        backgroundShell: this.capabilities?.backgroundShell ? ('enabled' as const) : ('disabled-by-gateway' as const),
         workspaceAccess: this.allowWrite ? ('read_write' as const) : ('read' as const),
         network:
           this.settings.get('sandbox.allowNetworking') === true
@@ -337,7 +343,13 @@ export class DirectGlobalConfiguration {
       },
     };
     const revision = createHash('sha256').update(JSON.stringify(settingsOnly)).digest('hex');
-    return { schemaVersion: 1, revision, defaultsRevision: revision, settings: settingsOnly };
+    return {
+      schemaVersion: 1,
+      revision,
+      defaultsRevision: revision,
+      settings: settingsOnly,
+      ...(this.capabilities ? { capabilities: this.capabilities } : {}),
+    };
   }
 
   #credential(providerId: string, required: boolean): SecretFreeCredential {

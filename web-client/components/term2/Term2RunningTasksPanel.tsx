@@ -202,12 +202,14 @@ const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice
 export function Term2RunningTasksPanel({
   view,
   shown,
+  allowedActions,
   onControlTask,
   onClose,
   onGoToQuestion,
 }: {
   view: Term2SessionView;
   shown: RunningTask[];
+  allowedActions?: readonly ('cancel' | 'background' | 'check_in' | 'foreground')[];
   onControlTask: (action: TaskControlAction) => Promise<boolean>;
   onClose: () => void;
   onGoToQuestion: () => void;
@@ -217,6 +219,10 @@ export function Term2RunningTasksPanel({
   const [openActivity, setOpenActivity] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const runningCount = shown.filter((entry) => entry.live).length;
+  const actions = new Set(allowedActions ?? ['cancel', 'background']);
+  const canBackground = actions.has('background');
+  const canCheckIn = actions.has('check_in');
+  const canCancel = actions.has('cancel');
 
   useEffect(() => {
     if (runningCount === 0) return;
@@ -330,12 +336,12 @@ export function Term2RunningTasksPanel({
               )}
               {live && status !== 'cancelling' && (
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  {!background && (
+                  {!background && canBackground && (
                     <Button type="button" variant="outline" size="xs" disabled={busy === id} onClick={() => void act(id, 'background')}>
                       Move to background
                     </Button>
                   )}
-                  {background && (
+                  {background && canCheckIn && (
                     <Button
                       type="button"
                       variant="outline"
@@ -347,7 +353,7 @@ export function Term2RunningTasksPanel({
                       Check in
                     </Button>
                   )}
-                  {confirmStop === id ? (
+                  {canCancel && (confirmStop === id ? (
                     <>
                       <Button type="button" variant="destructive" size="xs" disabled={busy === id} onClick={() => void act(id, 'cancel')}>
                         Stop it
@@ -367,7 +373,7 @@ export function Term2RunningTasksPanel({
                     >
                       Stop
                     </Button>
-                  )}
+                  ))}
                   {busy === id && <Spinner aria-label="Working" className="size-3.5 text-muted-foreground" />}
                 </div>
               )}

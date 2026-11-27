@@ -293,6 +293,14 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       stateDirectory: stateDir,
     });
     const product = createDirectProductPorts();
+    const capabilities = {
+      sessionBrowser: false,
+      rollover: false,
+      backgroundShell: true,
+      goalsWrite: false,
+      approvalReviewTakeover: false,
+      taskActions: ['cancel', 'background'] as const,
+    };
     const configuration = new DirectGlobalConfiguration(
       product.settings,
       product.credentials,
@@ -300,6 +308,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       product.oauth,
       product.models,
       args.allowWrite,
+      capabilities,
     );
     const directory = path.join(stateDir, 'conversations');
     const ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));

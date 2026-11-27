@@ -1,5 +1,6 @@
 'use client';
 
+import { useStoreSelector } from '../../../hooks/useStoreSelector';
 import { Term2RunningTasksPanel } from '../Term2RunningTasksPanel';
 import { useShownTasks } from './RunningTasksContext';
 import { useChatFacts, useSessionView, useShell, useShellEnv } from './ShellContext';
@@ -11,6 +12,7 @@ export function TasksPanelRegion() {
   const visible = useChatFacts((f) => f.tasksPanelVisible);
   const shown = useShownTasks();
   const view = useSessionView((v) => v);
+  const allowedActions = useStoreSelector(shell.data.settings, (s) => s.data?.capabilities?.taskActions);
   if (!visible || settingsOpen) return null;
   const close = () => shell.dispatch({ type: 'TASKS_PANEL_CLOSED' });
   return (
@@ -28,6 +30,7 @@ export function TasksPanelRegion() {
         <Term2RunningTasksPanel
           view={view}
           shown={shown}
+          allowedActions={allowedActions}
           onControlTask={shell.session.controlTask}
           onClose={close}
           onGoToQuestion={() =>

@@ -390,10 +390,43 @@ function validateShellSandboxNotice(value: unknown): ShellSandboxNotice | undefi
   if (/[\u0000-\u001f\u007f]/u.test(code) || /[\u0000-\u001f\u007f]/u.test(detail)) return undefined;
   return { code, detail };
 }
+const VALID_TASK_ACTIONS = new Set(['cancel', 'background', 'check_in', 'foreground']);
+function validateServerCapabilities(value: unknown): SettingsProjection['capabilities'] {
+  if (value === undefined) return undefined;
+  const item = object(value);
+  only(item, ['sessionBrowser', 'rollover', 'backgroundShell', 'goalsWrite', 'approvalReviewTakeover', 'taskActions']);
+  if (
+    typeof item.sessionBrowser !== 'boolean' ||
+    typeof item.rollover !== 'boolean' ||
+    typeof item.backgroundShell !== 'boolean' ||
+    typeof item.goalsWrite !== 'boolean' ||
+    typeof item.approvalReviewTakeover !== 'boolean' ||
+    !Array.isArray(item.taskActions) ||
+    !item.taskActions.every((action) => typeof action === 'string' && VALID_TASK_ACTIONS.has(action))
+  )
+    throw new Term2ApiError(503, 'Invalid agent response');
+  return {
+    sessionBrowser: item.sessionBrowser,
+    rollover: item.rollover,
+    backgroundShell: item.backgroundShell,
+    goalsWrite: item.goalsWrite,
+    approvalReviewTakeover: item.approvalReviewTakeover,
+    taskActions: item.taskActions as NonNullable<SettingsProjection['capabilities']>['taskActions'],
+  };
+}
 export function validateSettings(value: unknown): SettingsProjection {
   const input = object(value);
-  only(input, ['schemaVersion', 'revision', 'defaultsRevision', 'settings', 'session', 'shellSandboxNotice']);
+  only(input, [
+    'schemaVersion',
+    'revision',
+    'defaultsRevision',
+    'settings',
+    'session',
+    'shellSandboxNotice',
+    'capabilities',
+  ]);
   const shellSandboxNotice = validateShellSandboxNotice(input.shellSandboxNotice);
+  const capabilities = validateServerCapabilities(input.capabilities);
   if (input.schemaVersion !== 1 || typeof input.revision !== 'string' || typeof input.defaultsRevision !== 'string')
     throw new Term2ApiError(503, 'Invalid agent response');
   const settings = object(input.settings);
@@ -491,7 +524,7 @@ export function validateSettings(value: unknown): SettingsProjection {
   if (
     !['enabled', 'disabled', 'unavailable'].includes(String(safety.sandbox)) ||
     !['off', 'advisory', 'auto', 'unattended', 'unsafe-active', 'hidden'].includes(String(safety.approval)) ||
-    safety.backgroundShell !== 'disabled-by-gateway' ||
+    !['enabled', 'disabled-by-gateway'].includes(String(safety.backgroundShell)) ||
     !['read', 'read_write'].includes(String(safety.workspaceAccess)) ||
     !['denied', 'configured', 'confirmation-required'].includes(String(safety.network)) ||
     (safety.showReview !== undefined && typeof safety.showReview !== 'boolean')
@@ -510,6 +543,7 @@ export function validateSettings(value: unknown): SettingsProjection {
     },
     ...(input.session === undefined ? {} : { session: validateSessionConfig(input.session) }),
     ...(shellSandboxNotice ? { shellSandboxNotice } : {}),
+    ...(capabilities ? { capabilities } : {}),
   };
 }
 function validateCredentialProjection(value: unknown): SettingsProjection['settings']['credentials'][string] {

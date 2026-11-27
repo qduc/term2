@@ -1,8 +1,17 @@
 # Singleton daemon: one host, every UI a client
 
-Status: plan. Agreed with the owner on 2026-11-27; waiting on an orchestrator to
-start step 0. The orchestrator that picks this up switches the status to
-`in progress` and adds a **Resume here** section, per `docs/plans/README.md`.
+Status: in progress. Started 2026-11-27.
+
+## Resume here
+
+- **Current phase:** Steps 0–6 formalized; executing Step 7 (independent Branch A code-blind and Branch B code-derived ownership analysis) before Steps 8–10.
+- **State files:**
+  - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
+  - [Decision log](decisions.md)
+  - [Progress ledger](progress.md)
+  - [Worth revisiting (owner review list)](worth-revisiting.md)
+- **Next concrete actions:** Complete Step 7 (Branch A vs Branch B row-by-row comparison), Step 8 (scenario validation), Step 9 (Client API inventory), Step 10 (RFC-style draft spec + conformance suite + independent review rounds), Step 11 (sub-module zoom-ins), Step 13 (session-list stream prototype + web sidebar), Step 12 (spec recheck & freeze), and Step 14 (daemon build-out through the default flip).
+
 
 ## Goal
 

@@ -46,10 +46,7 @@ export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly authority: DirectAuthority | DirectAuthorityFactory;
   /** The modes with public hooks today: the terminal UI and headless. ACP and serve have none. */
   readonly hooks?: DirectHookOptions;
-  /**
-   * Live default for new sessions. Serve supplies its global settings owner so
-   * browser settings writes reach the next chat; other modes use the launch selection.
-   */
+  /** Live default for new sessions; serve reads global settings, other modes the launch selection. */
   readonly resolveDefaultModel?: () => ModelRef | Promise<ModelRef>;
 };
 

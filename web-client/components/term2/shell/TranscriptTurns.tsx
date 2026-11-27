@@ -15,6 +15,7 @@ import { currentTag } from '../../../lib/term2/shell-machine';
 /** The conversation's turns. Each turn re-renders only when it, or what it reads, changes. */
 export function TranscriptTurns() {
   const turns = useSessionView((v) => v.turns);
+  const rolledOver = useSessionView((v) => v.session?.rolledOver === true);
   const [copiedTurn, setCopiedTurn] = useState<string | null>(null);
   const copyTurn = useCallback((turnId: string, text: string) => {
     void navigator.clipboard
@@ -27,6 +28,17 @@ export function TranscriptTurns() {
   }, []);
   return (
     <>
+      {rolledOver && (
+        <div
+          role="separator"
+          aria-label="Continued in a fresh context"
+          className="flex items-center gap-3 py-1 text-xs text-muted-foreground"
+        >
+          <span className="h-px flex-1 bg-border" />
+          <span>Continued in a fresh context</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+      )}
       {turns.map((turn, turnIndex) => (
         <TranscriptTurn
           key={turn.turnId}

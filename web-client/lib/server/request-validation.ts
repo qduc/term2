@@ -4,7 +4,7 @@ export class RequestValidationError extends Error {
 }
 
 const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/u;
-const COMMAND_IDS = new Set(['compact', 'retry-tool', 'retry-turn']);
+const COMMAND_IDS = new Set(['compact', 'rollover', 'retry-tool', 'retry-turn']);
 
 function opaqueId(value: unknown, name: string): string {
   if (typeof value !== 'string' || !OPAQUE_ID.test(value)) throw new RequestValidationError(`Invalid ${name}`);

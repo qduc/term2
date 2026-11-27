@@ -294,8 +294,8 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     });
     const product = createDirectProductPorts();
     const capabilities = {
-      sessionBrowser: false,
-      rollover: false,
+      sessionBrowser: true,
+      rollover: true,
       backgroundShell: true,
       goalsWrite: false,
       approvalReviewTakeover: false,
@@ -321,15 +321,14 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       surface: () => ({
         autoApprove: false,
         interactive: true,
-        // Deferred: see scripts/surface-parity-exceptions.json (appWiring.sessionBrowser).
-        sessionBrowser: false,
+        sessionBrowser: true,
         allowUnsandboxed: false,
         shellEscapeApproval: true,
         preserveSandboxedShellApproval: true,
-        // Deferred: see scripts/surface-parity-exceptions.json (appWiring.mcp).
+        // By-design: see scripts/surface-parity-exceptions.json (appWiring.mcp).
         mcp: undefined,
       }),
-      // Deferred: see scripts/surface-parity-exceptions.json (appWiring.mcpCatalog, appWiring.hooks).
+      // By-design: see scripts/surface-parity-exceptions.json (appWiring.mcpCatalog, appWiring.hooks).
       mcpCatalog: null,
       hooks: null,
       async authorizeModel(next, previous) {

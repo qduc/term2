@@ -32,7 +32,7 @@ const SERVER_WIRE_COMMAND_PARITY: Record<WireCommand['type'], ServerWireCommandP
   list_rewind_targets: 'supported',
   rewind: 'supported',
   reset: 'by-design',
-  rollover: 'deferred',
+  rollover: 'supported',
   preview: 'by-design',
 };
 void SERVER_WIRE_COMMAND_PARITY;
@@ -51,6 +51,9 @@ export async function invokeServerCommand(input: ServerSessionRequest, body: Com
   switch (body.commandId) {
     case 'compact':
       command = { type: 'compact', commandId: body.clientRequestId, ...preconditions };
+      break;
+    case 'rollover':
+      command = { type: 'rollover', commandId: body.clientRequestId, ...preconditions };
       break;
     case 'retry-tool':
     case 'retry-turn':
@@ -92,7 +95,8 @@ function projectReceipt(body: CommandBody, receipt: WireCommandReceipt, pending:
   if (!outcome) return unavailable('durable command outcome');
   switch (outcome.kind) {
     case 'retried':
-      if (body.commandId === 'compact') return unavailable('matching durable command outcome');
+      if (body.commandId !== 'retry-tool' && body.commandId !== 'retry-turn')
+        return unavailable('matching durable command outcome');
       return {
         status: 200,
         body: { commandId: body.commandId, outcome: 'accepted', turnId: outcome.turnId },
@@ -100,6 +104,9 @@ function projectReceipt(body: CommandBody, receipt: WireCommandReceipt, pending:
     case 'compacted':
       if (body.commandId !== 'compact') return unavailable('matching durable command outcome');
       return { status: 200, body: { commandId: 'compact', outcome: 'completed' } };
+    case 'rolled_over':
+      if (body.commandId !== 'rollover') return unavailable('matching durable command outcome');
+      return { status: 200, body: { commandId: 'rollover', outcome: 'completed' } };
     case 'interrupted':
     case 'rejected':
       return projectNegativeReceipt(receipt);

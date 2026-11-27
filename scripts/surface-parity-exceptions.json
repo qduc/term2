@@ -1,9 +1,5 @@
 {
   "appWiring": {
-    "sessionBrowser": {
-      "status": "deferred",
-      "reason": "launch-serve.ts does not yet wire sessionBrowser: true, which disables session_list/search/read tools, contextMilestones reminders, and model-initiated session_rollover on the web server; remove once serve enables sessionBrowser and web-client renders rollover boundaries."
-    },
     "mcp": {
       "status": "by-design",
       "reason": "MCP server lifecycle and OAuth are intentionally terminal-only for now; web chats run without per-workspace MCP server processes."
@@ -46,10 +42,6 @@
       "status": "by-design",
       "reason": "Web intentionally uses draft-first New chat in the sidebar instead of resetting an existing logical session in place via /clear."
     },
-    "rollover": {
-      "status": "deferred",
-      "reason": "server-commands.ts rejects rollover with 422 command_not_allowed because sessionBrowser and rollover UI boundaries are not yet wired for web; remove alongside appWiring.sessionBrowser."
-    },
     "preview": {
       "status": "by-design",
       "reason": "Pre-send input-surge and large-uncached-context confirmation is intentionally terminal-only for now; web submits directly without a preview round-trip."
@@ -71,10 +63,6 @@
     "compaction_failed": {
       "status": "deferred",
       "reason": "web-client shows compaction failure transiently during an active turn, but does not yet persist the failure notice in the main transcript after the turn settles; remove once transcript notices render."
-    },
-    "session_rotated": {
-      "status": "deferred",
-      "reason": "web-client folds session_rotated via reduceWireEvent, which clears foreground turns silently without a rollover boundary divider or banner; remove once rollover UI is implemented."
     },
     "notice": {
       "status": "deferred",

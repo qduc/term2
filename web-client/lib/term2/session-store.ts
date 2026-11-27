@@ -50,7 +50,7 @@ const WEB_WIRE_EVENT_PARITY: Record<WireEvent['type'], WebWireEventParity> = {
   compaction_started: 'presented',
   compaction_completed: 'partial',
   compaction_failed: 'partial',
-  session_rotated: 'deferred',
+  session_rotated: 'presented',
   background_notice_enqueued: 'presented',
   background_notices_delivered: 'folded',
   command_started: 'folded',

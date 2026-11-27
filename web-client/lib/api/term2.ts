@@ -1230,6 +1230,12 @@ export const term2Client = {
       throw apiError(error);
     }
   },
+  setGoal(
+    sessionId: string,
+    body: { action: 'set'; text: string; successCriteria?: string } | { action: 'achieved' | 'abandon' | 'clear' | 'accept_proposal' },
+  ): Promise<{ ok: true }> {
+    return postJson(`/agent/sessions/${encodeURIComponent(id(sessionId))}/goal`, body, () => ({ ok: true as const }));
+  },
   };
 
 function validateSettingsWrite(value: unknown): SettingsWriteResult {

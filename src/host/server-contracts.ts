@@ -39,6 +39,7 @@ export const ASSERTION_PURPOSES = [
   'session_task_control',
   'session_files',
   'session_quota',
+  'session_goal',
 ] as const;
 export type AssertionPurpose = (typeof ASSERTION_PURPOSES)[number];
 export type GatewayAssertionClaims = {
@@ -302,7 +303,12 @@ export interface ServerSessionPresentation {
     readonly admission: 'idle';
     readonly expectedRevision: string;
   };
+  /** Set, update status, clear, or accept a proposed durable goal for this session. */
+  setGoal?(principal: Principal, snapshot: WireSnapshot, action: ServerGoalAction): Promise<void>;
 }
+export type ServerGoalAction =
+  | { readonly action: 'set'; readonly text: string; readonly successCriteria?: string }
+  | { readonly action: 'achieved' | 'abandon' | 'clear' | 'accept_proposal' };
 export type ServerAudit = {
   operation: AssertionPurpose;
   principal: Principal;

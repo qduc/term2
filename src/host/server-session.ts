@@ -309,6 +309,40 @@ export async function handleSessionRoute(
     }
     case 'session_quota':
       return { status: 200, body: subscriptionQuotaView(connection.snapshot) };
+    case 'session_goal': {
+      if (!dependencies.presentation?.setGoal) return unavailable('session goal');
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return invalid('goal request is invalid');
+      const v = body as Record<string, unknown>;
+      let action: import('./server-contracts.js').ServerGoalAction;
+      if (v.action === 'set') {
+        if (
+          typeof v.text !== 'string' ||
+          !v.text.trim() ||
+          v.text.length > 4_000 ||
+          (v.successCriteria !== undefined &&
+            (typeof v.successCriteria !== 'string' || v.successCriteria.length > 4_000))
+        )
+          return invalid('goal text is invalid');
+        action = {
+          action: 'set',
+          text: v.text.trim(),
+          ...(typeof v.successCriteria === 'string' && v.successCriteria.trim()
+            ? { successCriteria: v.successCriteria.trim() }
+            : {}),
+        };
+      } else if (
+        v.action === 'achieved' ||
+        v.action === 'abandon' ||
+        v.action === 'clear' ||
+        v.action === 'accept_proposal'
+      ) {
+        action = { action: v.action };
+      } else {
+        return invalid('goal action is invalid');
+      }
+      await dependencies.presentation.setGoal(principal, connection.snapshot, action);
+      return { status: 200, body: { ok: true } };
+    }
     default:
       return publicError(403, 'gateway_unavailable', 'gateway operation is unavailable');
   }

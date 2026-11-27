@@ -303,6 +303,26 @@ export class OpenSession {
     }
   }
 
+  async setGoal(
+    action:
+      | { action: 'set'; text: string; successCriteria?: string }
+      | { action: 'achieved' | 'abandon' | 'clear' | 'accept_proposal' },
+  ): Promise<boolean> {
+    const id = this.#sessionId;
+    if (!id) return false;
+    try {
+      await term2Client.setGoal(id, action);
+      return true;
+    } catch (error) {
+      this.#setCommand({
+        sessionId: id,
+        tone: 'error',
+        message: error instanceof Error ? error.message : 'Goal update failed.',
+      });
+      return false;
+    }
+  }
+
   /**
    * `forResend` is for Edit and Retry, which send right after: it skips the "Conversation rewound." notice and
    * resolves only once the reloaded chat accepts messages again.

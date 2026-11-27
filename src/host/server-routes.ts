@@ -51,7 +51,7 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
   if (method === 'POST' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_create' };
   if (method === 'GET' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_list' };
   const match = pathname.match(
-    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|rewind-targets|rewind|queue|tasks|files|quota|interactions\/([A-Za-z0-9_:-]{1,256})))?$/,
+    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|rewind-targets|rewind|queue|tasks|files|quota|goal|interactions\/([A-Za-z0-9_:-]{1,256})))?$/,
   );
   if (!match) return null;
   const sessionId = match[1]!;
@@ -67,6 +67,7 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
   if (method === 'POST' && match[2] === 'tasks') return { purpose: 'session_task_control', sessionId };
   if (method === 'GET' && match[2] === 'files') return { purpose: 'session_files', sessionId };
   if (method === 'GET' && match[2] === 'quota') return { purpose: 'session_quota', sessionId };
+  if (method === 'POST' && match[2] === 'goal') return { purpose: 'session_goal', sessionId };
   if (method === 'POST' && match[2]?.startsWith('interactions/'))
     return { purpose: 'interaction_resolve', sessionId, interactionId: match[3] };
   return null;

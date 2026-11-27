@@ -72,7 +72,7 @@ const WEB_WIRE_EVENT_PARITY: Record<WireEvent['type'], WebWireEventParity> = {
   notice: 'presented',
   automatic_memory_notice: 'presented',
   goal: 'presented',
-  goal_proposed: 'deferred',
+  goal_proposed: 'presented',
   verification: 'presented',
   error: 'presented',
 };

@@ -42,6 +42,7 @@ export interface Term2SessionFacts {
   lastUsage: NonNullable<WireSnapshot['lastUsage']> | null;
   cost: WireSnapshot['cost'];
   goal: WireSnapshot['goal'];
+  goalProposal: NonNullable<WireSnapshot['goalProposal']> | null;
   verification: WireSnapshot['verification'];
   notices: WireSnapshot['notices'];
   /** Rule 13: a session-level fault, shown once instead of a live-only overlay. */
@@ -416,6 +417,7 @@ function sessionFacts(snapshot: WireSnapshot): Term2SessionFacts {
     lastUsage: snapshot.lastUsage ?? null,
     cost: snapshot.cost,
     goal: snapshot.goal,
+    goalProposal: snapshot.goalProposal ?? null,
     verification: snapshot.verification,
     notices: snapshot.notices,
     lastError: snapshot.lastError,

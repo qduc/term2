@@ -20,19 +20,26 @@ export type SandboxAvailability =
   | { type: 'missing_dependency'; reason: string }
   | { type: 'initialization_failed'; reason: string };
 
+export type SandboxLeaseRelease = (() => void) & {
+  readonly token?: symbol;
+  readonly networkScope?: import('./sandbox-network-approval.js').SandboxNetworkApprovalScope;
+};
+
 export interface ShellSandboxRunner {
   availability(): Promise<SandboxAvailability>;
   /** Hold the process-wide sandbox configuration through command execution. */
-  acquire?(signal?: AbortSignal): Promise<() => void>;
+  acquire?(signal?: AbortSignal): Promise<SandboxLeaseRelease>;
   wrap(
     command: string,
     options: {
       cwd: string;
       config?: SandboxRuntimeConfig;
       signal?: AbortSignal;
+      lease?: SandboxLeaseRelease;
+      tmpDir?: string;
     },
   ): Promise<{ command: string; diagnostics?: string[] }>;
-  cleanupAfterCommand?(): void | Promise<void>;
+  cleanupAfterCommand?(lease?: SandboxLeaseRelease): void | Promise<void>;
   annotateFailure(command: string, stderr: string, exitCode?: number | null): string | Promise<string>;
 }
 

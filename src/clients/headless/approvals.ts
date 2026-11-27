@@ -47,7 +47,7 @@ export function createHeadlessAnswerer(
   connection: DirectConnection,
   options: DirectHeadlessOptions,
   errorText: (message: string, code?: string) => void,
-): (interaction: WireInteraction) => Promise<boolean> {
+): (interaction: WireInteraction, fromSnapshot?: boolean) => Promise<boolean> {
   const io = options.io ?? { stdout: process.stdout, stderr: process.stderr };
   const output = options.output ?? 'plain';
   const quiet = options.quiet ?? false;
@@ -67,10 +67,13 @@ export function createHeadlessAnswerer(
       .catch(() => undefined);
   };
 
-  const answer = async (interaction: WireInteraction): Promise<boolean> => {
+  const answer = async (interaction: WireInteraction, fromSnapshot = false): Promise<boolean> => {
     if (answered.has(interaction.requestId)) return true;
     answered.add(interaction.requestId);
     if (output === 'plain' && !quiet) io.stderr.write(interactionLine(interaction));
+    if (options.sessionHandlesHeadlessApprovals === true && !fromSnapshot) {
+      return true;
+    }
     let decided: HeadlessDecision;
     try {
       decided = await decide(interaction);

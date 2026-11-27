@@ -1,9 +1,22 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { SandboxManager as RuntimeSandboxManager, SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
-import { SANDBOX_TEMP_DIR, scratchDirectoryHint } from '../../../shared/utils/shell/temp-dir.js';
-import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
-import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
+import {
+  resolveWorkspaceSandboxTempDir,
+  SANDBOX_TEMP_DIR,
+  scratchDirectoryHint,
+} from '../../../shared/utils/shell/temp-dir.js';
+import {
+  createSandboxRuntimeConfig,
+  type SandboxAvailability,
+  type SandboxLeaseRelease,
+  type ShellSandboxRunner,
+} from './sandbox-policy.js';
+import {
+  createSandboxNetworkApprovalScope,
+  requestSandboxNetworkApproval,
+  type SandboxNetworkApprovalScope,
+} from './sandbox-network-approval.js';
 import { quoteShellArg } from '../../ssh-service.js';
 
 /**
@@ -24,24 +37,19 @@ async function sandboxManager(): Promise<typeof RuntimeSandboxManager> {
  * `CLAUDE_CODE_TMPDIR` names another directory. Term2 never creates
  * `/tmp/claude`, so inside the sandbox `mktemp` and anything else honouring
  * `$TMPDIR` failed with ENOENT while the writable temp directory went unused.
- * Name that directory for the duration of the wrap, and make sure it exists so
- * the runtime can bind it.
+ * Name that per-workspace directory strictly inside the held manager lease for
+ * the duration of the wrap, and make sure it exists so the runtime can bind it.
  */
 const RUNTIME_TMPDIR_ENV = 'CLAUDE_CODE_TMPDIR';
-// Wraps under one held lease may overlap, so the variable is restored only when the last one finishes.
-let runtimeTempDirHolders = 0;
-let runtimeTempDirPrevious: string | undefined;
-async function withRuntimeTempDir<T>(operation: () => Promise<T>): Promise<T> {
-  fs.mkdirSync(SANDBOX_TEMP_DIR, { recursive: true, mode: 0o700 });
-  if (runtimeTempDirHolders++ === 0) runtimeTempDirPrevious = process.env[RUNTIME_TMPDIR_ENV];
-  process.env[RUNTIME_TMPDIR_ENV] = SANDBOX_TEMP_DIR;
+async function withRuntimeTempDir<T>(tmpDir: string, operation: () => Promise<T>): Promise<T> {
+  fs.mkdirSync(tmpDir, { recursive: true, mode: 0o700 });
+  const previous = process.env[RUNTIME_TMPDIR_ENV];
+  process.env[RUNTIME_TMPDIR_ENV] = tmpDir;
   try {
     return await operation();
   } finally {
-    if (--runtimeTempDirHolders === 0) {
-      if (runtimeTempDirPrevious === undefined) delete process.env[RUNTIME_TMPDIR_ENV];
-      else process.env[RUNTIME_TMPDIR_ENV] = runtimeTempDirPrevious;
-    }
+    if (previous === undefined) delete process.env[RUNTIME_TMPDIR_ENV];
+    else process.env[RUNTIME_TMPDIR_ENV] = previous;
   }
 }
 
@@ -99,12 +107,13 @@ async function annotateWithViolations(
 }
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
-  // The shell holds a lease through execution because SandboxManager owns a
-  // process-wide policy and proxy. Wrapping-only callers take a short lock.
+  // The shell holds a scoped lease through execution because SandboxManager owns
+  // a process-wide policy and proxy. Callers without the active lease token queue
+  // behind #managerOperation so concurrent multi-workspace sessions never collide.
   static #initializedForKey: string | undefined;
-  static #initializationFailure: SandboxAvailability | undefined;
+  static #initializedNetworkScope: SandboxNetworkApprovalScope | undefined;
   static #managerOperation: Promise<void> = Promise.resolve();
-  #heldLease = false;
+  static #activeLeaseToken: symbol | undefined;
 
   async availability(): Promise<SandboxAvailability> {
     let SandboxManager: typeof RuntimeSandboxManager;
@@ -123,10 +132,6 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       return { type: 'missing_dependency', reason: dependencyCheck.errors.join('; ') };
     }
 
-    if (AnthropicShellSandboxRunner.#initializationFailure) {
-      return AnthropicShellSandboxRunner.#initializationFailure;
-    }
-
     return { type: 'available' };
   }
 
@@ -136,9 +141,12 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       cwd: string;
       config?: SandboxRuntimeConfig;
       signal?: AbortSignal;
+      lease?: SandboxLeaseRelease;
+      tmpDir?: string;
     },
   ): Promise<{ command: string; diagnostics?: string[] }> {
     const operation = async () => {
+      const tmpDir = options.tmpDir ?? resolveWorkspaceSandboxTempDir(options.cwd);
       const config = options.config;
       const directHosts = config?.network.allowLocalBinding ? 'localhost,127.0.0.1,::1' : '';
       // Self-hosted and private-address services use the same approval proxy.
@@ -156,9 +164,9 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
           config.filesystem.allowRead.push(script);
         }
       }
-      await this.#initialize(options.cwd, config);
+      await this.#initialize(options.cwd, config, tmpDir, options.lease?.networkScope);
       const SandboxManager = await sandboxManager();
-      const wrapped = await withRuntimeTempDir(() =>
+      const wrapped = await withRuntimeTempDir(tmpDir, () =>
         // Violations are looked up by the command the caller annotates, not the executed
         // string: with the setup prefix the runtime's 100-character key never matched it.
         SandboxManager.wrapWithSandbox(`${setup} ${command}`, undefined, undefined, options.signal, {
@@ -168,10 +176,12 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
       return { command: wrapped, diagnostics };
     };
-    return this.#heldLease ? operation() : this.#withManagerLock(operation);
+    const holdsActiveLease =
+      options.lease?.token !== undefined && options.lease.token === AnthropicShellSandboxRunner.#activeLeaseToken;
+    return holdsActiveLease ? operation() : this.#withManagerLock(operation);
   }
 
-  async acquire(signal?: AbortSignal): Promise<() => void> {
+  async acquire(signal?: AbortSignal): Promise<SandboxLeaseRelease> {
     signal?.throwIfAborted();
     const previous = AnthropicShellSandboxRunner.#managerOperation;
     let release!: () => void;
@@ -197,26 +207,42 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       void previous.then(release);
       throw error;
     }
-    this.#heldLease = true;
+    const token = Symbol('sandboxLease');
+    const networkScope = createSandboxNetworkApprovalScope();
+    AnthropicShellSandboxRunner.#activeLeaseToken = token;
     let released = false;
-    return () => {
+    const handle = (() => {
       if (released) return;
       released = true;
-      this.#heldLease = false;
+      if (AnthropicShellSandboxRunner.#activeLeaseToken === token) {
+        AnthropicShellSandboxRunner.#activeLeaseToken = undefined;
+      }
       release();
-    };
+    }) as SandboxLeaseRelease;
+    Object.defineProperties(handle, {
+      token: { value: token, enumerable: true },
+      networkScope: { value: networkScope, enumerable: true },
+    });
+    return handle;
   }
 
-  async cleanupAfterCommand(): Promise<void> {
-    try {
-      loadedManager?.cleanupAfterCommand();
-      // reset() keeps the store; a rerun of the same command must not inherit the last run's denials.
-      loadedManager?.getSandboxViolationStore().clear();
-      // Revoke this command's proxy credential even if a descendant survived.
-      if (AnthropicShellSandboxRunner.#initializedForKey) await loadedManager?.reset();
-    } finally {
-      AnthropicShellSandboxRunner.#initializedForKey = undefined;
-    }
+  async cleanupAfterCommand(lease?: SandboxLeaseRelease): Promise<void> {
+    const cleanup = async (): Promise<void> => {
+      try {
+        loadedManager?.cleanupAfterCommand();
+        // reset() keeps the store; a rerun of the same command must not inherit the last run's denials.
+        loadedManager?.getSandboxViolationStore().clear();
+        // Revoke this command's proxy credential even if a descendant survived.
+        if (AnthropicShellSandboxRunner.#initializedForKey) await loadedManager?.reset();
+      } finally {
+        AnthropicShellSandboxRunner.#initializedForKey = undefined;
+        AnthropicShellSandboxRunner.#initializedNetworkScope = undefined;
+      }
+    };
+    const holdsActiveLease =
+      lease?.token !== undefined && lease.token === AnthropicShellSandboxRunner.#activeLeaseToken;
+    if (holdsActiveLease) return cleanup();
+    return this.#withManagerLock(cleanup);
   }
 
   async annotateFailure(command: string, stderr: string, exitCode?: number | null): Promise<string> {
@@ -231,31 +257,31 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
 
   async #initialize(
     cwd: string,
-    config: SandboxRuntimeConfig = createSandboxRuntimeConfig({ cwd, tmpDir: SANDBOX_TEMP_DIR }),
+    config: SandboxRuntimeConfig | undefined,
+    tmpDir: string,
+    networkScope?: SandboxNetworkApprovalScope,
   ): Promise<void> {
-    const initializationKey = JSON.stringify({ cwd, config });
-    if (AnthropicShellSandboxRunner.#initializedForKey === initializationKey) {
+    const effectiveConfig = config ?? createSandboxRuntimeConfig({ cwd, tmpDir: tmpDir || SANDBOX_TEMP_DIR });
+    const initializationKey = JSON.stringify({ cwd, config: effectiveConfig, tmpDir });
+    if (
+      AnthropicShellSandboxRunner.#initializedForKey === initializationKey &&
+      AnthropicShellSandboxRunner.#initializedNetworkScope === networkScope
+    ) {
       return;
     }
 
-    try {
-      const SandboxManager = await sandboxManager();
-      if (AnthropicShellSandboxRunner.#initializedForKey) {
-        await SandboxManager.reset();
-      }
-      const sandboxAskCallback = async ({ host, port }: { host: string; port?: number }): Promise<boolean> => {
-        return requestSandboxNetworkApproval({ host, port }, cwd);
-      };
-      // The log monitor reports each denied operation and path; without it a failed command shows
-      // only the tool's own error, which may not name the path (pnpm's lock error does not).
-      await SandboxManager.initialize(config, sandboxAskCallback, process.platform === 'darwin');
-      AnthropicShellSandboxRunner.#initializedForKey = initializationKey;
-      AnthropicShellSandboxRunner.#initializationFailure = undefined;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      AnthropicShellSandboxRunner.#initializationFailure = { type: 'initialization_failed', reason };
-      throw error;
+    const SandboxManager = await sandboxManager();
+    if (AnthropicShellSandboxRunner.#initializedForKey) {
+      await SandboxManager.reset();
     }
+    const sandboxAskCallback = async ({ host, port }: { host: string; port?: number }): Promise<boolean> => {
+      return requestSandboxNetworkApproval({ host, port }, cwd, networkScope);
+    };
+    // The log monitor reports each denied operation and path; without it a failed command shows
+    // only the tool's own error, which may not name the path (pnpm's lock error does not).
+    await SandboxManager.initialize(effectiveConfig, sandboxAskCallback, process.platform === 'darwin');
+    AnthropicShellSandboxRunner.#initializedForKey = initializationKey;
+    AnthropicShellSandboxRunner.#initializedNetworkScope = networkScope;
   }
 
   async #withManagerLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -286,7 +312,7 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 export type SandboxLeaseWait =
   | {
       readonly kind: 'acquired';
-      readonly release: () => void;
+      readonly release: SandboxLeaseRelease;
       /** What is left of the budget for the process deadline; undefined when unbounded. */
       readonly remainingMs: number | undefined;
       readonly waitedMs: number;
@@ -303,7 +329,7 @@ export type SandboxLeaseWait =
  * `signal` rejects, as `acquire` does. With no timeout the wait is unbounded.
  */
 export async function acquireSandboxLeaseWithinBudget(
-  acquire: (signal?: AbortSignal) => Promise<() => void>,
+  acquire: (signal?: AbortSignal) => Promise<SandboxLeaseRelease>,
   timeoutMs: number | undefined,
   signal: AbortSignal | undefined,
 ): Promise<SandboxLeaseWait> {
@@ -311,7 +337,7 @@ export async function acquireSandboxLeaseWithinBudget(
   // Clamp so a huge timeout waits (effectively) forever instead of failing at once.
   const budgetSignal = timeoutMs ? AbortSignal.timeout(Math.min(timeoutMs, MAX_TIMER_DELAY_MS)) : undefined;
   const waitSignal = budgetSignal && signal ? AbortSignal.any([signal, budgetSignal]) : budgetSignal ?? signal;
-  let release: (() => void) | undefined;
+  let release: SandboxLeaseRelease | undefined;
   try {
     release = await acquire(waitSignal);
   } catch (error) {

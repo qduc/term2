@@ -362,6 +362,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       });
     },
     unattended: () => settings.get('shell.autoApproveMode') === 'unattended',
+    headlessPolicy: options.interactive === false,
     async decideInteraction(request, _history, review) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };

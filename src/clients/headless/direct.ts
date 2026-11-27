@@ -170,7 +170,7 @@ export async function runDirectHeadless(
     // A resumed session may already be waiting on approvals. Settle them by the
     // same policy before submitting; a stale answer fails explicitly.
     for (const interaction of connection.snapshot.pendingInteractions) {
-      if (!(await answer(interaction))) return result('failed', 1);
+      if (!(await answer(interaction, true))) return result('failed', 1);
     }
     if (options.signal?.aborted) return result('cancelled', 1);
 

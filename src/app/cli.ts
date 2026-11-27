@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 import '../config/env-setup.js';
 
-import { readlinkSync, realpathSync } from 'node:fs';
-import { readdir } from 'node:fs/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import envPaths from 'env-paths';
 import { getAllProviders, getProviderIds } from '../model/providers/index.js';
 import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
 import { LoggingService } from '../session/logging/logging-service.js';
@@ -53,6 +50,10 @@ import {
   type Refusal,
   type SessionOptions,
 } from './cli-args.js';
+import {
+  checkConversationsDirectory,
+  resolveConversationsDirectory as conversationsDirectory,
+} from './daemon/store-paths.js';
 
 const HOME_DIRECTORY_REFUSAL =
   'Headless startup refused from the home or root directory. Start in a project directory.';
@@ -69,65 +70,6 @@ function refused(refusal: Refusal): Error {
  */
 function homeGuardApplies(options: SessionOptions, hasPrompt: boolean): boolean {
   return !options.lite && options.resumeId === null && options.ssh === null && (!hasPrompt || options.autoApprove);
-}
-
-/** Resolves aliases even when the store or a symlink's target does not exist yet. */
-function resolvedStorePath(filename: string): string {
-  // Keep `..` until filesystem resolution: it may follow a symlinked component.
-  const supplied = path.isAbsolute(filename) ? filename : `${process.cwd()}${path.sep}${filename}`;
-  const root = path.parse(supplied).root;
-  const absolute = root + supplied.slice(root.length).replace(process.platform === 'win32' ? /[\\/]+$/ : /\/+$/, '');
-  try {
-    return realpathSync.native(absolute);
-  } catch (error) {
-    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-    let link: string | undefined;
-    try {
-      link = readlinkSync(absolute);
-    } catch (linkError) {
-      if (!(linkError instanceof Error && 'code' in linkError && ['ENOENT', 'EINVAL'].includes(String(linkError.code))))
-        throw linkError;
-    }
-    if (link !== undefined) {
-      return resolvedStorePath(path.isAbsolute(link) ? link : `${path.dirname(absolute)}${path.sep}${link}`);
-    }
-    const parent = path.dirname(absolute);
-    if (parent === absolute) throw error;
-    return path.join(resolvedStorePath(parent), path.basename(absolute));
-  }
-}
-
-function conversationsDirectory(): string {
-  const data = envPaths('term2').data;
-  const directory = resolvedStorePath(process.env['TERM2_CONVERSATIONS_DIR'] ?? path.join(data, 'conversations-next'));
-  // Missing paths have no canonical spelling yet. Protect case aliases on the
-  // platforms whose usual filesystems are case-insensitive, conservatively even on sensitive volumes.
-  const comparable = (filename: string) =>
-    process.platform === 'darwin' || process.platform === 'win32' ? filename.toLowerCase() : filename;
-  if (comparable(directory) === comparable(resolvedStorePath(path.join(data, 'conversations')))) {
-    throw new Error('The legacy conversations directory is read-only; use a separate native conversations directory');
-  }
-  // All consumers must use the same identity that was checked above.
-  return directory;
-}
-
-/**
- * Refuses any existing filename outside the `conv_` namespace. It enumerates
- * names only: no old file is opened or parsed. A missing directory is allowed;
- * the session store creates it when it writes the first conversation.
- */
-async function checkConversationsDirectory(directory: string): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await readdir(directory);
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return;
-    throw error;
-  }
-  const incompatible = entries.find((name) => !name.startsWith('conv_'));
-  if (incompatible !== undefined) {
-    throw new Error(`Refusing conversations directory containing a non-M1 entry: ${JSON.stringify(incompatible)}`);
-  }
 }
 
 function chooseProfile(options: Pick<SessionOptions, 'profile' | 'lite'>, settings: SettingsService): string {
@@ -480,6 +422,8 @@ async function main(argv: readonly string[]): Promise<number> {
       return runServe(command.args);
     case 'acp':
       return runAcp(command.args);
+    case 'daemon':
+      return (await import('./daemon/launch-daemon.js')).launchDirectDaemon(command.args);
     case 'control':
       if (!command.valid) {
         stderr.write(CONTROL_USAGE);

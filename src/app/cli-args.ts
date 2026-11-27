@@ -8,6 +8,7 @@ import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
 import type { ISettingsService } from '../shared/service-interfaces.js';
 import { parseServeArgs, type ServeArgs } from '../host/gateway/serve-args.js';
 import { parseAcpArgs, type AcpArgs } from './serve-args.js';
+import { parseDaemonArgs, type DaemonCliArgs } from './daemon/daemon-args.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
 import type { DurableGoal } from '../session/logging/conversation-log-events.js';
 
@@ -62,6 +63,7 @@ export type Command =
   | { readonly kind: 'interactive'; readonly options: SessionOptions; readonly refused: Refusal | null }
   | { readonly kind: 'serve'; readonly args: ServeArgs }
   | { readonly kind: 'acp'; readonly args: AcpArgs }
+  | { readonly kind: 'daemon'; readonly args: DaemonCliArgs }
   | { readonly kind: 'control'; readonly valid: boolean; readonly argv: readonly string[] }
   | { readonly kind: 'discord'; readonly argv: readonly string[] };
 
@@ -138,7 +140,7 @@ const FLAGS: readonly Flag[] = [
 const FLAG_BY_NAME = new Map(FLAGS.flatMap((flag) => flag.names.map((name) => [name, flag] as const)));
 const longName = (flag: Flag): string => flag.names.find((name) => name.startsWith('--')) ?? flag.names[0]!;
 
-const SUBCOMMANDS = new Set(['serve', 'acp', 'control', 'discord', 'sandbox-network']);
+const SUBCOMMANDS = new Set(['serve', 'acp', 'daemon', 'control', 'discord', 'sandbox-network']);
 const CONTROL_COMMANDS = new Set(['list', 'status', 'get', 'submit', 'steer', 'interrupt', 'wait-turn']);
 
 export const CONTROL_USAGE =
@@ -372,6 +374,11 @@ function parseSubcommand(name: string, rest: readonly string[], globalFlagsSeen:
     const parsed = parseAcpArgs(rest);
     if (!parsed.ok) throw new Error(`term2 acp: ${parsed.error}`);
     return { kind: 'acp', args: parsed.args };
+  }
+  if (name === 'daemon') {
+    const parsed = parseDaemonArgs(rest);
+    if (!parsed.ok) throw new Error(`term2 daemon: ${parsed.error}`);
+    return { kind: 'daemon', args: parsed.args };
   }
   if (name === 'sandbox-network') return { kind: 'sandbox-network', argv: rest };
   if (name === 'control') return { kind: 'control', valid: CONTROL_COMMANDS.has(rest[0] ?? ''), argv: rest };

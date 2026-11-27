@@ -31,7 +31,7 @@ function compareVersions(a: ParsedProtocolVersion, b: ParsedProtocolVersion): nu
  * Negotiate the highest mutually supported version in [max(cMin, hMin), min(cMax, hMax)]
  * under the linear-release invariant (client-api.md §3.1).
  */
-function negotiateProtocolVersion(
+export function negotiateProtocolVersion(
   clientMinRaw: string,
   clientMaxRaw: string,
   hostMinRaw: string = CLIENT_API_MIN_SUPPORTED_VERSION,

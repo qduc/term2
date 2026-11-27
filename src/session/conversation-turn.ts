@@ -21,7 +21,7 @@ import { directPreviewConfiguration } from './preview.js';
 import { planDirectTiming } from './time-gap.js';
 import { effortFallbackNotice } from './effort-timeline.js';
 import { isEffortUpdateItem } from '../model/effort-updates.js';
-import { REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
+import { resolveApprovalDecision, REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
 import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
 import { UnattendedRefusals, withUnattendedReport } from './approval/unattended-refusals.js';
 import { terminalNotice } from './harness-host/index.js';
@@ -151,38 +151,42 @@ export function ownConversationTurn(
     }
     terminal = journal.failure ? { kind: 'failed', error: journal.failure } : outcome;
   };
-  const openFact = (request: InteractionRequest, review: ApprovalReviewResult): Fact => ({
+  const openFact = (request: InteractionRequest, review?: ApprovalReviewResult): Fact => ({
     type: 'interaction_opened',
     turnId,
     request,
-    review,
+    ...(review ? { review } : {}),
   });
-  /** Open a reviewed request: a policy close with it when approved, else wait for a person. */
-  function settleReview(request: InteractionRequest, review: ApprovalReviewResult): void {
+  /** Open a reviewed or headless-policy request: a policy close when settled automatically, else wait for a person. */
+  function settleReview(
+    request: InteractionRequest,
+    review: ApprovalReviewResult | undefined,
+    policyDecision?: InteractionDecision,
+  ): void {
     if (released || cancelled || terminal || !requests.has(request.requestId)) return;
-    const decision: InteractionDecision | undefined = review.approved
-      ? review.grant
-        ? { kind: 'allow', grant: review.grant }
-        : { kind: 'allow' }
-      : undefined;
-    const automatic = decision && validDecision(request, decision) ? decision : undefined;
-    // Unattended never opens an approval for a person, even when an approval cannot be applied.
-    if (!automatic && options.reviews?.unattended()) {
-      const refused = refuse(request, { ...review, approved: false } as ApprovalReviewResult);
+    const { automatic, decision, recordedReview } = resolveApprovalDecision(
+      request,
+      review,
+      policyDecision,
+      validDecision,
+    );
+    if (!decision && options.reviews?.unattended()) {
+      const refused = refuse(request, {
+        ...(review ?? { kind: 'not_reviewed' }),
+        approved: false,
+      } as ApprovalReviewResult);
       if (refused) handle.answer(request.requestId, refused);
       return;
     }
-    const facts: Fact[] = [
-      openFact(request, automatic ? review : ({ ...review, approved: false } as ApprovalReviewResult)),
-    ];
-    if (automatic)
+    const facts: Fact[] = [openFact(request, recordedReview)];
+    if (decision)
       facts.push({
         type: 'interaction_closed',
         turnId,
         requestId: request.requestId,
-        resolution: automatic,
+        resolution: decision,
         resolutionSource: 'policy',
-        automaticApproval: true,
+        ...(automatic ? { automaticApproval: true } : {}),
       });
     let committed = false;
     try {
@@ -194,9 +198,9 @@ export function ownConversationTurn(
       cancel();
       return;
     }
-    if (!automatic) return;
+    if (!decision) return;
     requests.delete(request.requestId);
-    handle.answer(request.requestId, automatic);
+    handle.answer(request.requestId, decision);
   }
   /**
    * Unattended: open the request with its review and close it by policy with a refusal the model reads.

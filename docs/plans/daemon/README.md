@@ -4,7 +4,7 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–13 complete and Client API v1.0 **frozen** (Step 12); starting Step 14a (singleton daemon core: Unix socket Client API server, daemon lifecycle/lock/auto-start, headless approval policy in Runtime, and `AnthropicShellSandboxRunner` multi-workspace safety).
+- **Current phase:** Steps 0–13 merged (`65db33e`, `3c37277`) and Step 14a (singleton daemon core: Unix NDJSON server, RPC dispatcher, SQLite lock/auto-start, `term2 daemon [start|status|stop]`, session-owned headless approvals D003, and multi-workspace sandbox isolation) complete; next is Step 14b (remote `DirectHost`/`DirectConnection` client over Unix socket) and Step 14c (headless client over daemon).
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
@@ -15,7 +15,7 @@ Status: in progress. Started 2026-11-27.
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Step 14a (daemon core + Unix socket transport + `headlessPolicy` in session + sandbox multi-workspace lease fix), Step 14b (remote `DirectConnection` over Unix socket), Step 14c (headless client over daemon), Step 14d (TUI zoom-in + TUI client over daemon), Step 14e (control socket + Discord + ACP over daemon), Step 14f (flip daemon mode to default + full verification + smoke runs).
+- **Next concrete actions:** Step 14b (remote `DirectHost` + `DirectConnection` over Unix socket), Step 14c (headless client over daemon + provider-black-box & parity check), Step 14d (TUI zoom-in + TUI client over daemon), Step 14e (control socket + Discord + ACP + web over daemon), Step 14f (flip daemon mode to default + full verification + smoke runs).
 
 
 ## Goal

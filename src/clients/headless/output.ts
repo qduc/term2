@@ -2,7 +2,7 @@
  * streamed/final text reconciliation, never admission, cancellation or task life.
  */
 import type { WireBudgetEvidence, WireEvent, WireFinalWindow } from '../../protocol/wire.js';
-import { retryLine, toolStartLine } from './format.js';
+import { rejectionLine, retryLine, toolStartLine } from './format.js';
 import {
   formatGoalClosedByCheck,
   legacyCommandMessages,
@@ -114,6 +114,7 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
       io.stderr.write(`${recovery}\n`);
     }
   };
+  const policyOpenedInteractions = new Set<string>();
   return {
     get finalText() {
       return finalText;
@@ -122,6 +123,20 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
     reportBudgetPause,
     /** Every event of the run's session, before any turn filter, so between-turn child spend is counted. */
     observe(event: WireEvent, targetTurnId: string | null): void {
+      if (options.sessionHandlesHeadlessApprovals === true) {
+        if (event.type === 'interaction_opened') {
+          policyOpenedInteractions.add(event.payload.interaction.requestId);
+        } else if (
+          event.type === 'interaction_resolved' &&
+          policyOpenedInteractions.delete(event.payload.requestId) &&
+          event.payload.provenance?.source === 'policy' &&
+          event.payload.resolution.kind === 'deny' &&
+          options.autoApprove === true
+        ) {
+          if (output === 'json') json({ type: 'approval_rejected', reason: event.payload.resolution.reason });
+          else io.stderr.write(rejectionLine(event.payload.resolution.reason));
+        }
+      }
       if (output !== 'json' || summaryError !== undefined) return;
       try {
         summary.observe(event, targetTurnId);

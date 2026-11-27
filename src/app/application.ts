@@ -12,8 +12,6 @@ import { SkillsService, type SkillInfo } from '../tools/skills/skills-service.js
 import { SettingsService, type DurableWriteResult } from './settings-service.js';
 import { createDirectInProcessHost } from '../host/in-process-direct.js';
 import type { DirectHost, Principal } from '../host/in-process-direct-types.js';
-import type { HeadlessApprovalDecider } from '../clients/headless/index.js';
-import { decideHeadlessApproval } from '../clients/headless/index.js';
 import { DirectProtocolError } from '../protocol/errors.js';
 import type { DirectCommandCapabilities } from '../protocol/capabilities.js';
 import { forkDirectConversation } from '../session/fork.js';
@@ -22,7 +20,6 @@ import type { DurableGoal } from '../session/goal.js';
 import type { DirectBinding, DirectSession, DirectSessionState } from '../session/facade-types.js';
 import { listDirectResumeSessions } from '../session/resume-list.js';
 import { nativeIndexer } from './native-catalogue.js';
-import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import { startDirectHooks, type DirectHookOptions } from './application-hooks.js';
@@ -87,8 +84,6 @@ export type DirectSessionConfiguration = {
 export type DirectApplication = {
   readonly host: DirectHost;
   readonly principal: Principal;
-  /** Non-interactive policy for one attached session; its answer still goes through the wire. */
-  headlessPolicy(sessionId: string, autoApprove: boolean, signal: AbortSignal): HeadlessApprovalDecider;
   /** Caller authorizes logical ownership before requesting current selection. */
   sessionConfiguration(sessionId: string): Promise<DirectSessionConfiguration>;
   /** Canonical workspace of a direct session, for clients whose snapshot has none. */
@@ -217,8 +212,6 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       if (!(selection.settings instanceof SettingsService)) return { status: 'not-persisted', reason: 'disabled' };
       return selection.settings.setDynamic(key, settings.getDynamic(key));
     },
-    headlessPolicy: (sessionId, autoApprove, signal) =>
-      headlessPolicy({ store, runtimes, directory: options.conversationsDir, sessionId, autoApprove, signal }),
     listWorkspaceSessions(root) {
       return listDirectResumeSessions(
         options.conversationsDir,
@@ -450,60 +443,4 @@ function applicationCapabilities(
       throw new DirectProtocolError('unavailable', `Task ${action} is not available in the direct executable yet.`);
     },
   };
-}
-
-type HeadlessPolicyInput = {
-  readonly store: DirectLocalStore;
-  readonly runtimes: DirectRuntimes;
-  readonly directory: string;
-  readonly sessionId: string;
-  readonly autoApprove: boolean;
-  readonly signal: AbortSignal;
-};
-
-/**
- * The existing approval policy needs the accepted history, which no client may
- * see, so it runs here. This only reads: the decision returns to the client,
- * which answers through the Session like every other client.
- */
-function headlessPolicy(input: HeadlessPolicyInput): HeadlessApprovalDecider {
-  const { store, runtimes, sessionId, autoApprove, signal } = input;
-  return async (interaction) => {
-    if (interaction.kind === 'question') return decideHeadlessApproval(interaction, autoApprove);
-    const session = await store.open(sessionId);
-    const runtime = runtimes.get(session.id);
-    if (!runtime) throw new Error(`No runtime for session ${session.id}`);
-    const { state, unsubscribe } = session.capture(() => undefined);
-    unsubscribe();
-    const request = state.pendingInteractions.find((pending) => pending.requestId === interaction.requestId);
-    // Already settled by cancellation. The answer this produces is reported stale.
-    if (!request) return { decision: { kind: 'deny' } };
-    const history = session.acceptedHistory();
-    const decision = await runtime.scope(() =>
-      untilAborted(runtime.surface.decideInteraction(request, history, interaction.review), signal),
-    );
-    return { decision, reportRejection: autoApprove };
-  };
-}
-
-/** Cancellation stops waiting on advisory policy; surface disposal stops the policy itself. */
-async function untilAborted(
-  operation: Promise<InteractionDecision>,
-  signal: AbortSignal,
-): Promise<InteractionDecision> {
-  const cancelled: InteractionDecision = { kind: 'deny' };
-  if (signal.aborted) {
-    void operation.catch(() => undefined);
-    return cancelled;
-  }
-  let onAbort: () => void = () => {};
-  const aborted = new Promise<InteractionDecision>((resolve) => {
-    onAbort = () => resolve(cancelled);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-  try {
-    return await Promise.race([operation, aborted]);
-  } finally {
-    signal.removeEventListener('abort', onAbort);
-  }
 }

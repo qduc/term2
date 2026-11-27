@@ -38,6 +38,8 @@ export type ChatFacts = {
   readonly sessionId: string | null;
   readonly isDraft: boolean;
   readonly startingChat: boolean;
+  /** A new chat's first message is on its way but its turn has not appeared yet (creating, connecting or submitting). */
+  readonly firstSendPending: boolean;
   readonly selectedWorkspaceId: string | null;
   readonly hostWorkspaceId: string | null;
   readonly selectedWorkspaceKind: 'directory' | 'host' | 'ssh';
@@ -249,6 +251,13 @@ export function createChatFacts(): (inputs: ChatFactInputs) => ChatFacts {
     const activeStreamingTurn = view.turns.find((turn) => turn.status === 'streaming' || turn.status === 'pending');
     const hasStreamingTurn = Boolean(activeStreamingTurn);
     const lastTurn = view.turns[view.turns.length - 1];
+    // The gap between Enter and the first turn appearing: the draft is creating its chat, the new chat is
+    // connecting, or its first message is submitting. The status line owns this so Enter is never a blank wait.
+    const firstSendPending = Boolean(
+      startingChat ||
+        (sessionId && pendingFirstSend?.sessionId === sessionId) ||
+        (sessionId && shell.sending && view.turns.length === 0),
+    );
 
     // model and config
     const sessionConfig = shell.config?.sessionId === sessionId ? shell.config : null;
@@ -347,6 +356,7 @@ export function createChatFacts(): (inputs: ChatFactInputs) => ChatFacts {
       sessionId,
       isDraft,
       startingChat,
+      firstSendPending,
       selectedWorkspaceId,
       hostWorkspaceId,
       selectedWorkspaceKind,

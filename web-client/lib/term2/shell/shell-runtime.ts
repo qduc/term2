@@ -99,6 +99,9 @@ export function createShellRuntime(options: { localControlEnabled: boolean }): S
     // The stream follows the open chat, before anything renders, so one render never pairs the new chat with the
     // old chat's transcript. It is not a command: URL_CHANGED is still the only action that changes the open chat.
     if (next.openChat !== previous.openChat) session.open(next.openChat);
+    // A stream opened early for a draft's created chat (shell-commands) closes when that draft is gone without
+    // opening it (discarded, replaced, or a new user); a failed start keeps it for the retry.
+    else if (next.openChat === null && !next.draft?.createdSessionId && session.sessionId !== null) session.open(null);
     if (next.panels.sidebar && !previous.panels.sidebar) void data.chats.refresh().catch(() => undefined);
     if (next !== previous) for (const listener of [...listeners]) listener();
     for (const command of commands) runCommand(command);

@@ -4,13 +4,16 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–6 formalized; executing Step 7 (independent Branch A code-blind and Branch B code-derived ownership analysis) before Steps 8–10.
+- **Current phase:** Steps 0–9 complete; starting Step 10 (draft RFC-style Client API spec, TypeScript + generated JSON Schema, conformance test suite, and independent review rounds).
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
+  - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
+  - [Step 8 scenario validation](step8-scenarios.md)
+  - [Step 9 Client API inventory](step9-client-api-inventory.md)
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Complete Step 7 (Branch A vs Branch B row-by-row comparison), Step 8 (scenario validation), Step 9 (Client API inventory), Step 10 (RFC-style draft spec + conformance suite + independent review rounds), Step 11 (sub-module zoom-ins), Step 13 (session-list stream prototype + web sidebar), Step 12 (spec recheck & freeze), and Step 14 (daemon build-out through the default flip).
+- **Next concrete actions:** Complete Step 10 (RFC spec + TS/JSON schema + conformance suite + independent review rounds), Step 11 (Host/Web/Runtime zoom-ins), Step 13 (session-list stream prototype + web sidebar), Step 12 (spec recheck & freeze), and Step 14 (daemon build-out through the default flip).
 
 
 ## Goal

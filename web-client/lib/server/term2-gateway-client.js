@@ -42,6 +42,7 @@ export const ASSERTION_PURPOSES = Object.freeze([
   'session_files',
   'session_quota',
   'session_goal',
+  'session_handoff',
 ]);
 
 const PURPOSES = new Set(ASSERTION_PURPOSES);

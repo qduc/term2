@@ -11,12 +11,6 @@ function opaqueId(value: unknown, name: string): string {
   return value;
 }
 
-function exactKeys(body: Record<string, unknown>, keys: readonly string[]): void {
-  if (Object.keys(body).length !== keys.length || Object.keys(body).some((key) => !keys.includes(key))) {
-    throw new RequestValidationError('Invalid request body');
-  }
-}
-
 function text(value: unknown, name: string): string {
   if (typeof value !== 'string' || value.length > 16_384) throw new RequestValidationError(`Invalid ${name}`);
   for (let index = 0; index < value.length; index += 1) {
@@ -46,14 +40,36 @@ export function validateInteractionBody(body: Record<string, unknown>, interacti
 }
 
 export function validateAbortBody(body: Record<string, unknown>) {
-  exactKeys(body, ['turnId']);
-  return { turnId: opaqueId(body.turnId, 'turn ID') };
+  const allowed = ['turnId', 'discardQueue', 'returnSteers'];
+  if (Object.keys(body).some((k) => !allowed.includes(k))) throw new RequestValidationError('Invalid request body');
+  if (body.discardQueue !== undefined && typeof body.discardQueue !== 'boolean') {
+    throw new RequestValidationError('Invalid discardQueue');
+  }
+  if (body.returnSteers !== undefined && typeof body.returnSteers !== 'boolean') {
+    throw new RequestValidationError('Invalid returnSteers');
+  }
+  if (body.returnSteers === true && body.discardQueue !== false) {
+    throw new RequestValidationError('returnSteers requires discardQueue: false');
+  }
+  return {
+    turnId: opaqueId(body.turnId, 'turn ID'),
+    ...(body.discardQueue !== undefined ? { discardQueue: body.discardQueue } : {}),
+    ...(body.returnSteers !== undefined ? { returnSteers: body.returnSteers } : {}),
+  };
 }
 
 export function validateCommandBody(body: Record<string, unknown>) {
-  exactKeys(body, ['commandId', 'clientRequestId']);
+  const allowed = ['commandId', 'clientRequestId', 'executionId'];
+  if (Object.keys(body).some((k) => !allowed.includes(k))) throw new RequestValidationError('Invalid request body');
   if (typeof body.commandId !== 'string' || !COMMAND_IDS.has(body.commandId)) {
     throw new RequestValidationError('Invalid command ID');
   }
-  return { commandId: body.commandId, clientRequestId: opaqueId(body.clientRequestId, 'client request ID') };
+  if (body.executionId !== undefined && body.commandId !== 'retry-tool') {
+    throw new RequestValidationError('executionId is only valid for retry-tool');
+  }
+  return {
+    commandId: body.commandId,
+    clientRequestId: opaqueId(body.clientRequestId, 'client request ID'),
+    ...(body.executionId !== undefined ? { executionId: opaqueId(body.executionId, 'execution ID') } : {}),
+  };
 }

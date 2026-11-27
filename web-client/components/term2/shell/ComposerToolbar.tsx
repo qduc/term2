@@ -85,6 +85,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
               onMentionFile={onMentionFile}
               onUseSkill={ops.toggleSkills}
               onCommand={(commandId) => void session.invokeCommand(commandId)}
+              onHandoff={() => void ops.handoff()}
             />
           </div>
         </PopoverAnchor>

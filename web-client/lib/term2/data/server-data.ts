@@ -106,7 +106,7 @@ export function createServerData(options: { localControlEnabled: boolean }): Ser
     : { ...catalog, load: async () => null, ensure: () => undefined };
   const skills = createResource<SkillSummary[]>({
     initial: NO_SKILLS,
-    fetch: async () => (await client.listSkills()).skills,
+    fetch: async (key) => (await client.listSkills(key || undefined)).skills,
   });
   const files = createResource<WorkspaceFileEntry[]>({
     initial: NO_FILES,

@@ -197,23 +197,29 @@ export function isOpaqueId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value);
 }
 
-export function isTurnBody(body: unknown): body is { turnId: string } {
-  return (
-    !!body &&
-    typeof body === 'object' &&
-    !Array.isArray(body) &&
-    Object.keys(body as Record<string, unknown>).length === 1 &&
-    isOpaqueId((body as Record<string, unknown>).turnId)
-  );
+export function isTurnBody(body: unknown): body is { turnId: string; discardQueue?: boolean; returnSteers?: boolean } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const v = body as Record<string, unknown>;
+  if (!Object.keys(v).every((k) => k === 'turnId' || k === 'discardQueue' || k === 'returnSteers')) return false;
+  if (!isOpaqueId(v.turnId)) return false;
+  if (v.discardQueue !== undefined && typeof v.discardQueue !== 'boolean') return false;
+  if (v.returnSteers !== undefined && typeof v.returnSteers !== 'boolean') return false;
+  if (v.returnSteers === true && v.discardQueue !== false) return false;
+  return true;
 }
 
 export function isCommandBody(body: unknown): body is CommandBody {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const value = body as Record<string, unknown>;
+  if (
+    !Object.keys(value).every((key) =>
+      ['commandId', 'clientRequestId', 'admission', 'expectedRevision', 'executionId'].includes(key),
+    )
+  )
+    return false;
+  if (value.executionId !== undefined && (value.commandId !== 'retry-tool' || !isOpaqueId(value.executionId)))
+    return false;
   return (
-    Object.keys(value).every((key) =>
-      ['commandId', 'clientRequestId', 'admission', 'expectedRevision'].includes(key),
-    ) &&
     (value.admission === undefined || value.admission === 'idle') &&
     (value.expectedRevision === undefined ||
       (typeof value.expectedRevision === 'string' && value.expectedRevision.length > 0)) &&
@@ -305,10 +311,13 @@ export function isRewindBody(
   );
 }
 
-export function isQueueBody(
-  body: unknown,
-): body is
-  | { action: 'edit'; messageId: string; text: string }
+export function isQueueBody(body: unknown): body is
+  | {
+      action: 'edit';
+      messageId: string;
+      text: string;
+      attachments?: Array<{ type: 'image'; mediaType: string; data: string }>;
+    }
   | { action: 'retract'; messageId: string }
   | { action: 'resume' }
   | { action: 'discard' } {
@@ -319,11 +328,13 @@ export function isQueueBody(
     return Object.keys(v).every((k) => k === 'action' || k === 'messageId') && isOpaqueId(v.messageId);
   }
   if (v.action === 'edit') {
+    const hasAttachments = v.attachments !== undefined;
+    if (hasAttachments && !isImageAttachments(v.attachments)) return false;
     return (
-      Object.keys(v).every((k) => ['action', 'messageId', 'text'].includes(k)) &&
+      Object.keys(v).every((k) => ['action', 'messageId', 'text', 'attachments'].includes(k)) &&
       isOpaqueId(v.messageId) &&
       typeof v.text === 'string' &&
-      v.text.trim().length > 0 &&
+      (v.text.trim().length > 0 || hasAttachments) &&
       v.text.length <= 128_000
     );
   }
@@ -413,4 +424,55 @@ function isImageAttachments(value: unknown): value is Array<{ type: 'image'; med
       /^[A-Za-z0-9+/=]+$/.test(v.data)
     );
   });
+}
+
+export function parseGoalBody(body: unknown): import('./server-contracts.js').ServerGoalAction | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const v = body as Record<string, unknown>;
+  if (v.action === 'set') {
+    if (
+      typeof v.text !== 'string' ||
+      !v.text.trim() ||
+      v.text.length > 4_000 ||
+      (v.successCriteria !== undefined && (typeof v.successCriteria !== 'string' || v.successCriteria.length > 4_000))
+    )
+      return null;
+    return {
+      action: 'set',
+      text: v.text.trim(),
+      ...(typeof v.successCriteria === 'string' && v.successCriteria.trim()
+        ? { successCriteria: v.successCriteria.trim() }
+        : {}),
+    };
+  }
+  if (v.action === 'achieved' || v.action === 'abandon' || v.action === 'clear' || v.action === 'accept_proposal') {
+    return { action: v.action };
+  }
+  return null;
+}
+
+export function parseHandoffBody(body: unknown): import('./server-contracts.js').ServerHandoffInput | null {
+  if (body === null || body === undefined) return {};
+  if (typeof body !== 'object' || Array.isArray(body)) return null;
+  const v = body as Record<string, unknown>;
+  if (!Object.keys(v).every((k) => k === 'message' || k === 'model')) return null;
+  if (v.message !== undefined && (typeof v.message !== 'string' || v.message.length > 16_000)) return null;
+  let model: { provider: string; model: string } | undefined;
+  if (v.model !== undefined) {
+    if (!v.model || typeof v.model !== 'object' || Array.isArray(v.model)) return null;
+    const m = v.model as Record<string, unknown>;
+    if (
+      Object.keys(m).length !== 2 ||
+      typeof m.provider !== 'string' ||
+      !m.provider.trim() ||
+      m.provider.length > 256 ||
+      typeof m.model !== 'string' ||
+      !m.model.trim() ||
+      m.model.length > 256
+    )
+      return null;
+    model = { provider: m.provider.trim(), model: m.model.trim() };
+  }
+  const message = typeof v.message === 'string' && v.message.trim() ? v.message.trim() : undefined;
+  return { ...(message ? { message } : {}), ...(model ? { model } : {}) };
 }

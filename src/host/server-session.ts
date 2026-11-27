@@ -230,7 +230,8 @@ export async function handleSessionRoute(
         type: 'cancel',
         target: { kind: 'foreground' },
         expectedTurnId: body.turnId,
-        discardQueue: true,
+        discardQueue: body.discardQueue ?? true,
+        ...(body.returnSteers !== undefined ? { returnSteers: body.returnSteers } : {}),
       });
       if (!result.ok) return commandFailure(result);
       if (result.kind !== 'abort') return unavailable('turn abort receipt');
@@ -259,7 +260,12 @@ export async function handleSessionRoute(
       }
       return {
         status: 202,
-        body: { sessionId: connection.sessionId, turnId: result.result.turnId, accepted: true },
+        body: {
+          sessionId: connection.sessionId,
+          turnId: result.result.turnId,
+          accepted: true,
+          ...(result.result.returnedSteers ? { returnedSteers: result.result.returnedSteers } : {}),
+        },
       };
     }
     case 'session_rewind_targets': {
@@ -283,7 +289,12 @@ export async function handleSessionRoute(
       if (!validate.isQueueBody(body)) return invalid('queue request is invalid');
       const command: WireCommand =
         body.action === 'edit'
-          ? { type: 'queue_edit', messageId: body.messageId, text: body.text }
+          ? {
+              type: 'queue_edit',
+              messageId: body.messageId,
+              text: body.text,
+              ...(body.attachments ? { attachments: body.attachments } : {}),
+            }
           : body.action === 'retract'
           ? { type: 'queue_retract', messageId: body.messageId }
           : body.action === 'resume'
@@ -311,37 +322,17 @@ export async function handleSessionRoute(
       return { status: 200, body: subscriptionQuotaView(connection.snapshot) };
     case 'session_goal': {
       if (!dependencies.presentation?.setGoal) return unavailable('session goal');
-      if (!body || typeof body !== 'object' || Array.isArray(body)) return invalid('goal request is invalid');
-      const v = body as Record<string, unknown>;
-      let action: import('./server-contracts.js').ServerGoalAction;
-      if (v.action === 'set') {
-        if (
-          typeof v.text !== 'string' ||
-          !v.text.trim() ||
-          v.text.length > 4_000 ||
-          (v.successCriteria !== undefined &&
-            (typeof v.successCriteria !== 'string' || v.successCriteria.length > 4_000))
-        )
-          return invalid('goal text is invalid');
-        action = {
-          action: 'set',
-          text: v.text.trim(),
-          ...(typeof v.successCriteria === 'string' && v.successCriteria.trim()
-            ? { successCriteria: v.successCriteria.trim() }
-            : {}),
-        };
-      } else if (
-        v.action === 'achieved' ||
-        v.action === 'abandon' ||
-        v.action === 'clear' ||
-        v.action === 'accept_proposal'
-      ) {
-        action = { action: v.action };
-      } else {
-        return invalid('goal action is invalid');
-      }
+      const action = validate.parseGoalBody(body);
+      if (!action) return invalid('goal request is invalid');
       await dependencies.presentation.setGoal(principal, connection.snapshot, action);
       return { status: 200, body: { ok: true } };
+    }
+    case 'session_handoff': {
+      if (!dependencies.presentation?.handoff) return unavailable('session handoff');
+      const parsed = validate.parseHandoffBody(body);
+      if (!parsed) return invalid('handoff request is invalid');
+      const result = await dependencies.presentation.handoff(principal, connection.snapshot, parsed);
+      return { status: 201, body: result };
     }
     default:
       return publicError(403, 'gateway_unavailable', 'gateway operation is unavailable');

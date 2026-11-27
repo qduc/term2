@@ -1054,9 +1054,10 @@ export const term2Client = {
       signal,
     );
   },
-  listSkills(signal?: AbortSignal) {
+  listSkills(workspaceId?: string, signal?: AbortSignal) {
+    const query = workspaceId ? `?workspaceId=${encodeURIComponent(id(workspaceId))}` : '';
     return getJson(
-      '/term2/skills',
+      `/term2/skills${query}`,
       (value): { skills: SkillSummary[] } => {
         const input = object(value);
         return { skills: Array.isArray(input.skills) ? (input.skills as SkillSummary[]) : [] };
@@ -1193,8 +1194,18 @@ export const term2Client = {
       signal,
     );
   },
-  abort(sessionId: string, turnId: string, signal?: AbortSignal) {
-    return postJson(`/agent/sessions/${encodeURIComponent(sessionId)}/abort`, { turnId }, validateAbort, signal);
+  abort(
+    sessionId: string,
+    turnId: string,
+    signal?: AbortSignal,
+    options?: { discardQueue?: boolean; returnSteers?: boolean },
+  ) {
+    return postJson(
+      `/agent/sessions/${encodeURIComponent(sessionId)}/abort`,
+      { turnId, ...options },
+      validateAbort,
+      signal,
+    );
   },
   async resolveInteraction(
     sessionId: string,
@@ -1236,7 +1247,15 @@ export const term2Client = {
   ): Promise<{ ok: true }> {
     return postJson(`/agent/sessions/${encodeURIComponent(id(sessionId))}/goal`, body, () => ({ ok: true as const }));
   },
-  };
+  handoff(
+    sessionId: string,
+    body: { message?: string; model?: { provider: string; model: string } } = {},
+  ): Promise<{ sessionId: string }> {
+    return postJson(`/agent/sessions/${encodeURIComponent(id(sessionId))}/handoff`, body, (value) => ({
+      sessionId: id(object(value).sessionId),
+    }));
+  },
+};
 
 function validateSettingsWrite(value: unknown): SettingsWriteResult {
   const input = object(value);

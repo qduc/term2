@@ -49,6 +49,7 @@ export interface ShellOperations {
   /** Retry under a reply: resendFromTurn, and its failure shown under that turn until the page shows something else. */
   retryReply: ResendFromTurn;
   rewind(target: RewindTargetSummary, restoreText: boolean): Promise<void>;
+  handoff(): Promise<void>;
   toggleSkills(): void;
   openProviderSetup(): void;
   providerChosen(model: ModelSummary): void;
@@ -392,11 +393,22 @@ export function createShellOperations(runtime: {
       }
     },
 
+    async handoff() {
+      const { sessionId, selectedWorkspaceId } = facts.get();
+      if (!sessionId) return;
+      try {
+        const { sessionId: nextId } = await term2Client.handoff(sessionId);
+        void data.chats.refresh();
+        dispatch({ type: 'CHAT_PICKED', sessionId: nextId, workspaceId: selectedWorkspaceId ?? null });
+      } catch (error) {
+        notice('config', error instanceof Error ? error.message : 'Could not hand off chat.');
+      }
+    },
+
     toggleSkills() {
       const next = !store.get().panels.skills;
       dispatch({ type: 'SKILLS_SET', open: next });
-      const skills = data.skills.get();
-      if (next && skills.data.length === 0 && !skills.loading) void data.skills.load();
+      if (next) data.skills.ensure(facts.get().selectedWorkspaceId ?? '');
     },
 
     openProviderSetup() {

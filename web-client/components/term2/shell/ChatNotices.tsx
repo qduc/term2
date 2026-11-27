@@ -1,6 +1,6 @@
 'use client';
 
-import { Target } from 'lucide-react';
+import { Info, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreSelector } from '../../../hooks/useStoreSelector';
 import { shallowEqual } from '../../../lib/term2/store';
@@ -11,6 +11,37 @@ const STARTER_PROMPTS = [
   'Summarize how this project is organized',
   'Find any TODOs or potential issues here',
 ];
+
+/** Calm inline runtime notices (compaction outcomes, automatic memory, session notices). */
+export function SessionNotices() {
+  const notices = useSessionView((v) => v.session?.notices);
+  const hasStreamingTurn = useChatFacts((f) => f.hasStreamingTurn);
+  const visible = (notices ?? []).filter((n) => {
+    const msg = n.message.trim();
+    if (!msg) return false;
+    if (hasStreamingTurn && n.kind === 'context_compaction' && /compacting/iu.test(msg)) return false;
+    return true;
+  });
+  if (visible.length === 0) return null;
+  return (
+    <div role="status" aria-label="Session notices" className="space-y-1.5">
+      {visible.map((notice, index) => {
+        const failed = /fail/iu.test(notice.message);
+        return (
+          <p
+            key={`${notice.kind}:${index}:${notice.message}`}
+            className={`flex items-start gap-2 text-xs ${
+              failed ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'
+            }`}
+          >
+            <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+            <span className="min-w-0 break-words">{notice.message}</span>
+          </p>
+        );
+      })}
+    </div>
+  );
+}
 
 /** The session's active goal, while a chat is open. */
 export function GoalBanner() {

@@ -3,7 +3,7 @@
 import { Term2StatusBanner } from '../Term2StatusBanner';
 import { ChatDock } from './ChatDock';
 import { ChatHeaderRegion } from './ChatHeaderRegion';
-import { EmptyChatCard, GoalBanner, ModelBlockedCard } from './ChatNotices';
+import { EmptyChatCard, GoalBanner, ModelBlockedCard, SessionNotices } from './ChatNotices';
 import { useChatFacts, useSessionView, useShell, useShellEnv, useShellState } from './ShellContext';
 import { DiagnosticsDetails, LiveStatusLine, PendingInteraction } from './TranscriptTail';
 import { TranscriptPin, useTranscriptScroll } from './TranscriptScroll';
@@ -60,6 +60,7 @@ export function ChatColumn() {
               <ModelBlockedCard />
               <EmptyChatCard />
               <TranscriptTurns />
+              <SessionNotices />
               <LiveStatusLine />
               <PendingInteraction />
               <DiagnosticsDetails />

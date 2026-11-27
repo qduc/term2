@@ -408,7 +408,12 @@ test('concise mode keeps the tool row and turn height stable across tool calls a
         (button) => button.textContent?.trim() ?? '',
       );
       if (labels.length > 0 && w.__toolLabels.at(-1) !== labels[0]) w.__toolLabels.push(labels[0]!);
+      // The latest-call line under the row: '' while it is absent.
+      const line = article?.querySelector('section[aria-label="Tool calls"] > p')?.textContent?.trim() ?? '';
+      const cw = window as unknown as { __currentLines: string[] };
+      if (cw.__currentLines.at(-1) !== line) cw.__currentLines.push(line);
     };
+    (window as unknown as { __currentLines: string[] }).__currentLines = [];
     record();
     if (article) new MutationObserver(record).observe(article, { subtree: true, childList: true, characterData: true });
     // The status line is a fixed slot: while the turn runs it never goes blank or leaves the page.
@@ -431,6 +436,9 @@ test('concise mode keeps the tool row and turn height stable across tool calls a
   app.model.release('think-1');
   await app.model.held('think-2');
   await expect(turn.getByRole('button', { name: 'Read 1 file' })).toBeVisible();
+  // The finished call stays named on its own line while the model thinks about the next one.
+  const currentLine = turn.locator('section[aria-label="Tool calls"] > p');
+  await expect(currentLine).toHaveText('Read a.txt');
   await expect(status).toContainText('Thinking…');
   await expect(turn.locator('details')).toHaveCount(0);
   const h2 = await turnHeight();
@@ -440,6 +448,8 @@ test('concise mode keeps the tool row and turn height stable across tool calls a
   await app.model.held('think-3');
   await expect(turn.getByRole('button', { name: 'Read 2 files' })).toBeVisible();
   await expect(turn).toContainText(reply);
+  // The reply closed the run, so the latest-call line is gone.
+  await expect(currentLine).toHaveCount(0);
   await expect(turn.locator('details')).toHaveCount(0);
   const h3 = await turnHeight();
   const bottomWhileStreaming = await tailBottom();
@@ -456,7 +466,17 @@ test('concise mode keeps the tool row and turn height stable across tool calls a
   // The reserved status tail matches the finished action bar height so completion does not bounce the layout.
   expect(bottomWhenDone).toBe(bottomWhileStreaming);
   const labels = await page.evaluate(() => (window as unknown as { __toolLabels: string[] }).__toolLabels);
-  expect(labels).not.toContain('1 action waiting to start');
+  // The tally counts a call when it is issued, so it changes once per call and never names a
+  // waiting or running call.
+  expect(labels).toEqual(['Read 1 file', 'Read 2 files']);
+  // Once shown, the latest-call line stays until the run ends: it never blinks out between calls.
+  const lines = await page.evaluate(() => (window as unknown as { __currentLines: string[] }).__currentLines);
+  const shown = lines.findIndex((line) => line !== '');
+  expect(shown).toBeGreaterThanOrEqual(0);
+  expect(lines.slice(shown, -1)).not.toContain('');
+  expect(lines.at(-1)).toBe('');
+  expect(lines).toContain('Read a.txt');
+  expect(lines).toContain('Read b.txt');
 
   await expectSameTranscriptAfterReload(page, await transcript(page));
   expect(app.model.unscripted()).toEqual([]);

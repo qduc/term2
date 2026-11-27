@@ -53,7 +53,7 @@ export function createDirectShellTools() {
   };
   const start = (
     options: BackgroundShellLaunchOptions<BackgroundShellExecutionResult> &
-      Pick<ForegroundShellLeaseOptions<BackgroundShellExecutionResult>, 'parentSignal'>,
+      Pick<ForegroundShellLeaseOptions<BackgroundShellExecutionResult>, 'parentSignal' | 'handoffAfterMs'>,
     mode: 'foreground' | 'background',
   ) => {
     const port = current();
@@ -61,6 +61,7 @@ export function createDirectShellTools() {
       command: options.command,
       mode,
       parentSignal: mode === 'foreground' ? options.parentSignal : undefined,
+      handoffAfterMs: mode === 'foreground' ? options.handoffAfterMs : undefined,
       run: options.run,
       status: options.resultToStatus,
       cleanup: async () => {
@@ -102,7 +103,11 @@ export function createDirectShellTools() {
         foregroundResult: handle.foreground.then((outcome) => {
           if (outcome.kind === 'result') return outcome.value;
           options.onAdopted?.();
-          return { jobId: handle.id, status: 'running' as const };
+          return {
+            jobId: handle.id,
+            status: 'running' as const,
+            ...(outcome.handoffAfterMs ? { handoffAfterMs: outcome.handoffAfterMs } : {}),
+          };
         }),
       };
     },

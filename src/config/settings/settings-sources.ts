@@ -88,6 +88,7 @@ const SETTINGS_SOURCE_KEYS = {
   shell: {
     timeout: 'shell.timeout',
     backgroundTimeout: 'shell.backgroundTimeout',
+    foregroundHandoffMs: 'shell.foregroundHandoffMs',
     maxOutputLines: 'shell.maxOutputLines',
     autoApproveMode: 'shell.autoApproveMode',
     showReview: 'shell.showReview',

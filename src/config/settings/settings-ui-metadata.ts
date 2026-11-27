@@ -83,6 +83,7 @@ const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS]: 'Compaction token ceiling',
   [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell timeout',
   [SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT]: 'Background shell timeout',
+  [SETTING_KEYS.SHELL_FOREGROUND_HANDOFF_MS]: 'Move long commands to background after',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Shell output lines',
   [SETTING_KEYS.TOOLS_MAX_OUTPUT_CHARS]: 'Tool output chars',
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Approval mode',

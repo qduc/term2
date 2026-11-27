@@ -57,11 +57,15 @@ export interface ForegroundShellLeaseOptions<TResult> extends BackgroundShellLau
   parentSignal?: AbortSignal;
   /** Observational transfer hand-off, invoked before the foreground result resolves. */
   onAdopted?: () => void;
+  /** Transfer to the background on its own once still running after this long; absent or 0 = never. */
+  handoffAfterMs?: number;
 }
 
 export interface ForegroundShellTransferResult {
   jobId: string;
   status: 'running';
+  /** Set when the handoff timer moved it, not a person. */
+  handoffAfterMs?: number;
 }
 
 export interface ForegroundShellLeaseDetails {

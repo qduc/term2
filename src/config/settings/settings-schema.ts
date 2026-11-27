@@ -319,6 +319,15 @@ const ShellSettingsSchema = z.object({
     .positive()
     .default(30 * 60 * 1000)
     .describe('Timeout for background shell jobs, in milliseconds. Capped: 0 or unbounded values are rejected.'),
+  foregroundHandoffMs: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60 * 60 * 1000)
+    .default(60_000)
+    .describe(
+      'Move a foreground command the agent started to the background once it has run this long, so the turn can end and the agent is woken when it exits. The command keeps its own timeout. 0 turns this off.',
+    ),
   maxOutputLines: z.number().int().positive().default(1000),
   showReview: z
     .boolean()
@@ -823,6 +832,7 @@ export interface SettingsWithSources {
   shell: {
     timeout: SettingWithSource<number>;
     backgroundTimeout: SettingWithSource<number>;
+    foregroundHandoffMs: SettingWithSource<number>;
     maxOutputLines: SettingWithSource<number>;
     showReview: SettingWithSource<boolean>;
     autoApproveMode: SettingWithSource<'off' | 'auto' | 'unattended' | 'always'>;
@@ -985,6 +995,7 @@ export const SETTING_KEYS = {
   AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS: 'agent.contextCompaction.compactThresholdTokens',
   SHELL_TIMEOUT: 'shell.timeout',
   SHELL_BACKGROUND_TIMEOUT: 'shell.backgroundTimeout',
+  SHELL_FOREGROUND_HANDOFF_MS: 'shell.foregroundHandoffMs',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   TOOLS_MAX_OUTPUT_CHARS: 'tools.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
@@ -1121,6 +1132,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS,
   SETTING_KEYS.SHELL_TIMEOUT,
   SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
+  SETTING_KEYS.SHELL_FOREGROUND_HANDOFF_MS,
   SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
   SETTING_KEYS.TOOLS_MAX_OUTPUT_CHARS,
   SETTING_KEYS.LOGGING_LOG_LEVEL,
@@ -1264,6 +1276,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   shell: {
     timeout: 120000,
     backgroundTimeout: 30 * 60 * 1000,
+    foregroundHandoffMs: 60_000,
     maxOutputLines: 1000,
     autoApproveMode: 'off',
     showReview: false,

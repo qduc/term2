@@ -41,3 +41,25 @@ Transfer validates capacity and registry lifetime before changing anything. It t
 ## Territory finding
 
 `ApplicationRunLoop` passes its segment signal as `ToolInvocationContext.signal`, but invokes tool `execute` with details containing only the tool-call ID. Shell currently reads `details.signal`, so foreground agent shell has no effective run-loop cancellation. The lease must consume the typed tool context and tests must pin cancellation both before and after transfer.
+
+## Automatic handoff (`shell.foregroundHandoffMs`)
+
+The same transfer also runs without a person. When a model's own `shell` call is
+still running after `shell.foregroundHandoffMs` (default 60 s, 0 = off), the
+Session's shell-task port (`scheduleHandoff` in `src/session/shell-tasks.ts`)
+calls `moveToBackground` on it. The process, controller, output and cleanup are
+the ones above; the call's timeout is not extended, so a finite `timeout_ms` or
+`shell.timeout` still ends it. The tool result adds `message` and `next`, saying
+the job's exit will wake the session.
+
+Why: in the waiting experiment, A1 prompt guidance still left a model running a
+140 s suite in the foreground, blocking the turn. Elapsed time is only a proxy
+for "this should be waited on", so the action is the least destructive one
+available: change who waits, never kill or restart.
+
+Scope: root sessions with a background registry only. Subagents get no registry,
+headless runs have no background jobs, and a call made by a `run_code` script is
+never handed off (`isScriptedToolCall`), because the script is awaiting the
+output. A command that finishes first returns normally. Covered by the
+`foreground handoff` cases in `tests/tools/system/run-code/shell.integration.test.ts`.
+Rollback: set the setting to 0, or revert the one `handoffAfterMs` line in `shell.ts`.

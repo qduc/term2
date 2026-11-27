@@ -43,12 +43,18 @@ export function directShellTasks(
               };
         },
       );
+      const handoff =
+        request.mode === 'foreground' ? scheduleHandoff(tasks, handle.taskId, request.handoffAfterMs) : null;
       return {
         id: handle.taskId,
         startedAt: tasks.get(handle.taskId)!.startedAt,
         settled: handle.result.then(() => state(tasks.get(handle.taskId)!)),
         foreground: tasks.waitForForeground(handle).then((outcome) => {
-          if (outcome.kind === 'background') return { kind: 'background' as const };
+          handoff?.cancel();
+          if (outcome.kind === 'background')
+            return handoff?.fired
+              ? { kind: 'background' as const, handoffAfterMs: request.handoffAfterMs }
+              : { kind: 'background' as const };
           if (outcome.result.value !== undefined) return { kind: 'result' as const, value: outcome.result.value };
           throw new Error(outcome.result.kind === 'failed' ? outcome.result.error.message : 'Shell task cancelled');
         }),
@@ -87,6 +93,28 @@ export function directShellTasks(
     },
   };
   return port;
+}
+
+/**
+ * A model's foreground command that outlives the handoff moves to the background
+ * through the same transfer a person uses: one process, its own timeout, no restart.
+ * The turn can then end, and the task's completion wakes the session.
+ */
+function scheduleHandoff(tasks: DirectBackgroundTasks, taskId: string, afterMs: number | undefined) {
+  if (!afterMs || afterMs <= 0) return null;
+  const handoff = { fired: false, cancel: () => clearTimeout(timer) };
+  const timer = setTimeout(() => {
+    const task = tasks.get(taskId);
+    if (task?.mode !== 'foreground' || task.status !== 'running') return;
+    try {
+      // Set before the foreground waiter's continuation runs, so it reports the handoff.
+      handoff.fired = tasks.moveToBackground(taskId).ok;
+    } catch {
+      // A closing Session refuses the transfer; the command stays foreground.
+    }
+  }, afterMs);
+  timer.unref?.();
+  return handoff;
 }
 
 function state(task: DirectTaskState): ShellTaskState {

@@ -90,7 +90,9 @@ export type ShellTaskPort = {
     readonly id: string;
     readonly startedAt: number;
     readonly settled: Promise<ShellTaskState>;
-    readonly foreground: Promise<{ readonly kind: 'result'; readonly value: T } | { readonly kind: 'background' }>;
+    readonly foreground: Promise<
+      { readonly kind: 'result'; readonly value: T } | { readonly kind: 'background'; readonly handoffAfterMs?: number }
+    >;
     /** Async delivery retains this admitted launch's provenance, not the caller's current execution. */
     notify(key: string, text: string): boolean;
   };
@@ -108,6 +110,8 @@ export type ShellTaskStart<T> = {
   readonly run: (signal: AbortSignal) => Promise<T>;
   readonly cleanup?: () => Promise<void> | void;
   readonly status?: (value: T) => 'completed' | 'failed' | 'timed_out';
+  /** Foreground only: Session moves the still-running task to the background after this long. Absent or 0 = never. */
+  readonly handoffAfterMs?: number;
 };
 export type ShellTaskState = {
   readonly id: string;

@@ -9,6 +9,7 @@ import { logValidationError as logValidationErrorUtil } from '../shell/command-l
 import { executeShellCommand } from '../shell/execute-shell.js';
 import type { ShellChildRegistry } from '../shell/shell-child-registry.js';
 import { formatShellExecutionOutput } from '../../shared/utils/shell/shell-output.js';
+import { isScriptedToolCall } from '../../shared/utils/output/bound-tool-result.js';
 import type {
   AnyScriptedToolDefinition,
   PostExecutePauseDescriptor,
@@ -180,6 +181,9 @@ export interface BackgroundShellJobToolDefinitions {
   monitor?: ScriptedToolDefinition<typeof monitorShellJobParameters>;
   cancelMonitor?: ScriptedToolDefinition<typeof cancelShellMonitorParameters>;
 }
+
+const BACKGROUND_WAKE_HINT =
+  'You will be woken automatically when this job exits. If nothing else needs doing now, end your turn; do not sleep or poll.';
 
 function backgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecutionResult>) {
   return {
@@ -1480,7 +1484,7 @@ export function createShellToolDefinition(deps: {
             return JSON.stringify({
               jobId: job.id,
               status: job.status,
-              next: 'You will be woken automatically when this job exits. If nothing else needs doing now, end your turn; do not sleep or poll.',
+              next: BACKGROUND_WAKE_HINT,
               ...(monitor === undefined
                 ? {}
                 : {
@@ -1511,6 +1515,8 @@ export function createShellToolDefinition(deps: {
             },
             onSettled: cleanupAfterExecution,
             resultToStatus: (result) => result.status,
+            // A script awaits its command's output, so only a model's direct call is handed off.
+            handoffAfterMs: isScriptedToolCall(_context) ? 0 : settingsService.get('shell.foregroundHandoffMs') ?? 0,
             onAdopted: () => {
               transferred = true;
               networkApproval?.dispose();
@@ -1524,7 +1530,13 @@ export function createShellToolDefinition(deps: {
             // The tool call returns now, but only the parent-turn ownership is
             // released. Process cleanup remains deferred to lease settlement.
             restoreForegroundCorrelation();
-            return JSON.stringify(result);
+            const { handoffAfterMs, ...job } = result;
+            const why = handoffAfterMs ? `Still running after ${Math.round(handoffAfterMs / 1000)} s, so it` : 'It';
+            return JSON.stringify({
+              ...job,
+              message: `${why} moved to the background (same process; its timeout is unchanged).`,
+              next: BACKGROUND_WAKE_HINT,
+            });
           }
           return foregroundOutput(result);
         }

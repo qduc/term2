@@ -45,6 +45,7 @@ async function harness(
     bare?: boolean;
     restrictEscape?: boolean;
     escapeApproval?: boolean;
+    handoffMs?: number;
   } = {},
 ) {
   const cwd = await mkdtemp(join(tmpdir(), 'term2-script-shell-'));
@@ -55,6 +56,7 @@ async function harness(
     'shell.autoApproveMode': 'off',
     'shell.timeout': 5000,
     'shell.backgroundTimeout': 5000,
+    'shell.foregroundHandoffMs': options.handoffMs ?? 0,
   });
   const executionContext = ExecutionContext.pin(cwd);
   const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
@@ -456,6 +458,79 @@ describe('shell inside run_code through the wrapped tool graph', () => {
     controller.abort();
     await waitUntil(() => existsSync(done));
     await waitUntil(() => h.tasks.get(task!.taskId)?.status === 'completed');
+  });
+
+  describe('foreground handoff (shell.foregroundHandoffMs)', () => {
+    const slowCommand = (cwd: string, ms: number) => {
+      const done = join(cwd, 'handoff-done');
+      return {
+        done,
+        command: `${process.execPath} -e "setTimeout(()=>{require('fs').writeFileSync('${done}','yes');console.log('finished')},${ms})"`,
+      };
+    };
+    const direct = async (h: Awaited<ReturnType<typeof harness>>, command: string) => {
+      const shell = h.registry.get('shell')!;
+      try {
+        return String(
+          (
+            await shell.execute(
+              shell.parse({ command, sandbox: 'unsandboxed' }),
+              h.context(new AbortController().signal),
+            )
+          ).output,
+        );
+      } finally {
+        h.tasks.releaseParent('test-turn');
+      }
+    };
+
+    it("moves a model's still-running command to the background, same process, and it completes there", async () => {
+      const h = await harness({ approve: () => 'y', handoffMs: 300 });
+      const { done, command } = slowCommand(h.cwd, 1200);
+      const started = Date.now();
+      const output = await direct(h, command);
+      const elapsed = Date.now() - started;
+      const result = JSON.parse(output) as { jobId: string; status: string; message: string; next: string };
+      expect(result).toMatchObject({ status: 'running' });
+      expect(result.message).toContain('Still running after 0 s, so it moved to the background');
+      expect(result.next).toContain('woken automatically');
+      expect(elapsed).toBeGreaterThanOrEqual(290);
+      expect(elapsed).toBeLessThan(1100);
+      expect(existsSync(done)).toBe(false);
+      expect(h.tasks.get(result.jobId)).toMatchObject({ kind: 'shell', mode: 'background' });
+      await waitUntil(() => h.tasks.get(result.jobId)?.status === 'completed');
+      expect(existsSync(done)).toBe(true);
+    });
+
+    it('leaves a command that finishes before the handoff in the foreground', async () => {
+      const h = await harness({ approve: () => 'y', handoffMs: 2000 });
+      const { command } = slowCommand(h.cwd, 100);
+      const output = await direct(h, command);
+      expect(output).toContain('finished');
+      expect(output).not.toContain('moved to the background');
+      expect(h.tasks.list().filter((task) => task.mode === 'background')).toEqual([]);
+    });
+
+    it('never hands off a command a run_code script is awaiting', async () => {
+      const h = await harness({ approve: () => 'y', handoffMs: 200 });
+      const { done, command } = slowCommand(h.cwd, 700);
+      const output = await h.run(
+        `return await tools.shell(${JSON.stringify({ command, sandbox: 'unsandboxed' })});`,
+        undefined,
+        3000,
+      );
+      expect(String(output)).toContain('finished');
+      expect(existsSync(done)).toBe(true);
+      expect(h.tasks.list().filter((task) => task.mode === 'background')).toEqual([]);
+    });
+
+    it('is off at 0', async () => {
+      const h = await harness({ approve: () => 'y', handoffMs: 0 });
+      const { command } = slowCommand(h.cwd, 500);
+      const output = await direct(h, command);
+      expect(output).toContain('finished');
+      expect(h.tasks.list().filter((task) => task.mode === 'background')).toEqual([]);
+    });
   });
 
   it('keeps a launched background job alive after script completion and parent abort', async () => {

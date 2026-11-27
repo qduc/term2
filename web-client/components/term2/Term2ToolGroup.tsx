@@ -6,7 +6,7 @@ import { describeCommand, Term2CommandCard } from './Term2CommandCard';
 import type { Term2DisplayMode } from './Term2TurnTimeline';
 
 /**
- * A run of tool calls. In concise mode it is one summary line (opened only by the
+ * A run of tool calls. In concise mode it is one summary line, plus the latest call while the run is live (opened only by the
  * reader); in standard mode it is one compact row per call.
  */
 function summarizeCompletedTools(commands: Term2Command[]): string {
@@ -82,9 +82,12 @@ function asSentence(summary: string): string {
 export function Term2ToolGroup({
   commands,
   displayMode = 'concise',
+  live = false,
 }: {
   commands: Term2Command[];
   displayMode?: Term2DisplayMode;
+  /** The run can still grow: show the latest call on its own line. */
+  live?: boolean;
 }) {
   const [userOpen, setUserOpen] = useState(false);
   if (commands.length === 0) return null;
@@ -100,25 +103,21 @@ export function Term2ToolGroup({
     );
   }
 
-  // Concise: the whole run is one line, plus a quiet line naming any failures.
+  // Concise: line 1 tallies every call in the run, counted when it is issued, so it changes only
+  // when a new call arrives. While the run is live, line 2 names the latest call and stays after
+  // that call settles, until the next call replaces it or the run ends: a fast call never makes a
+  // line appear and vanish, and the row's height changes once, when other content follows it.
   const active = commands.filter((c) => c.status === 'running' || c.status === 'pending');
-  const settled = commands.filter((c) => c.status !== 'running' && c.status !== 'pending');
   const failed = commands.filter((c) => c.status === 'failed').length;
   const allFailed = failed === commands.length;
-  // A call that was issued but hasn't started yet is still the same action: reading it as `running`
-  // keeps the row from cycling through "waiting" -> "running" -> "done" on every call. Keep the
-  // settled work in the label while another call is active, so a new call doesn't erase the count
-  // the row just reported.
-  const current = active[0] ? describeCommand({ ...active[0], status: 'running' }) : null;
-  const currentText = current
-    ? `${current.verb}${current.target ? ` ${current.target}` : ''}${active.length > 1 ? ` and ${active.length - 1} more` : ''}…`
-    : null;
-  const settledSummary = settled.length > 0 ? asSentence(summarizeCompletedTools(settled)) : null;
-  const summary = currentText
-    ? settledSummary
-      ? `${settledSummary}, ${currentText.charAt(0).toLowerCase() + currentText.slice(1)}`
-      : currentText
-    : asSentence(summarizeCompletedTools(commands));
+  const summary = asSentence(summarizeCompletedTools(commands));
+  // A call that was issued but hasn't started yet reads as running, so line 2 doesn't cycle through
+  // "waiting" -> "running" -> "done" on every call.
+  const latest = active[0] ? { ...active[0], status: 'running' as const } : commands[commands.length - 1]!;
+  const current = describeCommand(latest);
+  const currentText = `${current.verb}${current.target ? ` ${current.target}` : ''}${
+    active.length > 1 ? ` and ${active.length - 1} more` : ''
+  }${active.length > 0 ? '…' : ''}`;
   // Keep any failure summary steady once a call in the run has failed so it doesn't
   // toggle the row height on and off as subsequent tools in the same run start and finish.
   const failures = describeFailures(commands);
@@ -145,7 +144,7 @@ export function Term2ToolGroup({
         </span>
         <span className="min-w-0">
           <span className="flex items-center gap-1.5 leading-5">
-            <span className={`truncate ${active.length > 0 ? 't2-shimmer' : ''}`}>{summary}</span>
+            <span className="truncate">{summary}</span>
             <ChevronRight
               aria-hidden
               className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
@@ -160,6 +159,19 @@ export function Term2ToolGroup({
           )}
         </span>
       </button>
+      {live && !open && (
+        <p
+          className={`truncate pl-6 text-xs leading-5 ${
+            latest.status === 'failed'
+              ? 'text-red-600 dark:text-red-400'
+              : active.length > 0
+                ? 't2-shimmer text-muted-foreground'
+                : 'text-muted-foreground'
+          }`}
+        >
+          {currentText}
+        </p>
+      )}
       {open && (
         <div className="t2-enter mt-1 space-y-px rounded-xl border border-black/[0.06] bg-zinc-50/60 p-1 dark:border-white/[0.06] dark:bg-white/[0.02]">
           {commands.map((command, index) => (

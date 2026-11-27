@@ -155,7 +155,7 @@ export const Term2TurnTimeline = memo(function Term2TurnTimeline({
 
   return (
     <>
-      {segments.map((segment) => {
+      {segments.map((segment, index) => {
         if (segment.kind === 'reasoning') {
           const isStreamingNow = Boolean(segment.streaming && turn.status === 'streaming');
           const key = `reason:${reasoningOrdinal++}`;
@@ -174,7 +174,13 @@ export const Term2TurnTimeline = memo(function Term2TurnTimeline({
 
         if (segment.kind === 'tools') {
           return (
-            <Term2ToolGroup key={segment.key} commands={segment.commands} displayMode={displayMode} />
+            <Term2ToolGroup
+              key={segment.key}
+              commands={segment.commands}
+              displayMode={displayMode}
+              // The run is still open while it is the turn's newest segment and the turn is streaming.
+              live={turn.status === 'streaming' && index === segments.length - 1}
+            />
           );
         }
 

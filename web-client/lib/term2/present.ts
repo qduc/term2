@@ -48,6 +48,8 @@ export interface Term2SessionFacts {
   lastError: WireSnapshot['lastError'];
   /** Rule 2: the snapshot has tools but no timeline, so no order can be shown. */
   unorderedTranscript: boolean;
+  /** True once this logical session has rolled over to a successor backing log. */
+  rolledOver: boolean;
 }
 
 /** The pending-interaction DTOs a frame carried, by request id (server-sse.ts, PendingInteractionEntry). */
@@ -414,6 +416,7 @@ function sessionFacts(snapshot: WireSnapshot): Term2SessionFacts {
     notices: snapshot.notices,
     lastError: snapshot.lastError,
     unorderedTranscript: false,
+    rolledOver: snapshot.backingSessionId !== snapshot.sessionId,
   };
 }
 

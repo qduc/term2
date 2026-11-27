@@ -278,8 +278,8 @@
       "reason": "Recorded when the gate first covered web-client (2026-11); the settings page was out of scope of the shell decomposition. Split per provider form when settings is next reworked."
     },
     "web-client/lib/term2/types.ts": {
-      "lines": 969,
-      "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11). Eleven lines add ServerTaskAction and ServerCapabilities to SettingsProjection."
+      "lines": 970,
+      "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11). Eleven lines add ServerTaskAction and ServerCapabilities to SettingsProjection, and one line adds the rollover command outcome."
     },
     "web-client/components/term2/settings/Term2SettingsPage.tsx": {
       "lines": 920,

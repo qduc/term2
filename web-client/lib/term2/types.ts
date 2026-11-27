@@ -368,7 +368,7 @@ export interface AbortResult {
   abortStatus?: 'terminal_accepted';
 }
 
-export const TERM2_COMMAND_IDS = ['compact', 'retry-tool', 'retry-turn'] as const;
+export const TERM2_COMMAND_IDS = ['compact', 'rollover', 'retry-tool', 'retry-turn'] as const;
 export type Term2CommandId = (typeof TERM2_COMMAND_IDS)[number];
 // Contract 13 §8: the outcomes each session command may report, in one place so
 // the wire validator and the contract pin cannot drift apart. The set is keyed by
@@ -377,6 +377,7 @@ export type Term2CommandId = (typeof TERM2_COMMAND_IDS)[number];
 // the union of these lists, so no second copy of the vocabulary exists.
 export const TERM2_COMMAND_OUTCOMES_BY_COMMAND = {
   compact: ['completed', 'not_reduced', 'nothing_to_retry', 'failed'],
+  rollover: ['completed'],
   'retry-tool': ['accepted', 'nothing_to_retry'],
   'retry-turn': ['accepted', 'nothing_to_retry'],
 } as const satisfies Record<Term2CommandId, readonly string[]>;

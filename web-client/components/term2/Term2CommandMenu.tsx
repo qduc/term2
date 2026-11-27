@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Archive, AtSign, ImagePlus, Loader2, Plus, RotateCcw, Wand2, Wrench } from 'lucide-react';
+import { Archive, AtSign, ImagePlus, Loader2, Plus, RefreshCw, RotateCcw, Wand2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -17,18 +17,21 @@ import { TERM2_COMMAND_IDS, type Term2CommandId } from '../../lib/term2/types';
 
 const COMMAND_LABELS: Record<Term2CommandId, string> = {
   compact: 'Compact context',
+  rollover: 'Roll over context',
   'retry-tool': 'Retry last tool',
   'retry-turn': 'Retry failed turn',
 };
 
 const COMMAND_HINTS: Record<Term2CommandId, string> = {
   compact: 'Summarise history to free up context',
+  rollover: 'Start a fresh context window in this chat',
   'retry-tool': 'Run the last tool call again',
   'retry-turn': 'Start the failed turn over',
 };
 
 const COMMAND_ICONS: Record<Term2CommandId, typeof Archive> = {
   compact: Archive,
+  rollover: RefreshCw,
   'retry-tool': Wrench,
   'retry-turn': RotateCcw,
 };

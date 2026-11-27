@@ -49,6 +49,7 @@ const COMMAND_ERROR_MESSAGES: Record<string, string> = {
 
 const NOTHING_TO_RETRY_MESSAGES: Record<Term2CommandId, string> = {
   compact: 'Nothing to compact yet.',
+  rollover: 'Nothing to roll over yet.',
   'retry-tool': 'No tool output is available to retry.',
   'retry-turn': 'No failed turn is available to retry.',
 };
@@ -69,6 +70,7 @@ function commandNoticeFor(
   result: Term2CommandResult,
 ): { tone: 'neutral' | 'error'; message: string } {
   if (result.outcome === 'nothing_to_retry') return { tone: 'neutral', message: NOTHING_TO_RETRY_MESSAGES[commandId] };
+  if (commandId === 'rollover') return { tone: 'neutral', message: 'Started a fresh context.' };
   if (result.outcome === 'not_reduced') return { tone: 'neutral', message: "Compaction didn't reduce the context." };
   if (result.outcome === 'failed') {
     const detail = result.reason

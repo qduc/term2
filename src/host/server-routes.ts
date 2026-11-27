@@ -19,6 +19,9 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
     return { purpose: 'workspace_candidate_browse' };
   if (method === 'POST' && pathname === '/private/agent/v1/workspace/candidates/select')
     return { purpose: 'workspace_candidate_select' };
+  if (method === 'GET' && pathname === '/private/agent/v1/workspaces/ssh-hosts')
+    return { purpose: 'workspace_ssh_hosts' };
+  if (method === 'POST' && pathname === '/private/agent/v1/workspaces/ssh') return { purpose: 'workspace_ssh_add' };
   const workspace = pathname.match(/^\/private\/agent\/v1\/workspaces\/([A-Za-z0-9_-]{1,256})(\/access)?$/);
   if (workspace && !workspace[2] && method === 'DELETE')
     return { purpose: 'workspace_remove', workspaceId: workspace[1] };

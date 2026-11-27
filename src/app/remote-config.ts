@@ -2,7 +2,8 @@
 import { readFile } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { resolveSSHHost } from '../shared/utils/ssh-config-parser.js';
+import { listSSHHosts, resolveSSHHost, type SSHHostEntry } from '../shared/utils/ssh-config-parser.js';
+export type { SSHHostEntry } from '../shared/utils/ssh-config-parser.js';
 import type { SSHConfig } from '../tools/ssh-service.js';
 import type { Workspace } from '../tools/index.js';
 
@@ -93,4 +94,9 @@ async function readConfig(): Promise<string> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
     throw new Error('Cannot read SSH configuration.', { cause: error });
   }
+}
+
+/** List explicit non-wildcard host aliases from ~/.ssh/config. Missing config returns []. */
+export async function listConfiguredSSHHosts(configContent?: string): Promise<SSHHostEntry[]> {
+  return listSSHHosts(configContent ?? (await readConfig()));
 }

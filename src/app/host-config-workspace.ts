@@ -15,10 +15,12 @@ import {
   requireStateDirectory,
   saveDynamicGrants,
 } from './host-config-workspace-grants.js';
-import type { GrantRecord, WorkspaceAccess, WorkspaceKind } from './host-config-workspace-grants.js';
+import type { GrantRecord, SshGrantTarget, WorkspaceAccess, WorkspaceKind } from './host-config-workspace-grants.js';
 import { scanDirectoryEntries } from './file-service.js';
+import { addServeSshWorkspace } from './remote-context.js';
+import { listConfiguredSSHHosts } from './remote-config.js';
 
-export type { WorkspaceAccess, WorkspaceKind, GrantRecord } from './host-config-workspace-grants.js';
+export type { WorkspaceAccess, WorkspaceKind, SshGrantTarget, GrantRecord } from './host-config-workspace-grants.js';
 export type { CandidateBrowse, CandidateValidation } from './host-config-candidates.js';
 
 export type WorkspaceAlias = { workspaceId: string; label: string; access: WorkspaceAccess; kind?: WorkspaceKind };
@@ -84,7 +86,7 @@ export class DirectWorkspaceAuthority {
     if (options.stateDirectory !== undefined) {
       this.#stateDirectory = requireStateDirectory(options.stateDirectory);
       for (const grant of loadDynamicGrants(this.#stateDirectory)) {
-        inspectRestoredRoot(grant.root);
+        if (grant.kind !== 'ssh') inspectRestoredRoot(grant.root);
         this.#insert(grant);
         this.#issuedVersion = Math.max(this.#issuedVersion, grant.grantVersion);
       }
@@ -101,6 +103,55 @@ export class DirectWorkspaceAuthority {
 
   kindOf(workspaceId: string): WorkspaceKind {
     return this.#grants.get(workspaceId)?.kind ?? 'directory';
+  }
+
+  sshTargetOf(workspaceId: string): SshGrantTarget | undefined {
+    const record = this.#grants.get(workspaceId);
+    return record?.kind === 'ssh' ? record.ssh : undefined;
+  }
+
+  addSshGrant(
+    principal: Principal,
+    input: {
+      readonly ssh: SshGrantTarget;
+      readonly root: string;
+      readonly access: WorkspaceAccess;
+      readonly label: string;
+    },
+  ): WorkspaceAlias {
+    const owner = requirePrincipal(principal);
+    if (input.access !== 'read' && input.access !== 'read_write')
+      throw new DirectHostConfigError('validation_error', 'authority');
+    if (input.access === 'read_write' && !this.#allowWrite)
+      throw new DirectHostConfigError('workspace_write_not_allowed', 'authority');
+    const existing = [...this.#grants.values()].find(
+      (g) => g.kind === 'ssh' && g.ssh?.target === input.ssh.target && g.root === input.root,
+    );
+    if (existing) {
+      if (existing.ownerUserId !== owner) throw new DirectHostConfigError('workspace_owner_mismatch', 'authority');
+      if (existing.access !== input.access) throw new DirectHostConfigError('workspace_grant_mismatch', 'authority');
+      return { workspaceId: existing.workspaceId, label: existing.label, access: existing.access, kind: 'ssh' };
+    }
+    const record: GrantRecord = {
+      workspaceId: `ws_${randomUUID().replaceAll('-', '')}`,
+      ownerUserId: owner,
+      label: input.label.slice(0, 120),
+      root: input.root,
+      access: input.access,
+      grantVersion: this.#issuedVersion + 1,
+      dynamic: true,
+      kind: 'ssh',
+      ssh: input.ssh,
+    };
+    this.#grants.set(record.workspaceId, record);
+    try {
+      this.#persist();
+    } catch {
+      this.#grants.delete(record.workspaceId);
+      throw new DirectHostConfigError('workspace_grant_not_persisted', 'authority');
+    }
+    this.#issuedVersion = record.grantVersion;
+    return { workspaceId: record.workspaceId, label: record.label, access: record.access, kind: 'ssh' };
   }
 
   validate(principal: Principal, absolutePath: string): CandidateValidation {
@@ -180,8 +231,10 @@ export class DirectWorkspaceAuthority {
     if (existing.access === access) return change(existing);
     if (access === 'read_write') {
       if (!this.#allowWrite) throw new DirectHostConfigError('workspace_write_not_allowed', 'authority');
-      const owned = this.#owned(principal, workspaceId);
-      this.#assertBoundary(this.#exactRoot(owned), 'read_write', 'authority');
+      if (existing.kind !== 'ssh') {
+        const owned = this.#owned(principal, workspaceId);
+        this.#assertBoundary(this.#exactRoot(owned), 'read_write', 'authority');
+      }
     }
     const record: GrantRecord = { ...existing, access, grantVersion: this.#issuedVersion + 1 };
     this.#grants.set(record.workspaceId, record);
@@ -198,6 +251,11 @@ export class DirectWorkspaceAuthority {
   /** HTTP create uses the stored grant's access. A client cannot choose a wider one. */
   resolveGrant(principal: Principal, workspaceId: string): WorkspaceGrant {
     const record = this.#owned(principal, workspaceId);
+    if (record.kind === 'ssh') {
+      if (record.access === 'read_write' && !this.#allowWrite)
+        throw new DirectHostConfigError('write_not_allowed', 'authority');
+      return { workspaceId: record.workspaceId, access: record.access };
+    }
     this.#assertBoundary(this.#exactRoot(record), record.access, 'authority');
     return { workspaceId: record.workspaceId, access: record.access };
   }
@@ -206,6 +264,15 @@ export class DirectWorkspaceAuthority {
   resolveWorkspace(principal: Principal, grant: WorkspaceGrant): WorkspaceAuthorityResult {
     const record = this.#owned(principal, grant.workspaceId);
     if (grant.access !== record.access) throw new DirectHostConfigError('workspace_grant_mismatch', 'authority');
+    if (record.kind === 'ssh' && record.ssh) {
+      if (record.access === 'read_write' && !this.#allowWrite)
+        throw new DirectHostConfigError('write_not_allowed', 'authority');
+      return {
+        workspace: { root: record.root, access: record.access, target: record.ssh.target },
+        workspaceId: record.workspaceId,
+        grantVersion: record.grantVersion,
+      };
+    }
     const root = this.#exactRoot(record);
     this.#assertBoundary(root, record.access, 'authority');
     return {
@@ -215,10 +282,24 @@ export class DirectWorkspaceAuthority {
     };
   }
 
-  /** Store callback has only a path. Ambiguous or missing roots fail closed. */
-  resolveStoredRoot(root: string): Workspace {
+  /** Store callback has only a path (and optional recorded identity). Ambiguous or missing roots fail closed. */
+  resolveStoredRoot(root: string, identity?: Workspace): Workspace {
+    if (identity && identity.target !== 'local') {
+      const matches = [...this.#grants.values()].filter(
+        (grant) => grant.kind === 'ssh' && grant.ssh?.target === identity.target && grant.root === root,
+      );
+      if (matches.length !== 1)
+        throw new DirectHostConfigError(
+          matches.length === 0 ? 'workspace_authority_revoked' : 'workspace_grant_mismatch',
+          'authority',
+        );
+      const record = matches[0]!;
+      if (record.access === 'read_write' && !this.#allowWrite)
+        throw new DirectHostConfigError('write_not_allowed', 'authority');
+      return { root: record.root, access: record.access, target: record.ssh!.target };
+    }
     const canonical = canonicalizeUse(root);
-    const all = [...this.#grants.values()].filter((grant) => grant.root === canonical);
+    const all = [...this.#grants.values()].filter((grant) => grant.kind !== 'ssh' && grant.root === canonical);
     const matches = all.length > 1 ? all.filter((grant) => grant.kind !== 'host') : all;
     if (matches.length !== 1)
       throw new DirectHostConfigError(
@@ -249,7 +330,9 @@ export class DirectWorkspaceAuthority {
   }
 
   #byRoot(root: string): GrantRecord | undefined {
-    return [...this.#grants.values()].find((grant) => grant.root === root && grant.kind !== 'host');
+    return [...this.#grants.values()].find(
+      (grant) => grant.root === root && grant.kind !== 'host' && grant.kind !== 'ssh',
+    );
   }
 
   #exactRoot(record: GrantRecord): string {
@@ -268,7 +351,10 @@ export class DirectWorkspaceAuthority {
   }
 
   #insert(record: GrantRecord): void {
-    if (this.#grants.has(record.workspaceId) || (record.kind !== 'host' && this.#byRoot(record.root))) {
+    if (
+      this.#grants.has(record.workspaceId) ||
+      (record.kind !== 'host' && record.kind !== 'ssh' && this.#byRoot(record.root))
+    ) {
       throw new DirectHostConfigError('configuration_invalid', 'startup');
     }
     this.#grants.set(record.workspaceId, record);
@@ -320,7 +406,7 @@ export function serverWorkspaceAdministration(
     async listFiles(principal, workspaceId) {
       const grant = grants.resolveGrant(principal, workspaceId);
       const { workspace } = grants.resolveWorkspace(principal, grant);
-      if (grants.kindOf(workspaceId) === 'host') return { entries: [], truncated: true };
+      if (grants.kindOf(workspaceId) !== 'directory') return { entries: [], truncated: true };
       const scanned = await scanDirectoryEntries(workspace.root, { maxDepth: 12, maxTotalEntries: 2_000 });
       return { entries: scanned.entries, truncated: scanned.truncated };
     },
@@ -328,6 +414,11 @@ export function serverWorkspaceAdministration(
     validate: (principal, absolutePath) => grants.validate(principal, absolutePath),
     browse: (principal, candidateId, child) => grants.browse(principal, candidateId, child),
     select: (principal, candidateId, access) => grants.select(principal, candidateId, access),
+    async listSshHosts(principal) {
+      requirePrincipal(principal);
+      return listConfiguredSSHHosts();
+    },
+    addSsh: (principal, input) => addServeSshWorkspace(grants, principal, input),
     async remove(principal, workspaceId) {
       const removed = grants.removeGrant(principal, workspaceId);
       const closedSessions = await closeWorkspaceSessions(removed.root);
@@ -343,7 +434,12 @@ export function serverWorkspaceAdministration(
 
 function change(record: GrantRecord): WorkspaceGrantChange {
   return {
-    workspace: { workspaceId: record.workspaceId, label: record.label, access: record.access },
+    workspace: {
+      workspaceId: record.workspaceId,
+      label: record.label,
+      access: record.access,
+      ...(record.kind ? { kind: record.kind } : {}),
+    },
     root: record.root,
     grantVersion: record.grantVersion,
   };

@@ -48,6 +48,15 @@ export class ServerGlobalRoutes {
         return workspaces?.select
           ? { status: 200, body: await workspaces.select(principal, body.candidateId, body.access) }
           : missing('workspace candidates');
+      case 'workspace_ssh_hosts':
+        return workspaces?.listSshHosts
+          ? { status: 200, body: { hosts: await workspaces.listSshHosts(principal) } }
+          : { status: 200, body: { hosts: [] } };
+      case 'workspace_ssh_add':
+        if (!validate.isWorkspaceSshAddBody(body)) return invalid('ssh workspace');
+        return workspaces?.addSsh
+          ? { status: 201, body: { workspace: await workspaces.addSsh(principal, body) } }
+          : missing('ssh workspaces');
       case 'workspace_remove':
         return workspaces?.remove
           ? { status: 200, body: await workspaces.remove(principal, route.workspaceId!) }

@@ -56,6 +56,27 @@ export function isWorkspaceAccessBody(body: unknown): body is { access: 'read' |
   return Object.keys(value).length === 1 && (value.access === 'read' || value.access === 'read_write');
 }
 
+export function isWorkspaceSshAddBody(body: unknown): body is {
+  target: string;
+  port?: number;
+  directory?: string;
+  access: 'read' | 'read_write';
+} {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const v = body as Record<string, unknown>;
+  if (!Object.keys(v).every((k) => ['target', 'port', 'directory', 'access'].includes(k))) return false;
+  if (typeof v.target !== 'string' || !v.target.trim() || v.target.length > 256 || /[\0\s]/.test(v.target.trim()))
+    return false;
+  if (v.port !== undefined && (typeof v.port !== 'number' || !Number.isInteger(v.port) || v.port < 1 || v.port > 65535))
+    return false;
+  if (
+    v.directory !== undefined &&
+    (typeof v.directory !== 'string' || v.directory.length > 1024 || v.directory.includes('\0'))
+  )
+    return false;
+  return v.access === 'read' || v.access === 'read_write';
+}
+
 export function isSettingsWriteBody(
   body: unknown,
 ): body is { expectedRevision: string; changes: Array<{ key: string; value: unknown }> } {

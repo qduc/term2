@@ -22,6 +22,8 @@ const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['workspace_candidate_validate', 'POST', '/workspace/candidates/validate'],
   ['workspace_candidate_browse', 'POST', '/workspace/candidates/browse'],
   ['workspace_candidate_select', 'POST', '/workspace/candidates/select'],
+  ['workspace_ssh_hosts', 'GET', '/workspaces/ssh-hosts'],
+  ['workspace_ssh_add', 'POST', '/workspaces/ssh'],
   ['workspace_remove', 'DELETE', '/workspaces/WORKSPACE'],
   ['workspace_access_update', 'PUT', '/workspaces/WORKSPACE/access'],
   ['settings_read', 'GET', '/settings'],

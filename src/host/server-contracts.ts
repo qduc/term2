@@ -10,6 +10,8 @@ export const ASSERTION_PURPOSES = [
   'workspace_candidate_validate',
   'workspace_candidate_browse',
   'workspace_candidate_select',
+  'workspace_ssh_hosts',
+  'workspace_ssh_add',
   'workspace_remove',
   'workspace_access_update',
   'settings_read',
@@ -133,6 +135,20 @@ export interface ServerWorkspaces {
     workspaceId: string,
     access: 'read' | 'read_write',
   ): WorkspaceAccessChange | Promise<WorkspaceAccessChange>;
+  listSshHosts?(
+    principal: Principal,
+  ): Promise<
+    readonly { readonly alias: string; readonly hostName?: string; readonly user?: string; readonly port?: number }[]
+  >;
+  addSsh?(
+    principal: Principal,
+    input: {
+      readonly target: string;
+      readonly port?: number;
+      readonly directory?: string;
+      readonly access: 'read' | 'read_write';
+    },
+  ): Promise<WorkspaceAlias>;
 }
 export type WorkspaceRemoval = { workspaceId: string; removed: true; closedSessions: number };
 export type WorkspaceAccessChange = { workspace: WorkspaceAlias; grantVersion: number; closedSessions: number };

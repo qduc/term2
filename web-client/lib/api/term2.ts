@@ -1257,6 +1257,22 @@ export const term2Client = {
       sessionId: id(object(value).sessionId),
     }));
   },
+  listSshHosts(signal?: AbortSignal) {
+    return getJson(
+      '/agent/workspaces/ssh-hosts',
+      (value): { hosts: import('../term2/types').SshHostAlias[] } => {
+        const input = object(value);
+        return { hosts: Array.isArray(input.hosts) ? (input.hosts as import('../term2/types').SshHostAlias[]) : [] };
+      },
+      signal,
+    );
+  },
+  addSshWorkspace(
+    body: { target: string; port?: number; directory?: string; access: 'read' | 'read_write' },
+    signal?: AbortSignal,
+  ): Promise<WorkspacePage['workspaces'][number]> {
+    return postJson('/agent/workspaces/ssh', body, (value) => validateWorkspace(object(value).workspace), signal);
+  },
 };
 
 function validateSettingsWrite(value: unknown): SettingsWriteResult {

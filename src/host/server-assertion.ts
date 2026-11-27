@@ -191,6 +191,8 @@ function isClaims(value: unknown): value is GatewayAssertionClaims {
     candidate.purpose === 'workspace_candidate_validate' ||
     candidate.purpose === 'workspace_candidate_browse' ||
     candidate.purpose === 'workspace_candidate_select' ||
+    candidate.purpose === 'workspace_ssh_hosts' ||
+    candidate.purpose === 'workspace_ssh_add' ||
     candidate.purpose === 'settings_read' ||
     candidate.purpose === 'settings_write' ||
     candidate.purpose === 'credential_write' ||

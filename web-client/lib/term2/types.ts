@@ -37,6 +37,13 @@ export interface WorkspaceAlias {
   kind?: 'directory' | 'host' | 'ssh';
 }
 
+export interface SshHostAlias {
+  alias: string;
+  hostName?: string;
+  user?: string;
+  port?: number;
+}
+
 export type SessionStatus = 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
 export interface SessionListItem {
   id: string;

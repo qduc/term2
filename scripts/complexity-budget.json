@@ -274,16 +274,16 @@
       "reason": "The direct child launcher prepares one launch: definition resolution, worktree pinning, the child's tool graph and its instructions. Four lines over the default limit withhold shell from every child of a read session whose sandbox cannot run, at the one point all launch paths (role, agent_spec, run_code, continuation) share. Lower the ceiling if launch preparation is split from tool-graph assembly."
     },
     "web-client/lib/api/term2.ts": {
-      "lines": 1274,
-      "reason": "The browser's one HTTP facade and its response validators; recorded when the gate first covered web-client (2026-11). Split validators from the client object when it is next reworked. Ten lines (#444) make validateModels skip malformed entries; 34 lines (#454) add validateServerCapabilities; 6 lines (#459) add setGoal(); 19 lines (#460) add workspace-scoped listSkills, optional abort options, and handoff(); 2 lines validate optional WorkspaceAlias.kind."
+      "lines": 1290,
+      "reason": "The browser's one HTTP facade and its response validators; recorded when the gate first covered web-client (2026-11). Split validators from the client object when it is next reworked. Ten lines (#444) make validateModels skip malformed entries; 34 lines (#454) add validateServerCapabilities; 6 lines (#459) add setGoal(); 19 lines (#460) add workspace-scoped listSkills, optional abort options, and handoff(); 2 lines (#462) validate WorkspaceAlias.kind; 16 lines add listSshHosts() and addSshWorkspace()."
     },
     "web-client/components/term2/settings/ProvidersSection.tsx": {
       "lines": 977,
       "reason": "Recorded when the gate first covered web-client (2026-11); the settings page was out of scope of the shell decomposition. Split per provider form when settings is next reworked."
     },
     "web-client/lib/term2/types.ts": {
-      "lines": 971,
-      "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11). Eleven lines add ServerTaskAction and ServerCapabilities to SettingsProjection, one line adds the rollover command outcome, and one line adds optional kind to WorkspaceAlias."
+      "lines": 978,
+      "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11). Eleven lines add ServerTaskAction and ServerCapabilities to SettingsProjection, one line adds the rollover command outcome, one line adds optional kind to WorkspaceAlias, and seven lines add SshHostAlias."
     },
     "web-client/components/term2/settings/Term2SettingsPage.tsx": {
       "lines": 919,

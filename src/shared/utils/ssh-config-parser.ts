@@ -108,3 +108,30 @@ export function resolveSSHHost(host: string, configContent: string): SSHHostConf
     ...hostConfig,
   };
 }
+
+export interface SSHHostEntry {
+  readonly alias: string;
+  readonly hostName?: string;
+  readonly user?: string;
+  readonly port?: number;
+}
+
+/**
+ * List explicit non-wildcard host aliases from ~/.ssh/config, merging wildcard `*` defaults.
+ */
+export function listSSHHosts(configContent: string): SSHHostEntry[] {
+  const configMap = parseSSHConfig(configContent);
+  const wildcard = configMap['*'] ?? {};
+  const entries: SSHHostEntry[] = [];
+  for (const [pattern, config] of Object.entries(configMap)) {
+    if (pattern.includes('*') || pattern.includes('?') || /\s/.test(pattern)) continue;
+    const merged = { ...wildcard, ...config };
+    entries.push({
+      alias: pattern,
+      ...(merged.hostName ? { hostName: merged.hostName } : {}),
+      ...(merged.user ? { user: merged.user } : {}),
+      ...(merged.port ? { port: merged.port } : {}),
+    });
+  }
+  return entries.sort((a, b) => a.alias.localeCompare(b.alias));
+}

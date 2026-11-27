@@ -107,7 +107,11 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       if (!started.binding || started.binding.client !== principal.userId) throw forbidden();
       const grant = options.authority.resolveGrant(principal, started.binding.id);
       const resolved = options.authority.resolveWorkspace(principal, grant);
-      if (path.resolve(resolved.workspace.root) !== path.resolve(started.root)) throw forbidden();
+      const sameRoot =
+        resolved.workspace.target === 'local'
+          ? path.resolve(resolved.workspace.root) === path.resolve(started.root)
+          : path.posix.normalize(resolved.workspace.root) === path.posix.normalize(started.root);
+      if (!sameRoot) throw forbidden();
       // A read grant still chats, as in the legacy gateway: its tools, not its commands, are read-only.
     },
     resolveWorkspace(principal, grant) {
@@ -126,10 +130,13 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
      */
     resolveStoredRoot(root, identity) {
       const frame = creation.getStore();
-      const current =
-        frame && path.resolve(frame.workspace.root) === path.resolve(root)
-          ? frame.workspace
-          : options.authority.resolveStoredRoot(root);
+      const sameFrameRoot =
+        frame &&
+        (frame.workspace.target === 'local'
+          ? path.resolve(frame.workspace.root) === path.resolve(root)
+          : path.posix.normalize(frame.workspace.root) === path.posix.normalize(root) &&
+            frame.workspace.target === identity?.target);
+      const current = sameFrameRoot ? frame.workspace : options.authority.resolveStoredRoot(root, identity);
       return identity?.access === 'read' ? { ...current, access: 'read' } : current;
     },
   };

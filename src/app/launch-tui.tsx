@@ -275,9 +275,9 @@ async function runTui(
       sessionBrowser: true,
       ...bridge.outbound(sessionId),
       ...target.surface,
-      ...(mcp ? { mcp } : {}),
+      mcp,
     }),
-    ...(mcp ? { mcpCatalog: mcp } : {}),
+    mcpCatalog: mcp ?? null,
     // The person at this terminal named the model, as with `-m` today.
     authorizeModel: () => undefined,
     authority: target.authority,

@@ -18,6 +18,66 @@ const BACKOFF_BASE = 500;
 const HIDDEN_FLUSH_MS = 500;
 const FRAME_RING = 200;
 
+type WebWireEventParity = 'presented' | 'folded' | 'partial' | 'deferred' | 'by-design';
+
+/**
+ * Compile-time exhaustiveness anchor for WireEvent parity in `web-client`.
+ * Adding a new WireEvent['type'] fails `tsc` until classified here; every 'partial',
+ * 'deferred', or 'by-design' entry must have a matching reason in scripts/surface-parity-exceptions.json.
+ */
+const WEB_WIRE_EVENT_PARITY: Record<WireEvent['type'], WebWireEventParity> = {
+  snapshot: 'presented',
+  turn_started: 'presented',
+  text_delta: 'presented',
+  reasoning: 'presented',
+  reasoning_started: 'presented',
+  reasoning_delta: 'presented',
+  codex_quota: 'folded',
+  message: 'presented',
+  tool_call_streaming_delta: 'presented',
+  tool_called: 'presented',
+  tool_started: 'presented',
+  tool_progress: 'presented',
+  tool_finished: 'presented',
+  interaction_opened: 'presented',
+  approval_review: 'deferred',
+  interaction_resolved: 'presented',
+  budget_opened: 'partial',
+  budget_closed: 'folded',
+  budget_observed: 'folded',
+  history_replaced: 'presented',
+  request_cost_recorded: 'presented',
+  compaction_started: 'presented',
+  compaction_completed: 'partial',
+  compaction_failed: 'partial',
+  session_rotated: 'deferred',
+  background_notice_enqueued: 'presented',
+  background_notices_delivered: 'folded',
+  command_started: 'folded',
+  command_finished: 'folded',
+  model_response_completed: 'folded',
+  admission: 'folded',
+  usage: 'presented',
+  status_changed: 'presented',
+  turn_ended: 'presented',
+  retrying: 'presented',
+  retry_eligibility: 'presented',
+  configuration: 'presented',
+  queue_changed: 'presented',
+  task_changed: 'presented',
+  task_progress: 'presented',
+  subagent: 'presented',
+  compacted: 'folded',
+  cost: 'presented',
+  notice: 'deferred',
+  automatic_memory_notice: 'deferred',
+  goal: 'presented',
+  goal_proposed: 'deferred',
+  verification: 'presented',
+  error: 'presented',
+};
+void WEB_WIRE_EVENT_PARITY;
+
 type PendingEntry = Exclude<InteractionProjection, null | { state: 'unavailable' }>;
 type Frame = {
   readonly format: 'direct-wire-v2';

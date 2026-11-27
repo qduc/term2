@@ -34,6 +34,7 @@ import {
   SERVER_DEFAULTS,
   SETTINGS_SECTIONS,
   differsFromDefault,
+  groupSettingItems,
   itemKeys,
   matchesQuery,
   sectionLabel,
@@ -778,12 +779,7 @@ export function Term2SettingsPage({
     );
   } else {
     const sectionItems = items.filter((item) => item.section === section);
-    const groups: Array<{ name?: string; items: SettingItem[] }> = [];
-    for (const item of sectionItems) {
-      const last = groups.at(-1);
-      if (last && last.name === item.group) last.items.push(item);
-      else groups.push({ name: item.group, items: [item] });
-    }
+    const groups = groupSettingItems(sectionItems);
     body = (
       <div>
         {groups.map((group, index) => (

@@ -34,7 +34,6 @@ import {
   SERVER_DEFAULTS,
   SETTINGS_SECTIONS,
   differsFromDefault,
-  groupSettingItems,
   itemKeys,
   matchesQuery,
   sectionLabel,
@@ -43,6 +42,7 @@ import {
   type SettingItem,
   type SettingsSectionId,
 } from './settings-catalog';
+import { groupSettingItems } from './settings-groups';
 
 type DisplayMode = 'concise' | 'standard';
 type Change = { key: string; value: unknown };

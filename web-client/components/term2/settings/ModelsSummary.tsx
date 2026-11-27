@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type { RowStatus } from './SettingRow';
-import { groupSettingItems, itemKeys, type SettingItem } from './settings-catalog';
+import { itemKeys, type SettingItem } from './settings-catalog';
+import { groupSettingItems } from './settings-groups';
 
 /** One line under a group heading, said once instead of under every row. */
 const GROUP_NOTES: Record<string, string> = {

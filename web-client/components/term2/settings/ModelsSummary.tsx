@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type { RowStatus } from './SettingRow';
 import { itemKeys, type SettingItem } from './settings-catalog';
+import { groupSettingItems } from './settings-groups';
 
 /** One line under a group heading, said once instead of under every row. */
 const GROUP_NOTES: Record<string, string> = {
@@ -45,12 +46,7 @@ export function ModelsSummary({
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const groups: Array<{ name?: string; items: SettingItem[] }> = [];
-  for (const item of items) {
-    const last = groups.at(-1);
-    if (last && last.name === item.group) last.items.push(item);
-    else groups.push({ name: item.group, items: [item] });
-  }
+  const groups = groupSettingItems(items);
 
   /** The bold part of a line, with quieter extras after it. */
   const summary = (item: SettingItem): ReactNode => {

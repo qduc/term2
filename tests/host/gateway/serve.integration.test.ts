@@ -55,6 +55,9 @@ const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
   ['session_quota', 'GET', '/sessions/SESSION/quota'],
   ['session_goal', 'POST', '/sessions/SESSION/goal'],
   ['session_handoff', 'POST', '/sessions/SESSION/handoff'],
+  ['protocol_hello', 'GET', '/hello'],
+  ['daemon_status', 'GET', '/daemon/status'],
+  ['session_list_events', 'GET', '/sessions/events'],
 ];
 
 // The launcher is exercised as a real child process: pair with a pre-shared
@@ -495,7 +498,7 @@ describe('term2 serve (child process)', () => {
           sign('user-1', purpose, { workspaceId, sessionId }),
         );
         expect(unexpectedSessionBinding.status).toBe(401);
-      } else if (/^(settings|credential|oauth|provider|skills)_/.test(purpose)) {
+      } else if (/^(settings|credential|oauth|provider|skills|daemon)_/.test(purpose)) {
         const otherOwner = await socketRequest(socketPath, method, route, {}, sign('other-owner', purpose));
         expect(otherOwner.status, purpose).toBe(403);
         expect(jsonBody(otherOwner).error.code).toBe('settings_forbidden');

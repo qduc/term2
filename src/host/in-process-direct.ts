@@ -73,7 +73,9 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     if (!pending) {
       pending = deps.sessions.open(id).then((session) => {
         open();
-        return new DirectAttachment(session);
+        return new DirectAttachment(session, {
+          autoDrainBackgroundNotifications: deps.autoDrainBackgroundNotifications,
+        });
       });
       attachments.set(id, pending);
       const original = pending;
@@ -220,7 +222,9 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
         const created = await pending;
         open();
         if (attachments.has(created.id)) throw new Error('Store returned an existing session identity');
-        const attached = new DirectAttachment(created);
+        const attached = new DirectAttachment(created, {
+          autoDrainBackgroundNotifications: deps.autoDrainBackgroundNotifications,
+        });
         const ready = Promise.resolve(attached);
         settled.set(ready, attached);
         attachments.set(created.id, ready);

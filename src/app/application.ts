@@ -48,6 +48,8 @@ export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly hooks: DirectHookOptions | null;
   /** Live default for new sessions; serve reads global settings, other modes the launch selection. */
   readonly resolveDefaultModel?: () => ModelRef | Promise<ModelRef>;
+  /** Automatically drain idle background check-in/completion notices on the host (term2 serve). */
+  readonly autoDrainBackgroundNotifications?: boolean;
 };
 
 /** Read from the session's own log and runtime, for clients that report it. */
@@ -194,6 +196,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     sessions,
     defaultModel: selection.settings.get('agent.modelSelection') as ModelRef,
     ...(options.resolveDefaultModel ? { resolveDefaultModel: options.resolveDefaultModel } : {}),
+    ...(options.autoDrainBackgroundNotifications ? { autoDrainBackgroundNotifications: true } : {}),
     authorize: (principal, access) => authority.authorize(principal, access),
     resolveWorkspace: (principal, grant) => authority.resolveGrant(principal, grant),
     capabilities: (session) => applicationCapabilities(store, runtimes, options.conversationsDir, session),

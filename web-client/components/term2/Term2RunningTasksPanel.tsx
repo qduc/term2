@@ -324,6 +324,15 @@ export function Term2RunningTasksPanel({
                   <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
                 )}
                 <span className="min-w-0 truncate">{activity(task, now, branchTurns)}</span>
+                {live && !needsYou && status !== 'cancelling' && (() => {
+                  const lastAt = num((task.lastObservation as Observation | undefined)?.at) ?? num(task.lastActivityAt) ?? startedAt;
+                  const quietMs = lastAt !== undefined ? now - lastAt : 0;
+                  return quietMs >= 30_000 ? (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground/80">
+                      (quiet {elapsed(quietMs)})
+                    </span>
+                  ) : null;
+                })()}
               </p>
               {needsYou && (
                 <button
@@ -377,6 +386,28 @@ export function Term2RunningTasksPanel({
                   {busy === id && <Spinner aria-label="Working" className="size-3.5 text-muted-foreground" />}
                 </div>
               )}
+              {shell && (() => {
+                const shellOutput = str(task.text) ?? str(task.error);
+                if (!shellOutput) return null;
+                return (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      aria-expanded={openActivity === id}
+                      onClick={() => setOpenActivity(openActivity === id ? null : id)}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <ChevronRight className={cn('size-3 transition-transform', openActivity === id && 'rotate-90')} />
+                      {openActivity === id ? 'Hide output' : 'Show output'}
+                    </button>
+                    {openActivity === id && (
+                      <pre className="mt-2 max-h-48 overflow-auto rounded-md border bg-background p-2 font-mono text-[11px] leading-relaxed text-foreground whitespace-pre-wrap break-words">
+                        {shellOutput.length > 4_000 ? shellOutput.slice(-4_000) : shellOutput}
+                      </pre>
+                    )}
+                  </div>
+                );
+              })()}
               {steps > 0 && (
                 <div className="mt-2">
                   <button

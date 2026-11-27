@@ -49,6 +49,10 @@
     }
   },
   "fileCeilings": {
+    "src/app/application.ts": {
+      "lines": 503,
+      "reason": "Composition root for DirectApplication; three lines forward the optional autoDrainBackgroundNotifications flag to createDirectInProcessHost so term2 serve drains idle background check-in notices without a connected browser tab. Splitting those three lines out would add artificial plumbing."
+    },
     "src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1021,
       "reason": "Verbatim copy of legacy source/components/message/CommandMessage.tsx: tool rows match legacy by construction; splitting it would reintroduce a rewrite to prove. Four lines are the port exception that reads a live render's measured elapsed time (live-tool-age.ts). Three more are the accepted difference that keeps a finished row's status while a decision is open (#136 item 8)."

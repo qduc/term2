@@ -44,7 +44,9 @@ export function directShellTasks(
         },
       );
       const handoff =
-        request.mode === 'foreground' ? scheduleHandoff(tasks, handle.taskId, request.handoffAfterMs) : null;
+        request.mode === 'foreground'
+          ? scheduleHandoff(tasks, handle.taskId, request.handoffAfterMs, request.handoffBlocked)
+          : null;
       return {
         id: handle.taskId,
         startedAt: tasks.get(handle.taskId)!.startedAt,
@@ -100,22 +102,38 @@ export function directShellTasks(
  * through the same transfer a person uses: one process, its own timeout, no restart.
  * The turn can then end, and the task's completion wakes the session.
  */
-function scheduleHandoff(tasks: DirectBackgroundTasks, taskId: string, afterMs: number | undefined) {
+function scheduleHandoff(
+  tasks: DirectBackgroundTasks,
+  taskId: string,
+  afterMs: number | undefined,
+  blocked: ShellTaskStart<unknown>['handoffBlocked'],
+) {
   if (!afterMs || afterMs <= 0) return null;
+  let timer: ReturnType<typeof setTimeout>;
   const handoff = { fired: false, cancel: () => clearTimeout(timer) };
-  const timer = setTimeout(() => {
+  const due = () => {
     const task = tasks.get(taskId);
     if (task?.mode !== 'foreground' || task.status !== 'running') return;
+    const block = blocked?.();
+    if (block === 'never') return;
+    // A person is answering a prompt for this command: moving now would answer it for them.
+    if (block === 'wait') return arm(HANDOFF_RECHECK_MS);
     try {
       // Set before the foreground waiter's continuation runs, so it reports the handoff.
-      handoff.fired = tasks.moveToBackground(taskId).ok;
+      handoff.fired = tasks.moveToBackground(taskId, 'handoff').ok;
     } catch {
       // A closing Session refuses the transfer; the command stays foreground.
     }
-  }, afterMs);
-  timer.unref?.();
+  };
+  const arm = (ms: number) => {
+    timer = setTimeout(due, ms);
+    timer.unref?.();
+  };
+  arm(afterMs);
   return handoff;
 }
+
+const HANDOFF_RECHECK_MS = 1000;
 
 function state(task: DirectTaskState): ShellTaskState {
   return {

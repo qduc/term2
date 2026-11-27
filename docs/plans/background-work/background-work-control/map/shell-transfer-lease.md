@@ -57,9 +57,26 @@ Why: in the waiting experiment, A1 prompt guidance still left a model running a
 for "this should be waited on", so the action is the least destructive one
 available: change who waits, never kill or restart.
 
+Who moved it is recorded: the handoff writes `task_backgrounded` with
+`by: 'handoff'` (older logs and a person's move have no `by`). The Session's
+user-control notice ("The user moved a foreground shell…") is written only for a
+person's move; the handoff answers in the call's own tool result. The first
+version omitted this and told the model the user had moved its command (found by
+the independent verifier).
+
+The handoff waits while a sandbox network prompt for the command is open
+(re-checked every second): firing then would dispose the prompt's handler and
+deny the destination on the person's behalf. It is dropped once the process has
+exited, so post-exit cleanup is never reported as "still running". A moved
+sandboxed command keeps the process-wide sandbox lease, as an explicit
+background job does, so the result says other sandboxed commands wait for it.
+The handoff is logged (`Shell foreground handed off to background`, with job id,
+threshold and whether it was sandboxed).
+
 Scope: root sessions with a background registry only. Subagents get no registry,
 headless runs have no background jobs, and a call made by a `run_code` script is
 never handed off (`isScriptedToolCall`), because the script is awaiting the
 output. A command that finishes first returns normally. Covered by the
-`foreground handoff` cases in `tests/tools/system/run-code/shell.integration.test.ts`.
+`foreground handoff` cases in `tests/tools/system/run-code/shell.integration.test.ts`
+and by `tests/session/conversation/shell-handoff-notice.integration.test.ts`.
 Rollback: set the setting to 0, or revert the one `handoffAfterMs` line in `shell.ts`.

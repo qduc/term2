@@ -58,7 +58,8 @@ export class ConversationBackground {
             !this.admission.closed &&
             (fact.type === 'task_question_opened'
               ? directQuestionNotice(previous, fact.question)
-              : fact.type === 'task_backgrounded'
+              : // A handoff answers in the moved call's own tool result; only a person's move is news.
+              fact.type === 'task_backgrounded' && fact.by !== 'handoff'
               ? directTaskNotice(previous, 'background')
               : // Legacy tells the model only about a user's stop of a background task; a cancelled turn's own work
               // is not one, and a model's stop answers in its own tool result.

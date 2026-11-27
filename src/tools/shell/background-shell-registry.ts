@@ -59,6 +59,8 @@ export interface ForegroundShellLeaseOptions<TResult> extends BackgroundShellLau
   onAdopted?: () => void;
   /** Transfer to the background on its own once still running after this long; absent or 0 = never. */
   handoffAfterMs?: number;
+  /** `wait` while a person is being asked something for this command; `never` once its process exited. */
+  handoffBlocked?: () => 'wait' | 'never' | undefined;
 }
 
 export interface ForegroundShellTransferResult {

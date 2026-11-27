@@ -48,6 +48,13 @@ const validateTaskLifecycleSchema: FactSchema = (fact, check: FactValidation) =>
     fact['by'] !== 'user'
   )
     check.fail('by');
+  if (
+    fact['type'] === 'task_backgrounded' &&
+    fact['by'] !== undefined &&
+    fact['by'] !== 'user' &&
+    fact['by'] !== 'handoff'
+  )
+    check.fail('by');
   if (fact['type'] === 'task_finished') {
     const result = check.object(fact['result'], 'result');
     if (!['completed', 'cancelled', 'failed', 'budget_exhausted', 'interrupted'].includes(result['kind'] as string))

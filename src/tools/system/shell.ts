@@ -1505,11 +1505,12 @@ export function createShellToolDefinition(deps: {
           status === 'failed' ? networkApproval?.annotateFailure(output) ?? output : output;
 
         if (backgroundShellRegistry && !sshService && typeof toolCallId === 'string') {
+          let exited = false;
           const lease = backgroundShellRegistry.startForeground({
             callId: toolCallId,
             command: optimizedCommand,
             parentSignal: toolSignal,
-            run: executePreparedCommand,
+            run: (signal) => executePreparedCommand(signal).finally(() => (exited = true)),
             onStarted: (jobId) => {
               observedJobId = jobId;
             },
@@ -1517,6 +1518,7 @@ export function createShellToolDefinition(deps: {
             resultToStatus: (result) => result.status,
             // A script awaits its command's output, so only a model's direct call is handed off.
             handoffAfterMs: isScriptedToolCall(_context) ? 0 : settingsService.get('shell.foregroundHandoffMs') ?? 0,
+            handoffBlocked: () => (exited ? 'never' : networkApproval?.pending() ? 'wait' : undefined),
             onAdopted: () => {
               transferred = true;
               networkApproval?.dispose();
@@ -1531,10 +1533,20 @@ export function createShellToolDefinition(deps: {
             // released. Process cleanup remains deferred to lease settlement.
             restoreForegroundCorrelation();
             const { handoffAfterMs, ...job } = result;
-            const why = handoffAfterMs ? `Still running after ${Math.round(handoffAfterMs / 1000)} s, so it` : 'It';
+            if (handoffAfterMs)
+              loggingService.info('Shell foreground handed off to background', {
+                jobId: job.jobId,
+                handoffAfterMs,
+                sandboxed,
+                command: optimizedCommand.substring(0, 100),
+              });
+            const why = handoffAfterMs
+              ? `Still running after ${Number((handoffAfterMs / 1000).toFixed(1))} s, so it`
+              : 'It';
+            const lock = sandboxed ? ' Until it exits, other sandboxed commands wait for it.' : '';
             return JSON.stringify({
               ...job,
-              message: `${why} moved to the background (same process; its timeout is unchanged).`,
+              message: `${why} moved to the background (same process; its timeout is unchanged).${lock}`,
               next: BACKGROUND_WAKE_HINT,
             });
           }

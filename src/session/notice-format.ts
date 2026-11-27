@@ -189,7 +189,7 @@ export function formatDirectLegacyNotifications(notifications: readonly DirectLe
         '',
         ...entries,
         '',
-        'Assess whether the matched output changes what you should do next. If it does, continue through the next necessary steps yourself and tell the user concisely, in your own words, what you concluded. If it does not (the job is still on its way and nothing needs doing), end your turn without a reply: the job still wakes you when it exits. A watch that only reports progress can be stopped with cancel_shell_monitor.',
+        'Assess whether the matched output changes what you should do next. If it does, continue through the next necessary steps yourself and tell the user concisely, in your own words, what you concluded. If it does not (the job is still on its way and nothing needs doing), end your turn without a reply: the job still wakes you when it exits. A watch that only reports progress can be stopped inside run_code with tools.cancel_shell_monitor({ watch_id }).',
       ].join('\n'),
     );
   }

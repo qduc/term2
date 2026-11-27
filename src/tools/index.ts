@@ -112,6 +112,8 @@ export type ShellTaskStart<T> = {
   readonly status?: (value: T) => 'completed' | 'failed' | 'timed_out';
   /** Foreground only: Session moves the still-running task to the background after this long. Absent or 0 = never. */
   readonly handoffAfterMs?: number;
+  /** Checked when the handoff is due: `wait` re-checks shortly (an approval is open), `never` drops it (the process exited). */
+  readonly handoffBlocked?: () => 'wait' | 'never' | undefined;
 };
 export type ShellTaskState = {
   readonly id: string;

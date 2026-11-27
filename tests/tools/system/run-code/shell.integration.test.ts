@@ -20,6 +20,7 @@ import type { InteractionDecision, ToolContext, ToolInteractionRequest } from '.
 import { ToolApprovalPolicyRegistry } from '../../../../src/session/approval/tool-approval-policy-registry.js';
 import { SessionAccessState } from '../../../../src/session/session/session-access-state.js';
 import type { ShellSandboxRunner } from '../../../../src/tools/shell/sandbox/sandbox-policy.js';
+import { requestSandboxNetworkApproval } from '../../../../src/tools/shell/sandbox/sandbox-network-approval.js';
 
 const logger = {
   info() {},
@@ -73,7 +74,10 @@ async function harness(
     resolve?.(
       answer === 'n' || answer === 'reject'
         ? { kind: 'deny' }
-        : { kind: 'allow', ...(answer === 'unsandboxed-once' ? { grant: answer } : {}) },
+        : {
+            kind: 'allow',
+            ...(answer === 'unsandboxed-once' || answer === 'network-allow-once' ? { grant: answer } : {}),
+          },
     );
   };
   const access = new SessionAccessState(settings);
@@ -492,7 +496,7 @@ describe('shell inside run_code through the wrapped tool graph', () => {
       const elapsed = Date.now() - started;
       const result = JSON.parse(output) as { jobId: string; status: string; message: string; next: string };
       expect(result).toMatchObject({ status: 'running' });
-      expect(result.message).toContain('Still running after 0 s, so it moved to the background');
+      expect(result.message).toContain('Still running after 0.3 s, so it moved to the background');
       expect(result.next).toContain('woken automatically');
       expect(elapsed).toBeGreaterThanOrEqual(290);
       expect(elapsed).toBeLessThan(1100);
@@ -522,6 +526,40 @@ describe('shell inside run_code through the wrapped tool graph', () => {
       expect(String(output)).toContain('finished');
       expect(existsSync(done)).toBe(true);
       expect(h.tasks.list().filter((task) => task.mode === 'background')).toEqual([]);
+    });
+
+    it('waits while a network approval is open, then honours the answer and hands off', async () => {
+      const runner: ShellSandboxRunner = {
+        availability: async () => ({ type: 'available' }),
+        wrap: async (command) => ({ command }),
+        annotateFailure: (_command, stderr) => stderr,
+      };
+      const h = await harness({
+        sandboxRunner: runner,
+        handoffMs: 200,
+        approve: (request) => (request.toolName === 'sandbox_network_access' ? undefined : 'y'),
+      });
+      const started = join(h.cwd, 'net-started');
+      const command = `${process.execPath} -e "require('fs').writeFileSync('${started}','yes');setTimeout(()=>console.log('finished'),2500)"`;
+      const shell = h.registry.get('shell')!;
+      let output: string | undefined;
+      const call = shell
+        .execute(shell.parse({ command }), h.context(new AbortController().signal))
+        .then((result) => (output = String(result.output)));
+      await waitUntil(() => existsSync(started));
+      const decision = requestSandboxNetworkApproval({ host: 'example.com', port: 443 }, h.cwd);
+      await waitUntil(() => h.isPending());
+      // sleep-ok: proves the 200 ms handoff does NOT fire while the prompt is open; the guard exposes no
+      // "held" signal at this boundary (its re-check is covered by the Conversation-level test), so only time shows it.
+      await delay(600);
+      // Past the handoff, but a person is still being asked: nothing was decided for them.
+      expect(output).toBeUndefined();
+      h.decide('network-allow-once');
+      expect(await decision).toBe(true);
+      await call;
+      expect(output).toContain('moved to the background');
+      expect(output).toContain('other sandboxed commands wait for it');
+      h.tasks.releaseParent('test-turn');
     });
 
     it('is off at 0', async () => {

@@ -106,7 +106,13 @@ export type DirectBackgroundFact =
       readonly resolution: DirectQuestionResolution;
     }
   | { readonly type: 'task_started'; readonly task: DirectTaskDescriptor; readonly mode: DirectTaskMode }
-  | { readonly type: 'task_backgrounded'; readonly taskId: DirectTaskId; readonly at: number }
+  | {
+      readonly type: 'task_backgrounded';
+      readonly taskId: DirectTaskId;
+      readonly at: number;
+      /** Who moved it. Older logs lack it and mean the user; `handoff` is shell.foregroundHandoffMs. */
+      readonly by?: 'user' | 'handoff';
+    }
   | {
       readonly type: 'task_stop_requested';
       readonly taskId: DirectTaskId;

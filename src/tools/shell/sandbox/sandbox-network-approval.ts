@@ -123,21 +123,23 @@ export async function requestSandboxNetworkApproval(
 export function beginForegroundSandboxNetworkApproval(
   context: unknown,
   signal?: AbortSignal,
-): { dispose: () => void; annotateFailure: (output: string) => string } | undefined {
+): { dispose: () => void; annotateFailure: (output: string) => string; pending: () => boolean } | undefined {
   const interact = (context as { [SANDBOX_NETWORK_INTERACT]?: ToolContext['interact'] } | undefined)?.[
     SANDBOX_NETWORK_INTERACT
   ];
   if (!interact) return undefined;
   let deniedDestination: string | undefined;
+  let asking = 0;
   const dispose = registerSandboxNetworkApprovalHandler(async ({ host, port }) => {
     const target = port === undefined ? host : `${host}:${port}`;
+    asking += 1;
     const decision = await interact({
       kind: 'approval',
       toolName: 'sandbox_network_access',
       input: { host, port },
       summary: `Allow network access to ${target}?`,
       grants: ['network-allow-once', 'allow-project'],
-    });
+    }).finally(() => (asking -= 1));
     if (signal?.aborted) return 'deny';
     if (decision.kind === 'allow' && decision.grant === 'allow-project') return 'allow-project';
     if (decision.kind === 'allow' && decision.grant === 'network-allow-once') return 'allow-once';
@@ -146,6 +148,7 @@ export function beginForegroundSandboxNetworkApproval(
   });
   return {
     dispose,
+    pending: () => asking > 0,
     annotateFailure: (output) =>
       deniedDestination
         ? `${output}\nSandbox network permission was not granted for ${deniedDestination}. Retry in a foreground session to approve this destination.`

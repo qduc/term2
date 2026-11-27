@@ -189,13 +189,18 @@ export class DirectBackgroundTasks {
   }
 
   /** Transfer the same live operation, signal, pending pauses and result; never restart. */
-  moveToBackground(target: string): DirectTaskControlResult {
+  moveToBackground(target: string, by: 'user' | 'handoff' = 'user'): DirectTaskControlResult {
     this.#assertOpen();
     const entry = this.#resolve(target);
     if (!entry) return { ok: false, code: 'not_found' };
     if (entry.outcome || entry.status === 'cancelling') return { ok: false, code: 'not_active' };
     if (entry.mode === 'background') return { ok: false, code: 'already_background' };
-    this.#accept({ type: 'task_backgrounded', taskId: entry.task.taskId, at: this.#now() });
+    this.#accept({
+      type: 'task_backgrounded',
+      taskId: entry.task.taskId,
+      at: this.#now(),
+      ...(by === 'handoff' ? { by } : {}),
+    });
     entry.mode = 'background';
     entry.detachParent?.();
     entry.detachParent = undefined;

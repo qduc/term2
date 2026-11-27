@@ -53,7 +53,10 @@ export function createDirectShellTools() {
   };
   const start = (
     options: BackgroundShellLaunchOptions<BackgroundShellExecutionResult> &
-      Pick<ForegroundShellLeaseOptions<BackgroundShellExecutionResult>, 'parentSignal' | 'handoffAfterMs'>,
+      Pick<
+        ForegroundShellLeaseOptions<BackgroundShellExecutionResult>,
+        'parentSignal' | 'handoffAfterMs' | 'handoffBlocked'
+      >,
     mode: 'foreground' | 'background',
   ) => {
     const port = current();
@@ -62,6 +65,7 @@ export function createDirectShellTools() {
       mode,
       parentSignal: mode === 'foreground' ? options.parentSignal : undefined,
       handoffAfterMs: mode === 'foreground' ? options.handoffAfterMs : undefined,
+      handoffBlocked: options.handoffBlocked,
       run: options.run,
       status: options.resultToStatus,
       cleanup: async () => {

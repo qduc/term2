@@ -41,11 +41,11 @@ import type { DirectMcp } from './mcp.js';
 
 export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly conversationsDir: string;
-  /** Interactive local app only. Borrowed catalog; manager outlives app.close(). */
-  readonly mcpCatalog?: Pick<DirectMcp, 'onCatalogChanged'>;
+  /** Interactive local app only. Borrowed catalog; manager outlives app.close(). Pass `null` when unwired. */
+  readonly mcpCatalog: Pick<DirectMcp, 'onCatalogChanged'> | null;
   readonly authority: DirectAuthority | DirectAuthorityFactory;
-  /** The modes with public hooks today: the terminal UI and headless. ACP and serve have none. */
-  readonly hooks?: DirectHookOptions;
+  /** Public hooks configuration. Pass `null` when this launcher does not wire hooks. */
+  readonly hooks: DirectHookOptions | null;
   /** Live default for new sessions; serve reads global settings, other modes the launch selection. */
   readonly resolveDefaultModel?: () => ModelRef | Promise<ModelRef>;
 };

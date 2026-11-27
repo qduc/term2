@@ -97,6 +97,7 @@ loaded 7-core box.
 | Every runtime file is reached by value edges from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
 | Files stay under 500 lines, folders stay under 15 files unless a ceiling records why; layer edges within budget | `check-complexity.mjs` | every commit | 0.15 s |
 | A new exception or raised ceiling carries a reason, and the reviewer is shown each one | `check-baselines.mjs` | every commit | 0.2 s |
+| Terminal and web surfaces stay in parity across app wiring, `WireCommand`/`WireEvent`, and browse-tab settings unless recorded with a reason in `scripts/surface-parity-exceptions.json` | `check-surface-parity.mjs` | every commit | 0.2 s |
 | Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
 | A message's path stays short and runs through the production direct files | `bench/hops.mts` | integration lane | 5.8 s |
 | The engine waits instead of calling up | layer table above (no upward import); `check-engine-callbacks.mjs` for the callbacks that write facts (audit F1): every `TurnDeps`/`TurnBudget` callback that reaches the session writer must be recorded in `rule-baseline.json` (`engineCallbackWrites`) with a reason. It follows calls it can resolve to a body, interface members into the object literals and classes that implement them, and port signatures named `commit*`/`accept*`/`append`; a write reached only through a value the checker cannot resolve is not seen | every commit | 10 s |

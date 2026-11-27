@@ -300,6 +300,24 @@ export const RULES = {
     avoid: 'Do not copy the history write into another module or call window.history from a component.',
     exceptions: null,
   },
+  'surface-parity': {
+    title: 'Terminal and web surfaces stay in parity unless a gap is recorded',
+    why:
+      'Term2 ships both a terminal UI (launch-tui.tsx) and a web surface (launch-serve.ts + src/host/server*.ts + ' +
+      'web-client/) on the same direct application. Without a parity check, new runtime capabilities, WireCommands, ' +
+      'WireEvents, or TUI settings silently default off or get dropped on the web surface.',
+    fix:
+      'Wire the capability in launch-serve.ts, support the WireCommand/WireEvent in src/host/ and web-client/, or ' +
+      'add the setting to src/config/settings/web-settings-policy.ts and web-client/components/term2/settings/.',
+    avoid:
+      'Do not hide a capability behind an optional flag, silently swallow a WireEvent, or write a placeholder reason ' +
+      'in scripts/surface-parity-exceptions.json.',
+    exceptions: {
+      file: 'scripts/surface-parity-exceptions.json',
+      entry: '"<key>": { "status": "deferred" | "by-design", "reason": "..." }',
+      note: 'remove the entry as soon as parity is implemented; stale entries fail the gate',
+    },
+  },
   baselines: {
     title: 'Recorded deviations carry reasons',
     why:
@@ -444,6 +462,18 @@ export function readDeviations(read) {
   const root = json('scripts/root-allowlist.json');
   for (const entry of root ?? [])
     add('root-files', 'scripts/root-allowlist.json', entry, 'file', 'scripts/root-allowlist.json');
+
+  const parity = json('scripts/surface-parity-exceptions.json');
+  for (const section of ['appWiring', 'serverCommands', 'webEvents', 'settings']) {
+    for (const [key, entry] of Object.entries(parity?.[section] ?? {}))
+      deviations.push({
+        rule: 'surface-parity',
+        file: 'scripts/surface-parity-exceptions.json',
+        key: `${section}.${key}`,
+        reason: entry?.reason ?? null,
+        legacy: false,
+      });
+  }
 
   return { deviations, present, budget };
 }

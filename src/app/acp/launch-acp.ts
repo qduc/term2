@@ -109,11 +109,13 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
     surface: (sessionId) => ({
       autoApprove: false,
       interactive: true,
+      sessionBrowser: false,
       allowUnsandboxed: false,
       shellEscapeApproval: protocolVersion === 1,
       mcp: sessions.surface(sessionId),
     }),
     mcpCatalog: sessions,
+    hooks: null,
     approvalAlwaysAsks: true,
     requireSandbox: true,
     persistSessionConfiguration: false,

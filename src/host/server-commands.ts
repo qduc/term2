@@ -5,6 +5,38 @@ import type { WireCommand, WireCommandReceipt, WireCommandResult } from '../prot
 import type { CommandBody, ServerResult, ServerSessionRequest } from './server-contracts.js';
 import { commandFailure, publicError, unavailable } from './server-errors.js';
 
+type ServerWireCommandParity = 'supported' | 'partial' | 'deferred' | 'by-design';
+
+/**
+ * Compile-time exhaustiveness anchor for WireCommand parity on `term2 serve`.
+ * Adding a new WireCommand['type'] fails `tsc` until classified here; every non-'supported'
+ * entry must have a matching reason in scripts/surface-parity-exceptions.json.
+ */
+const SERVER_WIRE_COMMAND_PARITY: Record<WireCommand['type'], ServerWireCommandParity> = {
+  submit: 'supported',
+  answer: 'supported',
+  take_over_review: 'deferred',
+  answer_budget: 'supported',
+  cancel: 'partial',
+  retry: 'partial',
+  compact: 'supported',
+  configure: 'partial',
+  queue_edit: 'partial',
+  queue_retract: 'supported',
+  queue_resume: 'supported',
+  queue_discard: 'supported',
+  task_control: 'supported',
+  command_status: 'deferred',
+  command_revision: 'supported',
+  drain_background_notifications: 'supported',
+  list_rewind_targets: 'supported',
+  rewind: 'supported',
+  reset: 'deferred',
+  rollover: 'deferred',
+  preview: 'deferred',
+};
+void SERVER_WIRE_COMMAND_PARITY;
+
 /** A native receipt is admission evidence, not an assumed successful terminal. Same-key lookups are
  * allowed while a later turn runs. Missing outcomes and interrupted recovery stay explicitly unknown.
  */

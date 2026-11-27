@@ -312,10 +312,17 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       surface: () => ({
         autoApprove: false,
         interactive: true,
+        // Deferred: see scripts/surface-parity-exceptions.json (appWiring.sessionBrowser).
+        sessionBrowser: false,
         allowUnsandboxed: false,
         shellEscapeApproval: true,
         preserveSandboxedShellApproval: true,
+        // Deferred: see scripts/surface-parity-exceptions.json (appWiring.mcp).
+        mcp: undefined,
       }),
+      // Deferred: see scripts/surface-parity-exceptions.json (appWiring.mcpCatalog, appWiring.hooks).
+      mcpCatalog: null,
+      hooks: null,
       async authorizeModel(next, previous) {
         // A same-selection refresh/rollover does not depend on a fresh catalog.
         if (next.provider === previous.provider && next.model === previous.model) return;

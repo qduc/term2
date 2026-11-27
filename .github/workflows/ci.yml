@@ -143,6 +143,7 @@ jobs:
           node scripts/check-complexity.mjs
           node scripts/check-rules.mjs
           node scripts/check-engine-callbacks.mjs
+          node scripts/check-surface-parity.mjs
           node scripts/check-baselines.mjs
       - name: Run static repository guards
         run: pnpm exec node scripts/run-ci-lane.mjs quality

@@ -45,6 +45,19 @@ import { nativeBrowserId } from './native-session-browser-store.js';
 import { createLaunchConfigurationScope } from './launch-configuration.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
+/**
+ * Capabilities every launcher must explicitly choose when wiring a session surface.
+ * Required (never optional) so a new runtime capability fails typecheck in every launcher
+ * (TUI, serve, headless, ACP) until explicitly enabled or opted out.
+ */
+export type DirectLauncherSurface = Omit<ToolSurfaceOptions, 'workspace' | 'interactive' | 'sessionBrowser' | 'mcp'> & {
+  readonly interactive: boolean;
+  /** Enables session_list/search/read tools, contextMilestones reminders, and model-initiated session_rollover. */
+  readonly sessionBrowser: boolean;
+  /** Per-session MCP tool source; pass `undefined` when this launcher does not wire MCP. */
+  readonly mcp: ToolSurfaceOptions['mcp'] | undefined;
+};
+
 export type DirectRuntimeOptions = {
   readonly conversationsDir?: string;
   readonly selection: ProfileSelection;
@@ -63,7 +76,7 @@ export type DirectRuntimeOptions = {
   /** Stamped on every session this application creates, and required of every one it opens. */
   readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
-  readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
+  readonly surface: (sessionId: string) => DirectLauncherSurface;
   /** Decides whether a session may move to another model. Without it, none may. */
   readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void | Promise<void>;
   /** After any resumed selection is restored, so this reports what actually runs. */

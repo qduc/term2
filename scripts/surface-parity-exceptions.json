@@ -1,0 +1,182 @@
+{
+  "appWiring": {
+    "sessionBrowser": {
+      "status": "deferred",
+      "reason": "launch-serve.ts does not yet wire sessionBrowser: true, which disables session_list/search/read tools, contextMilestones reminders, and model-initiated session_rollover on the web server; remove once serve enables sessionBrowser and web-client renders rollover boundaries."
+    },
+    "mcp": {
+      "status": "deferred",
+      "reason": "launch-serve.ts does not yet open per-workspace MCP connections or expose MCP OAuth/status endpoints; remove once MCP lifecycle and HTTP endpoints are wired for term2 serve."
+    },
+    "mcpCatalog": {
+      "status": "deferred",
+      "reason": "launch-serve.ts omits mcpCatalog alongside per-session mcp wiring because no MCP manager runs in the web server process yet; remove together with appWiring.mcp."
+    },
+    "hooks": {
+      "status": "deferred",
+      "reason": "launch-serve.ts passes hooks: null because public hook execution and trusted-root management are only wired for local CLI modes (TUI and headless); remove once serve supports hooks safely."
+    }
+  },
+  "serverCommands": {
+    "take_over_review": {
+      "status": "deferred",
+      "reason": "src/host/server*.ts does not yet expose an HTTP route to take over an in-progress approval review while the safety arbiter is running; remove once the route and web UI indicator are wired."
+    },
+    "cancel": {
+      "status": "deferred",
+      "reason": "POST /sessions/:id/abort hardcodes target: foreground and discardQueue: true without supporting returnSteers or queue-preserving cancel; remove once /abort exposes those options."
+    },
+    "retry": {
+      "status": "deferred",
+      "reason": "POST /sessions/:id/commands supports retry-turn and retry-tool when idle, but does not yet accept an executionId target for retrying a specific tool call; remove once executionId is validated and forwarded."
+    },
+    "configure": {
+      "status": "deferred",
+      "reason": "POST /sessions/:id/config supports modelSelection, reasoningEffort, mode, and approvalMode, but does not yet accept per-session temperature overrides; remove once temperature is exposed or retired."
+    },
+    "queue_edit": {
+      "status": "deferred",
+      "reason": "POST /sessions/:id/queue validates text-only edits for queued messages and does not yet allow editing attachments; remove once attachment edits are validated and forwarded."
+    },
+    "command_status": {
+      "status": "deferred",
+      "reason": "src/host/server*.ts has no standalone command_status lookup endpoint because clients currently rely on idempotent command retries and snapshot.commands; remove once a status route is added."
+    },
+    "reset": {
+      "status": "deferred",
+      "reason": "src/host/server*.ts does not expose the native reset (/clear) command; web-client starts a new chat instead of resetting a logical session in place; remove once reset is routed or retired."
+    },
+    "rollover": {
+      "status": "deferred",
+      "reason": "server-commands.ts rejects rollover with 422 command_not_allowed because sessionBrowser and rollover UI boundaries are not yet wired for web; remove alongside appWiring.sessionBrowser."
+    },
+    "preview": {
+      "status": "deferred",
+      "reason": "src/host/server*.ts does not expose the pre-send input preview command for input-surge or large-uncached-context confirmation; remove once preview is routed and wired in web-client."
+    }
+  },
+  "webEvents": {
+    "approval_review": {
+      "status": "deferred",
+      "reason": "web-client folds reviewingApprovals into the snapshot but does not yet render a live indicator or takeover action while the AI safety reviewer is evaluating an approval; remove once rendered."
+    },
+    "budget_opened": {
+      "status": "deferred",
+      "reason": "web-client renders run_budget interactions only when the gateway attaches an interaction DTO; standalone pendingBudgets without a DTO return null in TranscriptTail.tsx; remove once BudgetPanel parity is added."
+    },
+    "compaction_completed": {
+      "status": "deferred",
+      "reason": "web-client folds compaction completion into snapshot.notices (visible in Diagnostics), but does not yet render a persistent compaction notice in the main transcript; remove once transcript notices render."
+    },
+    "compaction_failed": {
+      "status": "deferred",
+      "reason": "web-client shows compaction failure transiently during an active turn, but does not yet persist the failure notice in the main transcript after the turn settles; remove once transcript notices render."
+    },
+    "session_rotated": {
+      "status": "deferred",
+      "reason": "web-client folds session_rotated via reduceWireEvent, which clears foreground turns silently without a rollover boundary divider or banner; remove once rollover UI is implemented."
+    },
+    "notice": {
+      "status": "deferred",
+      "reason": "web-client exposes snapshot.notices only inside the opt-in Diagnostics panel rather than rendering general runtime notices in the main chat view; remove once a notice surface is added."
+    },
+    "automatic_memory_notice": {
+      "status": "deferred",
+      "reason": "web-client folds automatic_memory_notice into snapshot.notices without surfacing it in the main chat transcript outside Diagnostics; remove once general notices render in chat."
+    },
+    "goal_proposed": {
+      "status": "deferred",
+      "reason": "web-client renders active goals read-only via GoalBanner and does not yet surface or let users accept/dismiss proposed goals; remove once interactive goal management is added to serve and web-client."
+    }
+  },
+  "settings": {
+    "agent.disabledProviders": {
+      "status": "by-design",
+      "reason": "Web manages provider enable/disable state through the dedicated Providers section and provider toggle endpoints rather than through WEB_SETTINGS safe defaults."
+    },
+    "agent.runBudget.escalation": {
+      "status": "deferred",
+      "reason": "Run-budget escalation mode is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
+    },
+    "agent.runBudget.maxActiveTimeMs": {
+      "status": "deferred",
+      "reason": "Run-budget active time limit is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
+    },
+    "agent.runBudget.maxUnpricedTokens": {
+      "status": "deferred",
+      "reason": "Run-budget unpriced token cap is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
+    },
+    "agent.runBudget.maxUsdMicros": {
+      "status": "deferred",
+      "reason": "Run-budget USD spend cap is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
+    },
+    "app.notifications": {
+      "status": "by-design",
+      "reason": "Web uses browser-local Web Notification preferences in web-client instead of writing the TUI's terminal notification setting on the server."
+    },
+    "app.notificationsOnApproval": {
+      "status": "by-design",
+      "reason": "Web uses a single browser-local notification toggle rather than per-event terminal notification flags; revisit if granular browser notification toggles are added."
+    },
+    "app.notificationsOnComplete": {
+      "status": "by-design",
+      "reason": "Web uses a single browser-local notification toggle rather than per-event terminal notification flags; revisit if granular browser notification toggles are added."
+    },
+    "hooks.includeToolArguments": {
+      "status": "deferred",
+      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+    },
+    "hooks.includeToolResults": {
+      "status": "deferred",
+      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+    },
+    "hooks.includeUserText": {
+      "status": "deferred",
+      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+    },
+    "hooks.project.enabled": {
+      "status": "deferred",
+      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+    },
+    "hooks.timeoutMs": {
+      "status": "deferred",
+      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+    },
+    "hooks.trustedProjectRoots": {
+      "status": "deferred",
+      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+    },
+    "hooks.user.enabled": {
+      "status": "deferred",
+      "reason": "Public hooks are not yet wired in launch-serve.ts, so hook settings are withheld from WEB_SETTINGS and web-client; remove alongside appWiring.hooks."
+    },
+    "shell.backgroundTimeout": {
+      "status": "deferred",
+      "reason": "Background shell timeout is not yet exposed in WEB_SETTINGS or web-client Settings Limits; remove once added to web-settings-policy.ts and settings-catalog.ts."
+    },
+    "ui.displayMode": {
+      "status": "by-design",
+      "reason": "Web stores its own browser-local tool display mode (concise/standard) rather than mutating the terminal UI's ui.displayMode setting."
+    },
+    "ui.skin": {
+      "status": "by-design",
+      "reason": "Terminal layout skins (classic, cards, ledger, rail, zen) apply only to the Ink TUI and do not exist in the web UI."
+    },
+    "ui.theme": {
+      "status": "by-design",
+      "reason": "Web manages Light/Dark/System appearance locally via ThemeContext rather than writing the terminal UI's ui.theme setting."
+    },
+    "webSearch.exa.apiKey": {
+      "status": "by-design",
+      "reason": "Web writes search-provider API keys through the dedicated write-only credentials endpoint and Web Search UI rather than WEB_SETTINGS safe defaults."
+    },
+    "webSearch.firecrawl.apiKey": {
+      "status": "by-design",
+      "reason": "Web writes search-provider API keys through the dedicated write-only credentials endpoint and Web Search UI rather than WEB_SETTINGS safe defaults."
+    },
+    "webSearch.tavily.apiKey": {
+      "status": "by-design",
+      "reason": "Web writes search-provider API keys through the dedicated write-only credentials endpoint and Web Search UI rather than WEB_SETTINGS safe defaults."
+    }
+  }
+}

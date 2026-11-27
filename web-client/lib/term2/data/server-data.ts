@@ -1,7 +1,7 @@
 /**
  * The chat page's server data in one place (docs/plans/web-client/web-shell-decomposition.md, section 4.6, and
  * web-shell-decomposition-part2.md, section 3): the settings projection, the model catalog, skills, the `@` file
- * listing, saved folders, the chat list, the open chat's quota and rewind points, and the provider catalog, each a
+ * listing, saved folders, the chat list, the open chat's rewind points, and the provider catalog, each a
  * `Resource` with the same loading, error and late-response rule. Settings writes go through one queue
  * (settings-writer.ts); a provider, credential or sign-in write re-reads what it made stale. The open chat's config is
  * not here: it stays in the shell machine under the tag rule. No React here.
@@ -13,7 +13,6 @@ import type {
   ProviderPresetEntry,
   ProviderWriteInput,
   RewindTargetSummary,
-  SessionQuota,
   SessionListItem,
   SessionProjection,
   SettingsProjection,
@@ -71,8 +70,6 @@ export interface ServerData {
   loadMoreChats(): Promise<void>;
   chatCreated(projection: SessionProjection): void;
   chatTitled(sessionId: string, firstLine: string): void;
-  /** The chat's subscription allowance. Key: chat id. Null until read. */
-  readonly quota: Resource<SessionQuota | null>;
   /** Key: chat id. Never `ensure`d: a turn or a rewind changes the list. */
   readonly rewindTargets: Resource<RewindTargetSummary[]>;
   readonly providerCatalog: Resource<ProviderCatalog>;
@@ -141,7 +138,6 @@ export function createServerData(options: { localControlEnabled: boolean }): Ser
     },
   });
   const folderDetails = createStore<Readonly<Record<string, FolderDetail>>>({});
-  const quota = createResource<SessionQuota | null>({ initial: null, fetch: (key) => client.readSessionQuota(key!) });
   const rewindTargets = createResource<RewindTargetSummary[]>({
     initial: [],
     fetch: async (key) => (await client.listRewindTargets(key!)).targets,
@@ -220,7 +216,6 @@ export function createServerData(options: { localControlEnabled: boolean }): Ser
         ),
       }));
     },
-    quota,
     rewindTargets,
     providerCatalog,
     writeSettings,

@@ -61,5 +61,7 @@ import type { WireEvent, WireSnapshot } from './fold/index.js';
 export type * from './fold/index.js';
 /** The shared fold, with the same options the server uses. */
 export declare function reduceWireEvent(state: WireSnapshot, event: WireEvent): WireSnapshot;
+/** Whether a provider is billed via a subscription plan rather than metered per-token spend. */
+export declare function isSubscriptionProvider(provider: string | undefined): boolean;
 `,
 );

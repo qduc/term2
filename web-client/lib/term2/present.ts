@@ -18,6 +18,7 @@ import type {
 } from './generated/wire-fold.js';
 import type {
   InteractionProjection,
+  SessionQuota,
   Term2Command,
   Term2ConnectionStatus,
   Term2SessionView,
@@ -41,6 +42,8 @@ export interface Term2SessionFacts {
   usage: WireSnapshot['usage'];
   lastUsage: NonNullable<WireSnapshot['lastUsage']> | null;
   cost: WireSnapshot['cost'];
+  /** Active provider and last-reported subscription quota windows from the folded snapshot. */
+  quota: SessionQuota;
   goal: WireSnapshot['goal'];
   goalProposal: NonNullable<WireSnapshot['goalProposal']> | null;
   verification: WireSnapshot['verification'];
@@ -400,7 +403,7 @@ function branchTurns(root: WireSnapshot, branch: Branch): readonly Term2TurnView
 }
 
 /** The slices of the snapshot the panels read; components never read the snapshot itself. */
-function sessionFacts(snapshot: WireSnapshot): Term2SessionFacts {
+function sessionFacts(snapshot: WireSnapshot, isSubscription: (provider: string | undefined) => boolean): Term2SessionFacts {
   const branchesByTask = new Map<string, Branch>();
   for (const branch of snapshot.branches ?? []) branchesByTask.set(branch.taskId, branch);
   return {
@@ -416,6 +419,18 @@ function sessionFacts(snapshot: WireSnapshot): Term2SessionFacts {
     usage: snapshot.usage,
     lastUsage: snapshot.lastUsage ?? null,
     cost: snapshot.cost,
+    quota: {
+      provider: snapshot.model.provider,
+      subscription: isSubscription(snapshot.model.provider),
+      windows: {
+        fiveHour: snapshot.codexFiveHourQuota
+          ? { usedPercent: snapshot.codexFiveHourQuota.usedPercent, resetAt: snapshot.codexFiveHourQuota.resetAt }
+          : null,
+        weekly: snapshot.codexQuota
+          ? { usedPercent: snapshot.codexQuota.usedPercent, resetAt: snapshot.codexQuota.resetAt }
+          : null,
+      },
+    },
     goal: snapshot.goal,
     goalProposal: snapshot.goalProposal ?? null,
     verification: snapshot.verification,
@@ -438,6 +453,7 @@ export function present(
   interactions: PresentInteractions,
   connection: PresentConnection,
   previous?: Term2SessionView,
+  isSubscription: (provider: string | undefined) => boolean = () => false,
 ): Term2SessionView {
   const base = {
     sessionId,
@@ -489,7 +505,7 @@ export function present(
     pendingInteraction,
     status: sessionStatus(snapshot, connection, pendingInteraction),
     lastAppliedSequence: snapshot.seq ?? 0,
-    session: { ...sessionFacts(snapshot), unorderedTranscript: unordered },
+    session: { ...sessionFacts(snapshot, isSubscription), unorderedTranscript: unordered },
   };
   memo.set(view, nextCache);
   return view;

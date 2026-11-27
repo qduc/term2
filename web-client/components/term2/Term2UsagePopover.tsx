@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useStoreSelector } from '../../hooks/useStoreSelector';
+import { useState } from 'react';
 import { Archive, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { summarizeReceiptCosts } from '../../lib/term2/receipt-cost';
-import { useServerData } from './shell/ShellContext';
 import type {
   ModelSummary,
   SessionConfigRecord,
@@ -28,20 +26,6 @@ function formatReset(resetAt: number): string {
   return date.toDateString() === new Date().toDateString()
     ? time
     : `${date.toLocaleDateString([], { weekday: 'short' })} ${time}`;
-}
-
-/**
- * The session's subscription allowance. The wire carries no quota change, so it is reread whenever
- * `refresh` changes: the provider reports it with every model response, including each step of a
- * tool loop, not only when the turn ends.
- */
-function useSessionQuota(sessionId: string, refresh: string): SessionQuota | null {
-  const data = useServerData();
-  useEffect(() => {
-    // A failed read keeps the value shown; another chat's key empties it (lib/term2/data/resource.ts).
-    if (sessionId) void data.quota.refresh(sessionId).catch(() => undefined);
-  }, [data, sessionId, refresh]);
-  return useStoreSelector(data.quota, (s) => (s.key === sessionId ? s.data : null));
 }
 
 const QUOTA_WINDOWS = [
@@ -72,7 +56,6 @@ export function Term2UsagePopover({
 }) {
   const [open, setOpen] = useState(false);
 
-  const allTurns = view.turns;
   // The session's own totals and the latest request's input (context fill), not sums of per-reply counts.
   const sessionUsage = view.session?.usage;
   const lastTurnInput = view.session?.lastUsage?.inputTokens ?? 0;
@@ -88,14 +71,8 @@ export function Term2UsagePopover({
   const hasCost = Boolean(receiptSummary && receiptSummary.pricedRequests > 0);
   const knownUsd = hasCost && receiptSummary ? receiptSummary.knownUsdMicros / 1_000_000 : null;
 
-  // One step per model response seen: a finished turn, or a tool call a response asked for.
-  const responses = allTurns.reduce(
-    (count, turn) => count + turn.commands.length + (turn.status !== 'streaming' && turn.status !== 'pending' ? 1 : 0),
-    0,
-  );
-  const model = config ? `${config.providerId}/${config.modelId}` : '';
-  // Opening the popover rereads too, so what it shows is never older than the click.
-  const quota = useSessionQuota(view.sessionId, `${responses}:${model}:${open ? 'open' : ''}`);
+  // Subscription allowance arrives on the direct-wire-v2 stream (snapshot + live codex_quota frames).
+  const quota = view.session?.quota ?? null;
   const windows = liveWindows(quota);
   const subscription = quota?.subscription === true;
   // The pill names the tightest window: the one closest to running out.

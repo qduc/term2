@@ -14,21 +14,9 @@
     }
   },
   "serverCommands": {
-    "cancel": {
-      "status": "deferred",
-      "reason": "POST /sessions/:id/abort hardcodes target: foreground and discardQueue: true without supporting returnSteers or queue-preserving cancel; remove once /abort exposes those options."
-    },
-    "retry": {
-      "status": "deferred",
-      "reason": "POST /sessions/:id/commands supports retry-turn and retry-tool when idle, but does not yet accept an executionId target for retrying a specific tool call; remove once executionId is validated and forwarded."
-    },
     "configure": {
       "status": "by-design",
       "reason": "POST /sessions/:id/config intentionally omits per-session temperature overrides because agent.temperature is deliberately hidden in the web UI (NEVER_SHOWN_KEYS)."
-    },
-    "queue_edit": {
-      "status": "deferred",
-      "reason": "POST /sessions/:id/queue validates text-only edits for queued messages and does not yet allow editing attachments; remove once attachment edits are validated and forwarded."
     },
     "command_status": {
       "status": "by-design",

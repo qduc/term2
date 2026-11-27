@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { getProfileLabel } from '../config/profiles/labels.js';
+import { composeHandoffMessage } from '../shared/handoff/handoff-flow-reducer.js';
 import { injectSkillIntoTurn } from '../shared/types/user-turn.js';
 import { defaultServeStateDir } from '../host/gateway/serve-args.js';
 import { createDirectServerHost, createServerAuthentication } from '../host/server.js';
@@ -288,6 +289,23 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         'user',
       );
     },
+    async handoff(principal, snapshot, input) {
+      owned(principal, snapshot.sessionId, snapshot.seq);
+      const captured = snapshot.messages
+        .filter((message) => message.role === 'assistant')
+        .map((message) => message.text)
+        .filter((text) => text.length > 0)
+        .at(-1);
+      if (captured === undefined)
+        throw new DirectProtocolError('rejected', 'No assistant response available to hand off.');
+      const text = composeHandoffMessage({
+        capturedText: captured,
+        stage: 'selecting_model',
+        ...(input.message ? { handoffMessage: input.message } : {}),
+      });
+      const sessionId = await app.handoff(snapshot.sessionId, input.model, text);
+      return { sessionId };
+    },
   };
 }
 
@@ -373,12 +391,16 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
         host: app.host,
         workspaces: serverWorkspaceAdministration(grants, closeWorkspaceSessions),
         models: () => configuration.listModels(),
-        skills: () =>
-          app.skills(homedir()).map((skill) => ({
+        skills: (principal, workspaceId) => {
+          const cwd = workspaceId
+            ? grants.resolveWorkspace(principal, grants.resolveGrant(principal, workspaceId)).workspace.root
+            : homedir();
+          return app.skills(cwd).map((skill) => ({
             name: skill.name,
             description: skill.description,
             isProjectLevel: skill.isProjectLevel,
-          })),
+          }));
+        },
         configuration,
         presentation: presentation({ app, directory, grants, configuration, allowWrite: args.allowWrite }),
         localOwnerUserId: args.localOwnerUserId,

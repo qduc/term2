@@ -1,7 +1,18 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Archive, AtSign, ImagePlus, Loader2, Plus, RefreshCw, RotateCcw, Wand2, Wrench } from 'lucide-react';
+import {
+  Archive,
+  ArrowRightLeft,
+  AtSign,
+  ImagePlus,
+  Loader2,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Wand2,
+  Wrench,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -49,6 +60,7 @@ export function Term2CommandMenu({
   onMentionFile,
   onUseSkill,
   onCommand,
+  onHandoff,
 }: {
   composerDisabled: boolean;
   commandsDisabled: boolean;
@@ -59,6 +71,7 @@ export function Term2CommandMenu({
   /** Opens the skill picker; called after the menu has closed so the picker can take focus. */
   onUseSkill: () => void;
   onCommand: (commandId: Term2CommandId) => void;
+  onHandoff?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   // Actions that move focus elsewhere (composer, skill picker) must stop the
@@ -136,6 +149,19 @@ export function Term2CommandMenu({
                 </DropdownMenuItem>
               );
             })}
+            {onHandoff && (
+              <DropdownMenuItem
+                disabled={commandsDisabled}
+                onSelect={select(onHandoff, false)}
+                className="items-start"
+              >
+                <ArrowRightLeft aria-hidden className="mt-0.5" strokeWidth={1.75} />
+                <span className="min-w-0">
+                  <span className="block">Hand off to new chat</span>
+                  <span className="block text-xs text-muted-foreground">Continue from the latest reply in a fresh chat</span>
+                </span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>

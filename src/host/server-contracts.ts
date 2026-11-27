@@ -40,6 +40,7 @@ export const ASSERTION_PURPOSES = [
   'session_files',
   'session_quota',
   'session_goal',
+  'session_handoff',
 ] as const;
 export type AssertionPurpose = (typeof ASSERTION_PURPOSES)[number];
 export type GatewayAssertionClaims = {
@@ -305,7 +306,17 @@ export interface ServerSessionPresentation {
   };
   /** Set, update status, clear, or accept a proposed durable goal for this session. */
   setGoal?(principal: Principal, snapshot: WireSnapshot, action: ServerGoalAction): Promise<void>;
+  /** Hand off the latest assistant response to a fresh successor session. */
+  handoff?(
+    principal: Principal,
+    snapshot: WireSnapshot,
+    input: ServerHandoffInput,
+  ): Promise<{ readonly sessionId: string }>;
 }
+export type ServerHandoffInput = {
+  readonly message?: string;
+  readonly model?: { readonly provider: string; readonly model: string };
+};
 export type ServerGoalAction =
   | { readonly action: 'set'; readonly text: string; readonly successCriteria?: string }
   | { readonly action: 'achieved' | 'abandon' | 'clear' | 'accept_proposal' };
@@ -320,7 +331,7 @@ export type ServerHostDependencies = {
   host: DirectHost;
   workspaces?: ServerWorkspaces;
   models?(): readonly ModelCatalogEntry[] | Promise<readonly ModelCatalogEntry[]>;
-  skills?(): readonly SkillSummary[] | Promise<readonly SkillSummary[]>;
+  skills?(principal: Principal, workspaceId?: string): readonly SkillSummary[] | Promise<readonly SkillSummary[]>;
   configuration?: ServerConfiguration;
   presentation?: ServerSessionPresentation;
   localOwnerUserId?: string;
@@ -364,6 +375,7 @@ export type CommandBody = {
   clientRequestId: string;
   admission?: 'idle';
   expectedRevision?: string;
+  executionId?: string;
 };
 export type InteractionResolveBody = {
   revision: number;

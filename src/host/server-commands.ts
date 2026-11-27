@@ -17,11 +17,11 @@ const SERVER_WIRE_COMMAND_PARITY: Record<WireCommand['type'], ServerWireCommandP
   answer: 'supported',
   take_over_review: 'supported',
   answer_budget: 'supported',
-  cancel: 'partial',
-  retry: 'partial',
+  cancel: 'supported',
+  retry: 'supported',
   compact: 'supported',
   configure: 'by-design',
-  queue_edit: 'partial',
+  queue_edit: 'supported',
   queue_retract: 'supported',
   queue_resume: 'supported',
   queue_discard: 'supported',
@@ -62,6 +62,7 @@ export async function invokeServerCommand(input: ServerSessionRequest, body: Com
         commandId: body.clientRequestId,
         ...preconditions,
         target: body.commandId === 'retry-tool' ? 'tool' : 'turn',
+        ...(body.commandId === 'retry-tool' && body.executionId !== undefined ? { executionId: body.executionId } : {}),
       };
       break;
     default:

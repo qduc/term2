@@ -139,10 +139,13 @@ export class ServerGlobalRoutes {
               return { status: 200, body: result };
             })
           : settingsMissing();
-      case 'skills_list':
+      case 'skills_list': {
+        const workspaceId = url.searchParams.get('workspaceId') || undefined;
+        if (workspaceId !== undefined && !validate.isOpaqueId(workspaceId)) return invalid('workspaceId is invalid');
         return this.dependencies.skills
-          ? { status: 200, body: { skills: await this.dependencies.skills() } }
+          ? { status: 200, body: { skills: await this.dependencies.skills(principal, workspaceId) } }
           : { status: 200, body: { skills: [] } };
+      }
       default:
         return null;
     }

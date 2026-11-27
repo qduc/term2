@@ -18,7 +18,8 @@ export const rpc = {
   providerPresets: '/private/agent/v1/providers/presets',
   providers: '/private/agent/v1/providers',
   providerDelete: (providerId: string) => `/private/agent/v1/providers/${providerId}`,
-  skills: '/private/agent/v1/skills',
+  skills: (workspaceId?: string) =>
+    workspaceId ? `/private/agent/v1/skills?workspaceId=${encodeURIComponent(workspaceId)}` : '/private/agent/v1/skills',
   sessions: '/private/agent/v1/sessions',
   session: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}`,
   messages: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/messages`,
@@ -31,6 +32,7 @@ export const rpc = {
   files: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/files`,
   quota: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/quota`,
   goal: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/goal`,
+  handoff: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/handoff`,
   interactions: (sessionId: string, interactionId: string) =>
     `/private/agent/v1/sessions/${sessionId}/interactions/${interactionId}`,
   sessionConfig: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/config`,

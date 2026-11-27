@@ -8,7 +8,7 @@
  * folded, an unavailable replay, or HTTP 410 ends in "Reload required", with no automatic retry.
  */
 import { term2Client, Term2ApiError } from '../api/term2';
-import { reduceWireEvent, type WireEvent, type WireSnapshot } from './generated/wire-fold.js';
+import { isSubscriptionProvider, reduceWireEvent, type WireEvent, type WireSnapshot } from './generated/wire-fold.js';
 import { present, type PresentConnection, type PresentInteractions } from './present';
 import { decodeSseText } from './sse';
 import type { InteractionProjection, Term2ConnectionStatus, Term2SessionView } from './types';
@@ -32,7 +32,7 @@ const WEB_WIRE_EVENT_PARITY: Record<WireEvent['type'], WebWireEventParity> = {
   reasoning: 'presented',
   reasoning_started: 'presented',
   reasoning_delta: 'presented',
-  codex_quota: 'folded',
+  codex_quota: 'presented',
   message: 'presented',
   tool_call_streaming_delta: 'presented',
   tool_called: 'presented',
@@ -188,6 +188,7 @@ export class Term2SessionStore {
       this.#interactions as PresentInteractions,
       this.#connection,
       this.#view,
+      isSubscriptionProvider,
     );
     const overlay = this.#overlay;
     return overlay.status || overlay.error !== undefined

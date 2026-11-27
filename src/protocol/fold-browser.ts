@@ -8,6 +8,7 @@ import { reduceWireEvent as foldWireEvent } from './fold/index.js';
 import { TERM2_WIRE_FOLD_OPTIONS } from './reducer.js';
 
 export type * from './fold/index.js';
+export { isSubscriptionProvider } from '../model/cost/subscription-providers.js';
 
 export function reduceWireEvent(state: WireSnapshot, event: WireEvent): WireSnapshot {
   return foldWireEvent(state, event, TERM2_WIRE_FOLD_OPTIONS);

@@ -286,7 +286,7 @@
       "reason": "Type declarations only, one vocabulary shared by the facade, the store and the components; recorded when the gate first covered web-client (2026-11). Eleven lines add ServerTaskAction and ServerCapabilities to SettingsProjection, and one line adds the rollover command outcome."
     },
     "web-client/components/term2/settings/Term2SettingsPage.tsx": {
-      "lines": 920,
+      "lines": 919,
       "reason": "Recorded when the gate first covered web-client (2026-11). It reads and writes through lib/term2/data/server-data.ts and keeps its own first read until the store installs a newer one (so a direct load never flashes the error screen), installing it when the store is still empty so writes have a revision; what remains is one component rendering every section. Split per section when settings is next reworked."
     },
     "web-client/components/term2/Term2FolderSelector.tsx": {

@@ -309,8 +309,7 @@ export function Term2FolderSelector({
     const matched = filterNamedEntries(visible, currentPath, filter);
     return {
       totalVisible: visible.length,
-      hiddenCount: dirs.length - visible.length,
-      dotFolderCount: dirs.filter((entry) => entry.name.startsWith('.')).length,
+      hiddenCount: dirs.filter((entry) => entry.name.startsWith('.')).length,
       selectable: matched.filter((entry) => entry.selectable),
       unavailable: matched.filter((entry) => !entry.selectable),
     };
@@ -579,8 +578,7 @@ export function Term2FolderSelector({
             }`}
           >
             {showHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-            {/* The count stays while they are shown, so the toggle keeps its width. */}
-            Hidden{directoryEntries.dotFolderCount > 0 ? ` (${directoryEntries.dotFolderCount})` : ''}
+            Hidden{directoryEntries.hiddenCount > 0 ? ` (${directoryEntries.hiddenCount})` : ''}
           </button>
         </div>
 
@@ -628,8 +626,7 @@ export function Term2FolderSelector({
           </div>
         )}
 
-        {/* Directory list */}
-        {/* A fixed height: showing hidden folders or opening a fuller folder must not resize the dialog. */}
+        {/* Directory list, at a fixed height: showing hidden folders or a fuller folder never resizes the dialog. */}
         <div className="relative h-64 overflow-y-auto scrollbar-thin">
           {busy ? (
             <div className="flex h-full items-center justify-center gap-2 text-xs text-zinc-500">

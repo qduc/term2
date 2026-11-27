@@ -34,7 +34,7 @@ export type DaemonControlPort = {
   readonly pid: number;
   readonly capabilities: readonly string[];
   status(): DaemonStatusResult;
-  shutdown(params: DaemonShutdownParams): Promise<{ readonly accepted: boolean; readonly draining?: boolean }>;
+  shutdown(params: DaemonShutdownParams): Promise<void>;
   resolveCwdGrant(principal: Principal, cwd: string): Promise<WorkspaceGrant>;
   resolveWorkspaceGrant?(principal: Principal, workspaceId: string): Promise<WorkspaceGrant>;
   setPendingCreatePolicy?(policy: SessionApprovalPolicy | undefined): void;
@@ -74,10 +74,12 @@ export class DaemonRpc {
   readonly #sessionLocks = new Map<string, Promise<unknown>>();
   #createLock: Promise<unknown> = Promise.resolve();
   #shutdownReason: 'closed' | 'daemon_shutdown' = 'closed';
+  #draining = false;
 
   constructor(private readonly deps: DaemonRpcDeps) {}
 
   markShuttingDown(): void {
+    this.#draining = true;
     this.#shutdownReason = 'daemon_shutdown';
   }
 
@@ -117,7 +119,8 @@ export class DaemonRpc {
         return { ...this.deps.control.status(), protocolVersion: CLIENT_API_VERSION };
       case 'daemon.shutdown': {
         const parsed = parseStrict(CLIENT_API_SCHEMAS.daemonShutdownParams, params, 'daemon.shutdown');
-        return await this.deps.control.shutdown(parsed);
+        await this.deps.control.shutdown(parsed);
+        return {};
       }
       case 'session.list': {
         const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionListParams, params, 'session.list');
@@ -270,6 +273,9 @@ export class DaemonRpc {
     principal: Principal,
     rawParams: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
+    if (this.#draining) {
+      throw new ClientApiRpcError('closed', 'Daemon is draining and not accepting new sessions.', { retryable: true });
+    }
     const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionCreateParams, rawParams, 'session.create');
     const grant =
       'cwd' in parsed
@@ -304,6 +310,9 @@ export class DaemonRpc {
   async #sessionCommand(principal: Principal, rawParams: Record<string, unknown>): Promise<Record<string, unknown>> {
     const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionCommandParams, rawParams, 'session.command');
     const command = parsed.command as WireCommand;
+    if (this.#draining && (command.type === 'submit' || command.type === 'retry')) {
+      throw new ClientApiRpcError('closed', 'Daemon is draining and not accepting new turns.', { retryable: true });
+    }
     let res: WireCommandResult;
     if (this.deps.host.sendCommand) {
       res = await this.deps.host.sendCommand(principal, parsed.sessionId, command);

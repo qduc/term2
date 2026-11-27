@@ -170,7 +170,7 @@ export function ownConversationTurn(
       policyDecision,
       validDecision,
     );
-    if (!decision && options.reviews?.unattended()) {
+    if (!decision && (options.reviews?.unattended() || options.reviews?.isHeadless())) {
       const refused = refuse(request, {
         ...(review ?? { kind: 'not_reviewed' }),
         approved: false,

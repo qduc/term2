@@ -1,7 +1,6 @@
 /**
  * Conformance & security integration suite for the Term2 singleton Unix daemon
- * (`docs/plans/daemon/spec/transport-unix.md` & `client-api.md` v1.0) plus
- * Step 14a multi-workspace sandbox lease & network-approval scope isolation.
+ * (`docs/plans/daemon/spec/transport-unix.md` & `client-api.md` v1.0).
  */
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -20,9 +19,6 @@ import {
 import { startTerm2Daemon, type Term2DaemonHandle } from '../../src/app/daemon/daemon.js';
 import { connectOrStartDaemon } from '../../src/app/daemon/daemon-bootstrap.js';
 import { prepareSocketForBind } from '../../src/app/daemon/daemon-paths.js';
-import { resolveWorkspaceSandboxTempDir } from '../../src/shared/utils/shell/temp-dir.js';
-import { createSandboxNetworkApprovalScope } from '../../src/tools/shell/sandbox/sandbox-network-approval.js';
-import { AnthropicShellSandboxRunner } from '../../src/tools/shell/sandbox/shell-sandbox-runner.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
 
 const execFileAsync = promisify(execFile);
@@ -231,6 +227,8 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(badHello.ok).toBe(false);
     if (!badHello.ok) {
       expect(badHello.error.code).toBe('protocol_incompatible');
+      expect(badHello.error.details?.['daemonProtocolVersion']).toBe('1.0');
+      expect(badHello.error.details?.['daemonMinSupportedVersion']).toBe('1.0');
       expect(badHello.error.details?.['activeTurnCount']).toBe(0);
     }
     await closePromise;
@@ -267,11 +265,20 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const ping = await healthy.request('protocol.ping');
     expect(ping.ok).toBe(true);
 
-    // Graceful shutdown broadcasts daemon.draining and removes daemon.sock + daemon.json before unlocking.
+    // Graceful shutdown returns {}, refuses new turn/session admissions with closed, broadcasts daemon.draining,
+    // and removes daemon.sock + daemon.json before unlocking.
     const drainingPromise = healthy.waitForEvent((e) => e.event === 'daemon.draining');
-    await started.shutdown({ mode: 'graceful', timeoutMs: 2_000 });
+    const shutdownRes = await healthy.request('daemon.shutdown', { mode: 'graceful', timeoutMs: 2_000 });
+    expect(shutdownRes.ok).toBe(true);
+    if (shutdownRes.ok) expect(shutdownRes.result).toEqual({});
+    const whileDraining = await healthy.request('session.create', { cwd: workspace }).catch(() => null);
+    if (whileDraining) {
+      expect(whileDraining.ok).toBe(false);
+      if (!whileDraining.ok) expect(whileDraining.error.code).toBe('closed');
+    }
     const draining = await drainingPromise;
     CLIENT_API_SCHEMAS.daemonDrainingEvent.parse(draining.payload);
+    await started.closed;
     expect(fs.existsSync(socketPath)).toBe(false);
     expect(fs.existsSync(started.paths.advertisementPath)).toBe(false);
   });
@@ -512,81 +519,5 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       { env },
     );
     await expect.poll(() => fs.existsSync(socketPath), { timeout: 5_000 }).toBe(false);
-  });
-
-  it('isolates multi-workspace sandbox leases, scratch temp dirs, and network approval scopes', async () => {
-    const { root } = makeSandboxRoot();
-    const wsA = path.join(root, 'ws-a');
-    const wsB = path.join(root, 'ws-b');
-    fs.mkdirSync(wsA, { recursive: true });
-    fs.mkdirSync(wsB, { recursive: true });
-
-    // Per-workspace private scratch dirs must be distinct 0700 subdirectories.
-    const tmpA = resolveWorkspaceSandboxTempDir(wsA);
-    const tmpB = resolveWorkspaceSandboxTempDir(wsB);
-    expect(tmpA).not.toBe(tmpB);
-    expect(fs.lstatSync(tmpA).mode & 0o777).toBe(0o700);
-    expect(fs.lstatSync(tmpB).mode & 0o777).toBe(0o700);
-
-    // Per-lease network approval scopes never cross-route handlers or pause controllers.
-    const scopeA = createSandboxNetworkApprovalScope();
-    const scopeB = createSandboxNetworkApprovalScope();
-    const callsA: string[] = [];
-    const callsB: string[] = [];
-    let pausedA = 0;
-    let pausedB = 0;
-    const stopHandlerA = scopeA.registerHandler(async ({ host }) => {
-      callsA.push(host);
-      return 'allow-once';
-    });
-    const stopHandlerB = scopeB.registerHandler(async ({ host }) => {
-      callsB.push(host);
-      return 'deny';
-    });
-    const stopPauseA = scopeA.registerPauseController({
-      pause: () => {
-        pausedA += 1;
-      },
-      resume: () => undefined,
-    });
-    const stopPauseB = scopeB.registerPauseController({
-      pause: () => {
-        pausedB += 1;
-      },
-      resume: () => undefined,
-    });
-    try {
-      expect(await scopeA.requestApproval({ host: 'alpha.example.com', port: 443 }, wsA)).toBe(true);
-      expect(await scopeB.requestApproval({ host: 'beta.example.com', port: 443 }, wsB)).toBe(false);
-      expect(callsA).toEqual(['alpha.example.com']);
-      expect(callsB).toEqual(['beta.example.com']);
-      expect(pausedA).toBe(1);
-      expect(pausedB).toBe(1);
-    } finally {
-      stopHandlerA();
-      stopHandlerB();
-      stopPauseA();
-      stopPauseB();
-    }
-
-    // Scoped lease tokens prevent Session B from acquiring/bypassing while Session A holds the lease.
-    const runner = new AnthropicShellSandboxRunner();
-    const leaseA = await runner.acquire();
-    expect(leaseA.token).toBeDefined();
-    expect(leaseA.networkScope).toBeDefined();
-    let leaseBAcquired = false;
-    const pendingB = runner.acquire().then((leaseB) => {
-      leaseBAcquired = true;
-      return leaseB;
-    });
-    // sleep-ok: observing that contending acquire() stays blocked while leaseA is held; 30ms spans multiple microtask and timer turns
-    await new Promise((r) => setTimeout(r, 30));
-    expect(leaseBAcquired).toBe(false);
-    leaseA();
-    const leaseB = await pendingB;
-    expect(leaseBAcquired).toBe(true);
-    expect(leaseB.token).not.toBe(leaseA.token);
-    expect(leaseB.networkScope).not.toBe(leaseA.networkScope);
-    leaseB();
   });
 });

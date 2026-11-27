@@ -127,7 +127,7 @@ export function ensureSecurePrivateDir(dir: string): void {
 export function verifySocketOwnership(socketPath: string): void {
   const uid = process.getuid?.();
   const dir = path.dirname(socketPath);
-  if (fs.existsSync(dir)) {
+  try {
     const dirStat = fs.lstatSync(dir);
     if (dirStat.isSymbolicLink() || !dirStat.isDirectory()) {
       throw new Error(`Refusing daemon socket directory (not a real directory): ${dir}`);
@@ -135,6 +135,8 @@ export function verifySocketOwnership(socketPath: string): void {
     if (uid !== undefined && dirStat.uid !== uid) {
       throw new Error(`Refusing daemon socket directory owned by uid ${dirStat.uid}: ${dir}`);
     }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   try {
     const sockStat = fs.lstatSync(socketPath);

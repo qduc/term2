@@ -27,7 +27,7 @@ import {
 import type { Principal } from '../in-process-direct-types.js';
 import { ClientApiRpcError, toClientApiError } from './daemon-errors.js';
 import type { DaemonRpc } from './daemon-rpc.js';
-import type { StreamEventFrame } from './daemon-streams.js';
+import { buildSlowConsumerFrame, type StreamEventFrame } from './daemon-streams.js';
 import {
   attachIncrementalLineReader,
   UNIX_DRAIN_TIMEOUT_MS,
@@ -58,6 +58,7 @@ type ClientConnection = {
   handshaken: boolean;
   closed: boolean;
   inFlight: number;
+  pendingStreams: number;
   nextStreamSeq: number;
   readonly streams: Map<string, ActiveStream>;
   stopReader: () => void;
@@ -159,6 +160,7 @@ export class DaemonUnixServer {
       handshaken: false,
       closed: false,
       inFlight: 0,
+      pendingStreams: 0,
       nextStreamSeq: 0,
       streams: new Map(),
       stopReader: () => undefined,
@@ -342,8 +344,8 @@ export class DaemonUnixServer {
         message: negotiated.reason,
         retryable: false,
         details: {
-          hostVersion: CLIENT_API_VERSION,
-          minSupportedVersion: CLIENT_API_MIN_SUPPORTED_VERSION,
+          daemonProtocolVersion: CLIENT_API_VERSION,
+          daemonMinSupportedVersion: CLIENT_API_MIN_SUPPORTED_VERSION,
           daemonVersion: this.options.daemonVersion,
           activeTurnCount: this.options.activeTurnCount(),
         },
@@ -374,12 +376,18 @@ export class DaemonUnixServer {
     method: string,
     params: Record<string, unknown> | undefined,
   ): Promise<void> {
-    if (client.streams.size >= MAX_SUBSCRIPTIONS) {
+    if (client.streams.size + client.pendingStreams >= MAX_SUBSCRIPTIONS) {
       throw new ClientApiRpcError('busy', 'Maximum concurrent subscriptions reached on this connection.', {
         retryable: true,
       });
     }
-    const registration = await this.options.rpc.openStream(this.options.localOwnerPrincipal, method, params);
+    client.pendingStreams += 1;
+    let registration: Awaited<ReturnType<DaemonRpc['openStream']>>;
+    try {
+      registration = await this.options.rpc.openStream(this.options.localOwnerPrincipal, method, params);
+    } finally {
+      client.pendingStreams -= 1;
+    }
     if (client.closed) {
       registration.start(() => undefined)();
       return;
@@ -397,6 +405,10 @@ export class DaemonUnixServer {
     this.#sendOk(client, id, { ...registration.result, streamId });
     if (registration.initialEvent) {
       this.#enqueueStreamEvent(client, stream, registration.initialEvent);
+    }
+    if (client.closed || stream.closed) {
+      registration.start(() => undefined)();
+      return;
     }
     stream.unsubscribe = registration.start((frame) => {
       this.#enqueueStreamEvent(client, stream, frame);
@@ -416,13 +428,7 @@ export class DaemonUnixServer {
   #enqueueStreamEvent(client: ClientConnection, stream: ActiveStream, frame: StreamEventFrame): void {
     if (client.closed || stream.closed) return;
     if (!client.backpressured && stream.queue.length === 0) {
-      this.#writeFrame(client, {
-        kind: 'event',
-        streamId: stream.streamId,
-        event: frame.event,
-        payload: frame.payload,
-      });
-      if (frame.terminal) this.#retireStream(client, stream);
+      this.#sendEvent(client, stream, frame);
       return;
     }
     if (stream.queue.length >= this.#maxStreamQueue) {
@@ -431,27 +437,8 @@ export class DaemonUnixServer {
       if (transientIdx !== -1) {
         stream.queue.splice(transientIdx, 1);
       } else {
-        const terminalFrame: StreamEventFrame =
-          stream.method === 'session.attach'
-            ? {
-                event: 'session.resync_required',
-                terminal: true,
-                payload: {
-                  sessionId: stream.sessionId ?? '',
-                  reason: 'slow_consumer',
-                  earliestReplayableSequence: 1,
-                  latestSequence: 0,
-                },
-              }
-            : { event: 'session.list.resync_required', terminal: true, payload: { reason: 'slow_consumer' } };
         stream.queue.length = 0;
-        this.#writeFrame(client, {
-          kind: 'event',
-          streamId: stream.streamId,
-          event: terminalFrame.event,
-          payload: terminalFrame.payload,
-        });
-        this.#retireStream(client, stream);
+        this.#sendEvent(client, stream, buildSlowConsumerFrame(stream.method, stream.sessionId));
         return;
       }
     }
@@ -465,18 +452,16 @@ export class DaemonUnixServer {
       progress = false;
       for (const stream of [...client.streams.values()]) {
         if (stream.closed || stream.queue.length === 0) continue;
-        const next = stream.queue.shift()!;
         progress = true;
-        this.#writeFrame(client, {
-          kind: 'event',
-          streamId: stream.streamId,
-          event: next.event,
-          payload: next.payload,
-        });
-        if (next.terminal) this.#retireStream(client, stream);
+        this.#sendEvent(client, stream, stream.queue.shift()!);
         if (client.closed || client.backpressured) break;
       }
     }
+  }
+
+  #sendEvent(client: ClientConnection, stream: ActiveStream, frame: StreamEventFrame): void {
+    this.#writeFrame(client, { kind: 'event', streamId: stream.streamId, event: frame.event, payload: frame.payload });
+    if (frame.terminal) this.#retireStream(client, stream);
   }
 
   #sendOk(client: ClientConnection, id: string, result: Record<string, unknown>): void {

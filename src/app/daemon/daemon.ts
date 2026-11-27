@@ -290,6 +290,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       return shutdownPromise;
     };
 
+    const knownWorkspaceRoots = new Map<string, string>();
     const rpc = new DaemonRpc({
       host: localOwnerApp.host,
       sessionIndex,
@@ -297,7 +298,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       configuration,
       models: () => configuration.listModels(),
       skills: async (_principal, workspaceId) => {
-        const root = workspaceId && fs.existsSync(workspaceId) ? workspaceId : process.cwd();
+        const mapped = workspaceId ? knownWorkspaceRoots.get(workspaceId) : undefined;
+        const root = mapped ?? (workspaceId && fs.existsSync(workspaceId) ? workspaceId : process.cwd());
         return localOwnerApp.skills(root).map(({ name, description, isProjectLevel }) => ({
           name,
           description,
@@ -324,11 +326,11 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
               });
             }
           }
+          rpcHolder.current?.markShuttingDown();
           // Defer teardown one tick so the RPC response flushes cleanly to the caller first.
           setImmediate(() => {
             void performShutdown(params);
           });
-          return { accepted: true, draining: true };
         },
         async resolveCwdGrant(_principal, cwd) {
           let resolved: string;
@@ -340,7 +342,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           if (!fs.statSync(resolved).isDirectory()) {
             throw new DirectProtocolError('invalid_command', `Workspace path is not a directory: ${cwd}`);
           }
-          return localGrant(resolved);
+          const grant = localGrant(resolved);
+          knownWorkspaceRoots.set(grant.workspaceId, resolved);
+          return grant;
         },
         setPendingCreatePolicy(policy) {
           pendingCreatePolicy = policy;

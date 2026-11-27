@@ -219,7 +219,20 @@ export async function openDaemonStream(
   if (method === 'settings.subscribe') {
     const read = deps.configuration?.read;
     if (!read) throw new ClientApiRpcError('unavailable', 'Settings configuration unavailable.', { retryable: true });
-    const projection = await read.call(deps.configuration);
+    const buffered: StreamEventFrame[] = [];
+    let capturedEmit: ((frame: StreamEventFrame) => void) | null = null;
+    const { projection, unsubscribe } = await deps.mutations.runSettings(async () => {
+      const current = await read.call(deps.configuration);
+      const unsub = deps.mutations.subscribeSettings((update) => {
+        const frame: StreamEventFrame = {
+          event: 'settings.changed',
+          payload: { revision: update.revision, settings: update.settings },
+        };
+        if (capturedEmit) capturedEmit(frame);
+        else buffered.push(frame);
+      });
+      return { projection: current, unsubscribe: unsub };
+    });
     const initialEvent: StreamEventFrame = {
       event: 'settings.snapshot',
       payload: { revision: projection.revision, settings: { ...projection } },
@@ -227,10 +240,11 @@ export async function openDaemonStream(
     return {
       result: {},
       initialEvent,
-      start: (emit) =>
-        deps.mutations.subscribeSettings((update) => {
-          emit({ event: 'settings.changed', payload: { revision: update.revision, settings: update.settings } });
-        }),
+      start(emit) {
+        capturedEmit = emit;
+        for (const frame of buffered.splice(0)) emit(frame);
+        return unsubscribe;
+      },
     };
   }
 
@@ -240,4 +254,20 @@ export async function openDaemonStream(
   }
 
   throw new ClientApiRpcError('invalid_request', `Unknown stream method "${method}".`);
+}
+
+export function buildSlowConsumerFrame(method: string, sessionId?: string): StreamEventFrame {
+  if (method === 'session.attach') {
+    return {
+      event: 'session.resync_required',
+      terminal: true,
+      payload: {
+        sessionId: sessionId ?? '',
+        reason: 'slow_consumer',
+        earliestReplayableSequence: 1,
+        latestSequence: 0,
+      },
+    };
+  }
+  return { event: 'session.list.resync_required', terminal: true, payload: { reason: 'slow_consumer' } };
 }

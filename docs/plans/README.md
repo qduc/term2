@@ -57,6 +57,7 @@ work belongs in `engineering/`; do not duplicate a plan across features.
 | [Terminal UI](terminal-ui/) | Menus, input, themes, queue editing, TUI control |
 | [Settings](settings/) | Settings infrastructure, field editing, tool configuration |
 | [Web client](web-client/) | Gateway, frontend, LAN/TLS |
+| [Daemon](daemon/) | Singleton host process, Client API spec, every UI as a client |
 | [Engineering](engineering/) | Cross-cutting refactors, contracts, testing, logging |
 
 Existing multi-file plan groups stay together inside their feature folder.

@@ -56,12 +56,18 @@ function TurnElapsed({ turnId }: { turnId: string }) {
   );
 }
 
-/** An approval or question waiting for the user, or one recovered after a restart. */
+/** An approval or question waiting for the user, a live AI safety review, or a budget pause. */
 export function PendingInteraction() {
   const shell = useShell();
   const pendingInteraction = useSessionView((v) => v.pendingInteraction);
+  const reviewing = useSessionView((v) => v.session?.reviewingApprovals);
+  const pendingBudgets = useSessionView((v) => v.session?.pendingBudgets);
   const aborting = useChatFacts((f) => f.aborting);
   const sandboxNotice = useStoreSelector(shell.data.settings, (s) => s.data?.shellSandboxNotice);
+  const canTakeOver = useStoreSelector(
+    shell.data.settings,
+    (s) => s.data?.capabilities?.approvalReviewTakeover !== false,
+  );
   if (pendingInteraction?.state === 'pending')
     return (
       <div id="term2-pending-interaction" className="scroll-mt-4">
@@ -86,6 +92,78 @@ export function PendingInteraction() {
         onResolve={shell.session.resolveInteraction}
       />
     );
+  if (pendingInteraction?.state === 'unavailable') {
+    const budget = pendingBudgets?.find((entry) => entry.requestId === pendingInteraction.requestId);
+    if (budget) {
+      return (
+        <div
+          id="term2-pending-interaction"
+          role="region"
+          aria-label="Run budget paused"
+          className="scroll-mt-4 rounded-2xl border border-amber-300 bg-amber-50/70 p-4 text-sm dark:border-amber-700/60 dark:bg-amber-950/40"
+        >
+          <p className="font-medium text-amber-950 dark:text-amber-100">Run budget paused</p>
+          <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+            {budget.evidence.type === 'tool_stall'
+              ? `Repeated tool calls detected (${budget.evidence.toolName}).`
+              : `Run budget limit reached (${budget.evidence.stage}).`}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={aborting}
+              onClick={() =>
+                void shell.session.resolveInteraction({ interactionId: budget.requestId, revision: 1, answer: 'approve' })
+              }
+              className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+            >
+              Extend budget
+            </button>
+            <button
+              type="button"
+              disabled={aborting}
+              onClick={() =>
+                void shell.session.resolveInteraction({ interactionId: budget.requestId, revision: 1, answer: 'reject' })
+              }
+              className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+            >
+              Stop
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
+  const activeReview = reviewing?.[0];
+  if (activeReview) {
+    return (
+      <div
+        role="status"
+        aria-label="Safety review in progress"
+        className="flex items-center justify-between gap-3 rounded-xl border bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground"
+      >
+        <span className="min-w-0 truncate">
+          AI reviewer is checking <span className="font-medium text-foreground">{activeReview.toolName}</span>…
+        </span>
+        {canTakeOver && (
+          <button
+            type="button"
+            disabled={aborting}
+            onClick={() =>
+              void shell.session.resolveInteraction({
+                interactionId: activeReview.requestId,
+                revision: 1,
+                answer: 'take_over_review',
+              })
+            }
+            className="shrink-0 rounded-md border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            Decide myself
+          </button>
+        )}
+      </div>
+    );
+  }
   return null;
 }
 

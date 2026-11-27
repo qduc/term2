@@ -298,7 +298,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       rollover: true,
       backgroundShell: true,
       goalsWrite: false,
-      approvalReviewTakeover: false,
+      approvalReviewTakeover: true,
       taskActions: ['cancel', 'background'] as const,
     };
     const configuration = new DirectGlobalConfiguration(

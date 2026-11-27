@@ -50,6 +50,10 @@ export interface Term2SessionFacts {
   unorderedTranscript: boolean;
   /** True once this logical session has rolled over to a successor backing log. */
   rolledOver: boolean;
+  /** Approvals currently being evaluated by the AI safety reviewer (live only). */
+  reviewingApprovals: NonNullable<WireSnapshot['reviewingApprovals']>;
+  /** Pending run-budget pause requests. */
+  pendingBudgets: NonNullable<WireSnapshot['pendingBudgets']>;
 }
 
 /** The pending-interaction DTOs a frame carried, by request id (server-sse.ts, PendingInteractionEntry). */
@@ -417,6 +421,8 @@ function sessionFacts(snapshot: WireSnapshot): Term2SessionFacts {
     lastError: snapshot.lastError,
     unorderedTranscript: false,
     rolledOver: snapshot.backingSessionId !== snapshot.sessionId,
+    reviewingApprovals: snapshot.reviewingApprovals ?? [],
+    pendingBudgets: snapshot.pendingBudgets ?? [],
   };
 }
 

@@ -14,10 +14,6 @@
     }
   },
   "serverCommands": {
-    "take_over_review": {
-      "status": "deferred",
-      "reason": "src/host/server*.ts does not yet expose an HTTP route to take over an in-progress approval review while the safety arbiter is running; remove once the route and web UI indicator are wired."
-    },
     "cancel": {
       "status": "deferred",
       "reason": "POST /sessions/:id/abort hardcodes target: foreground and discardQueue: true without supporting returnSteers or queue-preserving cancel; remove once /abort exposes those options."
@@ -48,14 +44,6 @@
     }
   },
   "webEvents": {
-    "approval_review": {
-      "status": "deferred",
-      "reason": "web-client folds reviewingApprovals into the snapshot but does not yet render a live indicator or takeover action while the AI safety reviewer is evaluating an approval; remove once rendered."
-    },
-    "budget_opened": {
-      "status": "deferred",
-      "reason": "web-client renders run_budget interactions only when the gateway attaches an interaction DTO; standalone pendingBudgets without a DTO return null in TranscriptTail.tsx; remove once BudgetPanel parity is added."
-    },
     "goal_proposed": {
       "status": "deferred",
       "reason": "web-client renders active goals read-only via GoalBanner and does not yet surface or let users accept/dismiss proposed goals; remove once interactive goal management is added to serve and web-client."
@@ -65,22 +53,6 @@
     "agent.disabledProviders": {
       "status": "by-design",
       "reason": "Web manages provider enable/disable state through the dedicated Providers section and provider toggle endpoints rather than through WEB_SETTINGS safe defaults."
-    },
-    "agent.runBudget.escalation": {
-      "status": "deferred",
-      "reason": "Run-budget escalation mode is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
-    },
-    "agent.runBudget.maxActiveTimeMs": {
-      "status": "deferred",
-      "reason": "Run-budget active time limit is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
-    },
-    "agent.runBudget.maxUnpricedTokens": {
-      "status": "deferred",
-      "reason": "Run-budget unpriced token cap is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
-    },
-    "agent.runBudget.maxUsdMicros": {
-      "status": "deferred",
-      "reason": "Run-budget USD spend cap is not yet exposed in WEB_SETTINGS or web-client Settings; remove once the Limits section includes run-budget controls."
     },
     "app.notifications": {
       "status": "by-design",
@@ -121,10 +93,6 @@
     "hooks.user.enabled": {
       "status": "by-design",
       "reason": "Public shell hooks are intentionally terminal-only (appWiring.hooks), so hook settings are withheld from WEB_SETTINGS and web-client."
-    },
-    "shell.backgroundTimeout": {
-      "status": "deferred",
-      "reason": "Background shell timeout is not yet exposed in WEB_SETTINGS or web-client Settings Limits; remove once added to web-settings-policy.ts and settings-catalog.ts."
     },
     "ui.displayMode": {
       "status": "by-design",

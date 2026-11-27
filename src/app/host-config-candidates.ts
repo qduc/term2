@@ -217,17 +217,18 @@ export class DirectCandidateRegistry {
   ): CandidateBrowse['entries'][number] {
     try {
       const target = realpathSync(fullPath);
-      if (!contained(candidate.canonicalRoot, target)) {
-        return {
-          name,
-          type,
-          selectable: false,
-          rejectionReason: 'workspace_path_escape',
-          ...(type === 'symlink' ? { targetDisplay: 'outside-candidate-root' } : {}),
-        };
-      }
       if (!statSync(target).isDirectory())
         return { name, type, selectable: false, rejectionReason: 'workspace_not_directory' };
+      if (!contained(candidate.canonicalRoot, target)) {
+        if (type !== 'symlink') return { name, type, selectable: false, rejectionReason: 'workspace_path_escape' };
+        try {
+          accessSync(target, constants.R_OK | constants.X_OK);
+        } catch {
+          return { name, type, selectable: false, rejectionReason: 'workspace_not_readable' };
+        }
+        // No child token or target path: the picker validates the link as a new root.
+        return { name, type, selectable: true };
+      }
       const childToken = this.#token(candidate, target);
       return {
         name,

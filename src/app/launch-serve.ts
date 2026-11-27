@@ -19,6 +19,7 @@ import type { Principal } from '../host/in-process-direct-types.js';
 import type { ServerSessionPresentation, ServerTransportOptions } from '../host/server-contracts.js';
 import type { WireSnapshot } from '../protocol/wire.js';
 import { DirectProtocolError } from '../protocol/errors.js';
+import { createDurableGoal } from '../session/goal.js';
 import { createDirectApplication, type DirectApplication } from './application.js';
 import { prepareDirectSessionConfigurationCommand } from './config-settings.js';
 import { scanDirectoryEntries } from './file-service.js';
@@ -263,6 +264,30 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
       owned(principal, snapshot.sessionId, snapshot.seq);
       return prepareDirectSessionConfigurationCommand(body, snapshot.model);
     },
+    async setGoal(principal, snapshot, action) {
+      owned(principal, snapshot.sessionId, snapshot.seq);
+      if (action.action === 'clear') {
+        await app.setGoal(snapshot.sessionId, undefined, 'user');
+        return;
+      }
+      if (action.action === 'set') {
+        await app.setGoal(snapshot.sessionId, createDurableGoal(action.text, action.successCriteria), 'user');
+        return;
+      }
+      if (action.action === 'accept_proposal') {
+        const proposal = snapshot.goalProposal;
+        if (!proposal) throw new DirectProtocolError('rejected', 'No proposed goal to accept.');
+        await app.setGoal(snapshot.sessionId, createDurableGoal(proposal.text, proposal.successCriteria), 'user');
+        return;
+      }
+      const current = await app.goal(snapshot.sessionId);
+      if (!current) throw new DirectProtocolError('rejected', 'No durable goal is set.');
+      await app.setGoal(
+        snapshot.sessionId,
+        { ...current, status: action.action === 'achieved' ? 'achieved' : 'abandoned' },
+        'user',
+      );
+    },
   };
 }
 
@@ -297,7 +322,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       sessionBrowser: true,
       rollover: true,
       backgroundShell: true,
-      goalsWrite: false,
+      goalsWrite: true,
       approvalReviewTakeover: true,
       taskActions: ['cancel', 'background'] as const,
     };

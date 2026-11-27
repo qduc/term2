@@ -43,28 +43,86 @@ export function SessionNotices() {
   );
 }
 
-/** The session's active goal, while a chat is open. */
+/** The session's active goal and any proposed goal, with interactive actions when supported. */
 export function GoalBanner() {
+  const shell = useShell();
   const sessionId = useChatFacts((f) => f.sessionId);
   const activeGoal = useSessionView((v) => v.session?.goal);
+  const goalProposal = useSessionView((v) => v.session?.goalProposal);
   const activeVerification = useSessionView((v) => v.session?.verification);
-  if (!sessionId || !activeGoal) return null;
+  const canWrite = useStoreSelector(shell.data.settings, (s) => s.data?.capabilities?.goalsWrite !== false);
+  if (!sessionId || (!activeGoal && !goalProposal)) return null;
   return (
-    <div className="flex items-start gap-2.5 rounded-2xl border border-teal-500/25 bg-teal-500/[0.06] px-4 py-3 text-xs dark:border-teal-400/20 dark:bg-teal-500/10">
-      <Target className="mt-0.5 h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-teal-950 dark:text-teal-100">
-          Active goal{typeof activeGoal.status === 'string' ? ` · ${activeGoal.status}` : ''}
-        </p>
-        <p className="mt-0.5 text-zinc-700 dark:text-zinc-300">
-          {activeGoal.text}
-        </p>
-        {activeVerification && (
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Verification: {String(activeVerification.status ?? 'recorded')}
-          </p>
-        )}
-      </div>
+    <div className="space-y-2">
+      {activeGoal && (
+        <div className="flex items-start gap-2.5 rounded-2xl border border-teal-500/25 bg-teal-500/[0.06] px-4 py-3 text-xs dark:border-teal-400/20 dark:bg-teal-500/10">
+          <Target className="mt-0.5 h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-teal-950 dark:text-teal-100">
+              Goal{typeof activeGoal.status === 'string' ? ` · ${activeGoal.status}` : ''}
+            </p>
+            <p className="mt-0.5 text-zinc-700 dark:text-zinc-300">{activeGoal.text}</p>
+            {activeVerification && (
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                Verification: {String(activeVerification.status ?? 'recorded')}
+              </p>
+            )}
+            {canWrite && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {activeGoal.status === 'active' && (
+                  <>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={() => void shell.session.setGoal({ action: 'achieved' })}
+                    >
+                      Mark achieved
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => void shell.session.setGoal({ action: 'abandon' })}
+                    >
+                      Abandon
+                    </Button>
+                  </>
+                )}
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => void shell.session.setGoal({ action: 'clear' })}
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {goalProposal && (
+        <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-muted/40 px-4 py-3 text-xs">
+          <Target className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-foreground">Suggested goal</p>
+            <p className="mt-0.5 text-muted-foreground">{goalProposal.text}</p>
+            {canWrite && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => void shell.session.setGoal({ action: 'accept_proposal' })}
+                >
+                  Accept goal
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

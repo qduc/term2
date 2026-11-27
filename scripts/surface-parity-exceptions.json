@@ -43,12 +43,7 @@
       "reason": "Pre-send input-surge and large-uncached-context confirmation is intentionally terminal-only for now; web submits directly without a preview round-trip."
     }
   },
-  "webEvents": {
-    "goal_proposed": {
-      "status": "deferred",
-      "reason": "web-client renders active goals read-only via GoalBanner and does not yet surface or let users accept/dismiss proposed goals; remove once interactive goal management is added to serve and web-client."
-    }
-  },
+  "webEvents": {},
   "settings": {
     "agent.disabledProviders": {
       "status": "by-design",

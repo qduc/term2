@@ -30,6 +30,7 @@ export const rpc = {
   tasks: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/tasks`,
   files: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/files`,
   quota: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/quota`,
+  goal: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/goal`,
   interactions: (sessionId: string, interactionId: string) =>
     `/private/agent/v1/sessions/${sessionId}/interactions/${interactionId}`,
   sessionConfig: (sessionId: string) => `/private/agent/v1/sessions/${sessionId}/config`,

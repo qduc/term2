@@ -66,4 +66,6 @@ export type DirectHostDeps = {
   ): DirectSessionState['workspace'] | Promise<DirectSessionState['workspace']>;
   /** Actual M3/M4 operations, if installed. Missing operations fail unavailable. */
   capabilities?(session: DirectSession): DirectCommandCapabilities;
+  /** Automatically drain idle background check-in/completion notices when no client is attached (term2 serve). */
+  readonly autoDrainBackgroundNotifications?: boolean;
 };

@@ -331,6 +331,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       // By-design: see scripts/surface-parity-exceptions.json (appWiring.mcpCatalog, appWiring.hooks).
       mcpCatalog: null,
       hooks: null,
+      autoDrainBackgroundNotifications: true,
       async authorizeModel(next, previous) {
         // A same-selection refresh/rollover does not depend on a fresh catalog.
         if (next.provider === previous.provider && next.model === previous.model) return;

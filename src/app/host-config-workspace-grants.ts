@@ -5,8 +5,16 @@ import { DirectHostConfigError } from './host-config-error.js';
 
 export type WorkspaceAccess = 'read' | 'read_write';
 export type WorkspaceKind = 'directory' | 'host' | 'ssh';
+export type SshGrantTarget = {
+  readonly requestedTarget: string;
+  readonly target: string;
+  readonly host: string;
+  readonly username: string;
+  readonly port: number;
+  readonly identityFile?: string;
+};
 
-/** Durable local grant. Dynamic grants are the only ones written to the direct grant file. */
+/** Durable local or SSH grant. Dynamic grants are the only ones written to the direct grant file. */
 export type GrantRecord = {
   readonly workspaceId: string;
   readonly ownerUserId: string;
@@ -16,6 +24,7 @@ export type GrantRecord = {
   readonly grantVersion: number;
   readonly dynamic: boolean;
   readonly kind?: WorkspaceKind;
+  readonly ssh?: SshGrantTarget;
 };
 
 const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/;
@@ -148,11 +157,13 @@ export function grantFromInput(value: {
   readonly grantVersion: number;
   readonly dynamic: boolean;
   readonly kind?: WorkspaceKind;
+  readonly ssh?: SshGrantTarget;
 }): GrantRecord {
   if (!isOpaqueId(value.workspaceId) || !isOwner(value.ownerUserId) || !isLabel(value.label)) {
     throw new DirectHostConfigError('configuration_invalid', 'startup');
   }
-  if (!path.isAbsolute(value.root) || value.root.includes('\0')) {
+  const isSsh = value.kind === 'ssh';
+  if ((isSsh ? !value.root.startsWith('/') : !path.isAbsolute(value.root)) || value.root.includes('\0')) {
     throw new DirectHostConfigError('configuration_invalid', 'startup');
   }
   if (
@@ -160,6 +171,9 @@ export function grantFromInput(value: {
     !Number.isSafeInteger(value.grantVersion) ||
     value.grantVersion < 1
   ) {
+    throw new DirectHostConfigError('configuration_invalid', 'startup');
+  }
+  if (isSsh && !isSshTarget(value.ssh)) {
     throw new DirectHostConfigError('configuration_invalid', 'startup');
   }
   return {
@@ -171,18 +185,47 @@ export function grantFromInput(value: {
     grantVersion: value.grantVersion,
     dynamic: value.dynamic,
     ...(value.kind ? { kind: value.kind } : {}),
+    ...(value.ssh ? { ssh: value.ssh } : {}),
   };
+}
+
+function isSshTarget(value: unknown): value is SshGrantTarget {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.requestedTarget === 'string' &&
+    v.requestedTarget.length > 0 &&
+    typeof v.target === 'string' &&
+    v.target.startsWith('ssh://') &&
+    typeof v.host === 'string' &&
+    v.host.length > 0 &&
+    typeof v.username === 'string' &&
+    v.username.length > 0 &&
+    typeof v.port === 'number' &&
+    Number.isInteger(v.port) &&
+    v.port >= 1 &&
+    v.port <= 65535 &&
+    (v.identityFile === undefined || typeof v.identityFile === 'string')
+  );
 }
 
 function parseGrant(value: unknown): GrantRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new DirectHostConfigError('configuration_invalid', 'startup');
   const record = value as Record<string, unknown>;
-  const allowed = ['workspaceId', 'ownerUserId', 'label', 'root', 'access', 'grantVersion'];
+  const allowed = ['workspaceId', 'ownerUserId', 'label', 'root', 'access', 'grantVersion', 'kind', 'ssh'];
   if (!Object.keys(record).every((key) => allowed.includes(key)) || typeof record.root !== 'string') {
     throw new DirectHostConfigError('configuration_invalid', 'startup');
   }
   if (!Number.isSafeInteger(record.grantVersion)) throw new DirectHostConfigError('configuration_invalid', 'startup');
+  const kind =
+    record.kind === undefined
+      ? undefined
+      : record.kind === 'directory' || record.kind === 'host' || record.kind === 'ssh'
+      ? record.kind
+      : (() => {
+          throw new DirectHostConfigError('configuration_invalid', 'startup');
+        })();
   return grantFromInput({
     workspaceId: record.workspaceId,
     ownerUserId: record.ownerUserId,
@@ -191,6 +234,8 @@ function parseGrant(value: unknown): GrantRecord {
     access: record.access,
     grantVersion: record.grantVersion as number,
     dynamic: true,
+    ...(kind ? { kind } : {}),
+    ...(record.ssh !== undefined ? { ssh: record.ssh as SshGrantTarget } : {}),
   });
 }
 
@@ -202,6 +247,8 @@ function persisted(record: GrantRecord): Omit<GrantRecord, 'dynamic'> {
     root: record.root,
     access: record.access,
     grantVersion: record.grantVersion,
+    ...(record.kind ? { kind: record.kind } : {}),
+    ...(record.ssh ? { ssh: record.ssh } : {}),
   };
 }
 

@@ -43,6 +43,7 @@ import {
   DirectWorkspaceAuthority,
   serverWorkspaceAdministration,
 } from './host-config.js';
+import { prepareServeSshSurface } from './remote-context.js';
 import type { DirectLaunchRequest } from './launch-types.js';
 import { warnIfSandboxUnavailable } from './sandbox-warning.js';
 
@@ -177,13 +178,7 @@ function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, ow
         await access.authorize(principal, request);
       },
       resolveGrant: (principal, grant) => access.resolveWorkspace(principal, grant),
-      resolveStored(root, identity) {
-        // Grants are local only, so a recorded SSH target can never match one.
-        if (identity && identity.target !== 'local') {
-          throw new DirectProtocolError('forbidden', 'This server does not run SSH sessions.');
-        }
-        return access.resolveStoredRoot(root, identity);
-      },
+      resolveStored: (root, identity) => access.resolveStoredRoot(root, identity),
       // A read grant is a real grant here, enforced by the tools. Stored roots with no grant already threw.
       canRun: () => true,
       createSession: (workspace, model, binding) => access.sessions.create(workspace, model, binding),
@@ -233,6 +228,7 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
     async configuration(principal, snapshot) {
       const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
       const { workspace } = grants.resolveWorkspace(principal, grant);
+      const kind = grants.kindOf(grant.workspaceId);
       const current = await app.sessionConfiguration(snapshot.sessionId);
       const { defaultsRevision } = await configuration.read();
       return {
@@ -245,7 +241,7 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
         toolPolicy: directServeToolPosture(
           workspace.access === 'read_write' && current.workspaceAccess === 'read_write' && allowWrite,
           current.approvalMode !== 'off',
-          { allowUnsandboxed: grants.kindOf(grant.workspaceId) === 'host' },
+          { allowUnsandboxed: kind !== 'directory', sshEnabled: kind === 'ssh' },
         ),
         configRevision: current.commandRevision,
         defaultsRevision,
@@ -254,12 +250,13 @@ function presentation(options: PresentationOptions): DirectServeSessionPresentat
     async listFiles(principal, snapshot) {
       const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
       const { workspace } = grants.resolveWorkspace(principal, grant);
-      if (grants.kindOf(grant.workspaceId) === 'host') return { entries: [], truncated: true };
+      if (grants.kindOf(grant.workspaceId) !== 'directory') return { entries: [], truncated: true };
       const scanned = await scanDirectoryEntries(workspace.root, { maxDepth: 12, maxTotalEntries: 2_000 });
       return { entries: scanned.entries, truncated: scanned.truncated };
     },
     prepareSkillText(principal, snapshot, skillName, text) {
       const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
+      if (grants.kindOf(grant.workspaceId) === 'ssh') return null;
       const { workspace } = grants.resolveWorkspace(principal, grant);
       const available = app.skills(workspace.root);
       const skill = available.find((candidate) => candidate.name.toLowerCase() === skillName.toLowerCase());
@@ -404,6 +401,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
         // By-design: see scripts/surface-parity-exceptions.json (appWiring.mcp).
         mcp: undefined,
       }),
+      prepareSurface: (_sessionId, ctx) => prepareServeSshSurface(grants, ctx),
       // By-design: see scripts/surface-parity-exceptions.json (appWiring.mcpCatalog, appWiring.hooks).
       mcpCatalog: null,
       hooks: null,
@@ -425,6 +423,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
         workspaces: serverWorkspaceAdministration(grants, closeWorkspaceSessions),
         models: () => configuration.listModels(),
         skills: (principal, workspaceId) => {
+          if (workspaceId && grants.kindOf(workspaceId) === 'ssh') return [];
           const cwd = workspaceId
             ? grants.resolveWorkspace(principal, grants.resolveGrant(principal, workspaceId)).workspace.root
             : homedir();

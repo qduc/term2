@@ -81,6 +81,14 @@ export type DirectRuntimeOptions = {
     sessionId: string,
     context?: { readonly workspace: Workspace; readonly binding?: DirectBinding },
   ) => DirectLauncherSurface;
+  /** Optional async per-session surface preparation (e.g. opening a per-session SSH connection). */
+  readonly prepareSurface?: (
+    sessionId: string,
+    context: { readonly workspace: Workspace; readonly binding?: DirectBinding },
+  ) => Promise<{
+    readonly surface?: Partial<DirectLauncherSurface>;
+    readonly dispose?: () => Promise<void>;
+  }>;
   /** Decides whether a session may move to another model. Without it, none may. */
   readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void | Promise<void>;
   /** After any resumed selection is restored, so this reports what actually runs. */
@@ -185,8 +193,13 @@ export function createDirectRuntimes(
         if (key === 'tools.maxOutputChars') trimConfig.maxCharacters = settings.get('tools.maxOutputChars');
         if (key === 'shell.maxOutputLines') trimConfig.maxLines = settings.get('shell.maxOutputLines');
       });
+      const prepared = await options.prepareSurface?.(context.id, {
+        workspace: context.workspace,
+        binding: context.binding,
+      });
       const suppliedSurfaceOptions = {
         ...options.surface(context.id, { workspace: context.workspace, binding: context.binding }),
+        ...prepared?.surface,
         trimConfig: () => trimConfig,
         sandboxAvailable,
       };
@@ -457,7 +470,9 @@ export function createDirectRuntimes(
           reasoning.clear();
           records.delete(context.id);
           stopTrimUpdates();
-          const results = await Promise.allSettled(generations.map(async (dispose) => dispose()));
+          const tasks = [...generations.map(async (dispose) => dispose())];
+          if (prepared?.dispose) tasks.push(prepared.dispose());
+          const results = await Promise.allSettled(tasks);
           const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
           if (failures.length) throw new AggregateError(failures, 'A tool graph could not be released.');
         },

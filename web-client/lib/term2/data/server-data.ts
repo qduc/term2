@@ -18,6 +18,7 @@ import type {
   SessionProjection,
   SettingsProjection,
   SkillSummary,
+  SshHostAlias,
   WorkspaceAlias,
   WorkspaceFileEntry,
 } from '../types';
@@ -54,11 +55,18 @@ export interface ServerData {
   readonly settings: Resource<SettingsProjection | null>;
   readonly models: Resource<ModelSummary[]>;
   readonly skills: Resource<SkillSummary[]>;
+  readonly sshHosts: Resource<SshHostAlias[]>;
   readonly files: Resource<WorkspaceFileEntry[]>;
   readonly folders: Resource<WorkspaceAlias[]>;
   readonly chats: Resource<ChatList>;
   /** What a folder pick returned in this page load. */
   readonly folderDetails: Store<Readonly<Record<string, FolderDetail>>>;
+  addSshWorkspace(body: {
+    target: string;
+    port?: number;
+    directory?: string;
+    access: 'read' | 'read_write';
+  }): Promise<WorkspaceAlias>;
   ensureFiles(scope: FileScope): void;
   loadMoreChats(): Promise<void>;
   chatCreated(projection: SessionProjection): void;
@@ -107,6 +115,10 @@ export function createServerData(options: { localControlEnabled: boolean }): Ser
   const skills = createResource<SkillSummary[]>({
     initial: NO_SKILLS,
     fetch: async (key) => (await client.listSkills(key || undefined)).skills,
+  });
+  const sshHosts = createResource<SshHostAlias[]>({
+    initial: [],
+    fetch: async () => (await client.listSshHosts()).hosts,
   });
   const files = createResource<WorkspaceFileEntry[]>({
     initial: NO_FILES,
@@ -159,10 +171,16 @@ export function createServerData(options: { localControlEnabled: boolean }): Ser
     settings,
     models,
     skills,
+    sshHosts,
     files,
     folders,
     chats,
     folderDetails,
+    async addSshWorkspace(body) {
+      const workspace = await client.addSshWorkspace(body);
+      await folders.refresh().catch(() => null);
+      return workspace;
+    },
     ensureFiles: (scope) => files.ensure(fileScopeKey(scope)),
     async loadMoreChats() {
       const cursor = chats.get().data.nextCursor;

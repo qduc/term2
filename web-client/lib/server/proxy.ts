@@ -13,6 +13,8 @@ export const rpc = {
   candidatesValidate: '/private/agent/v1/workspace/candidates/validate',
   candidatesBrowse: '/private/agent/v1/workspace/candidates/browse',
   candidatesSelect: '/private/agent/v1/workspace/candidates/select',
+  workspaceSshHosts: '/private/agent/v1/workspaces/ssh-hosts',
+  workspaceSshAdd: '/private/agent/v1/workspaces/ssh',
   models: '/private/agent/v1/models',
   settings: '/private/agent/v1/settings',
   providerPresets: '/private/agent/v1/providers/presets',

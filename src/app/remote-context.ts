@@ -1,6 +1,11 @@
 import { posix } from 'node:path';
+import type { Principal } from '../host/index.js';
+import type { Workspace } from '../tools/index.js';
 import { quoteShellArg } from '../tools/ssh-service.js';
-import type { DirectRemoteWorkspace } from './remote.js';
+import { requirePrincipal } from './host-config-error.js';
+import type { DirectWorkspaceAuthority, WorkspaceAccess, WorkspaceAlias } from './host-config-workspace.js';
+import { resolveDirectRemoteConnection } from './remote-config.js';
+import { openDirectRemoteWorkspace, type DirectRemoteWorkspace } from './remote.js';
 
 export type DirectRemoteProjectContext = {
   readonly environment: string;
@@ -43,4 +48,86 @@ export async function loadDirectRemoteProjectContext(
       instructionsFound: true,
     };
   });
+}
+
+/** Verify SSH connectivity, resolve the physical remote root, and persist an SSH workspace grant. */
+export async function addServeSshWorkspace(
+  grants: DirectWorkspaceAuthority,
+  principal: Principal,
+  input: {
+    readonly target: string;
+    readonly port?: number;
+    readonly directory?: string;
+    readonly access: WorkspaceAccess;
+  },
+): Promise<WorkspaceAlias> {
+  requirePrincipal(principal);
+  const directory = input.directory?.trim() || undefined;
+  const connection = await resolveDirectRemoteConnection({
+    target: input.target.trim(),
+    ...(input.port !== undefined ? { port: input.port } : {}),
+    ...(directory ? { directory } : {}),
+    lite: !directory,
+    access: input.access,
+  });
+  const remote = await openDirectRemoteWorkspace({
+    connection,
+    authorize: (workspace) => ({ workspace, allowUnconfinedShell: workspace.access === 'read_write' }),
+  });
+  const resolvedRoot = remote.workspace.root;
+  await remote.close().catch(() => undefined);
+  const dirSuffix = directory ? `:${directory}` : ':~';
+  return grants.addSshGrant(principal, {
+    ssh: {
+      requestedTarget: connection.requestedTarget,
+      target: connection.target,
+      host: connection.config.host,
+      username: connection.config.username,
+      port: connection.config.port,
+      ...(connection.config.identityFile ? { identityFile: connection.config.identityFile } : {}),
+    },
+    root: resolvedRoot,
+    access: input.access,
+    label: `${connection.requestedTarget}${dirSuffix}`,
+  });
+}
+
+/** Open a per-session SSH workspace and load remote AGENTS.md when a serve session binds to an SSH grant. */
+export async function prepareServeSshSurface(
+  grants: DirectWorkspaceAuthority,
+  context: { readonly workspace: Workspace; readonly binding?: { readonly client: string; readonly id: string } },
+) {
+  const ssh = context.binding ? grants.sshTargetOf(context.binding.id) : undefined;
+  if (!ssh || context.workspace.target === 'local') return {};
+  const remote = await openDirectRemoteWorkspace({
+    connection: {
+      requestedTarget: ssh.requestedTarget,
+      target: ssh.target,
+      config: {
+        host: ssh.host,
+        username: ssh.username,
+        port: ssh.port,
+        agent: process.env.SSH_AUTH_SOCK,
+        ...(ssh.identityFile ? { identityFile: ssh.identityFile } : {}),
+      },
+      directory: context.workspace.root,
+      access: context.workspace.access,
+    },
+    authorize: (workspace) => ({ workspace, allowUnconfinedShell: workspace.access === 'read_write' }),
+  });
+  try {
+    const controller = new AbortController();
+    const { instructions } = await loadDirectRemoteProjectContext(remote, controller.signal);
+    return {
+      surface: {
+        remote,
+        projectInstructions: instructions,
+        allowUnsandboxed: context.workspace.access === 'read_write',
+      },
+      dispose: () => remote.close(),
+    };
+  } catch (error) {
+    await remote.close().catch(() => undefined);
+    throw error;
+  }
 }

@@ -12,6 +12,8 @@ export const ASSERTION_PURPOSES = Object.freeze([
   'workspace_candidate_validate',
   'workspace_candidate_browse',
   'workspace_candidate_select',
+  'workspace_ssh_hosts',
+  'workspace_ssh_add',
   'workspace_remove',
   'workspace_access_update',
   'model_list',

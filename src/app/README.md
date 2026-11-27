@@ -62,6 +62,9 @@ host's public `SettingsProjection` rather than maintaining another projection
 type. Reads redact values through `safeValue`; writes enforce the allowlist,
 revision, and persistence result before returning a new projection. The public
 value union is not permission to serialize arbitrary settings objects.
+`launchServe` also asks this owner for the default model of a new session: the
+launch selection is a stale copy once the browser changes global settings, so a
+new chat must start from the value the settings API just wrote.
 
 `createDirectTuiSettings` in `launch-tui-settings.ts` acknowledges hidden profile
 compatibility aliases without switching or clearing history. Dropped/unknown

@@ -34,7 +34,11 @@ export type ModelStep =
   | { readonly error: { readonly status: number; readonly message: string } };
 
 type WireMessage = { role: string; content?: unknown };
-export type ModelRequest = { messages: WireMessage[]; tools?: { function: { name: string } }[] };
+export type ModelRequest = {
+  readonly model?: string;
+  readonly messages: WireMessage[];
+  readonly tools?: { function: { name: string } }[];
+};
 
 export type ModelDouble = {
   readonly baseUrl: string;
@@ -96,7 +100,8 @@ export async function startModelDouble(scripts: Record<string, readonly ModelSte
   const server = http.createServer((req, res) => {
     if (req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }] }));
+      // Two catalog entries so flows can pick a different model without a custom entry.
+      res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }, { id: 'mock-beta' }] }));
       return;
     }
     let body = '';

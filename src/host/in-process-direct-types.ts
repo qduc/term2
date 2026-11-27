@@ -51,6 +51,12 @@ export type DirectAccess =
 export type DirectHostDeps = {
   readonly sessions: DirectSessionStore;
   readonly defaultModel: DirectSessionState['model'];
+  /**
+   * Current global default for a newly created session. Serve overrides this so a
+   * model changed through the browser's settings API reaches the next new chat;
+   * otherwise the launch-time `defaultModel` still applies.
+   */
+  readonly resolveDefaultModel?: () => DirectSessionState['model'] | Promise<DirectSessionState['model']>;
   /** Required on every operation, including command sends; no implicit local/remote allow. */
   authorize(principal: Principal, access: DirectAccess): void | Promise<void>;
   /** Validates the grant and returns a workspace; no unchecked path from a client. */

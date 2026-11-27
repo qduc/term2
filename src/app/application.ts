@@ -46,6 +46,11 @@ export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly authority: DirectAuthority | DirectAuthorityFactory;
   /** The modes with public hooks today: the terminal UI and headless. ACP and serve have none. */
   readonly hooks?: DirectHookOptions;
+  /**
+   * Live default for new sessions. Serve supplies its global settings owner so
+   * browser settings writes reach the next chat; other modes use the launch selection.
+   */
+  readonly resolveDefaultModel?: () => ModelRef | Promise<ModelRef>;
 };
 
 /** Read from the session's own log and runtime, for clients that report it. */
@@ -191,6 +196,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
   const host = createDirectInProcessHost({
     sessions,
     defaultModel: selection.settings.get('agent.modelSelection') as ModelRef,
+    ...(options.resolveDefaultModel ? { resolveDefaultModel: options.resolveDefaultModel } : {}),
     authorize: (principal, access) => authority.authorize(principal, access),
     resolveWorkspace: (principal, grant) => authority.resolveGrant(principal, grant),
     capabilities: (session) => applicationCapabilities(store, runtimes, options.conversationsDir, session),

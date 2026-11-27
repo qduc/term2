@@ -306,6 +306,9 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     const app = await createDirectApplication({
       conversationsDir: directory,
       selection,
+      // The browser changes global settings through `configuration`; launch-time
+      // selection settings are a stale copy and must not seed a new chat's model.
+      resolveDefaultModel: () => configuration.currentModelSelection(),
       surface: () => ({
         autoApprove: false,
         interactive: true,

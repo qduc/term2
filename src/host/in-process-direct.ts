@@ -212,7 +212,9 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       open();
       const workspace = await deps.resolveWorkspace(principal, grant);
       open();
-      const pending = deps.sessions.create(workspace, deps.defaultModel);
+      const model = deps.resolveDefaultModel ? await deps.resolveDefaultModel() : deps.defaultModel;
+      open();
+      const pending = deps.sessions.create(workspace, model);
       creates.add(pending);
       try {
         const created = await pending;

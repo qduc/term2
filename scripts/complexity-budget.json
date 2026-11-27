@@ -50,8 +50,8 @@
   },
   "fileCeilings": {
     "src/app/application.ts": {
-      "lines": 503,
-      "reason": "Composition root for DirectApplication; three lines forward the optional autoDrainBackgroundNotifications flag to createDirectInProcessHost so term2 serve drains idle background check-in notices without a connected browser tab. Splitting those three lines out would add artificial plumbing."
+      "lines": 509,
+      "reason": "Composition root for DirectApplication; forwards optional autoDrainBackgroundNotifications and onSessionLifecycle hooks to createDirectInProcessHost and exposes listStoredSessions() so the host SessionIndex seeds and tracks live sessions without reading logs. Splitting six pass-through forwarding lines out would add artificial plumbing; this ceiling can drop once application.ts splits legacy headlessPolicy into session/ in Step 14a."
     },
     "src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1021,
@@ -274,8 +274,8 @@
       "reason": "The direct child launcher prepares one launch: definition resolution, worktree pinning, the child's tool graph and its instructions. Four lines over the default limit withhold shell from every child of a read session whose sandbox cannot run, at the one point all launch paths (role, agent_spec, run_code, continuation) share. Lower the ceiling if launch preparation is split from tool-graph assembly."
     },
     "web-client/lib/api/term2.ts": {
-      "lines": 1290,
-      "reason": "The browser's one HTTP facade and its response validators; recorded when the gate first covered web-client (2026-11). Split validators from the client object when it is next reworked. Ten lines (#444) make validateModels skip malformed entries; 34 lines (#454) add validateServerCapabilities; 6 lines (#459) add setGoal(); 19 lines (#460) add workspace-scoped listSkills, optional abort options, and handoff(); 2 lines (#462) validate WorkspaceAlias.kind; 16 lines add listSshHosts() and addSshWorkspace()."
+      "lines": 1324,
+      "reason": "The browser's one HTTP facade and its response validators; recorded when the gate first covered web-client (2026-11). Split validators from the client object when it is next reworked. Ten lines (#444) make validateModels skip malformed entries; 34 lines (#454) add validateServerCapabilities; 6 lines (#459) add setGoal(); 19 lines (#460) add workspace-scoped listSkills, optional abort options, and handoff(); 2 lines (#462) validate WorkspaceAlias.kind; 16 lines (#463) add listSshHosts() and addSshWorkspace(); 34 lines add openSessionListEvents() and allow optional Client API 1.0 SessionListItem metadata fields in validateSessionItem()."
     },
     "web-client/components/term2/settings/ProvidersSection.tsx": {
       "lines": 977,

@@ -112,3 +112,27 @@ it('a stream started with an already aborted signal rejects and leaves no open c
   // If the request reached the gateway at all, its connection is already closing.
   await Promise.all(gateway.requests.map(closed));
 });
+
+it('aborting a session-list stream before headers closes the gateway socket and sends Client API version header', async () => {
+  const gateway = await silentGateway();
+  const controller = new AbortController();
+  const pending = client(gateway.socketPath).stream({
+    userId: 'local-owner',
+    purpose: 'session_list_events',
+    rpcPath: '/private/agent/v1/sessions/events',
+    query: '?limit=50',
+    signal: controller.signal,
+  });
+  const outcome = pending.then(
+    () => 'resolved',
+    (error: { code?: string }) => error.code,
+  );
+
+  await expect.poll(() => gateway.requests.length).toBe(1);
+  expect(gateway.requests[0]!.url).toBe('/private/agent/v1/sessions/events?limit=50');
+  expect(gateway.requests[0]!.headers['x-term2-client-api-version']).toBe('1.0');
+  controller.abort();
+
+  expect(await outcome).toBe('gateway_unavailable');
+  await closed(gateway.requests[0]!);
+});

@@ -185,7 +185,6 @@ export function createShellOperations(runtime: {
       const openChatWorkspace = sessionId ? openChatFolder ?? selectedWorkspaceId : null;
       // Its chats no longer open: back to the welcome screen (the machine navigates away from the open chat).
       if (change.kind === 'removed' && openChatWorkspace === workspaceId) dispatch({ type: 'DRAFT_DISCARDED' });
-      void data.chats.refresh().catch(() => undefined);
       try {
         await data.folders.refresh();
       } catch {
@@ -398,7 +397,6 @@ export function createShellOperations(runtime: {
       if (!sessionId) return;
       try {
         const { sessionId: nextId } = await term2Client.handoff(sessionId);
-        void data.chats.refresh();
         dispatch({ type: 'CHAT_PICKED', sessionId: nextId, workspaceId: selectedWorkspaceId ?? null });
       } catch (error) {
         notice('config', error instanceof Error ? error.message : 'Could not hand off chat.');

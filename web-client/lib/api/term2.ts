@@ -662,11 +662,24 @@ function validateWorkspace(value: unknown): WorkspacePage['workspaces'][number] 
     ...(input.kind ? { kind: input.kind as 'directory' | 'host' | 'ssh' } : {}),
   };
 }
-function validateSessionItem(value: unknown): SessionPage['sessions'][number] {
+export function validateSessionItem(value: unknown): SessionPage['sessions'][number] {
   const input = object(value);
   if (
     Object.keys(input).some(
-      (key) => !['id', 'workspaceId', 'status', 'createdAt', 'updatedAt', 'latestSequence', 'title', 'model'].includes(key),
+      (key) =>
+        ![
+          'id',
+          'workspaceId',
+          'status',
+          'awaitingKind',
+          'createdAt',
+          'updatedAt',
+          'latestSequence',
+          'title',
+          'model',
+          'pendingInteractionCount',
+          'activeBackgroundTaskCount',
+        ].includes(key),
     )
   )
     throw new Term2ApiError(503, 'Invalid agent response');
@@ -1238,6 +1251,27 @@ export const term2Client = {
           headers: { Accept: 'text/event-stream', ...(cursor ? { 'Last-Event-ID': cursor } : {}) },
         },
       );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      throw apiError(error);
+    }
+  },
+  /** Live session-list stream (snapshot + incremental upsert/remove) for the sidebar. */
+  async openSessionListEvents(
+    options?: { workspaceId?: string; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<HttpResponse<Response>> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.workspaceId) params.set('workspaceId', id(options.workspaceId));
+      if (options?.limit !== undefined) params.set('limit', String(options.limit));
+      const query = params.size > 0 ? `?${params.toString()}` : '';
+      return await httpClient.get<Response>(`/agent/sessions/events${query}`, {
+        signal,
+        skipAuth: true,
+        skipRetry: true,
+        headers: { Accept: 'text/event-stream' },
+      });
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') throw error;
       throw apiError(error);

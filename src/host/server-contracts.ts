@@ -43,6 +43,9 @@ export const ASSERTION_PURPOSES = [
   'session_quota',
   'session_goal',
   'session_handoff',
+  'protocol_hello',
+  'daemon_status',
+  'session_list_events',
 ] as const;
 export type AssertionPurpose = (typeof ASSERTION_PURPOSES)[number];
 export type GatewayAssertionClaims = {
@@ -355,6 +358,10 @@ export type ServerHostDependencies = {
   skills?(principal: Principal, workspaceId?: string): readonly SkillSummary[] | Promise<readonly SkillSummary[]>;
   configuration?: ServerConfiguration;
   presentation?: ServerSessionPresentation;
+  sessionIndex?: import('./daemon/session-index.js').SessionIndex;
+  daemonId?: string;
+  daemonVersion?: string;
+  daemonStartedAt?: string;
   localOwnerUserId?: string;
   /** Receives only safe metadata, never request bodies, credentials, tokens or paths. */
   audit?(event: ServerAudit): void | Promise<void>;

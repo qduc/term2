@@ -20,28 +20,21 @@ import {
 import { homedir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { getProfileLabel } from '../config/profiles/labels.js';
-import { composeHandoffMessage } from '../shared/handoff/handoff-flow-reducer.js';
-import { injectSkillIntoTurn } from '../shared/types/user-turn.js';
 import { defaultServeStateDir } from '../host/gateway/serve-args.js';
 import { createDirectServerHost, createServerAuthentication } from '../host/server.js';
 import { SqliteReplayLedger } from '../host/server-auth.js';
-import type { Principal } from '../host/in-process-direct-types.js';
-import type { ServerSessionPresentation, ServerTransportOptions } from '../host/server-contracts.js';
-import type { WireSnapshot } from '../protocol/wire.js';
+import type { DirectHostLifecycleEvent } from '../host/in-process-direct-types.js';
+import type { ServerTransportOptions } from '../host/server-contracts.js';
 import { DirectProtocolError } from '../protocol/errors.js';
-import { createDurableGoal } from '../session/goal.js';
-import { createDirectApplication, type DirectApplication } from './application.js';
-import { prepareDirectSessionConfigurationCommand } from './config-settings.js';
-import { scanDirectoryEntries } from './file-service.js';
+import { createDirectApplication } from './application.js';
+import { createServePresentation } from './daemon/serve-presentation.js';
+import { createServeSessionIndex } from './daemon/serve-session-index.js';
 import type { DirectAuthorityFactory } from './application-workspaces.js';
 import {
   bindDirectSessionAccess,
   createDirectProductPorts,
-  directServeToolPosture,
   DirectGlobalConfiguration,
   DirectWorkspaceAuthority,
-  serverWorkspaceAdministration,
 } from './host-config.js';
 import { prepareServeSshSurface } from './remote-context.js';
 import type { DirectLaunchRequest } from './launch-types.js';
@@ -186,138 +179,6 @@ function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, ow
   };
 }
 
-type PresentationOptions = {
-  readonly app: DirectApplication;
-  readonly directory: string;
-  readonly grants: DirectWorkspaceAuthority;
-  readonly configuration: DirectGlobalConfiguration;
-  readonly allowWrite: boolean;
-};
-
-/** Server owner consumes this additive callback after retaining keyed configure
- * fields in HTTP validation and native/protocol admission. No route activation here. */
-type DirectServeSessionPresentation = ServerSessionPresentation & {
-  prepareConfiguration(
-    principal: Principal,
-    snapshot: WireSnapshot,
-    body: unknown,
-  ): ReturnType<typeof prepareDirectSessionConfigurationCommand>;
-};
-
-function presentation(options: PresentationOptions): DirectServeSessionPresentation {
-  const { app, grants, configuration, allowWrite } = options;
-  const owned = (principal: Principal, sessionId: string, seq: number | null) => {
-    // Authority stays on the original logical start, validated through the same
-    // accepted lineage/cut as the presentation, never on a physical filename alias.
-    const binding = app.sessionDetails(sessionId, seq).binding;
-    if (binding?.client !== principal.userId) {
-      throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
-    }
-    return { grant: grants.resolveGrant(principal, binding.id) };
-  };
-  return {
-    metadata(principal, snapshot) {
-      const { createdAt, updatedAt, earliestSeq } = app.sessionDetails(snapshot.sessionId, snapshot.seq);
-      return {
-        workspaceId: owned(principal, snapshot.sessionId, snapshot.seq).grant.workspaceId,
-        createdAt,
-        updatedAt,
-        earliestReplayableSequence: earliestSeq,
-      };
-    },
-    async configuration(principal, snapshot) {
-      const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
-      const { workspace } = grants.resolveWorkspace(principal, grant);
-      const kind = grants.kindOf(grant.workspaceId);
-      const current = await app.sessionConfiguration(snapshot.sessionId);
-      const { defaultsRevision } = await configuration.read();
-      return {
-        sessionId: current.sessionId,
-        providerId: current.model.provider,
-        modelId: current.model.model,
-        reasoningEffort: current.reasoningEffort,
-        mode: getProfileLabel(current.profileId),
-        approvalMode: current.approvalMode,
-        toolPolicy: directServeToolPosture(
-          workspace.access === 'read_write' && current.workspaceAccess === 'read_write' && allowWrite,
-          current.approvalMode !== 'off',
-          { allowUnsandboxed: kind !== 'directory', sshEnabled: kind === 'ssh' },
-        ),
-        configRevision: current.commandRevision,
-        defaultsRevision,
-      };
-    },
-    async listFiles(principal, snapshot) {
-      const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
-      const { workspace } = grants.resolveWorkspace(principal, grant);
-      if (grants.kindOf(grant.workspaceId) !== 'directory') return { entries: [], truncated: true };
-      const scanned = await scanDirectoryEntries(workspace.root, { maxDepth: 12, maxTotalEntries: 2_000 });
-      return { entries: scanned.entries, truncated: scanned.truncated };
-    },
-    prepareSkillText(principal, snapshot, skillName, text) {
-      const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
-      if (grants.kindOf(grant.workspaceId) === 'ssh') return null;
-      const { workspace } = grants.resolveWorkspace(principal, grant);
-      const available = app.skills(workspace.root);
-      const skill = available.find((candidate) => candidate.name.toLowerCase() === skillName.toLowerCase());
-      if (!skill) return null;
-      return injectSkillIntoTurn({
-        text,
-        skill: { name: skill.name, description: skill.description, body: skill.body },
-      }).text;
-    },
-    withApprovalMode(principal, snapshot, approvalMode, operation) {
-      owned(principal, snapshot.sessionId, snapshot.seq);
-      return app.withApprovalMode(snapshot.sessionId, approvalMode, operation);
-    },
-    prepareConfiguration(principal, snapshot, body) {
-      owned(principal, snapshot.sessionId, snapshot.seq);
-      return prepareDirectSessionConfigurationCommand(body, snapshot.model);
-    },
-    async setGoal(principal, snapshot, action) {
-      owned(principal, snapshot.sessionId, snapshot.seq);
-      if (action.action === 'clear') {
-        await app.setGoal(snapshot.sessionId, undefined, 'user');
-        return;
-      }
-      if (action.action === 'set') {
-        await app.setGoal(snapshot.sessionId, createDurableGoal(action.text, action.successCriteria), 'user');
-        return;
-      }
-      if (action.action === 'accept_proposal') {
-        const proposal = snapshot.goalProposal;
-        if (!proposal) throw new DirectProtocolError('rejected', 'No proposed goal to accept.');
-        await app.setGoal(snapshot.sessionId, createDurableGoal(proposal.text, proposal.successCriteria), 'user');
-        return;
-      }
-      const current = await app.goal(snapshot.sessionId);
-      if (!current) throw new DirectProtocolError('rejected', 'No durable goal is set.');
-      await app.setGoal(
-        snapshot.sessionId,
-        { ...current, status: action.action === 'achieved' ? 'achieved' : 'abandoned' },
-        'user',
-      );
-    },
-    async handoff(principal, snapshot, input) {
-      owned(principal, snapshot.sessionId, snapshot.seq);
-      const captured = snapshot.messages
-        .filter((message) => message.role === 'assistant')
-        .map((message) => message.text)
-        .filter((text) => text.length > 0)
-        .at(-1);
-      if (captured === undefined)
-        throw new DirectProtocolError('rejected', 'No assistant response available to hand off.');
-      const text = composeHandoffMessage({
-        capturedText: captured,
-        stage: 'selecting_model',
-        ...(input.message ? { handoffMessage: input.message } : {}),
-      });
-      const sessionId = await app.handoff(snapshot.sessionId, input.model, text);
-      return { sessionId };
-    },
-  };
-}
-
 export async function launchServe({ args, selection }: ServeRequest): Promise<number> {
   let stateDir: string;
   let keys: Map<string, string>;
@@ -385,6 +246,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     );
     const directory = path.join(stateDir, 'conversations');
     const ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));
+    const lifecycleObserver: { current?: (event: DirectHostLifecycleEvent) => void } = {};
     const app = await createDirectApplication({
       conversationsDir: directory,
       selection,
@@ -406,6 +268,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
       mcpCatalog: null,
       hooks: null,
       autoDrainBackgroundNotifications: true,
+      onSessionLifecycle: (event) => lifecycleObserver.current?.(event),
       async authorizeModel(next, previous) {
         // A same-selection refresh/rollover does not depend on a fresh catalog.
         if (next.provider === previous.provider && next.model === previous.model) return;
@@ -417,10 +280,19 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     // Grant edits must release live sessions; a host without this would keep stale authority.
     const closeWorkspaceSessions = app.host.closeWorkspaceSessions?.bind(app.host);
     if (!closeWorkspaceSessions) throw new Error('The direct host cannot close workspace sessions.');
+    const sessionIndexBundle = createServeSessionIndex({
+      app,
+      grants,
+      ownerUserId: args.localOwnerUserId,
+      closeWorkspaceSessions,
+    });
+    lifecycleObserver.current = sessionIndexBundle.observeLifecycle;
+    await sessionIndexBundle.index.seed();
     const transport = createDirectServerHost(
       {
         host: app.host,
-        workspaces: serverWorkspaceAdministration(grants, closeWorkspaceSessions),
+        workspaces: sessionIndexBundle.workspaces,
+        sessionIndex: sessionIndexBundle.index,
         models: () => configuration.listModels(),
         skills: (principal, workspaceId) => {
           if (workspaceId && grants.kindOf(workspaceId) === 'ssh') return [];
@@ -434,7 +306,13 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
           }));
         },
         configuration,
-        presentation: presentation({ app, directory, grants, configuration, allowWrite: args.allowWrite }),
+        presentation: createServePresentation({
+          app,
+          grants,
+          configuration,
+          allowWrite: args.allowWrite,
+          onSessionCreated: (id) => sessionIndexBundle.index.refresh(id),
+        }),
         localOwnerUserId: args.localOwnerUserId,
         audit: (event) => appendFile(auditPath, `${JSON.stringify(event)}\n`, { mode: 0o600 }),
       },
@@ -478,6 +356,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     } finally {
       // Sessions end only after no client can reach them; the ledger goes last, once nothing verifies.
       try {
+        sessionIndexBundle.index.dispose();
         await transport.stop();
         await app.close();
       } finally {

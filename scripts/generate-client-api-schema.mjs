@@ -36,8 +36,16 @@ if (isMain) {
   const rendered = `${JSON.stringify(buildClientApiJsonSchema(), null, 2)}\n`;
   if (process.argv.includes('--check')) {
     const existing = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-    if (existing !== rendered) {
-      console.error('docs/plans/daemon/spec/client-api.schema.json is out of date. Run: node --import tsx scripts/generate-client-api-schema.mjs');
+    let matches = false;
+    try {
+      matches = JSON.stringify(JSON.parse(existing)) === JSON.stringify(buildClientApiJsonSchema());
+    } catch {
+      matches = false;
+    }
+    if (!matches) {
+      console.error(
+        'docs/plans/daemon/spec/client-api.schema.json is out of date. Run: node --import tsx scripts/generate-client-api-schema.mjs',
+      );
       process.exit(1);
     }
     console.log('client-api.schema.json is up to date.');

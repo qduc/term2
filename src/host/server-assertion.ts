@@ -205,6 +205,9 @@ function isClaims(value: unknown): value is GatewayAssertionClaims {
     candidate.purpose === 'provider_delete' ||
     candidate.purpose === 'skills_list' ||
     candidate.purpose === 'session_list' ||
+    candidate.purpose === 'session_list_events' ||
+    candidate.purpose === 'protocol_hello' ||
+    candidate.purpose === 'daemon_status' ||
     candidate.purpose === 'model_list'
   ) {
     return candidate.workspaceId === undefined && candidate.sessionId === undefined;

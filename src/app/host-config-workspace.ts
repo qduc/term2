@@ -397,9 +397,15 @@ export class DirectWorkspaceAuthority {
  * failed close still releases the session and the grant stays changed, so the
  * edit is reported as done.
  */
+export type WorkspaceGrantHooks = {
+  readonly onRevoked?: (root: string) => Promise<void> | void;
+  readonly onGranted?: (principal: Principal, root: string) => Promise<void> | void;
+};
+
 export function serverWorkspaceAdministration(
   grants: DirectWorkspaceAuthority,
   closeWorkspaceSessions: (root: string) => Promise<number>,
+  hooks?: WorkspaceGrantHooks,
 ): Required<ServerWorkspaces> {
   return {
     list: (principal) => grants.list(principal),
@@ -413,20 +419,36 @@ export function serverWorkspaceAdministration(
     resolveGrant: (principal, workspaceId) => grants.resolveGrant(principal, workspaceId),
     validate: (principal, absolutePath) => grants.validate(principal, absolutePath),
     browse: (principal, candidateId, child) => grants.browse(principal, candidateId, child),
-    select: (principal, candidateId, access) => grants.select(principal, candidateId, access),
+    async select(principal, candidateId, access) {
+      const selected = grants.select(principal, candidateId, access);
+      await hooks?.onGranted?.(principal, selected.binding.canonicalRoot);
+      return selected;
+    },
     async listSshHosts(principal) {
       requirePrincipal(principal);
       return listConfiguredSSHHosts();
     },
-    addSsh: (principal, input) => addServeSshWorkspace(grants, principal, input),
+    async addSsh(principal, input) {
+      const added = await addServeSshWorkspace(grants, principal, input);
+      try {
+        const grant = grants.resolveGrant(principal, added.workspaceId);
+        const { workspace } = grants.resolveWorkspace(principal, grant);
+        await hooks?.onGranted?.(principal, workspace.root);
+      } catch {
+        // Grant already persisted; notification failure must not fail addSsh.
+      }
+      return added;
+    },
     async remove(principal, workspaceId) {
       const removed = grants.removeGrant(principal, workspaceId);
       const closedSessions = await closeWorkspaceSessions(removed.root);
+      await hooks?.onRevoked?.(removed.root);
       return { workspaceId: removed.workspace.workspaceId, removed: true, closedSessions };
     },
     async changeAccess(principal, workspaceId, access) {
       const changed = grants.changeGrantAccess(principal, workspaceId, access);
       const closedSessions = await closeWorkspaceSessions(changed.root);
+      await hooks?.onRevoked?.(changed.root);
       return { workspace: changed.workspace, grantVersion: changed.grantVersion, closedSessions };
     },
   };

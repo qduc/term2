@@ -45,6 +45,9 @@ export const ASSERTION_PURPOSES = Object.freeze([
   'session_quota',
   'session_goal',
   'session_handoff',
+  'protocol_hello',
+  'daemon_status',
+  'session_list_events',
 ]);
 
 const PURPOSES = new Set(ASSERTION_PURPOSES);
@@ -53,6 +56,7 @@ const INTERNAL_PREFIX = '/private/agent/v1/';
 const SAFE_ERROR_CODES = new Set([
   'gateway_unavailable',
   'protocol_upgrade_required',
+  'protocol_incompatible',
   'agent_wire_v2_unavailable',
   'hydration_unavailable',
   'replay_unavailable',
@@ -65,10 +69,12 @@ const SAFE_ERROR_CODES = new Set([
   'session_not_admitting',
   'persistence_unavailable',
   'idempotency_conflict',
+  'stale_revision',
   'stale_interaction',
   'interaction_already_resolved',
   'interaction_not_resolvable',
   'cursor_compacted',
+  'cursor_out_of_range',
   'projection_too_large',
   'invalid_cursor',
   'protocol_conflict',
@@ -91,6 +97,10 @@ const SAFE_ERROR_CODES = new Set([
   'not_persisted',
   'settings_unavailable',
   'session_busy',
+  'busy',
+  'env_disconnected',
+  'unavailable',
+  'closed',
   'command_not_allowed',
   'command_outcome_unobserved',
   'command_stale',
@@ -115,6 +125,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   gateway_unavailable: 'Agent gateway unavailable',
   protocol_upgrade_required:
     'Upgrade the browser and BFF together and use format=agent-wire-v2; config mutations require clientRequestId and the original expectedRevision. Do not auto-key, rebase or retry the old request',
+  protocol_incompatible: 'Client and daemon protocol versions are incompatible',
   agent_wire_v2_unavailable: 'agent-wire-v2 is gated until the shared artifact and consumer migration are combined',
   hydration_unavailable: 'Native accepted hydration is unavailable',
   replay_unavailable: 'Native atomic replay is unavailable; reload explicitly to hydrate a new accepted cut',
@@ -127,10 +138,12 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   session_not_admitting: 'Session is not accepting work',
   persistence_unavailable: 'Session persistence is unavailable',
   idempotency_conflict: 'Request conflicts with an earlier request',
+  stale_revision: 'Resource revision is stale; reload and retry',
   stale_interaction: 'Interaction is stale',
   interaction_already_resolved: 'Interaction is already resolved',
   interaction_not_resolvable: 'Interaction cannot be resolved',
   cursor_compacted: 'Event cursor requires reload',
+  cursor_out_of_range: 'Event cursor is out of range; reload required',
   projection_too_large: 'Session projection is too large',
   invalid_cursor: 'Invalid cursor',
   protocol_conflict: 'Protocol values disagree',
@@ -153,6 +166,10 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   not_persisted: 'Settings could not be saved',
   settings_unavailable: 'Settings unavailable',
   session_busy: 'Session is busy',
+  busy: 'Resource is busy',
+  env_disconnected: 'Execution environment is disconnected',
+  unavailable: 'Capability is unavailable',
+  closed: 'Connection or session is closed',
   command_not_allowed: 'Command is not allowed',
   command_outcome_unobserved: 'Command outcome was not observed; check only the original request',
   command_stale: 'Command target is stale',
@@ -270,6 +287,9 @@ export function createAgentAssertion({
     purpose === 'workspace_candidate_browse' ||
     purpose === 'workspace_candidate_select' ||
     purpose === 'session_list' ||
+    purpose === 'session_list_events' ||
+    purpose === 'protocol_hello' ||
+    purpose === 'daemon_status' ||
     purpose === 'model_list';
   const noWorkspace =
     isList ||
@@ -651,20 +671,44 @@ export class Term2GatewayClient {
   } = {}) {
     this.#assertEnabled();
     assertPurpose(purpose);
-    if (purpose !== 'events_connect')
+    if (purpose !== 'events_connect' && purpose !== 'session_list_events')
       throw new Term2GatewayError('validation_error', 'Invalid streaming operation', {
         statusCode: 400,
         retryable: false,
       });
-    assertOpaqueId(workspaceId, 'workspace ID');
-    assertOpaqueId(sessionId, 'session ID');
-    if (typeof query !== 'string' || !/^(?:|\?after=\d{1,16}|\?format=(?:agent-wire-v2|direct-wire-v2)(?:&after=\d{1,16})?)$/u.test(query))
-      throw new Term2GatewayError('validation_error', 'Invalid gateway operation', {
-        statusCode: 400,
-        retryable: false,
-      });
+    if (purpose === 'events_connect') {
+      assertOpaqueId(workspaceId, 'workspace ID');
+      assertOpaqueId(sessionId, 'session ID');
+      if (
+        typeof query !== 'string' ||
+        !/^(?:|\?after=\d{1,16}|\?format=(?:agent-wire-v2|direct-wire-v2)(?:&after=\d{1,16})?)$/u.test(query)
+      )
+        throw new Term2GatewayError('validation_error', 'Invalid gateway operation', {
+          statusCode: 400,
+          retryable: false,
+        });
+    } else {
+      if (workspaceId !== undefined || sessionId !== undefined)
+        throw new Term2GatewayError('validation_error', 'Invalid streaming scope', {
+          statusCode: 400,
+          retryable: false,
+        });
+      if (
+        typeof query !== 'string' ||
+        !/^(?:|\?(?:workspaceId=[A-Za-z0-9_-]{1,256}(?:&limit=\d{1,4})?|limit=\d{1,4}(?:&workspaceId=[A-Za-z0-9_-]{1,256})?))$/u.test(
+          query,
+        )
+      )
+        throw new Term2GatewayError('validation_error', 'Invalid gateway operation', {
+          statusCode: 400,
+          retryable: false,
+        });
+    }
     const assertion = this.issueAssertion({ userId, purpose, workspaceId, sessionId });
     const options = this.#requestOptions({ method: 'GET', rpcPath, query, assertion, correlationId });
+    if (purpose === 'session_list_events') {
+      options.headers['x-term2-client-api-version'] = '1.0';
+    }
     return this.#send(options, null, { correlationId, stream: true, signal });
   }
 

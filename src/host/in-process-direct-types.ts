@@ -48,6 +48,20 @@ export type DirectAccess =
   | { readonly kind: 'list' }
   | { readonly kind: 'create'; readonly grant: WorkspaceGrant }
   | { readonly kind: 'read' | 'write'; readonly sessionId: string };
+export type DirectHostLifecycleEvent =
+  | {
+      readonly kind: 'snapshot';
+      readonly sessionId: string;
+      readonly workspace: DirectSessionState['workspace'];
+      readonly snapshot: WireSnapshot;
+      readonly batch: WireEventBatch | null;
+    }
+  | {
+      readonly kind: 'closed';
+      readonly sessionId: string;
+      readonly workspace: DirectSessionState['workspace'];
+      readonly lastSnapshot: WireSnapshot;
+    };
 export type DirectHostDeps = {
   readonly sessions: DirectSessionStore;
   readonly defaultModel: DirectSessionState['model'];
@@ -68,4 +82,6 @@ export type DirectHostDeps = {
   capabilities?(session: DirectSession): DirectCommandCapabilities;
   /** Automatically drain idle background check-in/completion notices when no client is attached (term2 serve). */
   readonly autoDrainBackgroundNotifications?: boolean;
+  /** Optional lifecycle observer feeding a host-owned SessionIndex without reading logs. */
+  readonly onSessionLifecycle?: (event: DirectHostLifecycleEvent) => void;
 };

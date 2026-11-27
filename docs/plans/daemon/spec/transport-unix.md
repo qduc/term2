@@ -1,7 +1,7 @@
-# Term2 Client API — Unix Domain Socket Transport Binding (Draft rc2)
+# Term2 Client API — Unix Domain Socket Transport Binding (v1.0)
 
 - **Applies to:** Core Protocol Specification `1.0` ([`client-api.md`](client-api.md))
-- **Status:** Draft rc2
+- **Status:** Frozen (2026-11-27)
 - **Primary Consumers:** Trusted local-owner CLI surfaces ONLY — TUI, Headless CLI, Control CLI, and local ACP.
 - **Explicit Prohibition:** Clients MUST NOT proxy untrusted, remote, or multi-user principals (e.g., Web BFF or multi-user bridges) over `daemon.sock`. Proxying surfaces MUST connect via the [HTTP + SSE Binding](transport-http-sse.md) with per-request RS256 assertions.
 

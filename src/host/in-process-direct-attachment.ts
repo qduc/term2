@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { DirectSession, DirectSessionUpdate } from '../session/facade-types.js';
 import { DirectProjection } from '../protocol/projection.js';
 import { DirectProtocolError } from '../protocol/errors.js';
-import { DirectEventQueue, directBatch } from './in-process-direct-queue.js';
+import { DirectEventQueue, directBatch, type WireEventBatch } from './in-process-direct-queue.js';
 
 export type DirectAttachmentOptions = {
   /** Automatically drain idle background check-in/completion notices even when no client is connected. */
   readonly autoDrainBackgroundNotifications?: boolean;
+  /** Invoked synchronously after initial projection cut (`batch === null`) and every non-transient update. */
+  readonly onProjectionUpdate?: (snapshot: DirectProjection['snapshot'], batch: WireEventBatch | null) => void;
 };
 
 export class DirectAttachment {
@@ -16,6 +18,7 @@ export class DirectAttachment {
   readonly #unsubscribe: () => void;
   readonly #projection: DirectProjection;
   readonly #autoDrain: boolean;
+  readonly #onProjectionUpdate?: (snapshot: DirectProjection['snapshot'], batch: WireEventBatch | null) => void;
   #position: number;
   /** Publications applied to the projection so far; a batch carries the ordinal it was published at. */
   #ordinal = 0;
@@ -26,6 +29,7 @@ export class DirectAttachment {
   constructor(session: DirectSession, options?: DirectAttachmentOptions) {
     this.session = session;
     this.#autoDrain = options?.autoDrainBackgroundNotifications === true;
+    this.#onProjectionUpdate = options?.onProjectionUpdate;
     // Capture can enqueue callbacks while constructing. Never lose the atomic-cut tail.
     const pending: DirectSessionUpdate[] = [];
     let ready = false;
@@ -48,7 +52,11 @@ export class DirectAttachment {
     }
     ready = true;
     for (const update of pending) this.#update(update);
+    this.#notifyProjection(null);
     this.#maybeDrainBackgroundNotifications();
+  }
+  get snapshot(): DirectProjection['snapshot'] {
+    return this.#projection.snapshot;
   }
   /** Snapshot and live subscription are taken synchronously at this public-state cut. */
   connect(): {
@@ -69,6 +77,14 @@ export class DirectAttachment {
       // Read together, synchronously: the snapshot contains every batch published at or before the ordinal.
       cut: () => ({ snapshot: projection.snapshot, ordinal: this.#ordinal }),
     };
+  }
+  #notifyProjection(batch: WireEventBatch | null): void {
+    if (!this.#onProjectionUpdate) return;
+    try {
+      this.#onProjectionUpdate(this.#projection.snapshot, batch);
+    } catch {
+      // Index observation must never break Session projection or durable acceptance.
+    }
   }
   #maybeDrainBackgroundNotifications(): void {
     if (!this.#autoDrain || this.#closed || this.#failure || this.#draining) return;
@@ -98,6 +114,7 @@ export class DirectAttachment {
       this.#position = update.position;
       const batch = directBatch(update, this.#projection.update(update), ++this.#ordinal);
       for (const queue of this.#queues) queue.push(batch);
+      if (update.type !== 'transient') this.#notifyProjection(batch);
       this.#maybeDrainBackgroundNotifications();
     } catch {
       // Presentation failures must not propagate into Session's durable acceptance path.

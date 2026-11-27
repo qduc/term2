@@ -1,7 +1,7 @@
-# Term2 Client API — Core Protocol Specification (Draft rc2)
+# Term2 Client API — Core Protocol Specification (v1.0)
 
 - **Protocol Version:** `1.0`
-- **Status:** Draft rc2 (reconciled against Review Round 1 & Round 2 findings and Step 11 Host/Web/Runtime zoom-ins; ready for Step 13 session-list prototype and conformance verification before Step 12 freeze)
+- **Status:** Frozen (2026-11-27; passed independent Review Rounds 1 & 2b across all four lenses, Step 11 Host/Web/Runtime zoom-ins, Step 13 session-list stream prototype, and `tests/host/client-api-conformance.integration.test.ts` under Step 5)
 - **Schema Source:** `src/protocol/client-api/client-api-schema.ts` (staged for graduation to `@qduc/agent-wire`, Decision D006)
 - **Generated JSON Schema:** `docs/plans/daemon/spec/client-api.schema.json`
 - **Transport Bindings:**

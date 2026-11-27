@@ -26,7 +26,7 @@ const ClientKind = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
 
 export const CLIENT_API_CAPABILITIES = ['session_list_stream', 'settings_stream', 'daemon_control', 'mcp'] as const;
 
-export const CLIENT_API_ERROR_CODES = [
+const CLIENT_API_ERROR_CODES = [
   'protocol_incompatible',
   'unauthorized',
   'forbidden',

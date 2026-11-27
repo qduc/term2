@@ -41,13 +41,17 @@ function deniedByAuthority(error: unknown): boolean {
   );
 }
 
-function workspaceRoot(session: DirectSession): string {
+function sessionWorkspace(session: DirectSession) {
   const capture = session.capture(() => undefined);
   try {
-    return capture.state.workspace.root;
+    return capture.state.workspace;
   } finally {
     capture.unsubscribe();
   }
+}
+
+function workspaceRoot(session: DirectSession): string {
+  return sessionWorkspace(session).root;
 }
 
 /** Host owns the supplied store until dispose; each connection owns only its subscription. */
@@ -65,6 +69,24 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
 
   /** Attachments whose open has finished, so a grant change can close them without waiting. */
   const settled = new WeakMap<Promise<DirectAttachment>, DirectAttachment>();
+  const attachSession = (session: DirectSession, knownWorkspace?: ReturnType<typeof sessionWorkspace>) => {
+    const workspace = knownWorkspace ?? sessionWorkspace(session);
+    return new DirectAttachment(session, {
+      autoDrainBackgroundNotifications: deps.autoDrainBackgroundNotifications,
+      ...(deps.onSessionLifecycle
+        ? {
+            onProjectionUpdate: (snapshot, batch) =>
+              deps.onSessionLifecycle?.({
+                kind: 'snapshot',
+                sessionId: session.id,
+                workspace,
+                snapshot,
+                batch,
+              }),
+          }
+        : {}),
+    });
+  };
 
   async function attachment(id: string): Promise<DirectAttachment> {
     await closingSessions.get(id);
@@ -73,9 +95,7 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     if (!pending) {
       pending = deps.sessions.open(id).then((session) => {
         open();
-        return new DirectAttachment(session, {
-          autoDrainBackgroundNotifications: deps.autoDrainBackgroundNotifications,
-        });
+        return attachSession(session);
       });
       attachments.set(id, pending);
       const original = pending;
@@ -144,6 +164,8 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     if (!pending) return;
     const closing = (async () => {
       const attached = await pending;
+      const workspace = sessionWorkspace(attached.session);
+      const lastSnapshot = attached.snapshot;
       try {
         await attached.session.close();
       } finally {
@@ -151,6 +173,11 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
         // Replay subscribers watch the closed Session object directly; end them too so clients reconnect.
         for (const [events, id] of [...connections]) if (id === sessionId) events.close();
         if (attachments.get(sessionId) === pending) attachments.delete(sessionId);
+        try {
+          deps.onSessionLifecycle?.({ kind: 'closed', sessionId, workspace, lastSnapshot });
+        } catch {
+          // Index notification must never disrupt session cleanup.
+        }
       }
     })();
     closingSessions.set(sessionId, closing);
@@ -222,9 +249,7 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
         const created = await pending;
         open();
         if (attachments.has(created.id)) throw new Error('Store returned an existing session identity');
-        const attached = new DirectAttachment(created, {
-          autoDrainBackgroundNotifications: deps.autoDrainBackgroundNotifications,
-        });
+        const attached = attachSession(created, workspace);
         const ready = Promise.resolve(attached);
         settled.set(ready, attached);
         attachments.set(created.id, ready);

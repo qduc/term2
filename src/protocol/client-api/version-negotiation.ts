@@ -14,7 +14,7 @@ export type ParsedProtocolVersion = {
 
 const VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 
-export function parseProtocolVersion(value: string): ParsedProtocolVersion | null {
+function parseProtocolVersion(value: string): ParsedProtocolVersion | null {
   const match = VERSION_PATTERN.exec(value);
   if (!match) return null;
   const major = Number(match[1]);
@@ -31,7 +31,7 @@ function compareVersions(a: ParsedProtocolVersion, b: ParsedProtocolVersion): nu
  * Negotiate the highest mutually supported version in [max(cMin, hMin), min(cMax, hMax)]
  * under the linear-release invariant (client-api.md §3.1).
  */
-export function negotiateProtocolVersion(
+function negotiateProtocolVersion(
   clientMinRaw: string,
   clientMaxRaw: string,
   hostMinRaw: string = CLIENT_API_MIN_SUPPORTED_VERSION,

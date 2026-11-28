@@ -184,3 +184,15 @@ Step 14f flip work. Each has a built-CLI case in
   only when it differs from the default by value, as §1.1 states. Existing
   opt-in users of the default store: a daemon auto-started before the upgrade
   keeps running on the old paths until it is stopped; nothing else moves.
+- **Local sessions on the web's outside-sandbox path.** The daemon's surface
+  gave local TUI and headless sessions `shellEscapeApproval: true` and
+  `preserveSandboxedShellApproval: true`, copied from the web surface in 14a.
+  With them a `shell` call with `sandbox: 'unsandboxed'` gets the requirement
+  "Run shell command outside sandbox once" (`grants: ['unsandboxed-once']`), and
+  `execute` runs it only with that grant for the current directory
+  (`source-tools.ts`). The TUI's approval prompt answers with a plain allow, so a
+  command the person approved (after the reviewer declined, or in `off`) was
+  refused with "An explicit outside-sandbox grant for the current working
+  directory is required." Nothing ran unreviewed: it failed closed. Local
+  sessions now take the in-process path (neither flag set); the web surface
+  keeps its grants, and ACP never had them.

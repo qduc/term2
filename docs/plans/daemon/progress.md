@@ -123,3 +123,5 @@ the three daemon and Client API integration suites.
   leases. That cleanup now closes the server directly. A second test binds a busy
   TLS port in both modes and requires exit 1 with `EADDRINUSE`, then a working
   lease; it fails with exit 0 when the old `stop()` call is put back in the bundle.
+- Independent verifier: `accept` on `61f67f0`, after rerunning its busy-port,
+  disconnect-during-start and transport stop/start race probes.

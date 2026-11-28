@@ -194,6 +194,13 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
         mode is applied as a configure), and a target in another workspace. These
         match what an in-process TUI refuses (writer lock, `canRun`), but they are
         new for daemon users.
+      - `applySettings`' rollback restores every captured key that changed, not
+        only the ones this launch wrote. A session-scoped write from another
+        client acknowledged during the configure or sync await would be reverted
+        if the launch then fails. Reaching it needs a successful configure, a
+        concurrent write and a turn starting before `syncEnforced`; the verifier's
+        80-iteration race probe never hit it. Hardening: restore a key only while
+        it still holds the value this launch wrote.
 
 19. **TUI settings projection keeps a stale `rebuilt` flag** *(found verifying item 18)*:
     - After another client's configure rebuilds a session (for example a launch

@@ -66,3 +66,30 @@ it(
     await expect.poll(() => daemon!.exitCode, { timeout: 10_000, interval: 50 }).not.toBeNull();
   },
 );
+
+const sockets = (root: string) =>
+  fs
+    .readdirSync(root, { recursive: true })
+    .map(String)
+    .filter((name) => name.endsWith('daemon.sock'));
+
+it(
+  'lets `term2 daemon status` and `stop` reach the daemon a headless run auto-started for the default store',
+  { timeout: 60_000 },
+  async () => {
+    const w = await prepare({}, [{ text: 'DEFAULT-STORE-ANSWER' }]);
+    // The default store: no TERM2_CONVERSATIONS_DIR, so HOME and XDG (inside the world) place it.
+    const { TERM2_CONVERSATIONS_DIR: _store, ...rest } = w.env;
+    const env = { ...rest, TERM2_DAEMON_MODE: '1' };
+
+    const run = await cli(env, ['--profile', 'bare', 'Say something']);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain('DEFAULT-STORE-ANSWER');
+
+    const status = await cli(env, ['daemon', 'status']);
+    expect(status.status, status.stderr).toBe(0);
+    const stop = await cli(env, ['daemon', 'stop']);
+    expect(stop.status, stop.stderr).toBe(0);
+    await expect.poll(() => sockets(path.join(w.root, 'runtime')), { timeout: 10_000, interval: 50 }).toEqual([]);
+  },
+);

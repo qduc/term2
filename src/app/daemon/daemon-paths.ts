@@ -56,7 +56,9 @@ export function resolveDaemonPaths(
   const conversationsDir = options.conversationsDir
     ? resolvedStorePath(options.conversationsDir)
     : resolveConversationsDirectory(env);
-  const conversationsOverridden = Boolean(options.conversationsDir || env['TERM2_CONVERSATIONS_DIR']);
+  // Clients pass the store they resolved, the default one included, so "a path was given" does not mean
+  // "another store": compare by value, or `term2 serve` and `term2 daemon status|stop` reach another socket.
+  const conversationsOverridden = conversationsDir !== resolveConversationsDirectory({});
 
   let stateDir: string;
   const xdgState = env['XDG_STATE_HOME']?.trim() || path.join(os.homedir(), '.local', 'state');

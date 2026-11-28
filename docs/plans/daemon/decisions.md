@@ -173,3 +173,14 @@ Step 14f flip work. Each has a built-CLI case in
     session. Running `term2 daemon stop` with the old build (or ending the old
     daemon) once avoids it. The old lock and `run/` stay in the parent and can
     be deleted. The default store is unaffected by this change.
+- **One socket for the default store.** Clients pass the store they resolved,
+  the default one included, and `resolveDaemonPaths` treated any passed path as
+  "another store": auto-starting clients used `<data>/term2-nodejs` as state
+  directory and a digest-named runtime directory, while `term2 serve` and
+  `term2 daemon status|stop` (which pass no store) used `<xdg-state>/term2` and
+  `term2-daemon`. `term2 daemon status` could not find the auto-started daemon,
+  and `term2 serve` started a second daemon on the same store, so the web UI did
+  not see terminal sessions (against D007). A store now counts as another store
+  only when it differs from the default by value, as §1.1 states. Existing
+  opt-in users of the default store: a daemon auto-started before the upgrade
+  keeps running on the old paths until it is stopped; nothing else moves.

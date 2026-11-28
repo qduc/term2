@@ -454,9 +454,13 @@ describe('Built CLI TUI over daemon (Step 14d)', () => {
       await submitLine(tui, fixture.idlePath, '/goal set Ship daemon TUI --criteria All gates pass');
       await tui.waitForOutput('Goal (active): Ship daemon TUI', 30_000);
       await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
+      const beforeGoalShow = tui.getVisibleOutput().length;
       await submitLine(tui, fixture.idlePath, '/goal show');
-      await tui.waitForOutput('Success criteria: All gates pass', 30_000);
-      expect(tui.getVisibleOutput()).not.toContain('Goal (active): undefined');
+      await expect
+        .poll(() => tui.getVisibleOutput().slice(beforeGoalShow), { timeout: 30_000 })
+        .toContain('Goal (active): Ship daemon TUI');
+      expect(tui.getVisibleOutput().slice(beforeGoalShow)).toContain('Success criteria: All gates pass');
+      expect(tui.getVisibleOutput().slice(beforeGoalShow)).not.toContain('Goal (active): undefined');
       await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
 
       // 5. /resume waits for the async resume picker list before Enter so it never races under parallel load.

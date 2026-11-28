@@ -21,7 +21,7 @@ Tracks every step of [the singleton daemon plan](README.md), its status, key art
 | 14a | Daemon core (Unix socket + lifecycle + headless policy + sandbox lease fix) | Done | `DaemonUnixServer`, `DaemonRpc`, `GlobalMutationCoordinator`, `startTerm2Daemon`, `connectOrStartDaemon`, `term2 daemon [start\|status\|stop]`, D003 session-owned headless approvals, scoped sandbox leases | `bf0ef68` |
 | 14b | Remote `DirectConnection` over Unix socket | Done | `UnixRpcClient`, `createRemoteDirectHost`, `connectRemoteDirectHost`, `remote-direct-host.integration.test.ts` | `7a2c636c0` |
 | 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | `7a2c636c0` |
-| 14d | TUI zoom-in + TUI client over daemon | In progress | [TUI design and migration order](zoom/tui.md) | — |
+| 14d | TUI zoom-in + TUI client over daemon | Done | `TuiBackend`, `daemon-tui-backend.ts`, `DaemonTuiSettingsStore`, `daemon-tui-providers.ts`, `daemon-tui.e2e.test.ts` (independent verifier: `accept`) | Pending PR |
 | 14e | Control socket, Discord, ACP, and web clients over daemon | Pending | Depends on Step 14d | — |
 | 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e | — |
 
@@ -67,3 +67,20 @@ the three daemon and Client API integration suites.
   key/baseUrl retention, and `local_leases` gating (unadvertised until Step 14e).
 - Verified with `daemon-unix-conformance.integration.test.ts` and all 4 host
   conformance integration suites (13/13 passed) plus all repository quality gates.
+
+### Step 14d TUI client over daemon
+
+- Introduced explicit app-layer `TuiBackend` seam (`src/app/lib/tui-backend.ts`)
+  and Client API v1.1 Unix daemon backend (`src/app/daemon/daemon-tui-backend.ts`,
+  `daemon-tui-settings-store.ts`, `daemon-tui-providers.ts`), keeping
+  `launch-tui.tsx` under 500 lines and `TuiSession` within its existing ceiling.
+- Wired opt-in `TERM2_DAEMON_MODE=1` interactive TUI launch (respecting
+  `TERM2_IN_PROCESS=1`), headless v1.1 `session.launch` overrides, flushed/refreshed
+  scoped settings & provider projections (normalizing wire `credential.configured` /
+  `active` / `disabled`), server-resolved workspace `/skills`, `/mcp`, `/goal`,
+  `/resume`, `/model`, client-only `/restart`, retryable reconnect on daemon restart,
+  and terminal non-reconnecting close on explicit `session.close` / `workspace_revoked`.
+- Added built-CLI e2e suite `tests/cli/daemon-tui.e2e.test.ts` (zero fixed sleeps).
+  Independent verifier caught 4 defects on `19002d1` (`WireGoal.text` mapping,
+  terminal `session.close` reconnect, OAuth `isInUse`, parallel `/resume` picker
+  readiness); all 4 were fixed and independently verified `accept` on `ec3b19d32`.

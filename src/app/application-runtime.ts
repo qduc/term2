@@ -8,7 +8,7 @@ import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/background.js';
 import type { DirectContextCapabilities, DirectContextFactory, DirectContextPort } from '../session/capabilities.js';
-import type { DirectBinding } from '../session/facade-types.js';
+import type { DirectBinding, DirectSession } from '../session/facade-types.js';
 import type { DirectPreparedConfiguration } from '../session/configuration.js';
 import type { DirectRolloverPreparer } from '../session/session-rotation.js';
 import type { DirectVerificationOperations } from '../session/goal-verification.js';
@@ -87,6 +87,8 @@ export type DirectRuntimeOptions = {
     context: { readonly workspace: Workspace; readonly binding?: DirectBinding },
   ) => Promise<{
     readonly surface?: Partial<DirectLauncherSurface>;
+    /** Bound to the catalog and epoch used while preparing this runtime. */
+    readonly trackMcpCatalog?: (session: DirectSession) => void;
     readonly dispose?: () => Promise<void>;
   }>;
   /** Decides whether a session may move to another model. Without it, none may. */
@@ -109,6 +111,7 @@ export type DirectRuntimeRecord = {
   readonly rebuilt: boolean;
   /** Set once the Session has replayed, which is before any client can reach it. */
   readonly tasks: () => DirectBackgroundTasks | undefined;
+  readonly trackMcpCatalog?: (session: DirectSession) => void;
 };
 
 export type DirectRuntimes = {
@@ -267,6 +270,7 @@ export function createDirectRuntimes(
           profileId,
           rebuilt,
           tasks: () => tasks,
+          ...(prepared?.trackMcpCatalog ? { trackMcpCatalog: prepared.trackMcpCatalog } : {}),
         });
       };
       publish(surface, profile.activeProfileId, false, initialSettings);

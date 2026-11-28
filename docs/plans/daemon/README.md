@@ -4,7 +4,7 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–14c merged (last PR [#470](https://github.com/qduc/term2/pull/470), `7a2c636c0`). Step 14d is in progress. The TUI zoom-in and its independent design review are complete.
+- **Current phase:** Steps 0–14c merged; Step 14d is in progress. TUI zoom-in, workspace discovery (#471), attachment/replay seam, connection capability enforcement, and v1.0 daemon runtime implementations (`mcp`, `quota`, `set_goal`, server-resolved skills) are complete.
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
@@ -15,11 +15,11 @@ Status: in progress. Started 2026-11-27.
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Finish Step 14d's attachment and workspace seams,
-  review the needed Client API revision, then wire the daemon TUI backend and
-  verify it against the in-process entry point. Continue with Step 14e (control
-  socket, Discord, ACP, and web) and Step 14f (default flip, full verification,
-  and smoke runs).
+- **Next concrete actions:** Draft, independently review, and freeze Client API
+  v1.1 (Unix minor bump covering TUI launch/scoped settings/catalog/provider
+  edits + Step 14e local serve/control leases), then wire the daemon TUI backend
+  (Step 14d), serve/web/control/Discord/ACP (Step 14e), and default flip +
+  full verification (Step 14f).
 
 
 ## Goal

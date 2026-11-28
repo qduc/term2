@@ -8,6 +8,12 @@ import type { DirectSession, DirectSessionState } from '../session/facade-types.
 import { createDirectMcp, createDirectMcpOAuth, type DirectMcp } from './mcp.js';
 import type { DirectSessionTarget } from './application-target.js';
 
+export function createDirectMcpCredentialStore(conversationsDir: string): McpOAuthStore {
+  return new McpOAuthStore({
+    filePath: path.join(path.dirname(conversationsDir), 'direct-mcp-oauth.json'),
+  });
+}
+
 /** Open once per local application, not per session/generation. Caller closes
  * after app.close(); SSH never reads controller-local MCP config/credentials. */
 export async function openDirectApplicationMcp(options: {
@@ -17,9 +23,7 @@ export async function openDirectApplicationMcp(options: {
   readonly onNotice: (message: string) => void;
 }): Promise<DirectMcp | undefined> {
   if (options.target.surface.remote) return undefined;
-  const store = new McpOAuthStore({
-    filePath: path.join(path.dirname(options.conversationsDir), 'direct-mcp-oauth.json'),
-  });
+  const store = createDirectMcpCredentialStore(options.conversationsDir);
   const oauth = options.interactive ? createDirectMcpOAuth({ store, openBrowser: openInBrowser }) : { store };
   const mcp = await createDirectMcp({
     workspace: { root: options.target.root, target: 'local', access: options.target.grant.access },
@@ -127,6 +131,13 @@ export function createDirectMcpRefresh(
     epoch++;
     for (const entry of sessions.values()) schedule(entry);
   });
+  const untrack = (sessionId: string): void => {
+    const entry = sessions.get(sessionId);
+    if (!entry) return;
+    sessions.delete(sessionId);
+    entry.pending = undefined;
+    entry.unsubscribe();
+  };
   return {
     get epoch() {
       return epoch;
@@ -134,8 +145,7 @@ export function createDirectMcpRefresh(
     track(session: DirectSession, openedAtEpoch: number) {
       const previous = sessions.get(session.id);
       if (stopped || previous?.session === session) return;
-      previous?.unsubscribe();
-      if (previous) previous.pending = undefined;
+      untrack(session.id);
       const capture = session.capture((update) => {
         if (stopped || update.type !== 'state') return;
         const entry = sessions.get(session.id);
@@ -161,6 +171,7 @@ export function createDirectMcpRefresh(
       sessions.set(session.id, entry);
       schedule(entry);
     },
+    untrack,
     close() {
       stopped = true;
       unsubscribe();

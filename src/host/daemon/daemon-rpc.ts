@@ -29,6 +29,10 @@ export { ClientApiRpcError } from './daemon-errors.js';
 
 type WorkspaceScope = { readonly workspaceId?: string; readonly sessionId?: string };
 
+export type DaemonRpcContext = {
+  readonly protocolVersion?: string;
+};
+
 export type DaemonControlPort = {
   readonly daemonId: string;
   readonly daemonVersion: string;
@@ -46,6 +50,8 @@ export type DaemonControlPort = {
     sourceSessionId: string,
     input: { readonly name?: string; readonly text?: string },
   ): Promise<string>;
+  setGoal?(principal: Principal, sessionId: string, command: Record<string, unknown>): Promise<void>;
+  prepareSkillText?(principal: Principal, sessionId: string, skillName: string, text: string): Promise<string | null>;
   quota?(principal: Principal, sessionId?: string): Promise<Record<string, unknown>>;
   mcpStatus?(
     principal: Principal,
@@ -96,7 +102,12 @@ export class DaemonRpc {
     return next;
   }
 
-  openStream(principal: Principal, method: string, rawParams: unknown): Promise<StreamRegistration> {
+  openStream(
+    principal: Principal,
+    method: string,
+    rawParams: unknown,
+    _context?: DaemonRpcContext,
+  ): Promise<StreamRegistration> {
     return openDaemonStream(
       {
         host: this.deps.host,
@@ -112,7 +123,12 @@ export class DaemonRpc {
     );
   }
 
-  async invoke(principal: Principal, method: string, rawParams: unknown): Promise<Record<string, unknown>> {
+  async invoke(
+    principal: Principal,
+    method: string,
+    rawParams: unknown,
+    _context?: DaemonRpcContext,
+  ): Promise<Record<string, unknown>> {
     const params = rawParams === undefined ? {} : asRecord(rawParams, method);
     switch (method) {
       case 'protocol.ping':
@@ -182,37 +198,48 @@ export class DaemonRpc {
       case 'providers.presets':
         return await this.#requireConfig('listProviderPresets')();
       case 'providers.upsert':
-        return await this.deps.mutations.runSettings(
-          async () => (await this.#requireConfig('writeProvider')(params as never)) as Record<string, unknown>,
-        );
+        return await this.deps.mutations.runSettings(async () => {
+          const res = (await this.#requireConfig('writeProvider')(params as never)) as Record<string, unknown>;
+          await this.#publishCurrentSettings();
+          return res;
+        });
       case 'providers.delete': {
         const providerId = requireString(params, 'providerId');
         return await this.deps.mutations.runSettings(async () => {
           const res = await this.#requireConfig('deleteProvider')(providerId);
           if (!res.ok) throw new ClientApiRpcError('invalid_request', 'Only custom providers can be deleted.');
+          await this.#publishCurrentSettings();
           return res as Record<string, unknown>;
         });
       }
       case 'credentials.set': {
         const provider = requireString(params, 'provider');
         const value = requireString(params, 'value');
-        return await this.deps.mutations.runSettings(
-          async () => (await this.#requireConfig('setCredential')(provider, value)) as Record<string, unknown>,
-        );
+        return await this.deps.mutations.runSettings(async () => {
+          const res = (await this.#requireConfig('setCredential')(provider, value)) as Record<string, unknown>;
+          await this.#publishCurrentSettings();
+          return res;
+        });
       }
       case 'credentials.delete': {
         const provider = requireString(params, 'provider');
-        return await this.deps.mutations.runSettings(
-          async () => (await this.#requireConfig('deleteCredential')(provider)) as Record<string, unknown>,
-        );
+        return await this.deps.mutations.runSettings(async () => {
+          const res = (await this.#requireConfig('deleteCredential')(provider)) as Record<string, unknown>;
+          await this.#publishCurrentSettings();
+          return res;
+        });
       }
       case 'oauth.login':
       case 'oauth.select':
       case 'oauth.delete':
         return await this.#handleOAuth(method, params);
       case 'quota.get': {
-        const sessionId = typeof params['sessionId'] === 'string' ? params['sessionId'] : undefined;
-        return this.deps.control.quota ? await this.deps.control.quota(principal, sessionId) : { quota: null };
+        for (const key of Object.keys(params)) {
+          if (key !== 'sessionId')
+            throw new ClientApiRpcError('invalid_request', `Unrecognized key "${key}" in quota.get.`);
+        }
+        const scope = parseStrict(CLIENT_API_SCHEMAS.skillsListParams, params, 'quota.get');
+        return this.deps.control.quota ? await this.deps.control.quota(principal, scope.sessionId) : { quota: null };
       }
       case 'workspaces.list':
         return { workspaces: this.deps.workspaces ? await this.deps.workspaces.list(principal) : [] };
@@ -246,19 +273,28 @@ export class DaemonRpc {
         const scope = parseStrict(CLIENT_API_SCHEMAS.skillsListParams, params, 'skills.list');
         return { skills: (await this.deps.skills?.(principal, scope)) ?? [] };
       }
-      case 'mcp.status':
-        return this.deps.control.mcpStatus
-          ? await this.deps.control.mcpStatus(principal, {
-              ...(typeof params['workspaceId'] === 'string' ? { workspaceId: params['workspaceId'] } : {}),
-              ...(typeof params['sessionId'] === 'string' ? { sessionId: params['sessionId'] } : {}),
-            })
-          : { servers: [] };
-      case 'mcp.login':
+      case 'mcp.status': {
+        const scope = parseStrict(CLIENT_API_SCHEMAS.skillsListParams, params, 'mcp.status');
+        if (!this.deps.control.mcpStatus) throw new ClientApiRpcError('unavailable', 'MCP status unavailable.');
+        return await this.deps.control.mcpStatus(principal, scope);
+      }
+      case 'mcp.login': {
         if (!this.deps.control.mcpLogin) throw new ClientApiRpcError('unavailable', 'MCP login unavailable.');
+        const serverId = requireString(params, 'serverId');
+        for (const key of Object.keys(params)) {
+          if (key !== 'serverId' && key !== 'workspaceId') {
+            throw new ClientApiRpcError('invalid_request', `Unrecognized key "${key}" in mcp.login.`);
+          }
+        }
+        const scope =
+          params['workspaceId'] !== undefined
+            ? parseStrict(CLIENT_API_SCHEMAS.skillsListParams, { workspaceId: params['workspaceId'] }, 'mcp.login')
+            : {};
         return await this.deps.control.mcpLogin(principal, {
-          serverId: requireString(params, 'serverId'),
-          ...(typeof params['workspaceId'] === 'string' ? { workspaceId: params['workspaceId'] } : {}),
+          serverId,
+          ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
         });
+      }
       default:
         throw new ClientApiRpcError('invalid_request', `Unknown method "${method}".`);
     }
@@ -311,10 +347,33 @@ export class DaemonRpc {
 
   async #sessionCommand(principal: Principal, rawParams: Record<string, unknown>): Promise<Record<string, unknown>> {
     const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionCommandParams, rawParams, 'session.command');
-    const command = parsed.command as WireCommand;
-    if (this.#draining && (command.type === 'submit' || command.type === 'retry')) {
+    const rawCommand = { ...parsed.command };
+    const commandType = rawCommand['type'];
+    if (this.#draining && (commandType === 'submit' || commandType === 'retry')) {
       throw new ClientApiRpcError('closed', 'Daemon is draining and not accepting new turns.', { retryable: true });
     }
+    if (commandType === 'set_goal') {
+      if (!this.deps.control.setGoal) throw new ClientApiRpcError('unavailable', 'Session goal mutation unavailable.');
+      await this.deps.control.setGoal(principal, parsed.sessionId, rawCommand);
+      return { result: { ok: true, kind: 'accepted' } };
+    }
+    if ((commandType === 'submit' || commandType === 'preview') && rawCommand['skill'] !== undefined) {
+      if (typeof rawCommand['skill'] !== 'string' || rawCommand['skill'].length === 0) {
+        throw new ClientApiRpcError('invalid_request', 'Invalid skill name.');
+      }
+      if (rawCommand['text'] !== undefined && typeof rawCommand['text'] !== 'string') {
+        throw new ClientApiRpcError('invalid_request', 'Invalid command text.');
+      }
+      if (!this.deps.control.prepareSkillText) {
+        throw new ClientApiRpcError('unavailable', 'Server-side skill expansion unavailable.');
+      }
+      const text = typeof rawCommand['text'] === 'string' ? rawCommand['text'] : '';
+      const expanded = await this.deps.control.prepareSkillText(principal, parsed.sessionId, rawCommand['skill'], text);
+      if (expanded === null) throw new ClientApiRpcError('invalid_request', `Unknown skill "${rawCommand['skill']}".`);
+      delete rawCommand['skill'];
+      rawCommand['text'] = expanded;
+    }
+    const command = rawCommand as unknown as WireCommand;
     let res: WireCommandResult;
     if (this.deps.host.sendCommand) {
       res = await this.deps.host.sendCommand(principal, parsed.sessionId, command);
@@ -328,6 +387,16 @@ export class DaemonRpc {
     }
     if (!res.ok) throw mapCommandFailure(res);
     return { result: res };
+  }
+
+  async #publishCurrentSettings(): Promise<void> {
+    const read = this.deps.configuration?.read;
+    if (!read) return;
+    try {
+      this.deps.mutations.publishSettings(await read.call(this.deps.configuration));
+    } catch {
+      // Best-effort settings fanout after mutation commit.
+    }
   }
 
   async #settingsUpdate(rawParams: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -351,21 +420,19 @@ export class DaemonRpc {
     if (provider !== 'codex' && provider !== 'grok') {
       throw new ClientApiRpcError('invalid_request', 'Unsupported OAuth provider.');
     }
-    if (method === 'oauth.login') {
-      return await this.deps.mutations.runOAuth(
-        async () => (await this.#requireConfig('oauthLogin')(provider)) as Record<string, unknown>,
-      );
-    }
-    if (method === 'oauth.select') {
-      const accountId = requireString(params, 'accountId');
-      return await this.deps.mutations.runOAuth(
-        async () => (await this.#requireConfig('oauthSelect')(provider, accountId)) as Record<string, unknown>,
-      );
-    }
-    const accountId = typeof params['accountId'] === 'string' ? params['accountId'] : '';
-    return await this.deps.mutations.runOAuth(
-      async () => (await this.#requireConfig('oauthDelete')(provider, accountId)) as Record<string, unknown>,
-    );
+    return await this.deps.mutations.runOAuth(async () => {
+      const res =
+        method === 'oauth.login'
+          ? await this.#requireConfig('oauthLogin')(provider)
+          : method === 'oauth.select'
+          ? await this.#requireConfig('oauthSelect')(provider, requireString(params, 'accountId'))
+          : await this.#requireConfig('oauthDelete')(
+              provider,
+              typeof params['accountId'] === 'string' ? params['accountId'] : '',
+            );
+      await this.deps.mutations.runSettings(() => this.#publishCurrentSettings());
+      return res as Record<string, unknown>;
+    });
   }
 
   async #handleWorkspaceFiles(principal: Principal, params: Record<string, unknown>): Promise<Record<string, unknown>> {

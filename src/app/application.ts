@@ -107,7 +107,12 @@ export type DirectApplication = {
     operation: () => Promise<Result>,
   ): Promise<Result>;
   /** `undefined` clears it. Throws if another write got there first. */
-  setGoal(sessionId: string, goal: DurableGoal | undefined, source: 'user' | 'launcher'): Promise<void>;
+  setGoal(
+    sessionId: string,
+    goal: DurableGoal | undefined,
+    source: 'user' | 'launcher',
+    expectedGeneration?: number,
+  ): Promise<void>;
   /** The durable goal of a session, and whether one is set at all. */
   goal(sessionId: string): Promise<DurableGoal | undefined>;
   /** Pass a snapshot's `seq` to read that cut rather than the log's current end. */
@@ -175,12 +180,14 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       const epoch = refresh?.epoch ?? 0;
       const session = await nativeStore.create(...args);
       refresh?.track(session, epoch);
+      runtimes.get(session.id)?.trackMcpCatalog?.(session);
       return session;
     },
     async open(...args) {
       const epoch = refresh?.epoch ?? 0;
       const session = await nativeStore.open(...args);
       refresh?.track(session, epoch);
+      runtimes.get(session.id)?.trackMcpCatalog?.(session);
       return session;
     },
   };
@@ -290,8 +297,8 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     withApprovalMode(sessionId, approvalMode, operation) {
       return runtimes.withApprovalMode(sessionId, approvalMode, operation);
     },
-    async setGoal(sessionId, goal, source) {
-      writeGoal(await store.open(sessionId), goal, source);
+    async setGoal(sessionId, goal, source, expectedGeneration) {
+      writeGoal(await store.open(sessionId), goal, source, expectedGeneration);
     },
     goal: async (sessionId) => stateOf(await store.open(sessionId)).context.goal.goal,
     async sessionConfiguration(sessionId) {
@@ -393,9 +400,15 @@ function stateOf(session: DirectSession): DirectSessionState {
   return state;
 }
 
-function writeGoal(session: DirectSession, goal: DurableGoal | undefined, source: 'user' | 'launcher'): void {
-  if (!session.setGoal(stateOf(session).context.goal.generation, goal, source)) {
-    throw new Error('The goal changed while updating it.');
+function writeGoal(
+  session: DirectSession,
+  goal: DurableGoal | undefined,
+  source: 'user' | 'launcher',
+  expectedGeneration?: number,
+): void {
+  const generation = expectedGeneration ?? stateOf(session).context.goal.generation;
+  if (!session.setGoal(generation, goal, source)) {
+    throw new DirectProtocolError('request_conflict', 'The goal changed while updating it.');
   }
 }
 

@@ -54,6 +54,10 @@ export class DirectEventQueue implements AsyncIterable<WireEvent> {
     this.#batches.length = 0;
     this.#end(null);
   }
+  /** A source's terminal frame follows every publication it already delivered. */
+  finish(): void {
+    this.#end(null);
+  }
   /** Already queued accepted events remain readable before the transport failure surfaces. */
   fail(error: Error): void {
     this.#end(error);

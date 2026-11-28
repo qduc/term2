@@ -21,11 +21,12 @@ export interface DirectConnection {
   /** Unsubscribe only; closing a connection never cancels or closes the Session. */
   close(): void;
 }
-/** Reconnect retains client state at replay.fromSeq. Consume tail, cut-state sync, then live.
- * snapshot is null because no current snapshot may be applied BEFORE the tail. */
+/** Reconnect retains client state at replay.fromSeq. Consume the accepted tail before live events.
+ * A host may send a cut-state sync after the tail. The connection has no initial snapshot. */
 export type DirectReplayConnection = Omit<DirectConnection, 'snapshot' | 'cut'> & {
   readonly snapshot: null;
-  readonly replay: { readonly fromSeq: number; readonly toSeq: number };
+  /** toSeq is null when the transport does not report where replay ends and live streaming begins. */
+  readonly replay: { readonly fromSeq: number; readonly toSeq: number | null };
 };
 export interface DirectHost {
   listSessions(principal: Principal, cursor?: string): ReturnType<DirectSessionStore['list']>;

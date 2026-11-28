@@ -36,6 +36,8 @@ import { scanDirectoryEntries } from '../file-service.js';
 import { SessionContextService } from '../../model/traffic-context.js';
 import { buildEnvOverrides } from '../../config/settings/settings-env.js';
 import { createSettingsService } from '../settings.js';
+import { createDaemonMcp } from './daemon-mcp.js';
+import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import {
   acquireDaemonLock,
   checkConversationsDirectory,
@@ -138,6 +140,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
   let socketBound = false;
   let advertisementWritten = false;
   let app: Awaited<ReturnType<typeof createDirectApplication>> | null = null;
+  let daemonMcp: ReturnType<typeof createDaemonMcp> | null = null;
   let unixServer: DaemonUnixServer | null = null;
 
   try {
@@ -176,17 +179,28 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     const mutations = new GlobalMutationCoordinator();
     const sessionPolicies = new Map<string, SessionApprovalPolicy>();
     let pendingCreatePolicy: SessionApprovalPolicy | undefined;
+    const policyForSession = (sessionId: string): SessionApprovalPolicy | undefined => {
+      if (pendingCreatePolicy !== undefined && !sessionPolicies.has(sessionId)) {
+        sessionPolicies.set(sessionId, pendingCreatePolicy);
+      }
+      return sessionPolicies.get(sessionId);
+    };
     const lifecycleObserver: { current?: (event: DirectHostLifecycleEvent) => void } = {};
+    daemonMcp = createDaemonMcp({
+      conversationsDir: paths.conversationsDir,
+      settingsDir,
+      onWarning: (message) => selection.logger.warn(message),
+    });
+    const activeDaemonMcp = daemonMcp;
 
     app = await createDirectApplication({
       conversationsDir: paths.conversationsDir,
       selection,
       resolveDefaultModel: () => configuration.currentModelSelection(),
+      prepareSurface: (sessionId, { workspace }) =>
+        activeDaemonMcp.prepare(sessionId, workspace, policyForSession(sessionId)?.mode !== 'headless'),
       surface: (sessionId) => {
-        if (pendingCreatePolicy !== undefined && !sessionPolicies.has(sessionId)) {
-          sessionPolicies.set(sessionId, pendingCreatePolicy);
-        }
-        const policy = sessionPolicies.get(sessionId);
+        const policy = policyForSession(sessionId);
         const isHeadless = policy?.mode === 'headless';
         return {
           autoApprove: isHeadless ? policy.autoApprove : false,
@@ -298,6 +312,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
             try {
               sessionIndex.dispose();
               await app?.close();
+              await daemonMcp?.close();
             } finally {
               // Step 6: remove daemon.json and unlink daemon.sock BEFORE releasing daemon.lock.sqlite.
               if (advertisementWritten) {
@@ -385,6 +400,25 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         async handoffSession(_principal, sourceSessionId, input) {
           return await localOwnerApp.handoff(sourceSessionId, undefined, input.text ?? '');
         },
+        setGoal: (principal, sessionId, command) => applyDaemonSetGoal(localOwnerApp, principal, sessionId, command),
+        async prepareSkillText(principal, sessionId, skillName, text) {
+          const root = await discoveryRoot(principal, { sessionId });
+          return prepareDaemonSkillText(localOwnerApp, root, skillName, text);
+        },
+        quota: (principal, sessionId) => readDaemonSessionQuota(localOwnerApp, principal, sessionId),
+        async mcpStatus(principal, scope) {
+          requireLocalCaller(principal);
+          const root =
+            scope.workspaceId || scope.sessionId
+              ? await discoveryRoot(principal, scope)
+              : activeDaemonMcp.singleActiveRoot();
+          return await activeDaemonMcp.status(root);
+        },
+        async mcpLogin(principal, { serverId, workspaceId }) {
+          requireLocalCaller(principal);
+          const root = workspaceId ? resolveWorkspaceRoot(workspaceId) : activeDaemonMcp.singleActiveRoot();
+          return await activeDaemonMcp.login(root, serverId);
+        },
         async files(principal, scope) {
           const root = await discoveryRoot(principal, scope);
           const scanned = await scanDirectoryEntries(root, { maxDepth: 12, maxTotalEntries: 2_000 });
@@ -435,6 +469,11 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     }
     try {
       await app?.close();
+    } catch {
+      // Best-effort cleanup on startup failure.
+    }
+    try {
+      await daemonMcp?.close();
     } catch {
       // Best-effort cleanup on startup failure.
     }

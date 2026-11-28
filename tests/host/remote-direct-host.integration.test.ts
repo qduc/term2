@@ -142,13 +142,8 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
       }),
     );
 
-    const prevSettingsDir = process.env['TERM2_SETTINGS_DIR'];
-    process.env['TERM2_SETTINGS_DIR'] = settingsDir;
-    cleanups.push(() => {
-      if (prevSettingsDir === undefined) delete process.env['TERM2_SETTINGS_DIR'];
-      else process.env['TERM2_SETTINGS_DIR'] = prevSettingsDir;
-    });
-
+    // Do NOT set process.env.TERM2_SETTINGS_DIR: startTerm2Daemon receives it via options.env
+    // only, proving createSessionSettings forwards SettingsService.settingsDir without env leakage.
     const daemonEnv: NodeJS.ProcessEnv = {
       ...process.env,
       TERM2_DAEMON_DIR: runtimeDir,
@@ -223,6 +218,16 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     expect(eventsA.some((e) => e.type === 'turn_ended')).toBe(true);
     expect(eventsB.some((e) => e.type === 'turn_ended')).toBe(true);
 
+    // Attachment cut pairs the reduced snapshot with its exact batch ordinal.
+    const cutA = connA.cut?.();
+    expect(cutA).toBeDefined();
+    expect(cutA!.ordinal).toBeGreaterThan(0);
+    expect(cutA!.snapshot.seq).toBeGreaterThan(0);
+    expect(cutA!.snapshot.lastError).toBeNull();
+    expect(cutA!.snapshot.messages.map((m) => ({ role: m.role, text: m.text }))).toContainEqual(
+      expect.objectContaining({ role: 'assistant', text: expect.stringContaining('remote reply') }),
+    );
+
     // Closing Client B's connection detaches cleanly without closing the session; sendCommand works.
     connB.close();
     const invalidRes = await clientA.host.sendCommand!(LOCAL_PRINCIPAL, connA.sessionId, {
@@ -232,10 +237,65 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     });
     expect(invalidRes.ok).toBe(false);
 
+    // Quota and MCP status work over the Unix socket for the attached session; invalid scopes reject cleanly.
+    const quotaRes = await clientA.host.getQuota(connA.sessionId);
+    expect(quotaRes).toEqual({
+      quota: {
+        provider: 'mock-daemon',
+        subscription: false,
+        windows: { fiveHour: null, weekly: null },
+      },
+    });
+    for (const badQuota of [{ sessionId: 42 }, { sessionId: '' }, { typo: 'x' }]) {
+      await expect(clientA.host.rpc.request('quota.get', badQuota)).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    expect(await clientA.host.getMcpStatus({ sessionId: connA.sessionId })).toEqual({ servers: [] });
+    await expect(clientA.host.loginMcp('nonexistent-mcp')).rejects.toMatchObject({ code: 'not_found' });
+    await expect(clientA.host.loginMcp('nonexistent-mcp', '/etc/passwd')).rejects.toMatchObject({
+      code: 'invalid_request',
+    });
+
+    // v1.0 set_goal session command enforces strict schema and expectedGeneration CAS even after concurrent clear.
+    await expect(
+      clientA.host.rpc.request('session.command', {
+        sessionId: connA.sessionId,
+        command: { type: 'set_goal', action: 'set', goal: { text: 'Missing generation' } },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+    await expect(
+      clientA.host.rpc.request('session.command', {
+        sessionId: connA.sessionId,
+        command: { type: 'set_goal', action: 'set', expectedGeneration: 0, goal: { text: 'Ok' }, extra: 1 },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
+    const setGoalOk = await clientA.host.rpc.request('session.command', {
+      sessionId: connA.sessionId,
+      command: { type: 'set_goal', action: 'set', expectedGeneration: 0, goal: { text: 'Ship PR 1' } },
+    });
+    expect(setGoalOk).toEqual({ result: { ok: true, kind: 'accepted' } });
+    await expect(
+      clientA.host.rpc.request('session.command', {
+        sessionId: connA.sessionId,
+        command: { type: 'set_goal', action: 'clear', expectedGeneration: 0 },
+      }),
+    ).rejects.toMatchObject({ code: 'stale_revision' });
+    await clientA.host.rpc.request('session.command', {
+      sessionId: connA.sessionId,
+      command: { type: 'set_goal', action: 'clear', expectedGeneration: 1 },
+    });
+    // Concurrent clear advanced generation to 2; stale achieved MUST return stale_revision (not busy).
+    await expect(
+      clientA.host.rpc.request('session.command', {
+        sessionId: connA.sessionId,
+        command: { type: 'set_goal', action: 'achieved', expectedGeneration: 1 },
+      }),
+    ).rejects.toMatchObject({ code: 'stale_revision' });
+
     // Replay reconnect from seq 0 delivers accepted history events; invalid fromSeq maps to replay_unavailable.
     const replayConn = await clientB.host.connect(LOCAL_PRINCIPAL, connA.sessionId, 0);
     expect(replayConn.snapshot).toBeNull();
     expect(replayConn.replay.fromSeq).toBe(0);
+    expect(replayConn.replay.toSeq).toBeNull();
     const replayed = await collectUntil(replayConn.events, (e) => e.type === 'turn_ended');
     expect(replayed.some((e) => e.type === 'turn_ended')).toBe(true);
     replayConn.close();
@@ -258,7 +318,21 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     await settingsSub.unsubscribe();
     await listSub.unsubscribe();
 
-    // Disposing Client B never shuts down the daemon; Client A stays healthy.
+    // Disposing Client B never shuts down the daemon; Client A stays healthy and can close the session cleanly,
+    // and set_goal on a dormant/closed session re-attaches via host so a subsequent closeSession releases it.
+    const closeObserver = await clientB.host.connect(LOCAL_PRINCIPAL, connA.sessionId);
+    const drainClosed = (async () => {
+      const seen: WireEvent[] = [];
+      for await (const event of closeObserver.events) seen.push(event);
+      return seen;
+    })();
+    await clientA.host.closeSession!(LOCAL_PRINCIPAL, connA.sessionId);
+    await expect(drainClosed).resolves.toBeInstanceOf(Array);
+    await clientA.host.rpc.request('session.command', {
+      sessionId: connA.sessionId,
+      command: { type: 'set_goal', action: 'set', expectedGeneration: 2, goal: { text: 'Dormant goal' } },
+    });
+    await clientA.host.closeSession!(LOCAL_PRINCIPAL, connA.sessionId);
     connA.close();
     await clientB.host.dispose();
     const statusAfterDispose = await clientA.host.status();
@@ -317,11 +391,22 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     await expect(host.listSkills({ sessionId: 'conv_00000000-0000-4000-8000-000000000001' })).rejects.toMatchObject({
       code: 'not_found',
     });
-    for (const method of ['skills.list', 'workspaces.files']) {
+    for (const method of ['skills.list', 'workspaces.files', 'mcp.status']) {
       for (const invalid of [{ sessionId: 42 }, { workspaceId: '' }, { typo: 'misspelled scope' }]) {
         await expect(host.rpc.request(method, invalid)).rejects.toMatchObject({ code: 'invalid_request' });
       }
     }
+    const previewSkill = await host.rpc.request<{ result: { ok: boolean; kind: string } }>('session.command', {
+      sessionId,
+      command: { type: 'preview', text: 'apply skill', skill: 'daemon-project-scope' },
+    });
+    expect(previewSkill.result).toMatchObject({ ok: true, kind: 'preview' });
+    await expect(
+      host.rpc.request('session.command', {
+        sessionId,
+        command: { type: 'preview', text: 'apply skill', skill: 'no-such-skill' },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_request' });
   });
 
   it('runs a real built-CLI headless turn through TERM2_DAEMON_MODE=1 with auto-started daemon and clean stop', async () => {

@@ -2,7 +2,7 @@
  * Long-lived stream subscriptions and cursor-replay pumping for the Client API v1.0:
  * `session.list.subscribe`, `session.attach` (snapshot & replay), and `settings.subscribe`.
  */
-import type { WireEvent, WireSnapshot } from '../../protocol/wire.js';
+import type { WireSnapshot } from '../../protocol/wire.js';
 import { DirectProtocolError } from '../../protocol/errors.js';
 import { CLIENT_API_SCHEMAS } from '../../protocol/client-api/client-api-schema.js';
 import type { DirectConnection, DirectHost, DirectReplayConnection, Principal } from '../in-process-direct-types.js';
@@ -52,32 +52,25 @@ function pumpSessionConnection(
         for await (const batch of connection.batches()) {
           if (closed) break;
           if (batch.ordinal <= dropThroughOrdinal) continue;
-          if (batch.events.length === 0) continue;
-          const acceptedEvents: WireEvent[] = [];
-          const liveEvents: WireEvent[] = [];
-          for (const event of batch.events) {
-            if (event.seq !== null) acceptedEvents.push(event);
-            else liveEvents.push(event);
-          }
-          if (acceptedEvents.length > 0) {
-            const last = acceptedEvents[acceptedEvents.length - 1]!;
+          if (batch.kind === 'accepted') {
+            if (batch.seq === null || batch.occurredAt === null) throw new Error('Invalid accepted batch.');
             emit({
               event: 'session.accepted',
               payload: {
                 sessionId,
-                seq: last.seq!,
-                occurredAt: last.occurredAt,
-                events: acceptedEvents as unknown as Record<string, unknown>[],
+                seq: batch.seq,
+                occurredAt: batch.occurredAt,
+                events: batch.events as unknown as Record<string, unknown>[],
               },
             });
-          }
-          if (liveEvents.length > 0) {
+          } else if (batch.events.length > 0) {
             emit({
               event: 'session.live',
-              transient: true,
+              // Preserve authoritative state synchronization when shedding transient updates.
+              transient: batch.kind === 'live',
               payload: {
                 sessionId,
-                events: liveEvents as unknown as Record<string, unknown>[],
+                events: batch.events as unknown as Record<string, unknown>[],
               },
             });
           }

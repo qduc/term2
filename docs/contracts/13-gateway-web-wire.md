@@ -1,15 +1,9 @@
 # Contract 13 — Gateway ↔ ChatForge Web Wire
 
-**Status:** M0 deliverable of [web client gateway completion](../plans/web-client/web-client-gateway-completion.md).
-Docs-only; records the wire as it exists at term2 source commit `fbec9bb6` (branch
-`wg-m0-wire`). Nothing here is merged, and no production file changed.
-
-This record is an **inventory**, not the executable-seam shape of Contracts 01–12 in
-[README.md](./README.md). Those assume one cross-owner seam with invariants, settlement,
-and a public test boundary. M0's subject is the whole wire surface between two
-repositories, so it uses the five sections the plan prescribes: routes, auth, events,
-gaps, mismatches. A later milestone that repairs a seam here should get its own
-seam-shaped record.
+This historical inventory documents the gateway at Term2 commit `fbec9bb6`,
+with later appendices on session commands, workspace grant edits and restart
+recovery. For the current HTTP boundary, including negotiation and workspace
+grants, see [Agent-wire v2 server transport](14-agent-wire-v2-server.md).
 
 **Sources read for this record (historical pre-rewrite tree at `fbec9bb6`).** term2: historical `source/gateway/gateway.ts`, `contracts.ts`,
 `assertion.ts`, `pairing.ts`, `trusted-clients.ts`, `server.ts`,

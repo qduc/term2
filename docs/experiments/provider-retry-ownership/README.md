@@ -50,9 +50,8 @@ On unchanged production source, the original 16 regression cases all failed for
 the expected behavioral reasons. The intermediate SDK-only fix then failed the
 new timeout/conflict controls. The final checks cover bounded exhaustion,
 successful recovery, visible retry events, explicit engine re-entry with updated
-instructions, unchanged tool payloads and timeout/conflict recovery. `results.json`
-retains normalized runner evidence and source hashes; raw session-local reports
-are in `.handoff/`. Reproduce the original failure by running the regression file
+instructions, unchanged tool payloads and timeout/conflict recovery. The [archived results](https://github.com/qduc/term2/blob/v1.3.0/docs/experiments/provider-retry-ownership/results.json)
+retain normalized runner evidence and source hashes. Reproduce the original failure by running the regression file
 against the stated base production files. No permanent unit tests or static
 guards were added.
 
@@ -79,8 +78,7 @@ architecture/rules/reachability/complexity/callback checks and the baseline gate
 passed with no added deviations. ESLint retains 40 existing warnings. Independent
 verification accepted 66 cases, comprising the author's 20 plus 46 additional
 controls; its [review note](independent-verification.md) separates its evidence
-from author checks. The final source hashes in `results.json` match the checked
-files. CI and live-provider acceptance are separate from these local results.
+from author checks. The archived source hashes match the checked files. CI and live-provider acceptance are separate from these local results.
 
 ## Related work and rejected lead
 

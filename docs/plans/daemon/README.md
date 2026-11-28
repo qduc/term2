@@ -4,7 +4,7 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–14e Part 1 merged (`term2 serve` & web UI over daemon). Step 14e Part 2 (control socket, Discord, ACP over daemon; D011) is in review; Step 14f is next.
+- **Current phase:** Step 14e Part 1 (serve and web UI) merged in `93be5b603`. Part 2 (control socket, Discord, and ACP; D011) merged in `422b48691`. Daemon mode is still opt-in via `TERM2_DAEMON_MODE=1`.
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
@@ -15,7 +15,7 @@ Status: in progress. Started 2026-11-27.
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Land Step 14e Part 2, then Step 14f: default flip to daemon mode, `--in-process` escape hatch, the existing suites run with clients attached through the daemon, and one smoke run per surface. Owner review items 11–17 in [worth revisiting](worth-revisiting.md) came from Part 2; item 17 is a race on `main` to fix before the flip.
+- **Next concrete actions:** Address the daemon-only suite failures and verify the existing suites with clients attached through the daemon, including one smoke run per surface, before Step 14f changes the default. The [retrospective](../../lessons/2026-11-28-daemon-step14e-orchestration.md) records why the first flip attempt was parked. The launch-value race (item 17 in [worth revisiting](worth-revisiting.md)) was fixed in `d60623817`.
 
 
 ## Goal

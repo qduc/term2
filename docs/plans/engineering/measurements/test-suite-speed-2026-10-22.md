@@ -48,7 +48,7 @@ Typecheck, build, lint (31 existing warnings), formatting, no-unit-tests, AST
 preservation, inventory and failure-path checks passed. The Mac failures below
 remain visible and were never converted into skips. The final assignment and
 setup are retained; all earlier slower or unsuccessful experiments remain in
-[the machine-readable evidence](./test-suite-speed-2026-10-22.ci-loop.json).
+[the machine-readable evidence](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/plans/engineering/measurements/test-suite-speed-2026-10-22.ci-loop.json).
 Two historical per-job summaries still lacked terminal metadata even though
 their workflows reported success and complete logs passed. Their exact job
 completion/cost values are left unknown; no timestamps were invented. The
@@ -316,7 +316,7 @@ The corrected sequential result is `/tmp/term2-e2e-final.log`. No published
 performance number includes E2E or concurrent build work.
 
 Full-suite failures are preserved, not converted to skips or accepted as green.
-The machine-readable [evidence summary](./test-suite-speed-2026-10-22.results.json)
+The machine-readable [evidence summary](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/plans/engineering/measurements/test-suite-speed-2026-10-22.results.json)
 includes commands, resource measurements, all provider case-name accounting,
 failure names, representative attempts, and source hashes. Full local logs and
 Vitest JSON reports are `/tmp/term2-*.log` and `/tmp/term2-*-results.json` in the
@@ -409,7 +409,7 @@ Rejecting that split avoids adopting the observed reliability risk.
 
 The timing commands, per-case names/statuses/durations, failed attempts, warmup
 history, baseline blobs, and source hashes are in the
-[follow-up evidence](./test-suite-speed-2026-10-22.follow-up.json). Raw logs and
+[follow-up evidence](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/plans/engineering/measurements/test-suite-speed-2026-10-22.follow-up.json). Raw logs and
 Vitest JSON remain under `/tmp/term2-astra-*` in the execution environment.
 The baseline commands targeted the original files at `7d9a901`; the provider
 candidate selected all three entries:
@@ -533,7 +533,7 @@ optimization or Mac-specific test repair was adopted during this continuation.
 
 Exact commands, environment overrides, timestamps, every case result and
 failure, raw-log hashes, CI evidence, and preservation hashes are in
-[Mac evidence](./test-suite-speed-2026-10-22.mac.json). Raw local logs, Vitest JSON,
+[Mac evidence](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/plans/engineering/measurements/test-suite-speed-2026-10-22.mac.json). Raw local logs, Vitest JSON,
 and measurement records remain under
 `/Users/qduc/Documents/Codex/2026-10-22/task/evidence/`; the bounded measurement
 and AST-check scripts are beside that directory. The cloud's `/tmp` paths above
@@ -608,7 +608,7 @@ At this intermediate checkpoint the one-minute goal was unverified. The cold CLI
 alone took 63.04 seconds; the same-head repeat took 50.63 seconds. Its 53 cases
 remain sequential. The previously unreliable integration partition remains
 rejected. Full metadata, local outcomes, source hashes, preservation checks,
-and rejected attempts are in [CI loop evidence](./test-suite-speed-2026-10-22.ci-loop.json).
+and rejected attempts are in [CI loop evidence](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/plans/engineering/measurements/test-suite-speed-2026-10-22.ci-loop.json).
 
 
 ### Second bounded scheduling experiment

@@ -22,9 +22,9 @@ Tracks every step of [the singleton daemon plan](README.md), its status, key art
 | 14b | Remote `DirectConnection` over Unix socket | Done | `UnixRpcClient`, `createRemoteDirectHost`, `connectRemoteDirectHost`, `remote-direct-host.integration.test.ts` | `7a2c636c0` |
 | 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | `7a2c636c0` |
 | 14d | TUI zoom-in + TUI client over daemon | Done | `TuiBackend`, `daemon-tui-backend.ts`, `DaemonTuiSettingsStore`, `daemon-tui-providers.ts`, `daemon-tui.e2e.test.ts` (independent verifier: `accept`) | `54fb732` |
-| 14e (Part 1) | `term2 serve` & web UI over daemon (`daemon.serve.start`/`stop`, `local_leases`) | Done | `DaemonServeLeaseManager`, `launchServeOverDaemon`, unified D007 store/`SessionIndex`/`GlobalMutationCoordinator`, `daemon-serve-lease.integration.test.ts`, 35/35 Playwright browser flows under `TERM2_DAEMON_MODE=1` (independent verifier: `accept` on `9b3772a`) | Pending PR |
-| 14e (Part 2) | Control socket, Discord, and ACP over daemon (`session.control.*`, `session.acp.set_mcp`) | In review | `control-lease.ts`, `control-bridge.ts`, `daemon-acp.ts`, `launch-acp-daemon.ts`, `DaemonLaunchPolicies`; daemon TUI e2e control case, `tests/clients/acp/daemon.integration.test.ts` (D011; independent verifiers: `accept`) | — |
-| 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e Part 2 | — |
+| 14e (Part 1) | `term2 serve` & web UI over daemon (`daemon.serve.start`/`stop`, `local_leases`) | Done | `DaemonServeLeaseManager`, `launchServeOverDaemon`, unified D007 store/`SessionIndex`/`GlobalMutationCoordinator`, `daemon-serve-lease.integration.test.ts`, 35/35 Playwright browser flows under `TERM2_DAEMON_MODE=1` (independent verifier: `accept` on `9b3772a`) | `93be5b603` |
+| 14e (Part 2) | Control socket, Discord, and ACP over daemon (`session.control.*`, `session.acp.set_mcp`) | Done | `control-lease.ts`, `control-bridge.ts`, `daemon-acp.ts`, `launch-acp-daemon.ts`, `DaemonLaunchPolicies`; daemon TUI e2e control case, `tests/clients/acp/daemon.integration.test.ts` (D011; independent verifiers: `accept`) | `422b48691` |
+| 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Part 2 landed. The [first flip attempt](../../lessons/2026-11-28-daemon-step14e-orchestration.md) found daemon-only suite failures. | — |
 
 ### Step 14d workspace and discovery
 

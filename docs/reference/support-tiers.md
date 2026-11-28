@@ -44,6 +44,7 @@ items are stable and depended on by old conversation logs; they are not unfinish
 | Remote SSH session | `--ssh`, `--remote-dir`, `--ssh-port`, `ssh.*` | Supported | Has its own contract, `docs/contracts/06-ssh-transport-lifecycle.md`. |
 | Control socket and control CLI | `--control-socket`, `term2 control ...`, `/bridge` | Experimental | |
 | Discord bridge | `term2 discord`, `--discord-input`, tool `discord_send` | Experimental | Depends on a third-party service and a bot token. |
+| Local daemon | [Daemon opt-in and CLI](local-daemon.md) | Experimental | The in-process host remains the default. |
 | Gateway server | `term2 serve` with socket, TLS, pairing and assertion auth | Experimental | Its only client in this repository is the prototype web client. |
 | Web client | `web-client/` | Experimental | `web-client/SOURCE.md` calls it a prototype. |
 | Coordinator deployment files | `deployment/coord-startup/` | Experimental | Its README says it installs nothing. |

@@ -1,6 +1,6 @@
 # Bug: `session_read` cannot read the tail of a transcript, and its `from: "end"` contract promises a cursor it never returns
 
-**Status:** partially resolved (2026-09-05). The tail/page contract findings are fixed by the M2a repair in commit `569f9e3b` (see Resolution below); the rollover successor/brief delivery finding remains open.
+**Historical incident (2026-09-05).** The tail/page repair landed in `569f9e3b`. Successor briefing and durable predecessor metadata shipped separately through the [rollover handoff](../plans/sessions/session-rollover-handoff.md).
 **Severity:** medium — no data loss, but it breaks the tool's primary purpose
 ("continue from previous session") for long transcripts, and the description
 actively instructs the model down a path that dead-ends. Workarounds exist but
@@ -19,9 +19,9 @@ Fixed for the canonical browser (`SessionBrowser.read` in `source/services/conve
 - **`omitted` accounting (symptom 3).** `read` now reports page-local counts: `omitted = total - items.length`, so `total - omitted` equals records represented on the page on every page shape, including partial and resumed chunks. The old calculation measured cumulative remaining records and disagreed with the description on continuation pages.
 - **Description alignment.** The `session_read` description, its test pins, and the `session-browser.md` prompt fragment now state the region anchor, `maxChars`-driven continuations, cursor-only-while-forward-content-remains, and that read `omitted` covers records absent for any reason (before the anchor, beyond `limit`, awaiting continuation) — unlike `session_list`/`session_search`, where `omitted` still counts only budget-dropped entries.
 
-Still tracked in this report, not addressed by the tail repair:
+Findings outside the tail repair:
 
-- **Rollover successor/brief delivery** remains unobservable. The plan scopes brief persistence, projection, and successor delivery outside the index and tail contract, so a full tail read still proves nothing about a missing successor; this finding stays open here.
+- **Rollover successor and briefing delivery** were unobservable in the incident. The separate rollover implementation now composes the successor briefing and records its predecessor as `session_init.rolloverFrom`. The browser tail contract concerns records within the session selected for reading.
 - **Per-message time filtering** (the session-level `updatedAt` finding) is out of the current API scope; M2a only documented the session-level meaning in the `session_search` description.
 
 ## Symptom

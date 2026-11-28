@@ -1,69 +1,58 @@
-# Architecture Overview
+# Architecture overview
 
-Terminal AI assistant: React (Ink) UI, an application-owned agent runtime and
-TypeScript/Node. It chats with an agent that can run shell commands and edit files,
-gated by approval prompts. Clients (TUI, headless, ACP, control socket, Discord) render
-one wire protocol from one host.
+Term2 clients send commands and render events. The host connects a client to the
+right session. A session records what happened and applies Term2 policy, while
+`@qduc/agent-core` runs the model and tool loop.
 
-Start with [`layers.md`](layers.md). It is the reference for the source layers, their
-import rules, how a message travels and the rule checks that enforce all of it. This
-page answers the question `layers.md` leaves open: **which code actually runs a turn?**
-One path does. The unused pre-rewrite runtime was removed in #197.
+## Where the host runs
 
-## The turn path
+| Launch path | Where the session lives |
+| --- | --- |
+| In-process | The launcher uses the host built by `createDirectApplication` in [application.ts](../../src/app/application.ts). This is the default path. |
+| Daemon-backed | `startTerm2Daemon` builds the same host in a separate local process. TUI, headless and ACP clients connect over the Unix Client API. HTTP, named control sockets and Discord use daemon-owned listeners or connections scoped to the launcher. |
 
-Every conversation, every client and every child agent runs here.
+The daemon path is opt-in. The launcher selects it for eligible invocations.
+The [source layers](layers.md#host-paths) identify the launchers and transport
+entry points. The [Client API specification](../plans/daemon/spec/client-api.md)
+defines the local RPC and stream boundary.
 
-```
-client ── WireCommand ──▶ host/in-process-direct.ts ──▶ protocol/commands.ts
-                                                            │
-                                         session/session.ts │ (live DirectSession)
-                                    session/conversation.ts │ appends admission facts
-                               session/conversation-turn.ts │ appends each event's facts, then accepts it
-                                             engine/turn.ts ▼ waits for answers; never calls up
-                                   engine/turn-model.ts ──▶ app model registry ──▶ model/provider.ts
-```
+Both paths use the same native session. Detaching a client from a daemon session
+leaves the session with the daemon. A listener lease, such as the one for
+`term2 serve`, instead ends when its owning launcher disconnects.
 
-- **One log.** The session appends native facts (`session/facts.ts`) to one JSONL log.
-  History, status, the pending interaction, the queue and retry eligibility are replayed
-  from it (`session/replay.ts`).
-- **One projection.** `protocol/projection.ts` turns session updates into `WireEvent`s
-  once per session; every attached client reads the same events.
-- **The engine waits.** An approval or question is an `interaction_required` event; the
-  turn waits in memory and the session alone writes the pending interaction.
+## How a turn runs
 
-Details: "How a message travels" and "Where an approval waits" in `layers.md`.
-`bench/hops.mts` measures this path, so its output is the current file list.
+1. The host sends a native command through `applyDirectCommand` in
+   [commands.ts](../../src/protocol/commands.ts). A daemon client sends that
+   command to the host over RPC first.
+2. The [conversation](../../src/session/conversation.ts) admits the input.
+   [conversation-turn.ts](../../src/session/conversation-turn.ts) appends
+   admission and accepted turn facts to the native JSONL log.
+3. `startTurn` in [harness.ts](../../src/session/harness.ts) starts
+   `@qduc/agent-core`. The [portable turn engine](https://github.com/qduc/agent-runtime/tree/main/packages/core/src/engine)
+   runs the loop using the model registry and tool capabilities Term2 supplies.
+   The conversation records each accepted event before advancing the turn's
+   acceptance boundary.
+4. The host projects session updates through `DirectProjection` in
+   [projection.ts](../../src/protocol/projection.ts). Local attachments share
+   that projection. Transports can wrap or translate it for their clients. On
+   reopen, [replay.ts](../../src/session/replay.ts) rebuilds durable state from
+   the conversation log.
 
-Child agents run on the same path: `delegation/direct/` (`createDirectSubagentTools`)
-launches each one as a session branch (`session/branches.ts`) that runs through
-`startNestedTurn` in `engine/turn.ts`. See [`src/delegation/README.md`](../../src/delegation/README.md).
+When a tool needs permission or the model asks a question, the engine waits
+for an answer. The session applies approval policy and records any human
+decision before releasing the wait. The [native conversation contract](../contracts/09-rewrite-native-conversation.md)
+covers durable ordering and shutdown.
 
-## Retained shared policy
+Child agents use the same portable harness through `startNestedTurn`. The
+session owns their branches through `createDirectBranchDriver` in
+[branches.ts](../../src/session/branches.ts). The [delegation boundary](../../src/delegation/README.md)
+covers launch, role and workspace policy.
 
-The direct launcher uses the role loader, tool policy, role-pool selector and worker
-worktree helpers in `delegation/subagents/`. These are policy, not a second runner.
-`engine/agent-runtime/` retains live resolvers, budgets and its generation guard;
-workflow launch contracts remain type-only. Compatibility role-definition adaptation
-and offline v3 migration remain supported. The public `./hooks` entrypoint retains
-its type contract.
+## Earlier designs
 
-The archived [conversation core](conversation-core.md), [conversation loop](conversation-loop.md)
-and [output recovery](assistant-output-recovery-architecture.md) documents describe
-only the removed runtime. They are not implementation guidance for the live path.
-
-## Where to go next
-
-- [`layers.md`](layers.md) — layers, import rules, message path, rule checks, and what
-  to do when a gate fails.
-- Each layer's `index.ts` and `README.md` — that layer's public boundary.
-- The `architecture` skill (`.agents/skills/architecture/`) — module-design judgement
-  and the runtime-path reference for debugging.
-- [`assistant-output-recovery-architecture.md`](assistant-output-recovery-architecture.md)
-  — archived recovery design for the removed runtime.
-
-The earlier overview, with `ConversationOrchestrator`, `ConversationService`,
-`ConversationAdapter`, `TurnCoordinator` and `TurnWorkflow` on the main path, and its
-internals pages (`turn-workflow-internals.md`, `conversation-orchestrator-internals.md`)
-described the `source/` tree deleted at the flip (#86–#88). Git history keeps them, for
-example at commit `5839510`.
+The prior conversation core and loop described the runtime removed in #197.
+Their reasoning about model execution, durable acceptance and cancellation is
+available in [the earlier design notes](https://github.com/qduc/term2/tree/c455d16c5/docs/architecture).
+The [original output recovery design](assistant-output-recovery-architecture.md)
+also belongs to that earlier runtime.

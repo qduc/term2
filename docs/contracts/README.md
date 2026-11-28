@@ -1,116 +1,41 @@
-# Seam contracts — Phase 1 of ROADMAP.md
+# Runtime contracts
 
-Status: **completed and owner-reviewed 2026-08-14.** Records were verified
-against production source at `75d2ec249f8e4a30529a3368da31294c60a85a4b`
-with the Phase 1 test-only characterizations in the working tree.
+Start with the [source layers](../architecture/layers.md) when you need to
+locate the owner of a behavior.
 
-These are the executable seam contracts required by
-[`ROADMAP.md`](../../ROADMAP.md) Phase 1 — "Define executable seam contracts".
-They are durable ownership records, not implementation plans: each names the
-invariants, owners, boundary-crossing state, settlement semantics,
-observability, public test boundary, and verification commands for one
-cross-owner seam. They do not propose architecture work; repairs happen only in
-Phase 2 and only on a red proof through an owning public boundary.
+## Live interfaces
 
-## Index
+| Boundary | Reference |
+| --- | --- |
+| Native session, durable command receipts, queue, replay and shutdown | [Native conversation session](09-rewrite-native-conversation.md) |
+| Daemon startup, launch ownership, attach and lease lifetime | [Daemon and native session ownership](15-daemon-session-ownership.md) |
+| HTTP assertion and negotiation, hydration, SSE and configuration | [Agent-wire v2 server transport](14-agent-wire-v2-server.md) |
+| Local RPC vocabulary and framing | [Client API](../plans/daemon/spec/client-api.md), [Unix binding](../plans/daemon/spec/transport-unix.md) |
+| Shared browser and terminal fold types | [Wire fold surface](wire-fold.api.txt) |
 
-| # | Contract record | Owners (enforcement / recovery) | Focused verification command |
-| --- | --- | --- | --- |
-| 01 | [Conversation submission and turn lifecycle](./01-conversation-submission-and-turn-lifecycle.md) | `QueueController`, `ConversationAdapter`, `TurnCoordinator` + `TurnStatusMachine`, `ApplicationRunLoop` steer admission, `ConversationOrchestrator` projection | 10 files, 340 tests — green 2026-08-14 |
-| 02 | [Provider input, continuity, and effect settlement](./02-provider-input-continuity-and-effect-settlement.md) | `ConversationRecord` (private ledger/journal/history), `ProviderContinuity`, `SessionInputPlanner`, `filterChainedModelInput`, `SessionTurnAdapter` acceptance callbacks, retry/recovery policy | 14 files, 355 tests — green 2026-08-14 |
-| 03 | [Child-run identity, authority, and lifecycle](./03-child-run-identity-authority-and-lifecycle.md) | `createSubagentRuntime` runners, `SubagentBridge`, session traffic context | 12 files, 262 tests — green 2026-08-14 |
-| 04 | [Settings consumption](./04-settings-consumption.md) | Settings schema/resolution, runtime consumers, `ConversationConfigurationService` + `runtime-setting-router`, `/settings` | 14 files, 303 tests — green 2026-08-14 |
-| 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/approvals-and-sandbox/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests — 2026-08-14; the retained expected-failure characterization became two passing tests when Phase 2 repaired it on 2026-08-15 |
-| 10 | [Settings durability, migration, and sensitive bytes](./10-settings-durability-migration-and-sensitive-bytes.md) | `settings-persistence.ts` bytes/lock/recovery, `SettingsService` settlement + recovery result, `/settings` command rendering, settings schema/merger/migration | 9-file Contract 10 matrix — 189 passing tests, 1 expected fail (R10.2, excluded), 1 known schema baseline failure; black-box 166 passed / 1 skipped — repaired 2026-08-16 |
-| 11 | [Destructive approval authority](./11-destructive-approval-authority.md) | `ToolApprovalBatchCoordinator`, `ApprovalDecisionExecutor`, `ConversationAdapter`, `SubagentToolPolicy`, durable log events | audit draft 2026-08-15; 3 retained public-boundary reds (C11-D5/D8/D10), tests/docs-only |
+## Historical seam records
 
-All focused commands for completed contracts 01–05 re-ran with exit code 0 on 2026-08-14 (76 file
-invocations / 1,683 passing test invocations plus one retained expected-failure
-characterization). The authoritative Phase 0 baseline
-([historical validation-baseline-2026-08-14.md](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/validation-baseline-2026-08-14.md)) records these commands and
-results, alongside its full-suite, typecheck, lint, and provider black-box
-results for the same production-source commit. Phase 1 added tests but made no
-production changes, so those broader results remain the truthful recorded
-source baseline. Contract 05's expected-failure proof queued the
-watchdog-fallback defect for Phase 2; that repair merged on 2026-08-15 and the
-proof is now two passing tests. See §10 of that record for the approved
-deferral covering the residual ambiguous case.
+The ROADMAP Phase 1 records preserve the reasons for past contract decisions
+and the failures that led to them. Most originated in the pre-rewrite tree.
+Some have notes about replacement owners. Use the live source and current
+test tiers when verifying behavior today. The recorded counts, source paths
+and test commands describe their original checkouts.
 
-## Draft records under review
+- [01 Conversation submission and lifecycle](01-conversation-submission-and-turn-lifecycle.md)
+- [02 Provider continuity and effect settlement](02-provider-input-continuity-and-effect-settlement.md)
+- [03 Child-run authority and lifecycle](03-child-run-identity-authority-and-lifecycle.md)
+- [04 Settings consumption](04-settings-consumption.md)
+- [05 Runtime guards and retention](05-runtime-guards-and-retention.md)
+- [06 SSH transport lifecycle](06-ssh-transport-lifecycle.md)
+- [07 Logging and provider traffic](07-logging-and-provider-traffic.md)
+- [08 Conversation durability and recovery](08-conversation-durability-and-recovery.md)
+- [09 Execution-root authority and workspace lease](09-execution-root-authority-and-workspace-lease.md)
+- [10 Settings durability, migration and sensitive bytes](10-settings-durability-migration-and-sensitive-bytes.md)
+- [11 Destructive approval authority](11-destructive-approval-authority.md)
+- [12 Queue persistence and recovery](12-queue-persistence-and-recovery.md)
+- [13 Gateway wire inventory](13-gateway-web-wire.md)
 
-Draft contracts represent workstream records and characterization tests currently under review; they are tracked separately from the completed 2026-08-14 baseline:
-
-| # | Contract record | Owners (enforcement / recovery) | Focused verification command |
-| --- | --- | --- | --- |
-| 06 | [SSH transport lifecycle](./06-ssh-transport-lifecycle.md) | `SSHService`, `ExecutionContext` | 2 files, 59 tests all passing — 2026-08-16 (pre-repair baseline 2026-08-15: 47 tests, 37 passing, 10 expected failures); typed settlement, in-flight drop handling, opt-in timeout/abort |
-| 07 | [Logging and provider-traffic lifecycle](./07-logging-and-provider-traffic.md) | `LoggingService`, `ProviderTraffic`, `ProviderTrafficArtifactStore` | 4 files, 91 tests — VP-decided repairs landed 2026-08-16 (fail-open boundary, corrupt-index recovery, bounded request-path lifecycle, typed metadata); President decision 2026-08-16 retired the two C7.2 reds as green characterizations (single-level depth, evaluator lane exempt) |
-| 08 | [Conversation durability and recovery](./08-conversation-durability-and-recovery.md) | `ConversationLogWriter`, `conversation-persistence`, `HistoryService`, `conversation-decoder`/`replay` | 4 files, 166 tests (166 passed, 0 expected failures) — VP-decided repairs landed (D1/D3/D4/D5/D6 plus synchronous sidecar removal and stale-lock liveness) |
-| 09 | [Execution-root authority and workspace lease](./09-execution-root-authority-and-workspace-lease.md) | `ExecutionContext`, worktree admission (`workspace/worktree-transition.ts`), active-root fallback (`workspace/active-workspace-root.ts`) | docs-only landing + 8-file characterization gate passed 2026-08-16 (101 tests); G2/G5/G6 merged |
-| 12 | [Queue persistence and recovery](./12-queue-persistence-and-recovery.md) | `QueueController` (`queue-controller.ts`), `createSessionQueuePersistence` (`queue-persistence.ts`) | 3 files, 93 tests — R1 flipped green, merged 2026-08-16; residual decisions confirmed retain-current by President 2026-08-16; owner-reviewed |
-| 14 | [Agent-wire v2 server transport (gated)](./14-agent-wire-v2-server.md) | Direct host server SSE/hydration/configure adapter; shared artifact and browser/BFF migration are external dependencies | source-only; all checks deferred under M6 freeze |
-
-## How to read a record
-
-Every record follows the same template (the eight required elements from
-ROADMAP Phase 1):
-
-1. **Contract** — invariants, each paired with the user-visible harm it prevents.
-2. **Owners** — enforcement owner and recovery owner per invariant.
-3. **Execution paths** — every path that shares the invariant.
-4. **Identities and state crossing the boundary.**
-5. **Settlement semantics** — success, failure, cancellation, retry, ambiguous.
-6. **Observability** — logs/events that diagnose a violation.
-7. **Public boundary under test** — the interface through which the contract is
-   tested deterministically.
-8. **Deterministic contract matrix** — the ROADMAP minimum-matrix cells mapped
-   to exact test evidence (`file:line` + test title) or classified gaps.
-9. **Verification commands** — focused command (recorded result) and broader
-   gates.
-10. **Known gaps and classification** — every gap is classified per ROADMAP rule
-    4; only product defects proceed to Phase 2.
-
-## Failure classification legend
-
-Per ROADMAP "Working rules" item 4, every discovered failure is one of:
-
-- **product defect** — production behavior violates a contract (Phase 2 repair);
-- **test defect** — the test or verification command is wrong;
-- **fixture defect** — wire fixtures or recorded traffic are wrong;
-- **dependency defect** — a third-party behavior;
-- **environment limitation** — sandbox/PTY/network/Node behavior outside the app;
-- **known baseline** — already recorded in the Phase 0 baseline.
-
-A **coverage gap** (matrix cell with no deterministic test) is not by itself a
-product defect: current behavior may be correct but uncharacterized. It is
-listed with the exact public-boundary test that must be written to turn it into
-a red/green characterization before any Phase 2 repair.
-
-## Historical baseline correction found during Phase 1
-
-On 2026-08-14, Phase 1 verification found that the original Phase 0 focused
-commands for Seams 2, 3, and 4 referenced test files that do not exist in this
-checkout:
-
-| Seam | Nonexistent historical path(s) in baseline command (pre-rewrite `source/`) | Verified effect (2026-08-14 re-run) |
-| --- | --- | --- |
-| 2 | historical `source/services/context-compaction/provider-neutral-compactor.test.ts`, `source/lib/session-input-planner.test.ts` | Vitest silently ran only the 4 existing files / 139 tests; baseline recorded "6 files / 172 tests" |
-| 3 | historical `source/services/subagents/runtime.test.ts`, `source/services/subagents/subagent-bridge.test.ts`, `source/services/subagents/subagent-event-bus.test.ts` | Vitest silently ran only 2 existing files / 106 tests; baseline recorded "5 files / 91 tests" |
-| 4 | historical `source/services/settings/settings-manager.test.ts`, `source/services/settings/settings-store.test.ts` | Vitest silently ran only 1 existing file / 26 tests; baseline recorded "3 files / 44 tests" |
-
-**Classification: test defect in the baseline record (not a product defect).**
-The real test files exist under the corrected paths (see each record's
-"Verification commands"); the current implementation was green under the
-corrected commands. The authoritative baseline has been corrected to use those
-commands and results; it retains this table as the dated history of the
-test-record defect. Seam 1 and Seam 5 were also expanded from valid but
-under-covered original commands to their full contract-owner verification.
-
-## Update rules
-
-- Any production change to an owner listed in a record must re-run that
-  record's focused command (`NODE_ENV=test`) during development.
-- Provider, bridge, run loop, registry, and non-interactive changes must also
-  run `NODE_ENV=test pnpm test:provider-black-box` per `AGENTS.md`.
-- A contract change (invariant added/removed/weakened) requires updating the
-  owning record, re-running the matrix, and recording the outcome in the
-  verification section — this is the Phase 3 institutionalized workflow.
+Phase 1 found that Vitest could return success after silently matching only a
+subset of the requested test files. When using a focused check, compare the
+files it ran with the expected set. The original baseline correction and
+historical test counts remain available in [the Phase 1 index](https://github.com/qduc/term2/blob/c455d16c5/docs/contracts/README.md).

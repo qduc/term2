@@ -1,20 +1,14 @@
 # Releasing `@qduc/agent-core`
 
-The core package is maintained and released from the separate
-`qduc/agent-runtime` repository (`/home/qduc/agent-runtime` locally), not Term2.
-Its build uses implementation source in that repository, with no sibling
-Term2 checkout required.
+The turn harness lives in [`qduc/agent-runtime`, under `packages/core`](https://github.com/qduc/agent-runtime/tree/main/packages/core).
+Term2 consumes a published prerelease through the exact runtime dependency in
+[`package.json`](../../package.json). `src/session/harness.ts` adapts
+Term2 sessions to that package.
 
-See [shared package ownership and handoff](release-agent-packages.md) for the
-consumer migration boundary and user-assisted publication steps. Use the
-standalone repository's release instructions for its workflow and npm Trusted
-Publisher settings.
-
-Term2 still constructs sessions through its internal core seam. Consuming the
-external runtime safely requires resolving nominal collaborator types and
-shared state ownership; publishing the package alone does not finish that
-migration. The root `@qduc/term2` release must remain installable without an
-unpublished core dependency.
+Make runtime changes in the owning repository and follow its release workflow.
+After the prerelease is available from npm, update Term2's manifest and lockfile
+together and verify the affected journeys through Term2. Term2's publishing
+workflow publishes only `@qduc/term2`.
 
 ## Retired unknown-model context patch
 
@@ -43,7 +37,7 @@ in `qduc/agent-runtime`, derived from that owner's built `dist`. Those changes
 were released in `0.2.0-alpha.3` (owner PR
 [#8](https://github.com/qduc/agent-runtime/pull/8)). The published alpha.3
 `dist` matched alpha.2 with the patch applied except for the PR #11 changes
-above, so Term2 pins the release with no patch and carries no second engine
-implementation. The consumer still preserves raw write counts, supplies catalog
+above. Term2 adopted that release without the patch and has since advanced
+the npm pin in `package.json`. The consumer still preserves raw write counts, supplies catalog
 tiers and projects durable totals. Catalog costs remain estimates rounded to
 integer micros per billable dimension, not provider invoice totals.

@@ -1,210 +1,89 @@
 # Profile architecture and compatibility
 
-The app offers one default experience (Bare). CLI help, onboarding, slash
-completion, settings menus, banners, the footer and resume views do not expose
-profile selection or routine profile labels. `src/config/profiles/` remains the
-backend for composition, resolution, metadata and legacy adapters.
+Bare is the default experience for fresh terminal, headless, and server
+sessions and the only entry in `builtinProfiles`. The CLI help, onboarding,
+slash completion, and settings menus omit profile selection. Choose the model
+and reasoning effort independently with `/model` and `/effort`.
 
-Hidden CLI inputs `--profile bare/standard/full/lite`, `--lite` and `-l` remain
-compatible. Exact typed `/profile [name]`, `/bare` and `/lite` aliases acknowledge
-the default without clearing history or switching. Explicit dropped profile
-selections (Plan, Pair, Mentor, Orchestrator) fail; saved dropped selections fall
-back to Bare under the existing restore policy. Settings schema and load/save
-normalization remain intact, including legacy mode flags. Session profile ID,
-version and digest remain in persisted and machine-readable output, including
-NDJSON, web/server and ACP contracts; plain-text startup no longer announces them.
+## Legacy inputs and saved sessions
 
-The specifications and milestone descriptions below describe the historical
-architecture and behavior; they do not advertise current selectable profiles.
+| Entry point | Behavior |
+| --- | --- |
+| Hidden `--profile bare/standard/full/lite`, `--lite`, and `-l` | Select `builtin:bare` for the launch. |
+| Exact `/profile [name]`, `/bare`, and `/lite` | Acknowledge Bare for the supported aliases without changing the session or clearing history. |
+| Explicit Plan, Pair, Mentor, or Orchestrator selection | Fails as an unknown profile. |
+| Saved settings or sessions naming a dropped workflow | Run Bare while preserving the saved configuration and historical conversation facts. |
+| Saved Standard or Lite profile IDs, or old records without a profile or enabled legacy mode | Resolve to Bare. The legacy adapter projects Bare to `liteMode: true` for older readers. |
 
-Status: **Milestone 1 implemented and merged.** Built-in profile architecture and legacy mode removal merged in `b1ddd32a` (2026-09-02); Pair profile added in `37523fac` (2026-09-03).
+See `chooseProfile` in [cli.ts](../../src/app/cli.ts), `acknowledgeProfile` in
+[launch-tui-settings.ts](../../src/app/launch-tui-settings.ts),
+`createSessionSettings` in [settings.ts](../../src/app/settings.ts), and the
+[legacy adapter](../../src/config/profiles/legacy-adapter.ts). On resume, an
+explicit launch choice takes precedence. Otherwise, the last recorded profile
+configuration takes precedence over the session header.
 
-This directory specifies the Profile architecture that will replace term2's
-hard-coded built-in mode composition. The first implementation milestone is a
-behavior-preserving reconstruction of Standard, Lite, Plan, Mentor, and
-Orchestrator on that architecture. User Profile discovery and sharing follow in
-later milestones.
+`getProfileMetadata` produces the canonical ID, definition version, and digest.
+CLI conversation headers and machine-readable output retain profile metadata for
+compatibility and composition comparisons. The digest fingerprints the resolved
+profile composition. Settings, injected project instructions, and runtime
+availability can differ between sessions with the same digest.
 
-## Decision summary
+## What Bare supplies
 
-- A **Profile** is the complete composition currently represented by a built-in
-  mode.
-- A **block** is one typed part of that composition. Built-in and future
-  user-created Profiles use the same block contracts and resolver.
-- A Profile may be complete or extend exactly one parent Profile.
-- Blocks may be Profile-local or reusable registry entries.
-- Each block type owns its merge semantics.
-- Root instructions have named customizable slots. Harness safety and tool
-  contracts remain system-owned.
-- Profiles do not select the main model, provider, reasoning effort,
-  temperature, or active skills.
-- Tool blocks control model-visible capability groups, not authority.
-- Enforcement blocks may add registered restrictions but cannot weaken global
-  approval, sandbox, filesystem, network, or parent-agent authority.
-- Profile and block files are declarative. They do not execute code.
-- `activeProfileId` becomes the sole internal mode-selection authority.
-- Built-ins and custom Profiles differ by provenance, not representation.
+The [definition](../../src/config/profiles/registry.ts) loads
+[bare.md](../../src/session/prompts/bare.md) as the main prompt. `buildPromptSpec`
+and the [main agent factory](../../src/app/agent.ts) use the effective capabilities
+to render tool guidance, then assemble the enabled project instructions, skills
+catalog, and short environment line. Local project and global `AGENTS.md`
+instructions are loaded on the host. Remote project instructions come from the
+remote workspace. Skills are loaded through shell or through `read_file` when the
+read-only surface withholds shell. A project can separately opt into
+[personal memory context](../reference/personal-memory-context.md).
 
-## Documents
+- When enabled, the native `read_file`, `create_file` and `search_replace` or
+  `apply_patch` tools are available directly and through `run_code`. Both routes
+  share the validation and approval path. The effective file and shell settings,
+  workspace access, and provider editing surface determine which tools are offered.
+- `run_code` exposes the configured web, memory, session, MCP, and background
+  capabilities as script members. Bare lists the nonessential members by name.
+  Use `tools.describe(name)` for the schema. Configured delegation uses the
+  existing subagent runtime.
+- Shell searches are used when `app.searchViaShell` is enabled and shell is
+  available. Bare exposes shell `background` and `monitor` only when there is a
+  background job registry for the current surface. An interactive root can also
+  expose direct `session_rollover`, which is unavailable inside scripts.
+- A root request gains `goal_check` once the session has had a goal. The actual
+  completion conditions come from the [durable goal contract](../plans/agent-runtime/durable-goal.md).
+  Ordinary requests without an active goal follow the ordinary stop path.
 
-1. [Concepts and boundaries](./01-concepts-and-boundaries.md) — vocabulary,
-   goals, ownership, and non-goals.
-2. [Block contracts](./02-block-contracts.md) — instruction, context, tool,
-   enforcement, integration, presentation, and requirement blocks.
-3. [Definition and resolution](./03-definition-and-resolution.md) — manifest,
-   references, inheritance, merge rules, validation, and resolved output.
-4. [Built-in parity](./04-builtin-profile-parity.md) — the current behavior each
-   built-in Profile must reconstruct.
-5. [Activation, persistence, and trust](./05-activation-persistence-and-trust.md)
-   — switching, prompt-cache behavior, saved conversations, provenance, and
-   authority.
-6. [Milestone 1](./06-milestone-1.md) — implementation boundary, sequence,
-   compatibility work, tests, and acceptance criteria.
+## Composition and authority
 
-## Normative language
+`app.activeProfileId` is the internal selection key. The
+[profile schema](../../src/config/profiles/schema.ts) validates declarations.
+`resolveProfile` in [resolver.ts](../../src/config/profiles/resolver.ts)
+canonicalizes the ID, resolves parent and registered-block references, and merges
+each block by its own rules. The result carries instructions, context, tool
+capabilities, enforcement, integrations, presentation, requirements, and identity.
+The resolver can take an explicit registry. The shipped launch path uses the
+built-in registry.
 
-`MUST`, `MUST NOT`, `SHOULD`, and `MAY` are normative. Statements under
-"Current behavior" describe the repository at the time this specification was
-written; they are parity evidence, not permanent product requirements beyond
-Milestone 1.
+Capability groups determine which tools the application may offer. The tools
+still pass through the session's authority, sandbox, and approval checks.
+Registered enforcement adds restrictions. Profile data has no authority to
+weaken those checks or execute integration code.
 
-## Governing principle
+## History
 
-The architecture is successful only when built-in Profiles travel through the
-same definition, resolution, and consumption path intended for future custom
-Profiles. A descriptive Profile registry layered beside mode booleans does not
-satisfy this specification.
-
-## Retired workflow profiles
-
-Plan, Pair, Mentor, and Orchestrator were removed from the direct executable by
-[owner decision #149](https://github.com/qduc/term2/issues/149). They are not offered
-by `/profile`, typed mode commands, `--profile`, or HTTP session configuration.
-Shift+Tab no longer selects Plan. Explicit selections fail as unknown profiles;
-saved settings and resumed sessions naming a dropped profile run Bare instead.
-This fallback does not rewrite their settings or historical conversation facts.
-Workflow notices from old profiles are not reapplied on retry because their
-recorded mode differs from Bare. Same-mode notices and the original user input
-remain intact.
-
-Their profile definitions, workflow prompts, mode notices and the model-family
-base prompts (`gpt.md`, `anthropic.md`, `kimi.md`, `simple_v4.md`) were deleted
-once nothing could reach them; the main prompt is always Bare's `bare.md`. Their
-IDs remain only as compatibility data in saved settings and historical facts. Bare retains goal checks, delegation and its
-normal permissions. It does not offer the dropped workflows' `propose_goal` tool.
-
-## Bare profile and unattended runs
-
-Bare is the default for fresh sessions, including interactive and auto-approved runs.
-`--profile bare` explicitly selects it; CLI overrides do not persist. Standard is
-retired and has no selectable full-context definition. The consumer picker is removed.
-Old `--profile standard`, `--profile full`, `/profile standard`, `/profile full`,
-and saved `builtin:standard` selections resolve to canonical `builtin:bare`.
-Old sessions without a profile or enabled legacy mode also use Bare. History and
-settings files are not bulk-rewritten: runtime selection and new session headers
-use Bare, including resume and rollover. Unknown profile IDs still fail normally.
-
-The default is the same for positional prompts with or without `--auto-approve`.
-Hidden `/bare` and `/lite` aliases are no-ops.
-
-Lite was merged into Bare on 2026-10-24. Every Lite entry point now selects
-`builtin:bare`: `--lite`, `--profile lite`, `/lite` (alongside `/bare`),
-`app.liteMode: true`, a persisted `app.activeProfileId: "builtin:lite"`, resumed
-sessions recorded as Lite, and gateway mode `lite`. The legacy `app.liteMode` flag
-reads `true` while Bare is active. The [merge notes](./lite-bare-merge.md) record
-the rationale, request-size measurements, and known gaps.
-
-Bare uses a short prompt and injects local project/global AGENTS.md instructions.
-For remote sessions, project instructions are read through the remote shell. Bare includes the skills catalog
-(the model loads a skill by reading its SKILL.md through the shell) and a short
-environment line (OS, shell, cwd, home, date; no top-level tree). Delegation uses
-the existing subagent runtime when the session supplies it; authority restrictions still apply.
-Missing capabilities must be reported, not silently skipped.
-
-Bare's ordinary context defaults stay unchanged. A host-local, project-scoped
-`personal-context.json` opt-in in the project memory store can add only a bounded
-personal-memory section, refreshed before each provider request, without the
-full-context/global-memory prompt. See [personal memory context](../reference/personal-memory-context.md)
-for scope, opt-out and privacy; no profile switch is required.
-
-Bare offers the existing file tools directly as well as through `run_code`:
-`read_file` for inspection and the configured `search_replace`/`create_file` or
-`apply_patch` editing surface. File-read/write settings and read-only authority
-still determine availability. Both routes use the same validation and approvals;
-local direct reads resolve physical workspace boundaries before bypassing approval.
-Search and skill loading can still use the shell.
-
-Bare's short prompt recommends the available native file tools for inspection
-and targeted edits, and the shell for searches and commands. Its tool list and
-rules follow the effective read, write, shell, and patch/editor surface rather
-than advertising tools disabled by settings or authority.
-
-The remaining model-facing tools include the shell, `goal_check` (root sessions, once the session has had a goal), `run_code`, and, in interactive
-sessions, `session_rollover`, which scripts cannot call.
-The frozen provider surface omits Bare's proposed `ask_mentor`, `ask_user`,
-and `enter_worktree`/`exit_worktree` add-backs; see [the merge decision](lite-bare-merge.md).
-Web, memory,
-sessions, MCP, and background-job tools have no shell equivalent; they are
-script-only `tools.*` members of `run_code`, listed by name, and the model calls
-`tools.describe(name)` for a schema. Script calls keep the same approval prompts
-and enforcement as direct calls.
-
-The shell advertises a compact option set: `background` and `monitor` appear only
-when the session has a background job registry (interactive roots), so headless
-Bare stays foreground-only. Runtime normalization and approval still use the
-complete canonical shell schema. Bare's task-neutral guidance
-encourages batching known steps and filtering output locally without dropping
-checks or failure evidence. The
-[token-efficiency measurements](../research/bare-token-efficiency-20261024.md)
-record the tested scope, failures, and limits rather than promise a universal gain.
-
-Root sessions expose `goal_check` once the session has had a goal (see
-[durable goal](../plans/agent-runtime/durable-goal.md)). A supplied `--goal` uses the existing
-request-time goal context, stop checks, and configured completion verification.
-Bare does not waive required review. Ordinary replies without an active goal do
-not trigger goal verification. When required review cannot run through the
-available tools, report the missing capability or needed handoff and leave
-completion unverified; do not silently switch profiles/models or launch agents.
-Sandbox authority, approval policy, cancellation, output bounds, request deadlines,
-and compaction remain authoritative. `agent.completionVerification=false` remains
-an explicit operator override of the runtime completion gate.
-
-Bare's profile version is `3.0.0` (native file tools alongside `run_code`; `2.0.0`
-introduced the Lite merge and `run_code`). Its original minimal definition and comparison
-protocol are recorded in
-[the Bare experiment notes (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/bare-profile/README.md). Skills were
-restored after the cheap-additions experiment: on one skill-discovery task, three
-fresh paired runs used 34–66% fewer tokens with skills. That task is narrow, and
-one skills run overwrote a file without reading it first, so no general token
-saving or quality equivalence is claimed. Environment context was restored next: in two
-completed paired runs it used 45% and 50% fewer tokens
-([retry notes (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/bare-profile/cheap-additions-retry.md)).
-
-Plain-text CLI startup omits the routine profile announcement. Headless NDJSON begins with a
-`session_start` carrying `activeProfileId`, and persisted conversation headers
-record the same canonical profile ID. CLI session headers also carry
-`activeProfileVersion` and `activeProfileDigest` for composition comparisons; the
-digest excludes project instruction contents and runtime settings.
-
-All headless profiles receive instructions to choose reasonable interpretations,
-continue within existing permissions, and state assumptions in the final response
-instead of asking questions. Material missing requirements or authorization call
-for an explicit blocked result; unavailable required review remains unverified. Ambiguous `--model` matches select the highest-ranked
-candidate and print the assumption. Tool and budget permissions remain enforced.
-
-`verifier.model` selects the independent completion verifier's model ID on the
-session provider; the default empty string uses the session model. When verification
-is unavailable or inconclusive, Bare goal-driven runs block completion (exit 2),
-report the cause, and retain the active goal. Other headless profiles finish with
-“independent verification not performed” and retain an active durable goal. A
-concrete verification failure still requests repair or blocks completion.
-Interactive Bare uses the configured completion gate; other
-profiles retain their interactive verification behavior.
-
-`agent.backgroundWaitTimeoutMs` bounds the overall headless background drain,
-including notification turns. It defaults to one hour and accepts 1–86,400,000 ms.
-Expiration cancels unfinished work and reports its name (or task/ID) in text and
-structured output. This containment limit does not infer whether work made progress.
-Term2 has no application-owned worktree removal operation or per-run output folder;
-worktree cleanup performed through arbitrary shell commands belongs to the invoking
-workflow, which must save tracked and untracked changes before removing a worktree.
+- The Profile model first replaced built-in modes in `b1ddd32a`. The
+  [historical design](https://github.com/qduc/term2/tree/c455d16c56dfa1d46664c0b3183873100942bf65/docs/profiles)
+  records the original parity requirements, block design, and migration plan.
+- [The Lite merge](lite-bare-merge.md) records the rationale for the compact
+  script surface and the request-size measurements for Bare 2.0.0. Bare 3.0.0
+  restored native file tools alongside it in `317873590`. The
+  [token-efficiency study](../research/bare-token-efficiency-20261024.md)
+  records its tested tasks and scope.
+- The [retirement decision](https://github.com/qduc/term2/issues/149) dropped
+  Plan, Pair, Mentor, and Orchestrator from the direct executable. Their old
+  workflow notices are skipped on retry when the saved profile differs from
+  Bare. The main prompt now comes from one definition, with subagents retaining
+  their own role prompts.

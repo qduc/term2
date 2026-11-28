@@ -71,7 +71,7 @@ by default. Opt into each content class separately with
 
 ## Herdr status example
 
-`docs/reference/herdr-status-hook.ts` shows the first-party consumer shape. The installed
+The [Herdr status example](herdr-status-hook.ts) shows the consumer shape. The installed
 user hook at `~/.term2/hooks/herdr-status.ts` registers the session on
 `session.start`, translates `status.change` to Herdr's `pane report-agent`
 command, and releases the agent on `session.end`. It is a no-op when

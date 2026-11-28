@@ -1,8 +1,8 @@
 # Web transcript single source: build spec
 
-Status: plan. This is the builder's contract for
-[web-transcript-single-source.md](web-transcript-single-source.md); read that first for the evidence and the
-decisions. Nothing below is implemented unless that document's "Resume here" says so.
+Status: phases 0–2 and L shipped in `faa056ffb`. Phase 3 shipped in `d6467f442`.
+This build spec records the design and acceptance checks. The
+[implementation notes](web-transcript-single-source.md) record the evidence and decisions.
 
 Symbols named here were read on `main` at `6fcad34`. Check them with grep before relying on one. An independent
 reviewer checked revision 1 of this spec against the code; revision 2 (this one) folds in its findings. Where a

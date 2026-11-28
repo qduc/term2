@@ -1,6 +1,6 @@
 # Opencode gpt models: live thinking / tool-call indicators missing
 
-**Status**: Fixed in `opencode/responses-live-indicators`.
+**Historical incident.** The live-indicator fix merged in `2404525ca`. The adapter paths and event handling below describe the implementation investigated at the time.
 
 ## Symptom
 

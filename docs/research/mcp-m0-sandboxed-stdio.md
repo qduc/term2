@@ -4,7 +4,9 @@
 `mcp-m0-sandbox`, 2026-09-17. Brief: `.coord/mcp-code-mode/briefs/M0-sandbox.md`. Backs Decision 4
 of [`docs/plans/tools/run-code/mcp-code-mode.md`](../plans/tools/run-code/mcp-code-mode.md).
 
-Spike code: [`spikes/mcp/sandbox/`](../../spikes/mcp/sandbox/) (README there describes each script).
+The original worktree held the probe scripts at `spikes/mcp/sandbox/`. The
+record below retains their invocations and observations. The spike scripts are
+absent from the repository.
 
 ## Verification
 

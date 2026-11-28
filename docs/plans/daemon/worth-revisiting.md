@@ -90,7 +90,7 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
       `approvalPolicy { autoApprove }` could reach the attached session. Keying per
       launch needs the new session id before `createSession` returns it. Fix before
       the Step 14f flip.
-    - **Status: fixed** (`claude/daemon-launch-policy-race`). Each create or launch
+    - **Status: fixed** (`d60623817`). Each create or launch
       now runs its session start inside `DaemonLaunchPolicies.withLaunch`, an
       `AsyncLocalStorage` frame holding its own values. Only a session built inside
       that call adopts them: the session a resume or fork names, else the first one

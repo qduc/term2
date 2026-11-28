@@ -1,7 +1,10 @@
-**Implementation Plan**
+# Original subagent retry plan
+
+Status: shipped in the legacy runtime in `18b4d3449`. Source links below
+point to that implementation.
 
 1. Add shared retry metadata helper
-   In [conversation-retry-policy.ts](../source/services/conversation-retry-policy.ts:1), extract the reusable part of `decideRetry()` into something like:
+   In [conversation-retry-policy.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/services/conversation-retry-policy.ts#L1), extract the reusable part of `decideRetry()` into something like:
    ```ts
    decideRecoverableModelRetry(error, attemptCount)
    ```
@@ -17,7 +20,7 @@
    Existing `conversation-retry-policy.test.ts` should still pass unchanged.
 
 3. Add focused policy tests first
-   Extend [conversation-retry-policy.test.ts](../source/services/conversation-retry-policy.test.ts:1) with tests for the new helper:
+   Extend [conversation-retry-policy.test.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/services/conversation-retry-policy.test.ts#L1) with tests for the new helper:
   - hallucinated tool extracts `bash`
   - parsing errors classify as `parsing_error`
   - behavior errors classify as `behavior`
@@ -25,7 +28,7 @@
   - non-recoverable error returns `no_retry`
 
 4. Add subagent retry tests first
-   In [subagent-manager.test.ts](../source/services/subagents/subagent-manager.test.ts:1), add mock providers for:
+   In [subagent-manager.test.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/services/subagents/subagent-manager.test.ts#L1), add mock providers for:
   - recoverable `ModelBehaviorError('Tool bash not found in agent Explorer.')`, then success
   - recoverable error repeated through max retries, returning failed result
   - non-recoverable `ModelBehaviorError`, no retry
@@ -33,7 +36,7 @@
   - transient upstream error, retry via shared upstream retry executor
 
 5. Add subagent corrective retry prompt
-   In [subagent-manager.ts](../source/services/subagents/subagent-manager.ts:443), add a small helper:
+   In [subagent-manager.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/services/subagents/subagent-manager.ts#L443), add a small helper:
    ```ts
    buildSubagentRetryTask(originalTask, errorMessage, toolNames)
    ```
@@ -64,7 +67,7 @@
      logger,
    })
    ```
-   This reuses retry-after parsing, jitter, logging, and retry classification from [retry-executor.ts](../source/lib/retry-executor.ts:7).
+   This reuses retry-after parsing, jitter, logging, and retry classification from [retry-executor.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/lib/retry-executor.ts#L7).
 
 8. Avoid unsafe retries after side effects
    For worker subagents, only let automatic retries happen for errors thrown by the agent/provider run. Do not add retries around individual tool execution failures. Keep existing `filesChanged` tracking, and consider not retrying recoverable model errors if `filesChanged.length > 0`, to avoid duplicated edits after a partial worker run.

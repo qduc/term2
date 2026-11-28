@@ -8,8 +8,9 @@ The current policy is described in [approval-arbiter.md](approval-arbiter.md);
 the unattended snapshot and refusal rules in
 [unattended-approval.md](unattended-approval.md).
 
-Status: decided, build in progress. Each part below lands as its own PR, in
-the order of the build list. No part is merged yet.
+Status: shipped. Credential locks merged in `b74390f42`, the approval floor in
+`6a01ae8fe`, scratch-area scoping in `b65fd8fe2`, and headless routing in
+`627bcf5dc`. The decisions and build order below record the original design.
 
 ## The problem
 

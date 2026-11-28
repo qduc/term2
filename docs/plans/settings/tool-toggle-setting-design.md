@@ -103,7 +103,7 @@ describe the design-time registration sites and gaps, not the current tree.
   (`source/tools/types.ts:98-103,160-163`), but only a subset is centralized
   (`source/tools/tool-names.ts`) and there is no name→definition registry; the
   group→tool mapping is intentionally variable by model/context
-  (`docs/profiles/02-block-contracts.md:130-133`).
+  ([historical block contracts](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/profiles/02-block-contracts.md#L130-L133)).
 - Plan mode enforcement is a separate invocation-time layer (denials handled
   by `source/services/plan-mode-interceptor.ts:31-52`), not part of tool
   registration.
@@ -188,9 +188,9 @@ describe the design-time registration sites and gaps, not the current tree.
   materialized per build, so a masked capability makes the tool genuinely
   absent from the wire request.
 - Spec context: `Profile-visible ∩ runtime-available ∩ effective authority`
-  (`docs/profiles/02-block-contracts.md:145-153`); M1 slice 4 kept
+  ([historical block contracts](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/profiles/02-block-contracts.md#L145-L153)); M1 slice 4 kept
   "model, execution-context, service-availability, and global-setting
-  decisions" at tool construction (`docs/profiles/06-milestone-1.md:68-75`).
+  decisions" at tool construction ([historical M1 spec](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/profiles/06-milestone-1.md#L68-L75)).
 
 ## Design decisions
 
@@ -542,5 +542,3 @@ agreed Phase 2 priority; the swap is cheap if the interim delegation risk
    historical tool items whose tools are absent from the current request
    (OpenAI-style transports generally do; Codex Responses unverified) with one
    replay test.
-6. **Docs hygiene.** `docs/profiles/README.md:3-7` still describes M1 in
-   future tense; fix alongside the AGENTS.md line in the M1 docs pass.

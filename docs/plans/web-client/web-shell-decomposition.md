@@ -2,7 +2,7 @@
 
 Status: merged as `f13a1ee0` (qduc/term2#432). Part two, which finishes what sections 11 and 15 left, is
 [web-shell-decomposition-part2.md](web-shell-decomposition-part2.md). Built from
-[the brief](web-shell-decomposition-brief.md). Owner's defaults taken: the in-house data layer, the race-window
+[the original brief](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/plans/web-client/web-shell-decomposition-brief.md). Owner's defaults taken: the in-house data layer, the race-window
 differences in section 6.3, the nine ceilings in section 7.1. Where the build departs from this design, see
 [section 15](#15-build-notes). The claims below about the old code come from reading it. Since then the status
 line feed (`LIVE_STATUS`, `deferLiveStatus`, `visibleLiveStatus` and the post-tool delay timer) is gone: the

@@ -1,9 +1,13 @@
 # Web client: one source of truth for the transcript
 
-Status: in progress. Design is settled and written down; phase 0 is partly on branch
-`claude/beautiful-planck-2aliiz` (unmerged). Building is handed to a separate session.
+Status: phases 0–2 and the architecture checks (L) shipped in `faa056ffb`
+(qduc/term2#430). Phase 3 shipped in `d6467f442` (qduc/term2#431). The shared
+fold remains in `src/protocol/fold/`. The web client reads it through
+`session-store.ts` and `present.ts`, with shell policy in `shell-machine.ts`.
 
-## Resume here
+## Implementation notes
+
+These notes record evidence from the build branches before merge.
 
 - **Read next:** [the build spec](web-transcript-single-source-spec.md). It has the contracts, the acceptance
   example, the checks and what not to do.
@@ -187,12 +191,9 @@ Status: in progress. Design is settled and written down; phase 0 is partly on br
   effect that copied or reset state, or turned state into a command, is gone. Four new ones only report facts to
   the machine (`URL_CHANGED`, `READY_TO_SEND`, `BOUNDARY`, `LIVE_STATUS`). The browser suite is 18 flows, about
   45-55 s locally; the `web-browser` job's 120 s budget is still unproven on GitHub.
-- **Next:** the owner opens the PR(s): phases 0-2 and L on `claude/beautiful-planck-2aliiz`, phase 3 stacked on
-  `claude/optimistic-brown-2d0lrp`. Phase 3 is medium risk in the plan's table; no independent verifier ran on it.
-  CI has not yet run any of this branch: the `web-browser` job's time budget is
-  unproven. The acceptance example's steer is not in the stream integration test (it needs real queue state); the
-  browser steer flow covers it end to end. The second example (a background subagent) was added in `c7bf7333`.
-  Phase 3 is independent of 1 and 2.
+- **Coverage at merge:** The browser steer flow uses real queue state and covers the acceptance example
+  end to end. The second stream integration example covers a background subagent. The `web-browser` job
+  runs the browser suite in CI.
 - **Tooling trap:** CI pins pnpm 11.7.0. Adding a dependency with a newer local pnpm rewrites hundreds of
   lockfile lines; use the pinned version for dependency changes.
 

@@ -130,7 +130,7 @@ pnpm build
 pnpm start --help
 ```
 
-Read [AGENTS.md](AGENTS.md) before changing code. Use focused tests for the affected area; integration and provider tests have separate commands in `package.json`.
+Read [AGENTS.md](AGENTS.md) before changing code. See the [repository docs index](docs/README.md) for architecture, contracts, and operational guides. Use focused tests for the affected area; integration and provider tests have separate commands in `package.json`.
 
 The documentation site lives in [`website/`](website/):
 

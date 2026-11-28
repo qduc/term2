@@ -68,9 +68,38 @@ type ScopeState = {
   service: ISettingsService & MenuSettingsService & { reset(key: string): void };
 };
 
+function normalizeProvider(raw: Record<string, unknown>): DaemonProviderProjection {
+  const credential =
+    raw['credential'] && typeof raw['credential'] === 'object'
+      ? (raw['credential'] as Record<string, unknown>)
+      : undefined;
+  return {
+    id: String(raw['id'] ?? ''),
+    label: String(raw['label'] ?? raw['id'] ?? ''),
+    isCustom: raw['isCustom'] === true,
+    isActive: raw['isActive'] === true || raw['active'] === true,
+    hasCredentials: raw['hasCredentials'] === true || credential?.['configured'] === true,
+    isDisabled: raw['isDisabled'] === true || raw['disabled'] === true,
+    ...(typeof raw['type'] === 'string' ? { type: raw['type'] } : {}),
+    ...(raw['hasBaseUrl'] === true ? { hasBaseUrl: true } : {}),
+    ...(typeof raw['baseUrl'] === 'string' ? { baseUrl: raw['baseUrl'] } : {}),
+  };
+}
+
 function parseProjection(raw: Record<string, unknown>): { revision: string; settings: DaemonTuiProjection } {
   const revision = typeof raw['revision'] === 'string' ? raw['revision'] : '';
-  const settings = raw['settings'] as DaemonTuiProjection;
+  const rawSettings = raw['settings'] as Record<string, unknown> | undefined;
+  if (!rawSettings || typeof rawSettings !== 'object') {
+    return { revision, settings: rawSettings as unknown as DaemonTuiProjection };
+  }
+  const rawProviders = Array.isArray(rawSettings['providers']) ? rawSettings['providers'] : [];
+  const providers = rawProviders
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map(normalizeProvider);
+  const settings: DaemonTuiProjection = {
+    ...(rawSettings as unknown as DaemonTuiProjection),
+    providers,
+  };
   return { revision, settings };
 }
 
@@ -89,6 +118,7 @@ export class DaemonTuiSettingsStore {
   #host: RemoteDirectHost;
   readonly #global: ScopeState;
   readonly #sessions = new Map<string, ScopeState>();
+  readonly #pendingOps = new Set<Promise<unknown>>();
   #writeQueue: Promise<unknown> = Promise.resolve();
   #closed = false;
 
@@ -103,6 +133,21 @@ export class DaemonTuiSettingsStore {
 
   replaceHost(host: RemoteDirectHost): void {
     this.#host = host;
+  }
+
+  trackPending(op: Promise<unknown>): void {
+    this.#pendingOps.add(op);
+    void op.finally(() => {
+      this.#pendingOps.delete(op);
+    });
+  }
+
+  async flush(): Promise<void> {
+    await this.#writeQueue.catch(() => undefined);
+    while (this.#pendingOps.size > 0) {
+      await Promise.allSettled([...this.#pendingOps]);
+      await this.#writeQueue.catch(() => undefined);
+    }
   }
 
   async hydrateGlobal(): Promise<void> {
@@ -169,6 +214,7 @@ export class DaemonTuiSettingsStore {
   }
 
   async close(): Promise<void> {
+    await this.flush();
     this.#closed = true;
     const unsubs: Array<Promise<void>> = [];
     if (this.#global.unsubscribe) {

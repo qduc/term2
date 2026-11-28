@@ -350,6 +350,10 @@ export interface TuiIntegration {
   };
   /** Attach a returned direct session ID; do not reuse the previous connection. */
   switchSession?(sessionId: string): Promise<void | { readonly message?: string }>;
+  /** Disable client-driven background notification drain when the host drains authoritatively (daemon mode). */
+  readonly disableClientNotificationDrain?: boolean;
+  /** Called when the underlying event stream drops or closes while mounted; lets the app reconnect. */
+  readonly onConnectionLost?: (reason: string) => void;
 }
 
 /** A finished `!` command, as legacy's ShellInteractionSession hands it to addShellMessage. */
@@ -374,10 +378,6 @@ export interface TuiProps {
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   /** New durable events only; snapshot/replay callbacks do not trigger side effects. */
   readonly onLiveEvent?: (event: WireEvent) => void;
-  /** Disable client-driven background notification drain when the host drains authoritatively (daemon mode). */
-  readonly disableClientNotificationDrain?: boolean;
-  /** Called when the underlying event stream drops or closes while mounted; lets the app reconnect. */
-  readonly onConnectionLost?: (reason: string) => void;
   readonly onExit: () => void;
 }
 

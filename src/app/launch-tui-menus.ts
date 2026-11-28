@@ -93,7 +93,7 @@ import type {
   TuiModelSettings,
   TuiProviderMenu,
 } from '../clients/tui/integration.js';
-import type { TuiBackend } from './tui-backend.js';
+import type { TuiBackend } from './lib/tui-backend.js';
 
 import { displaySessionId } from '../protocol/session-id.js';
 

@@ -48,11 +48,9 @@ export function TuiSession({
   redrawKey,
   showReasoning,
   integration,
-  retainedSnapshot,
+  retainedSnapshot: retained,
   onSnapshot,
   onLiveEvent,
-  disableClientNotificationDrain,
-  onConnectionLost,
   onExit,
   interrupt,
   switchSession,
@@ -80,14 +78,7 @@ export function TuiSession({
 }): React.ReactElement {
   const goalClosed = useRef<(event: WireEvent) => void>(() => undefined);
   const live = (event: WireEvent) => (goalClosed.current(event), onLiveEvent?.(event));
-  const {
-    state,
-    error: connError,
-    historyRevision,
-  } = useClient(connection, retainedSnapshot, onSnapshot, live, {
-    disableClientNotificationDrain,
-    onConnectionLost,
-  });
+  const { state, error: connError, historyRevision } = useClient(connection, retained, onSnapshot, live, integration);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const liveTps = useLiveStreamingSpeed(state);

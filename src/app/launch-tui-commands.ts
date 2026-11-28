@@ -27,7 +27,7 @@ import type { DirectSessionTarget } from './application-target.js';
 import type { DirectControlBridge } from './launch-control.js';
 import { prepareRestart, type DirectRestartPlan } from './launch-tui-restart.js';
 import { createDirectTuiSettings } from './launch-tui-settings.js';
-import type { TuiBackend } from './tui-backend.js';
+import type { TuiBackend } from './lib/tui-backend.js';
 import { displaySessionId, storedSessionId } from '../protocol/session-id.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
@@ -57,11 +57,15 @@ async function configure(
   configuration: Configuration,
   /** What a completed change says, so the user sees the new value rather than a command id. */
   done?: string,
+  onConfigured?: () => Promise<void>,
 ): Promise<CommandResult> {
   const command = { type: 'configure', commandId: randomUUID(), configuration } as const;
   const result = await sendNativeCommand(connection, command);
   const configured = result.kind === 'finished' && result.receipt.outcome?.kind === 'configured';
-  if (configured && done) return { message: done, applied: true };
+  if (configured) {
+    await onConfigured?.();
+    if (done) return { message: done, applied: true };
+  }
   if (result.kind === 'rejected' || result.kind === 'error') {
     const outcome = result.receipt?.outcome;
     throw new Error(outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, ''));
@@ -158,8 +162,9 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       if (result.applied) await backend.saveApprovalPreference(connection.sessionId, 'agent.modelSelection');
       return result;
     };
+    const refresh = () => backend.refreshSessionSettings?.(connection.sessionId) ?? Promise.resolve();
     // Legacy set a `<id> [--provider=]` selection without checking the catalog; the menu submits that form.
-    if (provider !== undefined) return await save(await configure(connection, { model: selected }, done));
+    if (provider !== undefined) return await save(await configure(connection, { model: selected }, done, refresh));
     const catalog = await backend.modelCatalog(connection.sessionId, selected.provider);
     if (catalog.error || catalog.models.length === 0) {
       throw new Error(
@@ -175,7 +180,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           .join(', ')}.`,
       );
     }
-    return await save(await configure(connection, { model: selected }, done));
+    return await save(await configure(connection, { model: selected }, done, refresh));
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
@@ -189,6 +194,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       connection,
       { reasoning: value as NonNullable<Configuration['reasoning']> },
       `Reasoning effort set to ${value}.`,
+      () => backend.refreshSessionSettings?.(connection.sessionId) ?? Promise.resolve(),
     );
   };
 

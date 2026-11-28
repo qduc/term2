@@ -49,8 +49,15 @@ export function createDaemonProviderMenu(
   store: DaemonTuiSettingsStore,
   getHost: () => RemoteDirectHost,
 ): TuiProviderMenu {
-  const refreshLater = (sessionId: string) => {
-    void Promise.all([store.refresh(sessionId), store.refresh()]).catch(() => undefined);
+  const refreshLater = (sessionId: string) =>
+    Promise.all([store.refresh(sessionId), store.refresh()]).catch(() => undefined);
+  const track = (sessionId: string, op: Promise<unknown>) => {
+    store.trackPending(
+      op.then(
+        () => refreshLater(sessionId),
+        () => refreshLater(sessionId),
+      ),
+    );
   };
 
   return {
@@ -74,7 +81,7 @@ export function createDaemonProviderMenu(
         const op = key
           ? getHost().setCredential(editingOriginalName, key)
           : getHost().deleteCredential(editingOriginalName);
-        void op.then(() => refreshLater(sessionId)).catch(() => refreshLater(sessionId));
+        track(sessionId, op);
         return { success: true };
       }
 
@@ -95,24 +102,21 @@ export function createDaemonProviderMenu(
 
       const apiKey = draft.apiKey?.trim();
       const baseUrl = draft.baseUrl?.trim();
-      void getHost()
-        .upsertProvider({
+      track(
+        sessionId,
+        getHost().upsertProvider({
           action: 'save',
           ...(editingOriginalName ? { originalId: editingOriginalName } : {}),
           name: draft.name.trim(),
           type: draft.type,
           ...(baseUrl ? { baseUrl } : keepBaseUrl ? { keepBaseUrl: true } : {}),
           ...(apiKey ? { apiKey } : editingOriginalName ? { keepApiKey: true } : {}),
-        })
-        .then(() => refreshLater(sessionId))
-        .catch(() => refreshLater(sessionId));
+        }),
+      );
       return { success: true };
     },
     delete(sessionId, providerId) {
-      void getHost()
-        .deleteProvider(providerId)
-        .then(() => refreshLater(sessionId))
-        .catch(() => refreshLater(sessionId));
+      track(sessionId, getHost().deleteProvider(providerId));
     },
     validateName(sessionId, value, _isEditingField, editingOriginalName) {
       return validateDaemonProviderName(store, sessionId, value, editingOriginalName);
@@ -147,10 +151,7 @@ export function createDaemonProviderMenu(
       return store.projection(sessionId).providers.find((entry) => entry.id === id)?.isDisabled ?? false;
     },
     setDisabled(sessionId, id, disabled) {
-      void getHost()
-        .upsertProvider({ action: 'toggle', providerId: id, disabled })
-        .then(() => refreshLater(sessionId))
-        .catch(() => refreshLater(sessionId));
+      track(sessionId, getHost().upsertProvider({ action: 'toggle', providerId: id, disabled }));
     },
     isOAuthAccountProvider,
     listAccounts(sessionId, id): MenuOAuthAccount[] {
@@ -166,18 +167,22 @@ export function createDaemonProviderMenu(
     loginCommand: (id) => (isOAuthAccountProvider(id) ? oauthLoginCommand(id) : ''),
     removeAccount(id, account) {
       if (id !== 'codex' && id !== 'grok') return false;
-      void getHost()
-        .oauthDelete(id, account)
-        .then(() => void store.refresh().catch(() => undefined))
-        .catch(() => undefined);
+      store.trackPending(
+        getHost()
+          .oauthDelete(id, account)
+          .then(() => store.refresh().catch(() => undefined))
+          .catch(() => undefined),
+      );
       return true;
     },
     setActiveAccount(id, account) {
       if (id !== 'codex' && id !== 'grok') return false;
-      void getHost()
-        .oauthSelect(id, account)
-        .then(() => void store.refresh().catch(() => undefined))
-        .catch(() => undefined);
+      store.trackPending(
+        getHost()
+          .oauthSelect(id, account)
+          .then(() => store.refresh().catch(() => undefined))
+          .catch(() => undefined),
+      );
       return true;
     },
     sessionAccount(sessionId, providerId) {

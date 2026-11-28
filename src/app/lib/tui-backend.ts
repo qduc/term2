@@ -4,27 +4,27 @@
  * backend implement this narrow interface so Ink, input ownership, slash commands,
  * menus, and terminal probes stay shared across both modes.
  */
-import { collectProviderModels } from '../model/models/model-listing.js';
+import { collectProviderModels } from '../../model/models/model-listing.js';
 import type {
   MenuModelInfo,
   MenuPathEntry,
   MenuWorkspaceEntriesMeta,
   TuiProviderMenu,
-} from '../clients/tui/integration.js';
+} from '../../clients/tui/integration.js';
 import type {
   DirectConnection,
   DirectHost,
   DirectReplayConnection,
   Principal,
-} from '../host/in-process-direct-types.js';
-import type { SettingsUpdateParamsV11 } from '../protocol/client-api/client-api-schema.js';
-import type { WireSnapshot } from '../protocol/wire.js';
-import type { DurableGoal } from '../session/goal.js';
-import type { LoggingService } from '../session/logging/logging-service.js';
-import type { ISettingsService } from '../shared/service-interfaces.js';
-import type { DirectApplication } from './application.js';
-import type { DirectMcp } from './mcp.js';
-import type { McpStatusView } from '../tools/mcp/mcp-status.js';
+} from '../../host/in-process-direct-types.js';
+import type { SettingsUpdateParamsV11 } from '../../protocol/client-api/client-api-schema.js';
+import type { WireSnapshot } from '../../protocol/wire.js';
+import type { DurableGoal } from '../../session/goal.js';
+import type { LoggingService } from '../../session/logging/logging-service.js';
+import type { ISettingsService } from '../../shared/service-interfaces.js';
+import type { DirectApplication } from '../application.js';
+import type { DirectMcp } from '../mcp.js';
+import type { McpStatusView } from '../../tools/mcp/mcp-status.js';
 
 type SettingsChangeV11 = SettingsUpdateParamsV11['changes'][number];
 export type TuiSavedPreferenceKey =
@@ -73,6 +73,10 @@ export interface TuiBackend {
     sessionId: string,
     input: { readonly persist: boolean; readonly changes: readonly SettingsChangeV11[] },
   ): Promise<void>;
+  /** Wait for any queued daemon settings or provider writes to finish before rebuild or exit. */
+  flushSettings?(): Promise<void>;
+  /** Refresh a session's settings projection from the daemon after wire `configure` completes. */
+  refreshSessionSettings?(sessionId: string): Promise<void>;
   listWorkspaceSessions(root: string): Promise<{ readonly sessions: readonly TuiWorkspaceSessionItem[] }>;
   skills(root: string, sessionId?: string): readonly TuiSkillEntry[];
   /** Hydrate per-session projections (settings stream, skills) before rendering a session. */

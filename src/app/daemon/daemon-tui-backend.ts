@@ -4,18 +4,22 @@
  * through `session.launch`, keeps synchronous `ISettingsService` projections synced via
  * `DaemonTuiSettingsStore`, and supports bounded reconnect on dropped connections / `resync_required`.
  */
+import fs from 'node:fs';
+import { stderr, stdout } from 'node:process';
 import type { MenuModelInfo, MenuPathEntry } from '../../clients/tui/integration.js';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 import type { RemoteDirectHost } from '../../host/daemon/remote-direct-host.js';
 import { getModelContextWindow } from '../../model/providers/model-catalog/catalog.js';
 import type { SessionLaunchParams, SessionLaunchResult } from '../../protocol/client-api/client-api-schema.js';
+import { displaySessionId } from '../../protocol/session-id.js';
 import type { WireCommand, WireSnapshot } from '../../protocol/wire.js';
 import type { DurableGoal } from '../../session/goal.js';
 import type { McpStatusView } from '../../tools/mcp/mcp-status.js';
 import type { McpServerSnapshot } from '../../tools/mcp/mcp-tool-source.js';
 import { LOCAL_PRINCIPAL } from '../application-workspaces.js';
+import type { DirectControlBridge } from '../launch-control.js';
 import type { DirectLaunchRequest } from '../launch-types.js';
-import type { TuiBackend, TuiSkillEntry } from '../tui-backend.js';
+import type { TuiBackend, TuiSkillEntry } from '../lib/tui-backend.js';
 import { connectRemoteDirectHost } from './connect-daemon-host.js';
 import { createDaemonProviderMenu } from './daemon-tui-providers.js';
 import { DaemonTuiSettingsStore } from './daemon-tui-settings-store.js';
@@ -31,6 +35,10 @@ function waitMs(ms: number): Promise<void> {
   });
 }
 
+function isLaunchOverrideSource(source: string | undefined): boolean {
+  return source === 'cli' || source === 'env';
+}
+
 function buildLaunchParams(request: InteractiveRequest, root: string): SessionLaunchParams {
   const { settings } = request.selection;
   const selection: SessionLaunchParams['selection'] =
@@ -42,15 +50,23 @@ function buildLaunchParams(request: InteractiveRequest, root: string): SessionLa
 
   const cliModel =
     request.resumeConfiguration?.model ??
-    (settings.getSource?.('agent.modelSelection') === 'cli' ? settings.get('agent.modelSelection') : undefined);
+    (isLaunchOverrideSource(settings.getSource?.('agent.modelSelection'))
+      ? settings.get('agent.modelSelection')
+      : undefined);
   const cliReasoning =
     request.resumeConfiguration?.reasoning ??
-    (settings.getSource?.('agent.reasoningEffort') === 'cli' ? settings.get('agent.reasoningEffort') : undefined);
-  const cliApproval =
-    settings.getSource?.('shell.autoApproveMode') === 'cli' ? settings.get('shell.autoApproveMode') : undefined;
-  const cliShowReview =
-    settings.getSource?.('shell.showReview') === 'cli' ? settings.get('shell.showReview') : undefined;
-  const cliSandbox = settings.getSource?.('sandbox.enabled') === 'cli' ? settings.get('sandbox.enabled') : undefined;
+    (isLaunchOverrideSource(settings.getSource?.('agent.reasoningEffort'))
+      ? settings.get('agent.reasoningEffort')
+      : undefined);
+  const cliApproval = isLaunchOverrideSource(settings.getSource?.('shell.autoApproveMode'))
+    ? settings.get('shell.autoApproveMode')
+    : undefined;
+  const cliShowReview = isLaunchOverrideSource(settings.getSource?.('shell.showReview'))
+    ? settings.get('shell.showReview')
+    : undefined;
+  const cliSandbox = isLaunchOverrideSource(settings.getSource?.('sandbox.enabled'))
+    ? settings.get('sandbox.enabled')
+    : undefined;
 
   return {
     cwd: root,
@@ -100,13 +116,34 @@ function mapMcpStatusView(raw: Record<string, unknown>): McpStatusView {
   return { snapshots, ...(userConfigPath ? { userConfigPath } : {}) };
 }
 
-export type OpenedDaemonTui = {
+type OpenedDaemonTui = {
   readonly backend: TuiBackend;
   readonly initial: DirectConnection;
   readonly launched: SessionLaunchResult;
 };
 
-export async function openDaemonTuiSession(request: InteractiveRequest, root: string): Promise<OpenedDaemonTui> {
+function createDaemonNoOpControlBridge(): DirectControlBridge {
+  return {
+    server: undefined,
+    isStartup: false,
+    outbound: () => ({
+      discordSend: async () => {
+        throw new Error('Control bridge is unavailable on this daemon TUI session.');
+      },
+      isDiscordInputEnabled: () => false,
+    }),
+    attachAtStartup: async () => '',
+    connect: async () => {
+      throw new Error('Runtime control sockets over daemon require Step 14e control leases.');
+    },
+    rebind: async () => undefined,
+    disconnect: async () => undefined,
+    hold: () => undefined,
+    close: async () => undefined,
+  };
+}
+
+async function openDaemonTuiSession(request: InteractiveRequest, root: string): Promise<OpenedDaemonTui> {
   const connect = () =>
     connectRemoteDirectHost({
       clientKind: 'tui',
@@ -217,8 +254,10 @@ export async function openDaemonTuiSession(request: InteractiveRequest, root: st
         return getModelContextWindow(model.provider, model.model) ?? null;
       },
       async saveApprovalPreference(sessionId, key) {
-        const current = store.liveSettings(sessionId)?.getDynamic(key);
         try {
+          await store.flush();
+          await store.refresh(sessionId);
+          const current = store.liveSettings(sessionId)?.getDynamic(key);
           await store.updateSettings({ sessionId, persist: true, changes: [{ key, value: current }] });
           return { status: 'saved' };
         } catch (error) {
@@ -231,6 +270,8 @@ export async function openDaemonTuiSession(request: InteractiveRequest, root: st
       async commitSettings(sessionId, input) {
         await store.updateSettings({ sessionId, persist: input.persist, changes: input.changes });
       },
+      flushSettings: () => store.flush(),
+      refreshSessionSettings: (sessionId) => store.refresh(sessionId),
       async listWorkspaceSessions(workspaceRoot) {
         const sessions: Array<{
           id: string;
@@ -316,7 +357,7 @@ export async function openDaemonTuiSession(request: InteractiveRequest, root: st
         return mapMcpStatusView(raw);
       },
       async mcpLogin(_sessionId, serverId, onAuthorizationUrl) {
-        const raw = await host.loginMcp(serverId);
+        const raw = await host.loginMcp(serverId, launched.workspace.workspaceId);
         const server = (raw['server'] as Record<string, unknown> | undefined) ?? raw;
         const authUrl = typeof raw['authorizationUrl'] === 'string' ? raw['authorizationUrl'] : undefined;
         if (authUrl) onAuthorizationUrl?.(authUrl);
@@ -360,5 +401,57 @@ export async function openDaemonTuiSession(request: InteractiveRequest, root: st
     await store.close().catch(() => undefined);
     await host.dispose().catch(() => undefined);
     throw error;
+  }
+}
+
+export async function runDaemonTuiSession(
+  request: InteractiveRequest,
+  mount: (input: {
+    readonly backend: TuiBackend;
+    readonly root: string;
+    readonly initial: DirectConnection;
+    readonly unconfiguredSessionId?: string;
+    readonly bridge: DirectControlBridge;
+    readonly getExitCode: () => number;
+    readonly setUnmount: (fn: (() => void) | null) => void;
+  }) => Promise<number>,
+): Promise<number> {
+  const root = fs.realpathSync(process.cwd());
+  const bridge = createDaemonNoOpControlBridge();
+  let unmount: (() => void) | null = null;
+  let exitCode = 0;
+  const onSignal = (signal: NodeJS.Signals): void => {
+    exitCode = signal === 'SIGINT' ? 130 : 143;
+    if (unmount) unmount();
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  const { backend, initial, launched } = await openDaemonTuiSession(request, root);
+  try {
+    if (launched.forkedFrom) {
+      stderr.write(
+        `Forked conversation ${displaySessionId(launched.forkedFrom)} → ${displaySessionId(initial.sessionId)}\n`,
+      );
+    }
+    if (request.resumeId !== undefined) stdout.write(`Resumed conversation: ${displaySessionId(initial.sessionId)}\n`);
+    const isUnconfigured =
+      request.resumeId === undefined &&
+      request.selection.settings.getSource?.('agent.modelSelection') === 'default' &&
+      backend.persistentSettings.getSource?.('agent.modelSelection') === 'default';
+    return await mount({
+      backend,
+      root: launched.workspace.root,
+      initial,
+      unconfiguredSessionId: isUnconfigured ? initial.sessionId : undefined,
+      bridge,
+      getExitCode: () => exitCode,
+      setUnmount: (fn) => {
+        unmount = fn;
+      },
+    });
+  } finally {
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+    await backend.close();
   }
 }

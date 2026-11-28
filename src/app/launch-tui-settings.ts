@@ -25,7 +25,7 @@ import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireConfigureRequest, WireSnapshot } from '../protocol/wire.js';
 import type { SettingsService } from './settings.js';
-import type { TuiBackend } from './tui-backend.js';
+import type { TuiBackend } from './lib/tui-backend.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 
@@ -111,6 +111,7 @@ export function createDirectTuiSettings(backend: TuiBackend, latest: () => WireS
     key: 'shell.autoApproveMode' | 'sandbox.enabled' | readonly ('shell.autoApproveMode' | 'shell.showReview')[],
   ): Promise<CommandResult> => {
     await apply();
+    await backend.flushSettings?.();
     const save = async (): Promise<CommandResult> => {
       const keys = typeof key === 'string' ? [key] : key;
       const results = await Promise.all(keys.map((item) => backend.saveApprovalPreference(connection.sessionId, item)));
@@ -169,6 +170,7 @@ export function createDirectTuiSettings(backend: TuiBackend, latest: () => WireS
         // Legacy's settings command parses, saves and words it; the Session then switches to the saved value.
         const before = settings.getDynamic(key);
         command.action(args);
+        await backend.flushSettings?.();
         const after = settings.getDynamic(key);
         if (isDeepStrictEqual(before, after)) {
           const refused = messages.some((message) => message.startsWith('Error'));
@@ -184,11 +186,14 @@ export function createDirectTuiSettings(backend: TuiBackend, latest: () => WireS
           commandId: randomUUID(),
           configuration,
         });
-        if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured')
+        if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured') {
+          await backend.refreshSessionSettings?.(connection.sessionId);
           return { message: messages.join('\n'), applied: true };
+        }
         if (result.kind === 'rejected' || result.kind === 'error') {
           if (before === undefined) settings.reset(key);
           else settings.setDynamic(key, before);
+          await backend.flushSettings?.();
           throw new Error(receiptNotice(result));
         }
         return { message: receiptNotice(result) };
@@ -202,16 +207,19 @@ export function createDirectTuiSettings(backend: TuiBackend, latest: () => WireS
         const configure = { type: 'configure', commandId: randomUUID(), configuration: { temperature } } as const;
         const result = await sendNativeCommand(connection, configure);
         const applied = result.kind === 'finished' && result.receipt.outcome?.kind === 'configured';
+        if (applied) await backend.refreshSessionSettings?.(connection.sessionId);
         return { message: receiptNotice(result), ...(applied ? { applied } : {}) };
       }
       // Legacy saves a restart-only key (and the hook trust roots) for the next start and says so.
       if (!settings.isRuntimeModifiable(key) || key === SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS) {
         command.action(args);
+        await backend.flushSettings?.();
         return { message: messages.join('\n'), applied: true };
       }
 
       const before = settings.getDynamic(key);
       command.action(args);
+      await backend.flushSettings?.();
       if (isDeepStrictEqual(before, settings.getDynamic(key))) {
         // The command refused the value and said why; otherwise the value was already set, which legacy's
         // menus save as a no-op (a pool saved unchanged closes back to the list).
@@ -219,9 +227,10 @@ export function createDirectTuiSettings(backend: TuiBackend, latest: () => WireS
         return { message: messages.join('\n'), ...(refused ? {} : { applied: true }) };
       }
       // The command saved the value as legacy does; a refused rebuild takes it back on disk as well.
-      const undo = () => {
+      const undo = async () => {
         if (before === undefined) settings.reset(key);
         else settings.setDynamic(key, before);
+        await backend.flushSettings?.();
       };
       return rebuild(connection, undo, messages.join('\n'));
     },

@@ -33,8 +33,8 @@ import { INTERACTIVE_TERMINAL_REQUIRED } from './launch.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
 import { displaySessionId } from '../protocol/session-id.js';
-import { createInProcessTuiBackend, type TuiBackend } from './tui-backend.js';
-import { openDaemonTuiSession } from './daemon/daemon-tui-backend.js';
+import { createInProcessTuiBackend, type TuiBackend } from './lib/tui-backend.js';
+import { runDaemonTuiSession } from './daemon/daemon-tui-backend.js';
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
 type TerminalProbe = { readonly background: TerminalBackground; readonly programStatus: TerminalProgramStatus };
@@ -224,15 +224,15 @@ function DirectTuiSession({
           onConnectionChange(next);
         },
       }),
+      disableClientNotificationDrain: backend.mode === 'daemon',
+      onConnectionLost: backend.reconnectSession ? handleConnectionLost : undefined,
     }),
-    [backend, root, remote, bridge, restart, logger, onConnectionChange, unconfiguredSessionId],
+    [backend, root, remote, bridge, restart, logger, onConnectionChange, unconfiguredSessionId, handleConnectionLost],
   );
   return (
     <Tui
       connection={connection}
       retainedSnapshot={retainedSnapshot}
-      disableClientNotificationDrain={backend.mode === 'daemon'}
-      onConnectionLost={backend.reconnectSession ? handleConnectionLost : undefined}
       header={
         <Box paddingLeft={2}>
           <ProviderBanner
@@ -278,27 +278,6 @@ function DirectTuiSession({
 }
 
 type Restart = { plan?: DirectRestartPlan };
-
-function createDaemonNoOpControlBridge(): DirectControlBridge {
-  return {
-    server: undefined,
-    isStartup: false,
-    outbound: () => ({
-      discordSend: async () => {
-        throw new Error('Control bridge is unavailable on this daemon TUI session.');
-      },
-      isDiscordInputEnabled: () => false,
-    }),
-    attachAtStartup: async () => '',
-    connect: async () => {
-      throw new Error('Runtime control sockets over daemon require Step 14e control leases.');
-    },
-    rebind: async () => undefined,
-    disconnect: async () => undefined,
-    hold: () => undefined,
-    close: async () => undefined,
-  };
-}
 
 async function renderMountedTui(options: {
   readonly backend: TuiBackend;
@@ -374,54 +353,6 @@ async function renderMountedTui(options: {
     );
   }
   return options.getExitCode();
-}
-
-async function runDaemonTui(
-  request: InteractiveRequest,
-  pending: Restart,
-  { background }: TerminalProbe,
-): Promise<number> {
-  const root = fs.realpathSync(process.cwd());
-  const bridge = createDaemonNoOpControlBridge();
-  let unmount: (() => void) | null = null;
-  let exitCode = 0;
-  const onSignal = (signal: NodeJS.Signals): void => {
-    exitCode = signal === 'SIGINT' ? 130 : 143;
-    if (unmount) unmount();
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
-  const { backend, initial, launched } = await openDaemonTuiSession(request, root);
-  try {
-    if (launched.forkedFrom) {
-      stderr.write(
-        `Forked conversation ${displaySessionId(launched.forkedFrom)} → ${displaySessionId(initial.sessionId)}\n`,
-      );
-    }
-    if (request.resumeId !== undefined) stdout.write(`Resumed conversation: ${displaySessionId(initial.sessionId)}\n`);
-    return await renderMountedTui({
-      backend,
-      root: launched.workspace.root,
-      remote: undefined,
-      initial,
-      unconfiguredSessionId:
-        request.resumeId === undefined && backend.persistentSettings.getSource?.('agent.modelSelection') === 'default'
-          ? initial.sessionId
-          : undefined,
-      bridge,
-      pending,
-      background,
-      logger: request.selection.logger,
-      getExitCode: () => exitCode,
-      setUnmount: (fn) => {
-        unmount = fn;
-      },
-    });
-  } finally {
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
-    await backend.close();
-  }
 }
 
 async function runTui(
@@ -518,7 +449,15 @@ export async function launchTui(request: InteractiveRequest, terminal: TerminalP
   let exitCode: number;
   try {
     if (useDaemon) {
-      exitCode = await runDaemonTui(request, pending, terminal);
+      exitCode = await runDaemonTuiSession(request, (mounted) =>
+        renderMountedTui({
+          ...mounted,
+          remote: undefined,
+          pending,
+          background: terminal.background,
+          logger: request.selection.logger,
+        }),
+      );
     } else {
       const target = await openDirectSessionTarget(request.ssh, request.lite, new AbortController().signal);
       let mcp: DirectMcp | undefined;

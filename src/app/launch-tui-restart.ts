@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createRestartPlan } from '../shared/utils/process-restart.js';
 import { acquireDirectWriterLock } from '../session/writer-lock.js';
 import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/wire.js';
-import type { TuiBackend } from './tui-backend.js';
+import type { TuiBackend } from './lib/tui-backend.js';
 import type { DirectControlBridge, DirectControlHold } from './launch-control.js';
 
 export type DirectRestartPlan = ReturnType<typeof createRestartPlan> & { readonly sessionId: string };

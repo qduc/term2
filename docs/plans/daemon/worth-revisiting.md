@@ -32,3 +32,10 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
 
 8. **Process-global `AnthropicShellSandboxRunner` (`@anthropic-ai/sandbox-runtime`)** *(Step 7 Row 9)*:
    - `@anthropic-ai/sandbox-runtime`'s `SandboxManager` is process-global and mutates `process.env.CLAUDE_CODE_TMPDIR`. In the daemon, concurrent multi-workspace sandboxed shell calls serialize safely around it; long-term isolation across concurrent workspaces belongs with the deferred Execution Environments / per-workspace sandbox worker.
+
+9. **Daemon startup environment and per-launch overrides** *(Step 14d)*:
+   - A later client can start from another shell with different environment
+     overrides. Keep the distinction between durable defaults, CLI launch
+     choices, and provider credentials explicit in the TUI API review. Review
+     the chosen client-visible environment behavior with the SSH agent case in
+     item 6.

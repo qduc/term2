@@ -5,8 +5,9 @@
  * committed `docs/plans/daemon/spec/client-api.schema.json`.
  */
 import http from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -29,7 +30,6 @@ afterEach(async () => {
 function makeSnapshot(overrides: Partial<WireSnapshot> & { sessionId: string }): WireSnapshot {
   return {
     protocolVersion: 1,
-    sessionId: overrides.sessionId,
     seq: overrides.seq ?? 1,
     status: overrides.status ?? 'idle',
     model: overrides.model ?? { provider: 'openai', model: 'gpt-5' },
@@ -157,13 +157,8 @@ function httpJson(
 }
 
 describe('Client API v1.0 conformance', () => {
-  it('keeps committed client-api.schema.json in sync with client-api-schema.ts and version rules', async () => {
-    const { buildClientApiJsonSchema } = await import('../../scripts/generate-client-api-schema.mjs');
-    const committed = await readFile(
-      path.resolve(process.cwd(), 'docs/plans/daemon/spec/client-api.schema.json'),
-      'utf8',
-    );
-    expect(JSON.parse(committed)).toEqual(buildClientApiJsonSchema());
+  it('keeps committed client-api.schema.json in sync with client-api-schema.ts and version rules', () => {
+    execFileSync(process.execPath, ['--import', 'tsx', 'scripts/generate-client-api-schema.mjs', '--check']);
     expect(negotiateSingleProtocolVersion('1.0')).toEqual({ ok: true, version: '1.0' });
     expect(negotiateSingleProtocolVersion('1.2')).toEqual({ ok: true, version: '1.0' });
     expect(negotiateSingleProtocolVersion('2.0').ok).toBe(false);
@@ -185,9 +180,11 @@ describe('Client API v1.0 conformance', () => {
       stateDirectory: directory,
     });
     const validated = grants.validate({ userId: 'owner', via: 'assertion' }, workspaceDir);
+    if (!validated.valid) throw new Error(`Workspace fixture was rejected: ${validated.reasonCode}`);
     const selected = grants.select({ userId: 'owner', via: 'assertion' }, validated.candidateId, 'read_write');
     const workspaceId = selected.workspaceId;
     const workspaceRoot = selected.binding.canonicalRoot;
+    const workspace = { root: workspaceRoot, access: 'read_write', target: 'local' } as const;
 
     const index = createSessionIndex({
       coalesceMs: 10,
@@ -195,7 +192,7 @@ describe('Client API v1.0 conformance', () => {
         sessions: [
           {
             id: 'conv_00000000-0000-4000-8000-000000000001',
-            workspace: { root: workspaceRoot, access: 'read_write' },
+            workspace,
             model: { provider: 'openai', model: 'gpt-5' },
             fullTitle: 'Pre-crash running session',
             createdAt: '2026-11-27T10:00:00.000Z',
@@ -336,7 +333,7 @@ describe('Client API v1.0 conformance', () => {
     index.observeLifecycle({
       kind: 'snapshot',
       sessionId: 'conv_00000000-0000-4000-8000-000000000001',
-      workspace: { root: workspaceRoot, access: 'read_write' },
+      workspace,
       snapshot: makeSnapshot({
         sessionId: 'conv_00000000-0000-4000-8000-000000000001',
         seq: 5,
@@ -354,7 +351,7 @@ describe('Client API v1.0 conformance', () => {
     index.observeLifecycle({
       kind: 'snapshot',
       sessionId: 'conv_00000000-0000-4000-8000-000000000001',
-      workspace: { root: workspaceRoot, access: 'read_write' },
+      workspace,
       snapshot: makeSnapshot({
         sessionId: 'conv_00000000-0000-4000-8000-000000000001',
         seq: 6,

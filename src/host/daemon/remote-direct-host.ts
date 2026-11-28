@@ -66,7 +66,10 @@ export interface RemoteDirectHost extends DirectHost {
     changes: readonly { readonly key: string; readonly value: unknown }[],
   ): Promise<Record<string, unknown>>;
   listModels(): Promise<readonly Record<string, unknown>[]>;
-  listSkills(workspaceId?: string): Promise<readonly Record<string, unknown>[]>;
+  listSkills(scope?: {
+    readonly workspaceId?: string;
+    readonly sessionId?: string;
+  }): Promise<readonly Record<string, unknown>[]>;
   getQuota(sessionId?: string): Promise<Record<string, unknown>>;
   getMcpStatus(input?: {
     readonly workspaceId?: string;
@@ -452,12 +455,9 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
       const res = await rpc.request<{ readonly models: readonly Record<string, unknown>[] }>('models.list');
       return res.models;
     },
-    async listSkills(workspaceId) {
+    async listSkills(scope) {
       ensureOpen();
-      const res = await rpc.request<{ readonly skills: readonly Record<string, unknown>[] }>(
-        'skills.list',
-        workspaceId ? { workspaceId } : {},
-      );
+      const res = await rpc.request<{ readonly skills: readonly Record<string, unknown>[] }>('skills.list', scope);
       return res.skills;
     },
     async getQuota(sessionId) {
@@ -474,7 +474,7 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
     },
     async listSessionFiles(sessionId) {
       ensureOpen();
-      return await rpc.request('session.files', { sessionId });
+      return await rpc.request('workspaces.files', { sessionId });
     },
   };
 }

@@ -253,6 +253,14 @@ const SessionCommandParamsSchema = z.strictObject({
   command: z.record(z.string(), z.unknown()),
 });
 
+const WorkspaceScopeParamsSchema = z.strictObject({
+  workspaceId: OpaqueId.optional(),
+  sessionId: ControlFreeString.optional(),
+});
+const WorkspaceFilesParamsSchema = WorkspaceScopeParamsSchema.extend({
+  refresh: z.boolean().optional(),
+});
+
 const SettingsUpdateParamsSchema = z.strictObject({
   expectedRevision: ControlFreeString,
   changes: z.array(z.strictObject({ key: ControlFreeString, value: z.unknown() })).min(1),
@@ -342,6 +350,8 @@ export const CLIENT_API_SCHEMAS = {
   sessionCommandParams: SessionCommandParamsSchema,
   settingsUpdateParams: SettingsUpdateParamsSchema,
   settingsStateEvent: SettingsStateEventSchema,
+  skillsListParams: WorkspaceScopeParamsSchema,
+  workspaceFilesParams: WorkspaceFilesParamsSchema,
   unixSessionAttachResult: UnixSessionAttachResultSchema,
   unixStreamUnsubscribeParams: UnixStreamUnsubscribeParamsSchema,
   unixRequestFrame: UnixRequestFrameSchema,

@@ -24,13 +24,13 @@ import {
 } from '../../protocol/client-api/client-api-schema.js';
 import { CLIENT_API_VERSION } from '../../protocol/client-api/version-negotiation.js';
 import { DirectProtocolError } from '../../protocol/errors.js';
-import type { DirectHostLifecycleEvent } from '../../host/in-process-direct-types.js';
+import type { DirectHostLifecycleEvent, Principal } from '../../host/in-process-direct-types.js';
 import { createSessionIndex } from '../../host/daemon/session-index.js';
 import { GlobalMutationCoordinator } from '../../host/daemon/global-mutations.js';
 import { ClientApiRpcError, DaemonRpc } from '../../host/daemon/daemon-rpc.js';
 import { DaemonUnixServer } from '../../host/daemon/daemon-unix.js';
 import { createDirectApplication } from '../application.js';
-import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant } from '../application-workspaces.js';
+import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant, requireLocalCaller } from '../application-workspaces.js';
 import { createDirectProductPorts, DirectGlobalConfiguration } from '../host-config.js';
 import { scanDirectoryEntries } from '../file-service.js';
 import { SessionContextService } from '../../model/traffic-context.js';
@@ -209,8 +209,25 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     });
 
     const localOwnerApp = app;
+    const knownWorkspaceRoots = new Map<string, string>();
+    const recordLocalWorkspace = (root: string) => knownWorkspaceRoots.set(localWorkspaceIdForRoot(root), root);
+    const resolveWorkspaceRoot = (workspaceId: string): string => {
+      const root = knownWorkspaceRoots.get(workspaceId);
+      try {
+        if (root && fs.realpathSync(root) === root && fs.statSync(root).isDirectory()) return root;
+      } catch {
+        // A stored workspace can disappear between daemon startup and admission.
+      }
+      throw new DirectProtocolError('not_found', 'Unknown local workspace.');
+    };
     const sessionIndex = createSessionIndex({
-      listStored: () => localOwnerApp.listStoredSessions(),
+      async listStored() {
+        const page = await localOwnerApp.listStoredSessions();
+        for (const { workspace } of page.sessions) {
+          if (workspace.target === 'local') recordLocalWorkspace(workspace.root);
+        }
+        return page;
+      },
       resolveVisibility: (principal, record) => {
         if (principal.via !== 'local') return { visible: false };
         return {
@@ -222,6 +239,17 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     });
     lifecycleObserver.current = (event) => sessionIndex.observeLifecycle(event);
     await sessionIndex.seed();
+    const discoveryRoot = async (
+      principal: Principal,
+      { workspaceId, sessionId }: { workspaceId?: string; sessionId?: string },
+    ): Promise<string> => {
+      requireLocalCaller(principal);
+      if (workspaceId) return resolveWorkspaceRoot(workspaceId);
+      if (!sessionId) return process.cwd();
+      const session = await sessionIndex.get(principal, sessionId);
+      if (!session) throw new DirectProtocolError('not_found', 'Unknown local session workspace.');
+      return resolveWorkspaceRoot(session.workspaceId);
+    };
 
     const getCounts = () => sessionIndex.counts();
 
@@ -290,16 +318,14 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       return shutdownPromise;
     };
 
-    const knownWorkspaceRoots = new Map<string, string>();
     const rpc = new DaemonRpc({
       host: localOwnerApp.host,
       sessionIndex,
       mutations,
       configuration,
       models: () => configuration.listModels(),
-      skills: async (_principal, workspaceId) => {
-        const mapped = workspaceId ? knownWorkspaceRoots.get(workspaceId) : undefined;
-        const root = mapped ?? (workspaceId && fs.existsSync(workspaceId) ? workspaceId : process.cwd());
+      skills: async (principal, scope) => {
+        const root = await discoveryRoot(principal, scope);
         return localOwnerApp.skills(root).map(({ name, description, isProjectLevel }) => ({
           name,
           description,
@@ -332,7 +358,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
             void performShutdown(params);
           });
         },
-        async resolveCwdGrant(_principal, cwd) {
+        async resolveCwdGrant(principal, cwd) {
+          requireLocalCaller(principal);
           let resolved: string;
           try {
             resolved = fs.realpathSync(cwd);
@@ -342,9 +369,12 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           if (!fs.statSync(resolved).isDirectory()) {
             throw new DirectProtocolError('invalid_command', `Workspace path is not a directory: ${cwd}`);
           }
-          const grant = localGrant(resolved);
-          knownWorkspaceRoots.set(grant.workspaceId, resolved);
-          return grant;
+          recordLocalWorkspace(resolved);
+          return localGrant(resolved);
+        },
+        async resolveWorkspaceGrant(principal, workspaceId) {
+          requireLocalCaller(principal);
+          return localGrant(resolveWorkspaceRoot(workspaceId));
         },
         setPendingCreatePolicy(policy) {
           pendingCreatePolicy = policy;
@@ -355,8 +385,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         async handoffSession(_principal, sourceSessionId, input) {
           return await localOwnerApp.handoff(sourceSessionId, undefined, input.text ?? '');
         },
-        async sessionFiles(principal, sessionId) {
-          const root = await localOwnerApp.sessionRoot(principal, sessionId);
+        async files(principal, scope) {
+          const root = await discoveryRoot(principal, scope);
           const scanned = await scanDirectoryEntries(root, { maxDepth: 12, maxTotalEntries: 2_000 });
           return { entries: scanned.entries, truncated: scanned.truncated };
         },

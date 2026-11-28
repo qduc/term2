@@ -699,6 +699,14 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       ok: false,
       error: { code: 'invalid_request' },
     });
+    // Control-socket leases (Step 14e Part 2): an unknown session or lease is not found.
+    expect(
+      await v11.request('session.control.bind', { sessionId: 'conv_1', name: 'x', discordInput: false }),
+    ).toMatchObject({ ok: false, error: { code: 'not_found' } });
+    expect(await v11.request('session.control.unbind', { leaseId: 'lease_unknown' })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
     expect(await v11.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [] })).toMatchObject({
       ok: false,
       error: { code: 'unavailable' },

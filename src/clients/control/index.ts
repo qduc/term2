@@ -23,6 +23,8 @@ export type DirectControlSocketOptions = Omit<DirectControlPortOptions, 'connect
   readonly sessionId: string;
   readonly name: string;
   readonly runtimeDir?: string;
+  /** Advertised working directory; defaults to this process's. A daemon owner passes the session's root. */
+  readonly cwd?: string;
   /** Process-local opt-in only; never derived from a remotely mutable setting. */
   readonly discordInput?: boolean;
 };
@@ -50,6 +52,7 @@ export async function startDirectControlSocket(options: DirectControlSocketOptio
     socket = new ControlSocketServer({
       name: options.name,
       runtimeDir: options.runtimeDir,
+      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
       discordInput: options.discordInput,
       sessionId: () => connection.sessionId,
     });

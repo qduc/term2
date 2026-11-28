@@ -447,3 +447,31 @@ refuses a resolved workspace wider than that identity, and the runtime builds
 its tools from the resolved one. `sessionConfiguration().workspaceAccess`
 reports it. The
 wire behavior is in contract 13, "Saved folder edits".
+
+## Control socket over the daemon
+
+In daemon mode the TUI's named control socket lives in the daemon, not in the
+TUI process. `src/app/daemon/leases/control-bridge.ts` is the TUI's
+`DirectControlBridge` there: `/bridge`, `--control-socket`, `/clear`/`/resume`
+and `/restart` send `session.control.bind`/`rebind`/`unbind` over the TUI's own
+daemon connection. `src/app/daemon/leases/control-lease.ts`
+(`DaemonControlLeases`) answers them by opening the same `ControlSocketServer`
+an in-process TUI opens (`startDirectControlSocket`), in the daemon's
+`XDG_RUNTIME_DIR`, so the standalone `control` client and the Discord bridge
+are unchanged. The advertisement names the daemon's pid, and the session's
+workspace root as its `cwd`.
+
+A lease lives as long as the connection that holds it (transport-unix.md §5.2):
+EOF or `unbind` closes the socket and detaches it from the session without
+closing the session. `/restart` calls `unbind` with `pauseForHandoff`: the
+socket keeps listening with mutations paused, detached from any connection, and
+the lease id reaches the replacement process in `TERM2_CONTROL_HANDOFF_LEASE`;
+its startup `rebind` claims the socket and resumes it. A socket nobody claims
+closes after 30 s, and a late replacement then binds the name afresh. A failed
+`rebind` closes the socket, as in-process. If the TUI's connection drops and it
+reconnects, it binds the name again.
+
+Discord send for a daemon session's tools comes from the daemon's surface
+(`DaemonControlLeases.outbound`, interactive local sessions only, as
+in-process): authority resolves at each call to a live, opted-in, unpaused
+socket bound to that session.

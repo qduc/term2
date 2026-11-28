@@ -39,6 +39,7 @@ import { createDaemonMcp } from './daemon-mcp.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import { createDaemonV11Port } from './daemon-v11-ops.js';
 import { DaemonServeLeaseManager } from './leases/serve-lease.js';
+import { DaemonControlLeases } from './leases/control-lease.js';
 import {
   acquireLockOrDetectPeer,
   checkConversationsDirectory,
@@ -111,6 +112,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
   let app: Awaited<ReturnType<typeof createDirectApplication>> | null = null;
   let daemonMcp: ReturnType<typeof createDaemonMcp> | null = null;
   let serveLeases: DaemonServeLeaseManager | null = null;
+  const controlLeases = new DaemonControlLeases();
   let unixServer: DaemonUnixServer | null = null;
 
   try {
@@ -202,6 +204,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           allowUnsandboxed,
         });
         return {
+          // As an in-process TUI gives its sessions: Discord send through a control socket bound to the session.
+          ...(isHeadless || isAcp ? {} : controlLeases.outbound(sessionId)),
           autoApprove: policy?.mode === 'headless' ? policy.autoApprove : false,
           interactive: !isHeadless,
           sessionBrowser: !isHeadless && !isAcp,
@@ -254,6 +258,16 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     activeServeLeases.bindRuntime(localOwnerApp, sessionIndex);
     lifecycleObserver.current = (event) => sessionIndex.observeLifecycle(event);
     await sessionIndex.seed();
+    // A control socket binds only a session this daemon knows; a vanished root just leaves `workspaceRoot` empty.
+    controlLeases.attach(localOwnerApp, async (sessionId) => {
+      const session = await sessionIndex.get(LOCAL_PRINCIPAL, sessionId);
+      if (!session) throw new DirectProtocolError('not_found', 'Unknown local session.');
+      try {
+        return resolveWorkspaceRoot(session.workspaceId);
+      } catch {
+        return null;
+      }
+    });
     const discoveryRoot = async (
       principal: Principal,
       { workspaceId, sessionId }: { workspaceId?: string; sessionId?: string },
@@ -312,6 +326,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           } finally {
             try {
               await serveLeases?.closeAll();
+              await controlLeases.closeAll();
               sessionIndex.dispose();
               await app?.close();
               await daemonMcp?.close();
@@ -354,6 +369,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       }),
       serveStart: activeServeLeases.startLease.bind(activeServeLeases),
       serveStop: activeServeLeases.stopLease.bind(activeServeLeases),
+      controlBind: controlLeases.controlBind.bind(controlLeases),
+      controlRebind: controlLeases.controlRebind.bind(controlLeases),
+      controlUnbind: controlLeases.controlUnbind.bind(controlLeases),
     };
     const advertisedCapabilities = [...CLIENT_API_CAPABILITIES];
     const rpc = new DaemonRpc({
@@ -463,7 +481,13 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     advertisementWritten = true;
     return { kind: 'started', daemonId, paths, status, shutdown: performShutdown, closed };
   } catch (error) {
-    await Promise.allSettled([unixServer?.close(), serveLeases?.closeAll(), app?.close(), daemonMcp?.close()]);
+    await Promise.allSettled([
+      unixServer?.close(),
+      serveLeases?.closeAll(),
+      controlLeases.closeAll(),
+      app?.close(),
+      daemonMcp?.close(),
+    ]);
     if (advertisementWritten) removeFileIfPresent(paths.advertisementPath);
     if (socketBound) removeFileIfPresent(paths.socketPath);
     releaseLock();

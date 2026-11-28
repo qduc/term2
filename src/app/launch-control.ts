@@ -17,7 +17,8 @@ import type { WireSnapshot } from '../protocol/wire.js';
 import type { DirectApplication } from './application.js';
 import type { DirectControlSocketRequest } from './launch-types.js';
 
-type ControlServer = DirectControlSocket['socket'];
+/** What the TUI shows and restarts with; the socket may live in this process or in the daemon. */
+type ControlServer = Pick<DirectControlSocket['socket'], 'name' | 'socketPath' | 'discordInputEnabled'>;
 
 export type DirectControlHold = { readonly drained: Promise<void>; release(): void };
 
@@ -46,6 +47,8 @@ export type DirectControlBridge = {
   rebind(sessionId: string): Promise<void>;
   /** Stops control input for a restart. The new process owns the socket name next. */
   hold(): DirectControlHold | undefined;
+  /** Extra environment for the replacement process, so it can claim a socket held for it (daemon mode). */
+  restartEnv?(): Readonly<Record<string, string>>;
   close(): Promise<void>;
 };
 
@@ -53,12 +56,16 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function metadataFor(app: DirectApplication, root: string): (snapshot: WireSnapshot) => ControlSessionMetadata {
+/** Status metadata for a control socket; `root` is read per call because a daemon socket can follow a session elsewhere. */
+export function controlMetadataFor(
+  app: DirectApplication,
+  root: () => string | null,
+): (snapshot: WireSnapshot) => ControlSessionMetadata {
   return (snapshot) => {
     // The logical ID survives rollover; backing log and installed profile do not.
     const known = app.sessionDetails(snapshot.sessionId, snapshot.seq);
     return {
-      workspaceRoot: root,
+      workspaceRoot: root(),
       version: installationVersion,
       createdAt: known.createdAt,
       logPath: known.logPath,
@@ -85,7 +92,7 @@ export function createDirectControlBridge(
       sessionId,
       name,
       discordInput,
-      metadata: metadataFor(app, root),
+      metadata: controlMetadataFor(app, () => root),
     });
   };
 

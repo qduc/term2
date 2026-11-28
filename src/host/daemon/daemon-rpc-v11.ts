@@ -5,6 +5,7 @@
  */
 import {
   CLIENT_API_SCHEMAS,
+  type DaemonServeStartParams,
   type ModelsListParamsV11,
   type ProviderUpsertParamsV11,
   type SessionLaunchParams,
@@ -16,6 +17,12 @@ import type { ProviderWriteInput, SafeSettingValue, ServerConfiguration } from '
 import { ClientApiRpcError, parseStrict } from './daemon-errors.js';
 import type { GlobalMutationCoordinator } from './global-mutations.js';
 import type { SessionIndex } from './session-index.js';
+
+export type DaemonRpcConnectionContext = {
+  readonly connectionId: string;
+  emitEvent(event: string, payload: Record<string, unknown>): void;
+  onDisconnect(cleanup: () => void | Promise<void>): () => void;
+};
 
 export type DaemonV11ControlPort = {
   launchSession?(principal: Principal, params: SessionLaunchParams): Promise<Record<string, unknown>>;
@@ -35,6 +42,16 @@ export type DaemonV11ControlPort = {
   mcpLoginV11?(
     principal: Principal,
     input: { readonly serverId: string; readonly workspaceId?: string; readonly handoffUrl?: boolean },
+  ): Promise<Record<string, unknown>>;
+  serveStart?(
+    principal: Principal,
+    params: DaemonServeStartParams,
+    connection: DaemonRpcConnectionContext,
+  ): Promise<Record<string, unknown>>;
+  serveStop?(
+    principal: Principal,
+    leaseId: string,
+    connection: DaemonRpcConnectionContext,
   ): Promise<Record<string, unknown>>;
 };
 
@@ -260,4 +277,36 @@ export async function handleMcpLogin(
       ? parseStrict(CLIENT_API_SCHEMAS.skillsListParams, { workspaceId: params['workspaceId'] }, 'mcp.login')
       : {};
   return await mcpLogin(principal, { serverId, ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}) });
+}
+
+export async function handleLocalLeaseMethod(
+  v11: DaemonV11ControlPort | undefined,
+  principal: Principal,
+  method: string,
+  params: Record<string, unknown>,
+  connection: DaemonRpcConnectionContext | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (method === 'daemon.serve.start') {
+    if (!v11?.serveStart || !connection) {
+      throw new ClientApiRpcError('unavailable', 'Daemon serve lease management is unavailable.');
+    }
+    const parsed = parseStrict(CLIENT_API_SCHEMAS.daemonServeStartParams, params, 'daemon.serve.start');
+    return await v11.serveStart(principal, parsed, connection);
+  }
+  if (method === 'daemon.serve.stop') {
+    if (!v11?.serveStop || !connection) {
+      throw new ClientApiRpcError('unavailable', 'Daemon serve lease management is unavailable.');
+    }
+    const parsed = parseStrict(CLIENT_API_SCHEMAS.daemonServeStopParams, params, 'daemon.serve.stop');
+    return await v11.serveStop(principal, parsed.leaseId, connection);
+  }
+  if (
+    method === 'session.control.bind' ||
+    method === 'session.control.rebind' ||
+    method === 'session.control.unbind' ||
+    method === 'session.acp.set_mcp'
+  ) {
+    throw new ClientApiRpcError('unavailable', `Local lease method "${method}" is unavailable.`);
+  }
+  return undefined;
 }

@@ -44,6 +44,8 @@ const CHILD_ENV_KEYS = [
   'NODE_ENV',
   'TERM2_TEST_OWNER',
   'TERM2_EXIT_CONFIRM_WINDOW_MS',
+  'TERM2_DAEMON_MODE',
+  'TERM2_IN_PROCESS',
 ];
 
 /** Build a child environment without leaking ambient credentials or service URLs. */

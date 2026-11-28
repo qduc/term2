@@ -99,7 +99,7 @@ try {
   const publicKeyPath = path.join(dir, 'pub.pem');
   const owner = 'local-owner';
   const keyId = 'term2-web';
-  const issuer = 'term2-web';
+  const issuer = 'chatforge-bff';
   const audience = 'term2-gateway';
   const { publicKey, privateKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,

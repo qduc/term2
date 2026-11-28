@@ -50,6 +50,8 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
   readonly authority: DirectWorkspaceAuthority;
   readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   readonly directory: string;
+  readonly allowUnboundLocal?: boolean;
+  readonly ownerUserId?: string;
 }): {
   readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   authorize(
@@ -104,7 +106,26 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       // The start fact never changes, so it is read once per session, not once per send.
       let started = starts.get(access.sessionId);
       if (!started) starts.set(access.sessionId, (started = sessionStart(directory, access.sessionId)));
-      if (!started.binding || started.binding.client !== principal.userId) throw forbidden();
+      if (!started.binding) {
+        if (!options.allowUnboundLocal || !options.ownerUserId || principal.userId !== options.ownerUserId) {
+          throw forbidden();
+        }
+        const matched = options.authority.list(principal).some((alias) => {
+          try {
+            const grant = options.authority.resolveGrant(principal, alias.workspaceId);
+            const resolved = options.authority.resolveWorkspace(principal, grant);
+            return (
+              resolved.workspace.target === 'local' &&
+              path.resolve(resolved.workspace.root) === path.resolve(started!.root)
+            );
+          } catch {
+            return false;
+          }
+        });
+        if (!matched) throw forbidden();
+        return;
+      }
+      if (started.binding.client !== principal.userId) throw forbidden();
       const grant = options.authority.resolveGrant(principal, started.binding.id);
       const resolved = options.authority.resolveWorkspace(principal, grant);
       const sameRoot =

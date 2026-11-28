@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { installationVersion } from '../../model/providers/fetch/logging-middleware.js';
 import {
-  CLIENT_API_HTTP_CAPABILITIES,
+  CLIENT_API_CAPABILITIES,
   type DaemonShutdownParams,
   type DaemonStatusResult,
   type SessionApprovalPolicy,
@@ -30,7 +30,7 @@ import { GlobalMutationCoordinator } from '../../host/daemon/global-mutations.js
 import { ClientApiRpcError, DaemonRpc } from '../../host/daemon/daemon-rpc.js';
 import { DaemonUnixServer } from '../../host/daemon/daemon-unix.js';
 import { createDirectApplication } from '../application.js';
-import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant, requireLocalCaller } from '../application-workspaces.js';
+import { LOCAL_PRINCIPAL, localGrant, requireLocalCaller } from '../application-workspaces.js';
 import { createDirectProductPorts, DirectGlobalConfiguration } from '../host-config.js';
 import { scanDirectoryEntries } from '../file-service.js';
 import { SessionContextService } from '../../model/traffic-context.js';
@@ -38,6 +38,7 @@ import { buildEnvOverrides } from '../../config/settings/settings-env.js';
 import { createDaemonMcp } from './daemon-mcp.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import { createDaemonV11Port } from './daemon-v11-ops.js';
+import { DaemonServeLeaseManager } from './leases/serve-lease.js';
 import {
   acquireDaemonLock,
   checkConversationsDirectory,
@@ -141,6 +142,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
   let advertisementWritten = false;
   let app: Awaited<ReturnType<typeof createDirectApplication>> | null = null;
   let daemonMcp: ReturnType<typeof createDaemonMcp> | null = null;
+  let serveLeases: DaemonServeLeaseManager | null = null;
   let unixServer: DaemonUnixServer | null = null;
 
   try {
@@ -176,6 +178,15 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       capabilities,
     );
     const mutations = new GlobalMutationCoordinator();
+    const activeServeLeases = new DaemonServeLeaseManager({
+      daemonId,
+      conversationsDir: paths.conversationsDir,
+      product,
+      capabilities,
+      mutations,
+      localWorkspaceIdForRoot,
+    });
+    serveLeases = activeServeLeases;
     const sessionPolicies = new Map<string, SessionApprovalPolicy>();
     const sessionLaunchFlags = new Map<
       string,
@@ -206,10 +217,13 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       conversationsDir: paths.conversationsDir,
       selection,
       resolveDefaultModel: () => configuration.currentModelSelection(),
-      authorizeModel: () => undefined,
-      prepareSurface: (sessionId, { workspace }) =>
-        activeDaemonMcp.prepare(sessionId, workspace, policyForSession(sessionId)?.mode !== 'headless'),
-      surface: (sessionId) => {
+      authorizeModel: (next, previous) => activeServeLeases.authorizeModel(next, previous),
+      prepareSurface: (sessionId, ctx) =>
+        activeServeLeases.prepareServeSurface(ctx) ??
+        activeDaemonMcp.prepare(sessionId, ctx.workspace, policyForSession(sessionId)?.mode !== 'headless'),
+      surface: (sessionId, ctx) => {
+        const serveSurface = activeServeLeases.serveSurfaceOptions(ctx);
+        if (serveSurface) return serveSurface;
         const policy = policyForSession(sessionId);
         const flags = sessionLaunchFlags.get(sessionId);
         const isHeadless = policy?.mode === 'headless' || flags?.clientMode === 'headless';
@@ -232,9 +246,10 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           sessionPolicies.delete(event.sessionId);
           sessionLaunchFlags.delete(event.sessionId);
         }
+        activeServeLeases.observeLifecycle(event);
         lifecycleObserver.current?.(event);
       },
-      authority: createLocalAuthority(() => true),
+      authority: activeServeLeases.createUnifiedAuthority(),
     });
 
     const localOwnerApp = app;
@@ -252,20 +267,18 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     const sessionIndex = createSessionIndex({
       async listStored() {
         const page = await localOwnerApp.listStoredSessions();
-        for (const { workspace } of page.sessions) {
-          if (workspace.target === 'local') recordLocalWorkspace(workspace.root);
+        for (const { id, workspace } of page.sessions) {
+          if (workspace.target === 'local') {
+            recordLocalWorkspace(workspace.root);
+            activeServeLeases.recordSessionRoot(id, workspace.root);
+          }
         }
         return page;
       },
-      resolveVisibility: (principal, record) => {
-        if (principal.via !== 'local') return { visible: false };
-        return {
-          visible: true,
-          workspaceId: localWorkspaceIdForRoot(record.workspaceRoot),
-          workspaceRoot: record.workspaceRoot,
-        };
-      },
+      resolveBinding: (sessionId) => activeServeLeases.resolveBinding(sessionId),
+      resolveVisibility: (principal, record) => activeServeLeases.resolveVisibility(principal, record),
     });
+    activeServeLeases.bindRuntime(localOwnerApp, sessionIndex);
     lifecycleObserver.current = (event) => sessionIndex.observeLifecycle(event);
     await sessionIndex.seed();
     const discoveryRoot = async (
@@ -325,6 +338,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
             await unixServer?.close();
           } finally {
             try {
+              await serveLeases?.closeAll();
               sessionIndex.dispose();
               await app?.close();
               await daemonMcp?.close();
@@ -348,23 +362,27 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       return shutdownPromise;
     };
 
-    const v11Port = createDaemonV11Port({
-      app: localOwnerApp,
-      sessionIndex,
-      mutations,
-      configuration,
-      productSettings: product.service,
-      localWorkspaceIdForRoot,
-      recordLocalWorkspace,
-      resolveWorkspaceRoot,
-      setPendingCreatePolicy: (policy) => {
-        pendingCreatePolicy = policy;
-      },
-      setPendingLaunchFlags: (flags) => {
-        pendingLaunchFlags = flags;
-      },
-    });
-    const advertisedCapabilities = [...CLIENT_API_HTTP_CAPABILITIES];
+    const v11Port = {
+      ...createDaemonV11Port({
+        app: localOwnerApp,
+        sessionIndex,
+        mutations,
+        configuration,
+        productSettings: product.service,
+        localWorkspaceIdForRoot,
+        recordLocalWorkspace,
+        resolveWorkspaceRoot,
+        setPendingCreatePolicy: (policy) => {
+          pendingCreatePolicy = policy;
+        },
+        setPendingLaunchFlags: (flags) => {
+          pendingLaunchFlags = flags;
+        },
+      }),
+      serveStart: activeServeLeases.startLease.bind(activeServeLeases),
+      serveStop: activeServeLeases.stopLease.bind(activeServeLeases),
+    };
+    const advertisedCapabilities = [...CLIENT_API_CAPABILITIES];
     const rpc = new DaemonRpc({
       host: localOwnerApp.host,
       sessionIndex,
@@ -456,7 +474,6 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       capabilities: advertisedCapabilities,
       activeTurnCount: () => getCounts().activeTurnCount,
     });
-
     await unixServer.listen(paths.socketPath);
     socketBound = true;
 
@@ -471,10 +488,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       protocolVersion: CLIENT_API_VERSION,
     });
     advertisementWritten = true;
-
     return { kind: 'started', daemonId, paths, status, shutdown: performShutdown, closed };
   } catch (error) {
-    await Promise.allSettled([unixServer?.close(), app?.close(), daemonMcp?.close()]);
+    await Promise.allSettled([unixServer?.close(), serveLeases?.closeAll(), app?.close(), daemonMcp?.close()]);
     if (advertisementWritten) removeFileIfPresent(paths.advertisementPath);
     if (socketBound) removeFileIfPresent(paths.socketPath);
     releaseLock();

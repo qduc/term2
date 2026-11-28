@@ -24,6 +24,9 @@ export type ServePresentationOptions = {
   readonly configuration: DirectGlobalConfiguration;
   readonly allowWrite: boolean;
   readonly onSessionCreated?: (sessionId: string) => Promise<void>;
+  readonly allowUnboundLocal?: boolean;
+  readonly ownerUserId?: string;
+  readonly resolveSessionRoot?: (sessionId: string) => string | undefined;
 };
 
 export type DirectServeSessionPresentation = ServerSessionPresentation & {
@@ -38,10 +41,27 @@ export function createServePresentation(options: ServePresentationOptions): Dire
   const { app, grants, configuration, allowWrite } = options;
   const owned = (principal: Principal, sessionId: string, seq: number | null) => {
     const binding = app.sessionDetails(sessionId, seq).binding;
-    if (binding?.client !== principal.userId) {
-      throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
+    if (binding) {
+      if (binding.client !== principal.userId) {
+        throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
+      }
+      return { grant: grants.resolveGrant(principal, binding.id) };
     }
-    return { grant: grants.resolveGrant(principal, binding.id) };
+    if (options.allowUnboundLocal && options.ownerUserId === principal.userId) {
+      const root = options.resolveSessionRoot?.(sessionId);
+      if (root) {
+        for (const alias of grants.list(principal)) {
+          try {
+            const grant = grants.resolveGrant(principal, alias.workspaceId);
+            const { workspace } = grants.resolveWorkspace(principal, grant);
+            if (workspace.target === 'local' && workspace.root === root) return { grant };
+          } catch {
+            // Skip inaccessible grants.
+          }
+        }
+      }
+    }
+    throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
   };
   return {
     metadata(principal, snapshot) {

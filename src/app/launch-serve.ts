@@ -39,6 +39,7 @@ import {
 import { prepareServeSshSurface } from './remote-context.js';
 import type { DirectLaunchRequest } from './launch-types.js';
 import { warnIfSandboxUnavailable } from './sandbox-warning.js';
+import { launchServeOverDaemon, shouldLaunchServeOverDaemon } from './daemon/leases/launch-serve-daemon.js';
 
 type ServeRequest = Extract<DirectLaunchRequest, { readonly kind: 'serve' }>;
 
@@ -180,6 +181,7 @@ function serverAuthority(grants: DirectWorkspaceAuthority, directory: string, ow
 }
 
 export async function launchServe({ args, selection }: ServeRequest): Promise<number> {
+  if (shouldLaunchServeOverDaemon(args)) return launchServeOverDaemon(args);
   let stateDir: string;
   let keys: Map<string, string>;
   let transportOptions: ServerTransportOptions;

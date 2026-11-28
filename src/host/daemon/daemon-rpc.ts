@@ -19,6 +19,7 @@ import type { SessionIndex } from './session-index.js';
 import { asRecord, ClientApiRpcError, mapCommandFailure, parseStrict, requireString } from './daemon-errors.js';
 import { openDaemonStream, type StreamRegistration } from './daemon-streams.js';
 import {
+  handleLocalLeaseMethod,
   handleMcpLogin,
   handleModelsList,
   handleSessionHandoff,
@@ -27,17 +28,16 @@ import {
   handleSettingsUpdate,
   isV11,
   parseProviderUpsert,
+  type DaemonRpcConnectionContext,
   type DaemonV11ControlPort,
 } from './daemon-rpc-v11.js';
 
 export { ClientApiRpcError } from './daemon-errors.js';
-export type { DaemonV11ControlPort } from './daemon-rpc-v11.js';
+export type { DaemonRpcConnectionContext, DaemonV11ControlPort } from './daemon-rpc-v11.js';
 
 type WorkspaceScope = { readonly workspaceId?: string; readonly sessionId?: string };
 
-export type DaemonRpcContext = {
-  readonly protocolVersion?: string;
-};
+export type DaemonRpcContext = { readonly protocolVersion?: string; readonly connection?: DaemonRpcConnectionContext };
 
 export type DaemonControlPort = {
   readonly daemonId: string;
@@ -313,10 +313,11 @@ export class DaemonRpc {
       }
       case 'mcp.login':
         return await handleMcpLogin(this.deps.control.mcpLogin, this.deps.v11, principal, params, allowV11);
-      case 'session.acp.set_mcp':
-        throw new ClientApiRpcError('unavailable', 'ACP per-session MCP configuration is unavailable.');
-      default:
+      default: {
+        const leased = await handleLocalLeaseMethod(this.deps.v11, principal, method, params, context?.connection);
+        if (leased !== undefined) return leased;
         throw new ClientApiRpcError('invalid_request', `Unknown method "${method}".`);
+      }
     }
   }
 

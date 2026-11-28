@@ -121,6 +121,11 @@ export type DirectApplication = {
   contextWindow(model: ModelRef): number | null;
   /** The live settings of a session without reading its log each time; for code that runs on every render. */
   liveSettings(sessionId: string): DirectSessionDetails['settings'];
+  /**
+   * The settings a live session's tools enforce now: the copy its last rebuild took, or its live settings
+   * before any rebuild. A live-only change reaches a rebuilt session's tools at its next rebuild.
+   */
+  enforcedSettings(sessionId: string): { getDynamic(key: string): unknown } | null;
   /** Account actually used by this session's current root model registry. */
   sessionAccount(sessionId: string, providerId: string): string | null;
   /**
@@ -328,6 +333,11 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     },
     liveSettings(sessionId) {
       return runtimes.get(sessionId)?.settings ?? null;
+    },
+    enforcedSettings(sessionId) {
+      const record = runtimes.get(sessionId);
+      if (!record) return null;
+      return record.rebuilt ? record.configurationSettings : record.settings;
     },
     contextWindow(model) {
       return getModelContextWindow(model.provider, model.model) ?? null;

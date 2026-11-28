@@ -189,7 +189,7 @@ async function launchDaemonSession(
   }
   try {
     await deps.admitLaunch?.(sessionId, params);
-    await deps.launchGate.applySettings(sessionId, launchConfig, params);
+    await deps.launchGate.applySettings(principal, sessionId, launchConfig, params);
     if (params.goal) {
       await deps.app.setGoal(sessionId, createDurableGoal(params.goal.text, params.goal.successCriteria), 'launcher');
     }
@@ -363,8 +363,11 @@ async function updateDaemonScopedSettings(
           else target.setDynamic(change.key, change.value, { persist: false });
         }
       }
+      // A rebuilt session's tools enforce an approval mode or sandbox change only once rebuilt.
+      if (live && params.sessionId) await deps.launchGate.syncEnforced(principal, params.sessionId);
     } catch (error) {
-      if (!persist) {
+      // The session keeps what it had; a saved preference stays saved for later sessions.
+      if (!persist || live) {
         for (const { key, hadValue } of previousValues) {
           try {
             target.setDynamic(key, hadValue, { persist: false });

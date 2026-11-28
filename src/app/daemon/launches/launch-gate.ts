@@ -14,6 +14,8 @@
  *   wider. Until it attaches, no other launch reopens the session.
  * ACP sessions are left to `admitLaunch` and the holder rule: their surface is the strictest.
  */
+import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { ClientApiRpcError, type DaemonRpcConnectionContext } from '../../../host/daemon/daemon-rpc.js';
 import type { DirectConnection, DirectReplayConnection, Principal } from '../../../host/in-process-direct-types.js';
 import type { SessionLaunchParams } from '../../../protocol/client-api/client-api-schema.js';
@@ -25,6 +27,7 @@ import type { DaemonLaunchPolicies, DaemonLaunchValues } from './launch-policies
 const APPROVAL_MODE = 'shell.autoApproveMode';
 const SANDBOX = 'sandbox.enabled';
 const ESCAPE_REVIEW = 'shell.unattendedEscapeReview';
+const POSTURE_KEYS = [APPROVAL_MODE, SANDBOX, ESCAPE_REVIEW] as const;
 
 /** What a session runs with that decides what may run without a person. */
 type Posture = {
@@ -87,9 +90,9 @@ export function createDaemonLaunchGate(deps: {
 }) {
   const { app, launches, saved } = deps;
 
-  /** The live session's posture; null when it is not live, or is an ACP session. */
+  /** The live session's posture, as its tools enforce it; null when it is not live, or is an ACP session. */
   const livePosture = (sessionId: string): Posture | null => {
-    const settings = app.liveSettings(sessionId);
+    const settings = app.enforcedSettings(sessionId);
     if (!settings || launches.isAcp(sessionId)) return null;
     const { policy, flags } = launches.recordsOf(sessionId);
     return {
@@ -100,6 +103,29 @@ export function createDaemonLaunchGate(deps: {
       sandbox: settings.getDynamic(SANDBOX),
       escapeReview: settings.getDynamic(ESCAPE_REVIEW),
     };
+  };
+
+  /**
+   * Makes a rebuilt session's tools enforce the approval mode and sandbox its live settings hold: a live-only
+   * change does not reach them before the next rebuild, so this rebuilds now (a configure keeping its model).
+   * Refused with `busy` while the session cannot take a configure (a turn or background work running).
+   */
+  const syncEnforced = async (principal: Principal, sessionId: string): Promise<void> => {
+    const live = app.liveSettings(sessionId);
+    const enforced = app.enforcedSettings(sessionId);
+    if (!live || !enforced || enforced === live) return;
+    if (POSTURE_KEYS.every((key) => isDeepStrictEqual(live.getDynamic(key), enforced.getDynamic(key)))) return;
+    const { model } = await app.sessionConfiguration(sessionId);
+    const configure = { type: 'configure', commandId: randomUUID(), configuration: { model } } as const;
+    const result = await app.host.sendCommand?.(principal, sessionId, configure);
+    if (!result?.ok) {
+      throw new ClientApiRpcError(
+        'busy',
+        'This session has to rebuild to apply an approval mode or sandbox change, and cannot while a turn or ' +
+          'background work is running. Try again when it is idle.',
+        { retryable: true },
+      );
+    }
   };
 
   /**
@@ -163,20 +189,26 @@ export function createDaemonLaunchGate(deps: {
     },
 
     /**
-     * Applies a launch's session settings. The approval mode is compared with the live value, which is
-     * what approvals read and what this gate compares: an equal one is left alone, so re-admitting a
-     * session mid-turn needs no configure. A different one goes through the session's configure (with
-     * the model, effort and profile), and is set on the live settings too when that configure had
-     * nothing to do because an in-session change had moved the live value off the accepted one.
+     * Applies a launch's session settings. The approval mode is compared with the one the session's
+     * tools enforce (`enforcedSettings`): an equal one is left alone, so re-admitting a session mid-turn
+     * needs no configure. A different one goes through the session's configure (with the model, effort
+     * and profile), and is set on the live settings too when that configure had nothing to do because an
+     * in-session change had moved the live value off the accepted one. Session-only values are written
+     * first, so a configure takes them into a rebuilt surface; `syncEnforced` covers the rest.
      */
     async applySettings(
+      principal: Principal,
       sessionId: string,
       configuration: DirectCommandConfiguration,
       params: SessionLaunchParams,
     ): Promise<void> {
+      const live = app.liveSettings(sessionId);
+      if (params.showReview !== undefined) live?.set('shell.showReview', params.showReview, { persist: false });
+      if (params.sandboxEnabled !== undefined) live?.set(SANDBOX, params.sandboxEnabled, { persist: false });
+      if (params.requireSandbox) live?.set(SANDBOX, true, { persist: false });
       const asked = params.approvalMode as DirectApprovalMode | undefined;
-      const mode =
-        asked !== undefined && app.liveSettings(sessionId)?.getDynamic(APPROVAL_MODE) !== asked ? asked : undefined;
+      const enforced = app.enforcedSettings(sessionId)?.getDynamic(APPROVAL_MODE);
+      const mode = asked !== undefined && enforced !== asked ? asked : undefined;
       if (mode !== undefined || Object.keys(configuration).length > 0) {
         try {
           await app.applyLaunchConfiguration(sessionId, configuration, mode);
@@ -184,14 +216,14 @@ export function createDaemonLaunchGate(deps: {
           mapLaunchConfigError(error);
         }
       }
-      const live = app.liveSettings(sessionId);
-      if (!live) return;
-      if (mode !== undefined && live.getDynamic(APPROVAL_MODE) !== mode)
-        live.set(APPROVAL_MODE, mode, { persist: false });
-      if (params.showReview !== undefined) live.set('shell.showReview', params.showReview, { persist: false });
-      if (params.sandboxEnabled !== undefined) live.set(SANDBOX, params.sandboxEnabled, { persist: false });
-      if (params.requireSandbox) live.set(SANDBOX, true, { persist: false });
+      const after = app.liveSettings(sessionId);
+      if (after && mode !== undefined && after.getDynamic(APPROVAL_MODE) !== mode) {
+        after.set(APPROVAL_MODE, mode, { persist: false });
+      }
+      await syncEnforced(principal, sessionId);
     },
+
+    syncEnforced,
 
     /** Called before the launch on `connection` returns `sessionId`, while it still holds the session open. */
     reserve(connection: DaemonRpcConnectionContext | undefined, sessionId: string, values: DaemonLaunchValues): void {

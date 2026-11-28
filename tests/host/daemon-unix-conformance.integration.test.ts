@@ -1448,6 +1448,92 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(await posture()).toEqual(['always', true]);
   });
 
+  it('keeps a rebuilt session enforcing the approval mode and sandbox its settings show', async () => {
+    /** A session-scoped temporary write (`/auto-approve`, `/sandbox`); returns the response. */
+    const setSetting = async (client: TestUnixRpcClient, sessionId: string, key: string, value: unknown) => {
+      const read = await client.request('settings.get', { sessionId, view: 'tui' });
+      const expectedRevision = read.ok ? String(read.result['revision']) : '';
+      const changes = [{ key, value }];
+      return await client.request('settings.update', { sessionId, expectedRevision, persist: false, changes });
+    };
+    /** A configure that rebuilds the session's tools, keeping its model. */
+    const rebuild = (client: TestUnixRpcClient, sessionId: string) =>
+      client.request('session.command', {
+        sessionId,
+        command: { type: 'configure', commandId: `rebuild-${sessionId}`, configuration: { model: touchModel } },
+      });
+    /** Submits a turn that asks to `touch` `file`: 'asked' when a person is asked (and declines), else 'ran'. */
+    const turn = async (client: TestUnixRpcClient, sessionId: string, streamId: string, file: string) => {
+      const submitted = await client.request('session.command', {
+        sessionId,
+        command: { type: 'submit', requestId: `turn-${file}`, text: `Please create ${file}`, origin: { kind: 'cli' } },
+      });
+      expect(submitted.ok).toBe(true);
+      const frame = await client.waitForEvent(
+        (f) => accepted(f, streamId).some((e) => e.type === 'interaction_opened' || e.type === 'turn_ended'),
+        15_000,
+      );
+      const opened = accepted(frame, streamId).find((e) => e.type === 'interaction_opened');
+      if (!opened) return 'ran';
+      const requestId = (opened.payload!['interaction'] as { requestId: string }).requestId;
+      await client.request('session.command', {
+        sessionId,
+        command: { type: 'answer', requestId, decision: { kind: 'deny', reason: 'person declined' } },
+      });
+      return 'asked';
+    };
+    const touchModel = { provider: 'touch', model: 'touch-model' };
+
+    // Launched with `always` (its configure rebuilt it), then set back to off in the session, then left.
+    // A resume asking for off, or asking nothing, must find off in force: its write asks the person.
+    const { socketPath, launch, attach } = await startTouchDaemon();
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    for (const [label, posture] of [
+      ['explicit', { ...interactive, approvalMode: 'off' }],
+      ['plain', interactive],
+    ] as const) {
+      const always = sessionIdOf(await launch(a, null, { ...interactive, approvalMode: 'always' }));
+      const left = await attach(a, always);
+      expect(await setSetting(a, always, 'shell.autoApproveMode', 'off')).toMatchObject({ ok: true });
+      expect(await a.request('session.detach', { streamId: left })).toMatchObject({ ok: true });
+      expect(await launch(b, always, posture)).toMatchObject({ ok: true });
+      expect(await turn(b, always, await attach(b, always), `${label}.txt`)).toBe('asked');
+    }
+
+    // Mid-turn, a rebuilt session cannot take such a write (it would need a rebuild): refused, nothing changes.
+    const busy = sessionIdOf(await launch(a, null, interactive));
+    const busyStream = await attach(a, busy);
+    expect(await rebuild(a, busy)).toMatchObject({ ok: true });
+    const submitted = await a.request('session.command', {
+      sessionId: busy,
+      command: { type: 'submit', requestId: 'busy-1', text: 'Please create busy.txt', origin: { kind: 'cli' } },
+    });
+    expect(submitted.ok).toBe(true);
+    await firstOfType(a, busyStream, 'interaction_opened');
+    expect(await setSetting(a, busy, 'shell.autoApproveMode', 'always')).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+    const read = await a.request('settings.get', { sessionId: busy, view: 'tui' });
+    expect(
+      read.ok && (read.result['settings'] as { entries: Record<string, { value: unknown }> }).entries,
+    ).toMatchObject({ 'shell.autoApproveMode': { value: 'off' } });
+
+    // The sandbox: turned off at launch and taken into a rebuild, then turned back on in the session, then left.
+    // A plain resume (the saved setting is on) must find it on: the workspace write runs sandboxed, unasked.
+    const sandboxed = await startTouchDaemon(true);
+    const c = await openV11Client(sandboxed.socketPath, 'tui');
+    const d = await openV11Client(sandboxed.socketPath, 'tui');
+    const off = sessionIdOf(await sandboxed.launch(c, null, { ...interactive, sandboxEnabled: false }));
+    const offStream = await sandboxed.attach(c, off);
+    expect(await rebuild(c, off)).toMatchObject({ ok: true });
+    expect(await setSetting(c, off, 'sandbox.enabled', true)).toMatchObject({ ok: true });
+    expect(await c.request('session.detach', { streamId: offStream })).toMatchObject({ ok: true });
+    expect(await sandboxed.launch(d, off, interactive)).toMatchObject({ ok: true });
+    expect(await turn(d, off, await sandboxed.attach(d, off), 'sandboxed.txt')).toBe('ran');
+  });
+
   it('lands an explicit approval mode on the live value an in-session change moved, so the attach is admitted', async () => {
     const { socketPath, launch, attach, liveSetting } = await startTouchDaemon();
     const a = await openV11Client(socketPath, 'tui');

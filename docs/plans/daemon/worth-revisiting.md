@@ -138,14 +138,26 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
       apply step now compares the live value too: equal is a true no-op, and a
       different mode lands on the live settings even when the configure has
       nothing to change. A refusal now ends the TUI's reconnect on every path.
+      A fourth review found that once a configure has rebuilt a session, its tools
+      enforce the copy of its settings that rebuild took: a later live-only
+      `settings.update` of the approval mode or sandbox does not reach them before
+      the next rebuild, so a resume read a live `off` while `always` was in force.
+      Now a session-scoped write of `shell.autoApproveMode`, `sandbox.enabled` or
+      `shell.unattendedEscapeReview` on a rebuilt session rebuilds it at once
+      (`launchGate.syncEnforced`, the same configure the TUI's own `/auto-approve`
+      sends on a rebuilt session), or is refused with `busy` and rolled back while
+      it cannot take a configure. A launch's applied settings are synced the same
+      way, and the gate compares the values in force
+      (`DirectApplication.enforcedSettings`). A rebuilt session's in-session mode
+      change therefore needs it idle, as the TUI's rebuild already did.
       Rebuilding a live surface in place was not chosen: the runtime captures its
       surface options once, at open. Covered by
       `tests/host/remote-direct-host.integration.test.ts` (built CLI),
       `tests/host/daemon-unix-conformance.integration.test.ts` (live resume,
       launch-then-attach race, session-only settings) and
       `tests/cli/daemon-tui.e2e.test.ts` (`/resume` of a live auto-approve session),
-      plus the loosening, re-admit, mid-turn reattach and explicit-mode cases in
-      the two host suites.
+      plus the loosening, re-admit, mid-turn reattach, explicit-mode and
+      rebuilt-session cases in the two host suites.
     - Still open:
       - A plain attach with no launch before it (another viewer) sees the session
         as it is.
@@ -174,3 +186,12 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
         match what an in-process TUI refuses (writer lock, `canRun`), but they are
         new for daemon users.
 
+19. **TUI settings projection keeps a stale `rebuilt` flag** *(found verifying item 18)*:
+    - After another client's configure rebuilds a session (for example a launch
+      with `model` and `reasoning`), the `settings.subscribe` stream a TUI holds
+      sends no update, so its projection keeps `rebuilt: false`; a fresh
+      `settings.get` reads `true`. The TUI's `/auto-approve` and `/sandbox` then
+      skip the rebuild they send on a rebuilt session. Present on `d60623817`.
+      Item 18's fix makes the daemon rebuild on such a write itself, so the
+      posture holds, but the projection and anything else that reads the flag
+      stay wrong until the TUI refreshes it.

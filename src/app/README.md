@@ -540,13 +540,19 @@ keeps that surface and any session-only settings a launch applied
   it open and the launch's own `approvalMode`/`sandboxEnabled` would loosen it
   there. Equal or tighter values still apply to a shared session: tightening never
   lets anything run unasked.
-- A launch's approval mode is compared with the live value, which approvals read
-  and an in-session `/auto-approve` changes without a configure. An equal one is
-  left alone, so re-admitting a session mid-turn sends no configure. A different
-  one goes through the session's configure and is set on the live settings too,
-  since that configure has nothing to do when only an in-session change moved
-  the live value. A configure the session cannot take now (a turn or background
-  work running) is refused with `busy`.
+- The gate compares the values a session's tools enforce
+  (`DirectApplication.enforcedSettings`): its live settings before any rebuild,
+  the copy its last rebuild took after one. A launch's approval mode equal to the
+  enforced one is left alone, so re-admitting a session mid-turn sends no
+  configure. A different one goes through the session's configure and is set on
+  the live settings too, since that configure has nothing to do when only an
+  in-session change moved the live value. A configure the session cannot take
+  now (a turn or background work running) is refused with `busy`.
+- A session-scoped write of `shell.autoApproveMode`, `sandbox.enabled` or
+  `shell.unattendedEscapeReview` on a rebuilt session (`settings.update`, or a
+  launch's own settings) rebuilds it at once (`launchGate.syncEnforced`), so its
+  tools never enforce something other than its settings show. While it cannot
+  take that configure, the write is refused with `busy` and rolled back.
 - Every launch leaves a reservation for its Unix connection. That connection's
   next `session.attach` of the session opens it with the launch's values if it
   was closed meanwhile, and is refused with `busy` if it now runs wider. Until it

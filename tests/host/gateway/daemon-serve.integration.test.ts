@@ -16,6 +16,8 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LOCAL_PRINCIPAL } from '../../../src/app/application-workspaces.js';
 import { connectRemoteDirectHost } from '../../../src/app/daemon/connect-daemon-host.js';
+import { connectOrStartDaemon } from '../../../src/app/daemon/daemon-bootstrap.js';
+import { UnixRpcClient } from '../../../src/host/daemon/unix-rpc-client.js';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createGatewayAssertion } from '../../../src/host/server-assertion.js';
 import type { AssertionPurpose } from '../../../src/host/server-contracts.js';
@@ -406,5 +408,48 @@ describe('term2 serve over the daemon (built CLI)', () => {
     await readOnly.exited;
     await expect.poll(() => fs.existsSync(httpSocket), { timeout: 10_000 }).toBe(false);
     await expect.poll(() => fs.existsSync(path.join(serveState, 'serve.lock.pid')), { timeout: 10_000 }).toBe(false);
+
+    // A client that disconnects at any point during serve.start leaves no listener behind:
+    // the next lease on the same socket must start.
+    const leaseParams = {
+      stateDir: serveState,
+      localOwnerUserId: 'user-1',
+      allowWrite: false,
+      pairing: true,
+      bffKeys: [],
+      transport: { kind: 'socket', socketPath: httpSocket },
+    };
+    const leaseClient = async () => {
+      const connected = await connectOrStartDaemon({ clientKind: 'serve', allowAutoStart: false, env });
+      return new UnixRpcClient(connected.socket);
+    };
+    for (const delayMs of [0, 1, 2, 5, 10, 20]) {
+      const dropped = await leaseClient();
+      const abandoned = dropped.request('daemon.serve.start', leaseParams).catch(() => undefined);
+      // sleep-ok: places the disconnect at a point inside serve.start, which exposes no signal mid-start;
+      // 0–20 ms spans the state-dir, seeding and socket-bind steps, 38 ms in total.
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      dropped.close();
+      await abandoned;
+      const next = await leaseClient();
+      let leaseId: string | undefined;
+      await expect
+        .poll(
+          async () => {
+            try {
+              leaseId = (await next.request<{ leaseId: string }>('daemon.serve.start', leaseParams)).leaseId;
+              return 'started';
+            } catch (error) {
+              // The abandoned lease may still be tearing down; anything else is a leak.
+              return (error as { code?: string }).code === 'busy' ? 'busy' : String((error as Error).message);
+            }
+          },
+          { timeout: 10_000, interval: 50 },
+        )
+        .toBe('started');
+      await next.request('daemon.serve.stop', { leaseId: leaseId! });
+      next.close();
+      expect(fs.existsSync(httpSocket), `delay ${delayMs}`).toBe(false);
+    }
   }, 180_000);
 });

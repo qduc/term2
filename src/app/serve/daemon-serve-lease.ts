@@ -57,6 +57,8 @@ type ServeLease = {
   readonly authority: DirectAuthority;
   /** Set once release begins; a start still in flight checks it and backs out. */
   closing: boolean;
+  /** Releases run one after another; a later one tears down only what was created since. */
+  releasing?: Promise<void>;
   bundle?: ServeSessionIndexBundle;
   transport?: DirectServerTransport;
   ledger?: SqliteReplayLedger;
@@ -71,22 +73,19 @@ type ServeLease = {
  * otherwise reach them. In-process serve kept them apart with a conversation
  * directory per state directory.
  */
-function claimServeStateDir(pinPath: string, stateDir: string): void {
+function checkServeStateDirPin(pinPath: string, stateDir: string): { readonly pinned: boolean } {
   let pinned: string | undefined;
   try {
     pinned = readFileSync(pinPath, 'utf8').trim() || undefined;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  if (pinned === undefined) {
-    writeFileSync(pinPath, `${stateDir}\n`, { mode: 0o600 });
-    return;
-  }
-  if (pinned !== stateDir) {
+  if (pinned !== undefined && pinned !== stateDir) {
     throw new ServeRefused(
       `this daemon's web sessions belong to --state-dir ${pinned}; use it, or remove ${pinPath} to move them to ${stateDir}.`,
     );
   }
+  return { pinned: pinned !== undefined };
 }
 
 export class DaemonServeLeases implements DaemonLeasePort {
@@ -204,6 +203,7 @@ export class DaemonServeLeases implements DaemonLeasePort {
       let keys: Map<string, string>;
       let releaseLock: () => void;
       let transportOptions: ReturnType<typeof serveTransportOptions>;
+      let pin: { readonly pinned: boolean };
       try {
         stateDir = prepareServeStateDir(params.stateDir);
         keys = readServePublicKeys(params.bffKeys);
@@ -211,7 +211,7 @@ export class DaemonServeLeases implements DaemonLeasePort {
           throw new ServeRefused('provide at least one --bff-key <kid>=<pem path> or enable --pairing');
         }
         transportOptions = serveTransportOptions(params.transport);
-        claimServeStateDir(this.deps.stateDirPinPath, stateDir);
+        pin = checkServeStateDirPin(this.deps.stateDirPinPath, stateDir);
         releaseLock = acquireServeStateDirLock(stateDir);
       } catch (error) {
         if (error instanceof ServeRefused) throw new ClientApiRpcError('invalid_request', error.message);
@@ -294,6 +294,8 @@ export class DaemonServeLeases implements DaemonLeasePort {
         throw new ClientApiRpcError('unavailable', `server failed to start: ${messageOf(error)}`);
       }
       backOutIfReleased(current);
+      // Pinned only once a lease has really served, so a failed first start leaves no pin behind.
+      if (!pin.pinned) writeFileSync(this.deps.stateDirPinPath, `${stateDir}\n`, { mode: 0o600 });
       return { leaseId };
     } catch (error) {
       // Re-entrant: tears down whatever was created after an earlier release began.
@@ -325,8 +327,14 @@ export class DaemonServeLeases implements DaemonLeasePort {
    * rather than inheriting the tools an earlier grant gave them. Re-entrant: each
    * resource is taken once, so a second call releases only what was created since.
    */
-  async #release(lease: ServeLease): Promise<void> {
+  #release(lease: ServeLease): Promise<void> {
     lease.closing = true;
+    const next = (lease.releasing ?? Promise.resolve()).then(() => this.#teardown(lease));
+    lease.releasing = next.catch(() => undefined);
+    return next;
+  }
+
+  async #teardown(lease: ServeLease): Promise<void> {
     lease.unregisterClose?.();
     lease.unregisterClose = undefined;
     const transport = lease.transport;

@@ -130,7 +130,7 @@ Each architectural, protocol, or operational decision made during the singleton 
     authorize checks only that a grant exists with the same root. Closing them
     makes a later lease reopen them through its own grants, as an in-process
     restart does.
-  - The first serve state directory a daemon store is used with is recorded in
+  - The first serve state directory a daemon store successfully serves from is recorded in
     `<daemon state dir>/serve-state-dir`; a lease naming another one is refused.
     Web-bound sessions record only `{ owner, grant id }` and every state directory
     has a `host` grant, so without the pin a lease with other keys or trusted

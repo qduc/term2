@@ -95,6 +95,8 @@ export class DirectServerTransport {
     }
   }
   async stop(): Promise<void> {
+    // A stop during start must close what start is about to bind, not return before it exists.
+    if (this.#starting) await this.#starting.catch(() => undefined);
     const server = this.#server;
     if (!server) return;
     this.#server = undefined;

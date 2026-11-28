@@ -109,3 +109,11 @@ the three daemon and Client API integration suites.
   model changes skipped the catalog check. It also flagged a shutdown race during
   `serve.start` and cross-state-dir `host` grants. All five are fixed; the
   carry-over check was confirmed red with the session close disabled in the bundle.
+- Its second round (`8b33bb7`) found the race fix had opened a leak: a client
+  disconnecting during `serve.start` left the HTTP listener bound with no lease,
+  because `DirectServerTransport.stop()` returned before an in-flight `start()`
+  had a server to close. `stop()` now waits for `start()`, releases run one after
+  another, and the state-dir pin is written only after a lease has started. The
+  integration test drops the client 0–20 ms into `serve.start` and requires the
+  next lease to start; it fails with `gateway socket is already in use` when the
+  `stop()` wait is removed from the bundle.

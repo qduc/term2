@@ -16,6 +16,40 @@ ACP session; `sandboxEnabled:false` on an ACP launch). All with one model: **an 
 holder** (decision 2 below). The verifier's probes T1 to T9 now all show the fixed
 behaviour against the rebuilt bundle (summarized under "Verifier probes").
 
+**Round 3 (after verifier reject of `0682d0a88`, finding R1).** The web owner could put
+a held ACP session in Unattended through `POST /private/agent/v1/sessions/:id/config`
+with `approvalMode` (serve presentation `withApprovalMode` reaches
+`app.withApprovalMode`), a route `guardV11` never saw. The ACP rule now lives in the
+session's runtime, so no route can apply it:
+
+- `src/app/settings.ts`: `SessionSettingsService.refuseValues(refusal)`. Once set,
+  every write to the session's own settings (`setDynamic`, hence `set` and
+  `setDynamicTransaction`; `setPersistentDynamic`; `setPersistentDynamicTransaction`;
+  `reset`) first checks `shell.autoApproveMode` and `sandbox.enabled`, including a
+  write to their parent object. `createSessionSettings` installs it last, after the
+  launch flags have set Ask and the sandbox.
+- `src/app/application-runtime.ts`: `DirectSessionPolicy.refuseSetting`. It is passed to
+  `createSessionSettings`, and `configure` checks any approval mode against it before
+  it builds the next tool generation. That covers launch configuration and
+  `withApprovalMode` (the web route). A generation's settings are a snapshot of the
+  session's settings, so the guarded write path covers the rest.
+- `src/app/acp/daemon-acp.ts`: `sessionPolicy` (the ACP policy, model rule and
+  `refuseSetting`); `daemon.ts` returns it from `sessionPolicy` for ACP sessions.
+  In-process ACP does not use `refuseSetting`: v1 may choose Assisted there.
+- Web `PUT /private/agent/v1/settings` takes no session: its `sessionId` field is
+  ignored and it writes global settings. A running session holds Ask and the sandbox
+  as runtime values that a global write does not reach. Checked with the verifier's
+  R10/R11 probes on the rebuilt bundle: the session stays `off`/sandbox `true`, the next
+  `run_code` asks for one permission, and the web config route answers 503
+  `command_rejected` for both `auto` and `unattended`.
+- The test now starts a serve lease, grants the workspace, and checks that the web
+  config route refuses Unattended on the held session (the next `run_code` still asks).
+  It was proved red twice, by disabling the policy's refusal and by disabling only the
+  configure-level check. The 16 earlier proofs were rerun on the round-3 bundle and all
+  went red again.
+- Not mine, per the coordinator: the daemon-wide pending launch policy race with a
+  headless `autoApprove`.
+
 ## What changed, by file
 
 - `src/app/acp/launch-acp.ts`: with `TERM2_DAEMON_MODE=1` and no `TERM2_IN_PROCESS=1`,
@@ -306,7 +340,7 @@ and in v1 the MCP stdio/http/sse cases, redirect, the cold-cache model selector,
 updates and provider failure. The 6 failures are G2 (title, 1) and G1 (5 shell or
 Assisted cases). The copies were deleted and their daemons stopped.
 
-## Commands and results (round 2, built after the last code edit)
+## Commands and results (round 3, built after the last code edit)
 
 - `pnpm build`: OK.
 - `npx tsc --noEmit`: clean.
@@ -318,5 +352,7 @@ Assisted cases). The copies were deleted and their daemons stopped.
   133 tests, all passed. This includes every in-process ACP suite, so the in-process
   path is unchanged.
 - `pnpm test:e2e tests/cli/daemon-tui.e2e.test.ts`: 2 of 2 passed.
+- `tests/clients/acp/daemon.integration.test.ts` alone: passed, about 4.0 s of test
+  time, 3 built-CLI launches, plus one RSA key generation for the serve lease.
 - Not run: the full integration, e2e and provider lanes. No provider or run-loop code
   changed.

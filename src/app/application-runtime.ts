@@ -40,7 +40,7 @@ import { createDirectSessionMemory, directMainMemoryEnabled } from './memory.js'
 import { contextMilestones, runPolicy } from './application-policy.js';
 import { createDirectVerificationOperations } from './verifier.js';
 import { withGenerationGuard } from './generation-guard.js';
-import { createSessionSettings, inheritSessionSettings } from './settings.js';
+import { createSessionSettings, inheritSessionSettings, type SettingRefusal } from './settings.js';
 import { createNativeSessionBrowser } from './native-session-browser.js';
 import { nativeBrowserId } from './native-session-browser-store.js';
 import { createLaunchConfigurationScope } from './launch-configuration.js';
@@ -62,7 +62,7 @@ export type DirectLauncherSurface = Omit<ToolSurfaceOptions, 'workspace' | 'inte
 export type DirectSessionPolicy = Pick<
   DirectRuntimeOptions,
   'approvalAlwaysAsks' | 'requireSandbox' | 'persistSessionConfiguration' | 'authorizeModel'
->;
+> & { readonly refuseSetting?: SettingRefusal };
 
 export type DirectRuntimeOptions = {
   readonly conversationsDir?: string;
@@ -320,6 +320,7 @@ export function createDirectRuntimes(
         const approvalMode = launchConfiguration.approvalMode(context.id);
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
+        if (approvalMode !== undefined) policy.refuseSetting?.('shell.autoApproveMode', approvalMode);
         if (approvalMode !== undefined && tasks?.list().some((task) => !task.result)) {
           throw new Error('Finish or cancel background work before changing approval mode.');
         }

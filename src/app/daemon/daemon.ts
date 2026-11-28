@@ -39,7 +39,6 @@ import { createDaemonMcp } from './daemon-mcp.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import { createDaemonV11Port, type DaemonLaunchFlags } from './daemon-v11-ops.js';
 import { createDaemonAcp } from '../acp/daemon-acp.js';
-import { ACP_SESSION_POLICY } from '../acp/acp-common.js';
 import { DaemonServeLeaseManager } from './leases/serve-lease.js';
 import {
   acquireLockOrDetectPeer,
@@ -194,7 +193,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       sessionPolicy: (sessionId, { binding }) => {
         if (binding) return undefined;
         policyForSession(sessionId);
-        return isAcpSession(sessionId) ? { ...ACP_SESSION_POLICY, authorizeModel: acp().authorizeModel } : undefined;
+        return isAcpSession(sessionId) ? acp().sessionPolicy : undefined;
       },
       prepareSurface: async (sessionId, ctx) => {
         const serve = activeServeLeases.prepareServeSurface(ctx);

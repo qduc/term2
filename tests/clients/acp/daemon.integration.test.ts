@@ -10,6 +10,7 @@
  * after the first exits, and a foreign close reopens it only with the ACP surface.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -20,6 +21,8 @@ import * as acp from '@agentclientprotocol/sdk';
 import { LOCAL_PRINCIPAL } from '../../../src/app/application-workspaces.js';
 import { connectRemoteDirectHost } from '../../../src/app/daemon/connect-daemon-host.js';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
+import { createGatewayAssertion } from '../../../src/host/server-assertion.js';
+import type { AssertionPurpose } from '../../../src/host/server-contracts.js';
 import { integrationCliPath } from '../../helpers/integration-cli.js';
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
 
@@ -140,6 +143,41 @@ function alive(pid: number): boolean {
 function parentOf(pid: number): number {
   const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
   return Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+}
+
+/** One JSON request to the serve lease's HTTP listener over its Unix socket. */
+function httpUnix(
+  socketPath: string,
+  method: string,
+  requestPath: string,
+  body: unknown,
+  assertion: string,
+): Promise<{ status: number; json: Record<string, any> }> {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+    const req = http.request(
+      {
+        socketPath,
+        method,
+        path: requestPath,
+        headers: {
+          accept: 'application/json',
+          'x-term2-assertion': assertion,
+          ...(payload !== undefined
+            ? { 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(payload)) }
+            : {}),
+        },
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk: Buffer | string) => (raw += String(chunk)));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, json: raw.trim() ? JSON.parse(raw) : {} }));
+      },
+    );
+    req.on('error', reject);
+    if (payload !== undefined) req.write(payload);
+    req.end();
+  });
 }
 
 function startAcp(cliPath: string, env: NodeJS.ProcessEnv, permissions: acp.RequestPermissionRequest[]) {
@@ -436,6 +474,65 @@ describe('term2 acp over the daemon (built CLI)', () => {
       mcpServers,
     });
     expect(option(loaded, 'approval_mode')).toMatchObject({ currentValue: 'ask' });
+
+    // The web owner, through a serve lease whose grant covers the workspace, cannot put the
+    // held session in Unattended either: the session's own policy refuses it on any route.
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const pemPath = path.join(root, 'bff.pem');
+    fs.writeFileSync(pemPath, publicKey);
+    const gateway = path.join(runtimeDir, 'gateway.sock');
+    const sign = (purpose: AssertionPurpose, ids: { sessionId?: string } = {}) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: 'k',
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject: 'web-owner',
+        purpose,
+        ...ids,
+      });
+    await observer.host.rpc.request('daemon.serve.start', {
+      stateDir: path.join(root, 'serve-state'),
+      localOwnerUserId: 'web-owner',
+      allowWrite: true,
+      pairing: false,
+      bffKeys: [{ kid: 'k', pemPath }],
+      transport: { kind: 'socket', socketPath: gateway },
+    });
+    const candidate = await httpUnix(
+      gateway,
+      'POST',
+      '/private/agent/v1/workspace/candidates/validate',
+      { absolutePath: workspace },
+      sign('workspace_candidate_validate'),
+    );
+    await httpUnix(
+      gateway,
+      'POST',
+      '/private/agent/v1/workspace/candidates/select',
+      { candidateId: candidate.json['candidateId'], access: 'read_write' },
+      sign('workspace_candidate_select'),
+    );
+    const configPath = `/private/agent/v1/sessions/${sessionId}/config?format=direct`;
+    const discovered = await httpUnix(gateway, 'POST', configPath, {}, sign('session_update', { sessionId }));
+    expect(discovered).toMatchObject({ status: 200, json: { approvalMode: 'off' } });
+    const webChange = await httpUnix(
+      gateway,
+      'POST',
+      configPath,
+      {
+        clientRequestId: 'web-unattended',
+        expectedRevision: String(discovered.json['configRevision']),
+        admission: 'idle',
+        approvalMode: 'unattended',
+      },
+      sign('session_update', { sessionId }),
+    );
+    expect(webChange.status).not.toBe(200);
     const asked = permissions.length;
     await second.context.request(acp.methods.agent.session.prompt, {
       sessionId,

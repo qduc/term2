@@ -457,8 +457,13 @@ only with the ACP surface, whoever reopens it (`holds`, read by the daemon's
 `policyForSession`). The ACP client sends stdio servers its own default MCP
 environment (HOME, PATH, USER and the rest that the MCP SDK passes on), so the
 daemon's environment never reaches them. No client may put an ACP session in
-Assisted or Unattended (launch or `settings.update`), which need ACP v1's
-sandboxed-shell review that a launch cannot request, or turn its sandbox off.
+Assisted or Unattended, which need ACP v1's sandboxed-shell review that a launch
+cannot request, or turn its sandbox off. The session's own runtime enforces it:
+`DirectSessionPolicy.refuseSetting` is checked on every write to the session's
+settings (`SessionSettingsService.refuseValues`) and on every approval-mode
+configure, so no route (Unix launch or `settings.update`, the web config route,
+a later one) can apply it. `admitLaunch` and `guardV11` refuse earlier with a
+Client API error code.
 
 ## Serve workspace grants
 

@@ -30,7 +30,8 @@ import type { SessionLaunchParams, SettingsUpdateParamsV11 } from '../../protoco
 import { createDirectMcpRefresh } from '../application-mcp.js';
 import type { DirectApplication } from '../application.js';
 import { LOCAL_PRINCIPAL, requireLocalCaller } from '../application-workspaces.js';
-import { authorizeAcpModel, type AcpRequest } from './acp-common.js';
+import type { DirectSessionPolicy } from '../application-runtime.js';
+import { ACP_SESSION_POLICY, authorizeAcpModel, type AcpRequest } from './acp-common.js';
 import { createAcpSessions } from './acp-sessions.js';
 
 const meta = z.record(z.string(), z.unknown()).nullish();
@@ -195,9 +196,23 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
         dispose: async () => refresh.untrack(sessionId),
       };
     },
+    /**
+     * The runtime policy of an ACP session, held for its whole life. `refuseSetting` is the
+     * one place that keeps it out of Assisted, Unattended and sandbox-off: every write to
+     * the session's settings and every approval-mode configure checks it, whichever
+     * client or route (Unix, HTTP, launch) asked.
+     */
+    sessionPolicy: {
+      ...ACP_SESSION_POLICY,
+      authorizeModel: (next: ModelRef, previous: ModelRef) =>
+        authorizeAcpModel(deps.selection.settings, next, previous),
+      refuseSetting(key, value) {
+        if (key === 'shell.autoApproveMode' && weakerApproval(value)) throw new Error(unreviewed().message);
+        if (key === 'sandbox.enabled' && value !== true) throw new Error(sandboxRequired().message);
+      },
+    } satisfies DirectSessionPolicy,
     /** A live ACP client holds this session: it reopens only with the ACP surface. */
     holds: (sessionId: string) => holders.has(sessionId),
-    authorizeModel: (next: ModelRef, previous: ModelRef) => authorizeAcpModel(deps.selection.settings, next, previous),
     admitLaunch,
     /** Launches carry their connection to `admitLaunch`; a settings write may not weaken an ACP session. */
     guardV11(port: DaemonV11ControlPort): Pick<DaemonV11ControlPort, 'launchSession' | 'updateScopedSettings'> {

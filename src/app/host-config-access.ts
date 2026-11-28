@@ -140,25 +140,27 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       // The start fact never changes, so it is read once per session, not once per send.
       let started = starts.get(access.sessionId);
       if (!started) starts.set(access.sessionId, (started = sessionStart(directory, access.sessionId)));
+      const enforceLivePosture = (workspaceId: string, workspaceAccess: 'read' | 'read_write') => {
+        if (access.kind !== 'write') return;
+        const live = options.liveSessionPosture?.(access.sessionId);
+        if (!live) return;
+        const grantAllowsWrite = workspaceAccess === 'read_write' && options.allowWrite !== false;
+        const kind = options.authority.kindOf(workspaceId);
+        const grantAllowsUnsandboxed = kind === 'host' || (kind === 'ssh' && grantAllowsWrite);
+        if (
+          (live.workspaceAccess === 'read_write' && !grantAllowsWrite) ||
+          (live.allowUnsandboxed && !grantAllowsUnsandboxed)
+        ) {
+          throw forbidden();
+        }
+      };
       if (!started.binding) {
         if (!options.allowUnboundLocal || !options.ownerUserId || principal.userId !== options.ownerUserId) {
           throw forbidden();
         }
         const matched = findMatchingLocalGrant(options.authority, principal, started.root);
         if (!matched) throw forbidden();
-        if (access.kind === 'write') {
-          const live = options.liveSessionPosture?.(access.sessionId);
-          if (live) {
-            const grantAllowsWrite = matched.workspace.access === 'read_write' && options.allowWrite !== false;
-            const grantAllowsUnsandboxed = options.authority.kindOf(matched.grant.workspaceId) === 'host';
-            if (
-              (live.workspaceAccess === 'read_write' && !grantAllowsWrite) ||
-              (live.allowUnsandboxed && !grantAllowsUnsandboxed)
-            ) {
-              throw forbidden();
-            }
-          }
-        }
+        enforceLivePosture(matched.grant.workspaceId, matched.workspace.access);
         return;
       }
       if (started.binding.client !== principal.userId) throw forbidden();
@@ -169,6 +171,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
           ? path.resolve(resolved.workspace.root) === path.resolve(started.root)
           : path.posix.normalize(resolved.workspace.root) === path.posix.normalize(started.root);
       if (!sameRoot) throw forbidden();
+      enforceLivePosture(grant.workspaceId, resolved.workspace.access);
       // A read grant still chats, as in the legacy gateway: its tools, not its commands, are read-only.
     },
     resolveWorkspace(principal, grant) {

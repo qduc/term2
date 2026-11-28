@@ -790,5 +790,28 @@ describe('Daemon serve lease (Step 14e Part 1)', () => {
     );
     expect(readHome.status).toBe(200);
     expect((readHome.body['session'] as { workspaceId?: string } | undefined)?.workspaceId).toBe(homeGrantId);
+
+    // Narrowing a bound web session's grant and resuming it live via local Unix MUST block web writes on that live session.
+    const narrowed = await httpUnixRequest(
+      sockB,
+      'PUT',
+      `/private/agent/v1/workspaces/${wsIdB}/access`,
+      { access: 'read' },
+      sign('workspace_access_update', { workspaceId: wsIdB }),
+    );
+    expect(narrowed.status).toBe(200);
+    const localResumeBound = await probe.request('session.launch', {
+      cwd: wsB,
+      selection: { kind: 'resume', sessionId: webBId },
+    });
+    expect(localResumeBound.ok).toBe(true);
+    const writeOnLiveBound = await httpUnixRequest(
+      sockB,
+      'POST',
+      `/private/agent/v1/sessions/${webBId}/messages`,
+      { text: 'must not widen narrowed bound session', clientRequestId: 'ro-live-bound-1' },
+      sign('message_submit', { sessionId: webBId }),
+    );
+    expect(writeOnLiveBound.status).toBe(404);
   }, 60_000);
 });

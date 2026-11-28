@@ -29,9 +29,14 @@ export function createSettingsService(options: AppSettingsOptions = {}): Setting
  * service would save (a `setDynamic` without `persist: false`, `setPersistentDynamic`, `reset` and the
  * transactions built on them) is also applied to the owner, which saves `settings.json` as legacy does.
  */
+/** Throws for a value a session must never take, as one host serving several modes decides per session. */
+export type SettingRefusal = (key: (typeof REFUSABLE_KEYS)[number], value: unknown) => void;
+const REFUSABLE_KEYS = ['shell.autoApproveMode', 'sandbox.enabled'] as const;
+
 class SessionSettingsService extends SettingsService {
   // Not a #private field: the base constructor may call the overrides before this class initialises its fields.
   private owner: SettingsService | undefined;
+  private refuse: SettingRefusal | undefined;
 
   constructor(options: AppSettingsOptions) {
     super({ ...options, disableFilePersistence: true });
@@ -42,18 +47,40 @@ class SessionSettingsService extends SettingsService {
     this.owner = owner;
   }
 
+  /** From now on every write, whichever path it takes, is checked first. */
+  refuseValues(refuse: SettingRefusal): void {
+    this.refuse = refuse;
+  }
+
+  /** Checks each refused key a write to `key` would change, nested values included. */
+  private check(key: string, value: unknown): void {
+    if (!this.refuse) return;
+    for (const guarded of REFUSABLE_KEYS) {
+      if (guarded === key) this.refuse(guarded, value);
+      else if (guarded.startsWith(`${key}.`)) {
+        let nested: unknown = value;
+        for (const part of guarded.slice(key.length + 1).split('.'))
+          nested = nested && typeof nested === 'object' ? (nested as Record<string, unknown>)[part] : undefined;
+        if (nested !== undefined) this.refuse(guarded, nested);
+      }
+    }
+  }
+
   override setDynamic(key: string, value: unknown, options?: { persist?: boolean }): DurableWriteResult {
+    this.check(key, value);
     const result = super.setDynamic(key, value, { persist: false });
     if (options?.persist === false || !this.owner) return result;
     return this.owner.setDynamic(key, this.getDynamic(key));
   }
 
   override setPersistentDynamic(key: string, value: unknown): DurableWriteResult {
+    this.check(key, value);
     const result = super.setPersistentDynamic(key, value);
     return this.owner ? this.owner.setPersistentDynamic(key, this.getDynamic(key)) : result;
   }
 
   override setPersistentDynamicTransaction(changes: readonly { key: string; value: unknown }[]): DurableWriteResult {
+    for (const { key, value } of changes) this.check(key, value);
     if (!this.owner) return super.setPersistentDynamicTransaction(changes);
     const result = this.owner.setPersistentDynamicTransaction(changes);
     // The owner applies the batch only once it is saved; so does this copy.
@@ -62,6 +89,8 @@ class SessionSettingsService extends SettingsService {
   }
 
   override reset(key?: string): DurableWriteResult {
+    for (const guarded of REFUSABLE_KEYS)
+      if (!key || guarded === key || guarded.startsWith(`${key}.`)) this.check(guarded, this.getDefault(guarded));
     const result = super.reset(key);
     return this.owner ? this.owner.reset(key) : result;
   }
@@ -97,6 +126,7 @@ type SessionSettingsLaunch = {
   readonly profileExplicit?: boolean;
   readonly approvalAlwaysAsks?: boolean;
   readonly requireSandbox?: boolean;
+  readonly refuseSetting?: SettingRefusal;
 };
 
 /**
@@ -105,7 +135,7 @@ type SessionSettingsLaunch = {
  * session's saved selection must not change another session's.
  */
 export function createSessionSettings(
-  { selection, profileExplicit, approvalAlwaysAsks, requireSandbox }: SessionSettingsLaunch,
+  { selection, profileExplicit, approvalAlwaysAsks, requireSandbox, refuseSetting }: SessionSettingsLaunch,
   { metadata, configuration, model }: DirectRuntimeContext,
 ): SettingsService {
   const continued = continuedSettings.getStore();
@@ -147,6 +177,7 @@ export function createSessionSettings(
   if (requireSandbox) settings.set('sandbox.enabled', true, { persist: false });
   // From here on, what legacy's one service would save is saved through the app's settings owner.
   if (selection.settings instanceof SettingsService) settings.saveThrough(selection.settings);
+  if (refuseSetting) settings.refuseValues(refuseSetting);
   return settings;
 }
 

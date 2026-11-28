@@ -13,11 +13,14 @@ import {
 } from '../../protocol/client-api/client-api-schema.js';
 import type { SessionControlBindParams } from '../../protocol/client-api/client-api-schema-v11.js';
 import { isClientApiVersionAtLeast } from '../../protocol/client-api/version-negotiation.js';
+import type { z } from 'zod';
 import type { Principal } from '../in-process-direct-types.js';
 import type { ProviderWriteInput, SafeSettingValue, ServerConfiguration } from '../server-contracts.js';
 import { ClientApiRpcError, parseStrict } from './daemon-errors.js';
 import type { GlobalMutationCoordinator } from './global-mutations.js';
 import type { SessionIndex } from './session-index.js';
+
+type SessionAcpSetMcpParams = z.infer<typeof CLIENT_API_SCHEMAS.sessionAcpSetMcpParams>;
 
 export type DaemonRpcConnectionContext = {
   readonly connectionId: string;
@@ -26,7 +29,11 @@ export type DaemonRpcConnectionContext = {
 };
 
 export type DaemonV11ControlPort = {
-  launchSession?(principal: Principal, params: SessionLaunchParams): Promise<Record<string, unknown>>;
+  launchSession?(
+    principal: Principal,
+    params: SessionLaunchParams,
+    connection?: DaemonRpcConnectionContext,
+  ): Promise<Record<string, unknown>>;
   canonicalizeCwd?(principal: Principal, cwd: string): string;
   handoffSessionV11?(
     principal: Principal,
@@ -68,6 +75,12 @@ export type DaemonV11ControlPort = {
   controlUnbind?(
     principal: Principal,
     params: { readonly leaseId: string; readonly pauseForHandoff?: boolean },
+    connection: DaemonRpcConnectionContext,
+  ): Promise<void>;
+  /** `session.acp.set_mcp`: per-session ACP MCP servers, owned by the calling connection. */
+  acpSetMcp?(
+    principal: Principal,
+    params: SessionAcpSetMcpParams,
     connection: DaemonRpcConnectionContext,
   ): Promise<void>;
 };
@@ -340,7 +353,11 @@ export async function handleLocalLeaseMethod(
     return {};
   }
   if (method === 'session.acp.set_mcp') {
-    throw new ClientApiRpcError('unavailable', `Local lease method "${method}" is unavailable.`);
+    if (!v11?.acpSetMcp || !connection) {
+      throw new ClientApiRpcError('unavailable', 'ACP MCP configuration is unavailable.');
+    }
+    await v11.acpSetMcp(principal, parseStrict(CLIENT_API_SCHEMAS.sessionAcpSetMcpParams, params, method), connection);
+    return {};
   }
   return undefined;
 }

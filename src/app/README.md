@@ -429,6 +429,42 @@ operations before `app.close`; `shutdown` then closes managers. Host
 A reopened session replaces the old entry in `createDirectMcpRefresh` so later
 catalog notifications target the new runtime.
 
+## ACP over the daemon
+
+In daemon mode (`TERM2_DAEMON_MODE=1` without `TERM2_IN_PROCESS=1`) `launchAcp` hands off to
+`launchAcpOverDaemon` (`acp/launch-acp-daemon.ts`), a daemon client behind the
+same `createAcpBackend`. Every session it creates or resumes goes through
+`session.launch` with `clientMode: 'acp'`; later attaches are plain
+`session.attach`. Policy shared by both hosts lives in `acp/acp-common.ts`:
+`ACP_SESSION_POLICY` (Ask at every open, required sandbox, no saved-default
+writes), `authorizeAcpModel` and the model catalog.
+
+Inside the daemon, `createDaemonAcp` (`acp/daemon-acp.ts`) gives a session that
+opened with the ACP flag that policy through `DirectRuntimeOptions.sessionPolicy`,
+the ACP model rule, and only the MCP servers its ACP client supplies, never the
+daemon's per-workspace pool. `session.acp.set_mcp` runs them through
+`createAcpSessions`, so validation, atomic replacement and tool generations are
+the in-process ones.
+
+The Unix connection whose ACP launch admitted a session holds it until that
+connection ends, as one in-process ACP process holds the writer lock: another
+ACP launch onto it is refused (`busy`), only the holder may change its MCP
+servers (`forbidden` for anyone else), and a new holder starts in Ask. The
+holder's EOF closes every MCP process the session had, including servers it
+cleared or replaced, and a session that stays open rebuilds its tools without
+them; session close closes them too. While a holder lives, the session reopens
+only with the ACP surface, whoever reopens it (`holds`, read by the daemon's
+`policyForSession`). The ACP client sends stdio servers its own default MCP
+environment (HOME, PATH, USER and the rest that the MCP SDK passes on), so the
+daemon's environment never reaches them. No client may put an ACP session in
+Assisted or Unattended, which need ACP v1's sandboxed-shell review that a launch
+cannot request, or turn its sandbox off. The session's own runtime enforces it:
+`DirectSessionPolicy.refuseSetting` is checked on every write to the session's
+settings (`SessionSettingsService.refuseValues`) and on every approval-mode
+configure, so no route (Unix launch or `settings.update`, the web config route,
+a later one) can apply it. `admitLaunch` and `guardV11` refuse earlier with a
+Client API error code.
+
 ## Serve workspace grants
 
 `DirectWorkspaceAuthority` (`host-config-workspace.ts`) owns the server's

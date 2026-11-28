@@ -744,9 +744,14 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       ok: false,
       error: { code: 'not_found' },
     });
+    // ACP MCP installation is backed (Step 14e Part 2b) and applies only to a live ACP session.
     expect(await v11.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [] })).toMatchObject({
       ok: false,
-      error: { code: 'unavailable' },
+      error: { code: 'not_found' },
+    });
+    expect(await v11.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [{ name: 'x' }] })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
     });
 
     // 3. `session.launch` new + explicit overrides (without mutating global defaults) + workspace boundary checks.

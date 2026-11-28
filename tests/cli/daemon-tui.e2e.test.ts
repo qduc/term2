@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { connectRemoteDirectHost } from '../../src/app/daemon/connect-daemon-host.js';
 import { LOCAL_PRINCIPAL } from '../../src/app/application-workspaces.js';
+import { controlDirectory } from '../../src/clients/control-socket/control-socket.js';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { displaySessionId } from '../../src/protocol/session-id.js';
 import type { WireEvent } from '../../src/protocol/wire.js';
@@ -30,7 +31,12 @@ type ScriptedProvider = {
   readonly close: () => Promise<void>;
 };
 
-async function startProvider(replies: readonly string[]): Promise<ScriptedProvider> {
+/** A text reply, or one function call (the provider sees its result in the next request). */
+type ScriptedReply =
+  | string
+  | { readonly toolCall: { readonly id: string; readonly name: string; readonly args: object } };
+
+async function startProvider(replies: readonly ScriptedReply[]): Promise<ScriptedProvider> {
   const requests: Array<{ model?: string; messages: Array<{ role: string; content?: unknown }> }> = [];
   const server = http.createServer((req, res) => {
     if (req.method === 'GET') {
@@ -46,11 +52,22 @@ async function startProvider(replies: readonly string[]): Promise<ScriptedProvid
       const parsed = JSON.parse(body) as { model?: string; messages: Array<{ role: string; content?: unknown }> };
       requests.push(parsed);
       const index = requests.length;
-      const text = replies[index - 1] ?? `daemon-reply-${index}`;
+      const reply = replies[index - 1] ?? `daemon-reply-${index}`;
       const id = `chatcmpl-${index}`;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { role: 'assistant', content: text } }] })}\n\n`);
-      res.write(`data: ${JSON.stringify({ id, choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
+      if (typeof reply === 'string') {
+        res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { role: 'assistant', content: reply } }] })}\n\n`);
+        res.write(`data: ${JSON.stringify({ id, choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
+      } else {
+        const call = {
+          index: 0,
+          id: reply.toolCall.id,
+          type: 'function',
+          function: { name: reply.toolCall.name, arguments: JSON.stringify(reply.toolCall.args) },
+        };
+        res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { tool_calls: [call] } }] })}\n\n`);
+        res.write(`data: ${JSON.stringify({ id, choices: [{ delta: {}, finish_reason: 'tool_calls' }] })}\n\n`);
+      }
       res.end('data: [DONE]\n\n');
     });
   });
@@ -145,6 +162,43 @@ async function submitLine(session: TerminalSession, idlePath: string, text: stri
   session.write(text);
   await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 30_000 });
   session.write('\r');
+}
+
+/** The built standalone control client: it reaches the session only through the advertised socket. */
+async function runControl(args: readonly string[], env: NodeJS.ProcessEnv, cwd: string, input = ''): Promise<string> {
+  const child = spawn(process.execPath, [builtCli, 'control', ...args], { cwd, env: createTestChildEnv(env) });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => (stdout += chunk.toString()));
+  child.stderr.on('data', (chunk) => (stderr += chunk.toString()));
+  child.stdin.end(input);
+  const code = await new Promise<number | null>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', resolve);
+  });
+  expect(code, stderr).toBe(0);
+  return stdout;
+}
+
+type ControlListing = {
+  name: string;
+  pid: number;
+  socketPath: string;
+  sessionId: string;
+  discordInput?: boolean;
+  cwd: string;
+};
+
+async function listControl(env: NodeJS.ProcessEnv, cwd: string): Promise<ControlListing[]> {
+  const out = await runControl(['list', '--status'], env, cwd);
+  return out
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as ControlListing);
+}
+
+function countOccurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
 }
 
 describe('Built CLI TUI over daemon (Step 14d)', () => {
@@ -496,6 +550,164 @@ describe('Built CLI TUI over daemon (Step 14d)', () => {
         .toBe(true);
       const exit = await exitPromise;
       expect(exit.exitCode).toBe(0);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    'hosts the TUI control socket in the daemon: control and Discord reach the session through it, /clear moves it, a killed TUI releases it, and /restart hands it over',
+    async () => {
+      // The model reads the session's Discord authority through `discord_send` (a run_code script tool).
+      const provider = await startProvider([
+        {
+          toolCall: {
+            id: 'call_discord_status',
+            name: 'run_code',
+            args: {
+              code: "return await tools.discord_send({ action: 'status', requestId: 'probe-1' });",
+              description: 'Check Discord delivery',
+            },
+          },
+        },
+        'control-reply',
+      ]);
+      cleanups.push(() => provider.close());
+
+      const fixture = createFixture(provider.baseUrl, 'term2-daemon-control-e2e');
+      cleanups.push(() => fs.rmSync(fixture.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+      const daemonEnv = createTestChildEnv(fixture.env);
+      cleanups.push(async () => {
+        await execFileAsync(
+          process.execPath,
+          [builtCli, 'daemon', 'stop', '--socket', fixture.socketPath, '--state-dir', fixture.stateDir],
+          { cwd: fixture.daemonCwd, env: daemonEnv, timeout: 10_000 },
+        ).catch(() => undefined);
+      });
+      // The script tool runs without an approval prompt.
+      const settingsFile = path.join(fixture.settingsDir, 'settings.json');
+      const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as { shell: { autoApproveMode: string } };
+      settings.shell.autoApproveMode = 'always';
+      fs.writeFileSync(settingsFile, JSON.stringify(settings));
+      // An empty Discord endpoint directory: with live send authority the tool answers `not_mapped` (no bridge
+      // running); without it, a bare `unavailable` and no attempt.
+      fs.mkdirSync(path.join(fixture.runtimeDir, 'term2-discord'), { mode: 0o700 });
+
+      // The TUI auto-starts the daemon; the startup flag that used to force in-process mode now leases the socket.
+      const tui = spawnTerminal(process.execPath, [builtCli, '--control-socket=coord', '--discord-input'], {
+        cwd: fixture.workspace,
+        env: fixture.env,
+        cols: 100,
+        rows: 30,
+      });
+      cleanups.push(() => tui.dispose());
+      let idleGen = await waitForHarnessIdleGeneration(fixture.idlePath, { timeoutMs: 60_000 });
+      await tui.waitForOutput('Control socket on: coord', 30_000);
+
+      const daemonStatus = async () =>
+        JSON.parse(
+          (
+            await execFileAsync(
+              process.execPath,
+              [builtCli, 'daemon', 'status', '--socket', fixture.socketPath, '--state-dir', fixture.stateDir],
+              { cwd: fixture.daemonCwd, env: daemonEnv, timeout: 5_000 },
+            )
+          ).stdout,
+        ) as { daemonId: string; pid: number; activeSessionCount: number };
+      const daemon = await daemonStatus();
+
+      // The daemon, not the TUI, owns the socket, in the same private place an in-process TUI uses.
+      const [listed, ...others] = await listControl(fixture.env, fixture.workspace);
+      expect(others).toEqual([]);
+      expect(listed).toMatchObject({ name: 'coord', pid: daemon.pid, discordInput: true, cwd: fixture.workspace });
+      const sessionTopic = JSON.parse(
+        await runControl(['get', 'coord', 'session', '--json'], fixture.env, fixture.workspace),
+      ) as { workspaceRoot: string | null };
+      expect(sessionTopic.workspaceRoot).toBe(fixture.workspace);
+      expect(listed!.socketPath).toBe(path.join(controlDirectory(fixture.runtimeDir), 'coord.sock'));
+      expect(fs.statSync(listed!.socketPath).mode & 0o777).toBe(0o600);
+      expect(fs.statSync(path.dirname(listed!.socketPath)).mode & 0o777).toBe(0o700);
+      const firstSession = listed!.sessionId;
+
+      // A standalone control submit reaches the TUI's session through the daemon-owned socket.
+      const receipt = JSON.parse(
+        await runControl(
+          ['submit', 'coord', '--id', 'daemon-control-1', '--json'],
+          fixture.env,
+          fixture.workspace,
+          'hello from control',
+        ),
+      ) as { delivery: string };
+      expect(receipt.delivery).toBe('started');
+      await tui.waitForOutput('control-reply', 30_000);
+      idleGen = await waitForHarnessIdleGeneration(fixture.idlePath, { after: idleGen, timeoutMs: 30_000 });
+      expect(provider.requests()).toHaveLength(2);
+      expect(JSON.stringify(provider.requests()[0]!.messages)).toContain('hello from control');
+      // Discord send keeps the in-process TUI's behaviour: the session's tool resolves the socket bound to it.
+      const toolResult = provider.requests()[1]!.messages.find((message) => message.role === 'tool');
+      expect(String(toolResult?.content)).toContain('not_mapped');
+      expect(String(toolResult?.content)).toContain('probe-1');
+
+      // `/clear` starts a new session; the socket follows it (session.control.rebind).
+      await submitLine(tui, fixture.idlePath, '/clear');
+      let clearedSession = '';
+      await expect
+        .poll(
+          async () => {
+            clearedSession = (await listControl(fixture.env, fixture.workspace))[0]?.sessionId ?? '';
+            return clearedSession !== '' && clearedSession !== firstSession;
+          },
+          { timeout: 30_000, interval: 200 },
+        )
+        .toBe(true);
+      await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
+
+      // A killed TUI (EOF, no handoff) releases the socket; its sessions stay open in the daemon.
+      const beforeKill = await daemonStatus();
+      expect(beforeKill.activeSessionCount).toBeGreaterThanOrEqual(1);
+      tui.dispose();
+      await expect.poll(() => fs.existsSync(listed!.socketPath), { timeout: 15_000, interval: 100 }).toBe(false);
+      expect(await listControl(fixture.env, fixture.workspace)).toEqual([]);
+      const afterKill = await daemonStatus();
+      expect(afterKill.daemonId).toBe(daemon.daemonId);
+      expect(afterKill.activeSessionCount).toBe(beforeKill.activeSessionCount);
+
+      // The released name binds again from a new TUI.
+      fs.rmSync(fixture.idlePath, { force: true });
+      const second = spawnTerminal(process.execPath, [builtCli, '--control-socket=coord'], {
+        cwd: fixture.workspace,
+        env: fixture.env,
+        cols: 100,
+        rows: 30,
+      });
+      cleanups.push(() => second.dispose());
+      await waitForHarnessIdleGeneration(fixture.idlePath, { timeoutMs: 60_000 });
+      await second.waitForOutput('Control socket on: coord', 30_000);
+      await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
+      const [rebound] = await listControl(fixture.env, fixture.workspace);
+      expect(rebound).toMatchObject({ name: 'coord', pid: daemon.pid });
+      expect(rebound!.discordInput).toBeUndefined();
+
+      // `/restart` replaces that TUI process; the daemon keeps the same socket paused for it (pauseForHandoff).
+      // Inode plus change time: a socket released and bound again could reuse the inode, not the ctime.
+      const socketIdentity = () => {
+        const stat = fs.statSync(listed!.socketPath, { bigint: true });
+        return `${stat.ino}:${stat.ctimeNs}`;
+      };
+      const socketBeforeRestart = socketIdentity();
+      await submitLine(second, fixture.idlePath, '/restart');
+      await expect
+        .poll(() => countOccurrences(second.getVisibleOutput(), 'Control socket on: coord'), { timeout: 30_000 })
+        .toBe(2);
+      await expect.poll(() => readHarnessIdleGeneration(fixture.idlePath), { timeout: 30_000 }).toBe(1);
+      expect(second.getVisibleOutput()).not.toContain('Control socket off');
+      expect(socketIdentity()).toBe(socketBeforeRestart);
+      const [afterRestart] = await listControl(fixture.env, fixture.workspace);
+      expect(afterRestart).toMatchObject({ name: 'coord', pid: daemon.pid, sessionId: rebound!.sessionId });
+
+      // The replacement now holds the lease: killing it releases the socket too.
+      second.dispose();
+      await expect.poll(() => fs.existsSync(listed!.socketPath), { timeout: 15_000, interval: 100 }).toBe(false);
+      expect((await daemonStatus()).daemonId).toBe(daemon.daemonId);
     },
     TIMEOUT_MS,
   );

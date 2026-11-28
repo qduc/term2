@@ -20,6 +20,7 @@ import { startTerm2Daemon, type Term2DaemonHandle } from '../../src/app/daemon/d
 import { connectOrStartDaemon } from '../../src/app/daemon/daemon-bootstrap.js';
 import { prepareSocketForBind } from '../../src/app/daemon/daemon-paths.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
+import { controlDirectory } from '../../src/clients/control-socket/control-socket.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -139,6 +140,42 @@ async function startMockOpenAiProvider(replyText: string): Promise<{ baseUrl: st
     baseUrl: `http://127.0.0.1:${port}/v1`,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
+}
+
+/** One request on a control socket's private v1 wire, after its `hello`. */
+async function controlSocketRequest(
+  socketPath: string,
+  method: string,
+  params: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: { code: string } }> {
+  const socket = await connectRaw(socketPath);
+  try {
+    const replies: Array<{ id: string; ok: boolean; error?: { code: string } }> = [];
+    let buffer = '';
+    socket.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString('utf8');
+      for (let nl = buffer.indexOf('\n'); nl >= 0; nl = buffer.indexOf('\n')) {
+        replies.push(JSON.parse(buffer.slice(0, nl)));
+        buffer = buffer.slice(nl + 1);
+      }
+    });
+    const next = (id: string) =>
+      new Promise<{ ok: boolean; error?: { code: string } }>((resolve, reject) => {
+        const check = () => {
+          const found = replies.find((reply) => reply.id === id);
+          if (found) resolve(found);
+          else if (socket.destroyed) reject(new Error('control socket closed'));
+          else setTimeout(check, 10);
+        };
+        check();
+      });
+    socket.write(`${JSON.stringify({ v: 1, id: 'hello', method: 'hello' })}\n`);
+    expect((await next('hello')).ok).toBe(true);
+    socket.write(`${JSON.stringify({ v: 1, id: 'call', method, params })}\n`);
+    return await next('call');
+  } finally {
+    socket.destroy();
+  }
 }
 
 describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
@@ -699,9 +736,22 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       ok: false,
       error: { code: 'invalid_request' },
     });
+    // Control-socket leases (Step 14e Part 2): an unknown session or lease is not found.
+    expect(
+      await v11.request('session.control.bind', { sessionId: 'conv_1', name: 'x', discordInput: false }),
+    ).toMatchObject({ ok: false, error: { code: 'not_found' } });
+    expect(await v11.request('session.control.unbind', { leaseId: 'lease_unknown' })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+    // ACP MCP installation is backed (Step 14e Part 2b) and applies only to a live ACP session.
     expect(await v11.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [] })).toMatchObject({
       ok: false,
-      error: { code: 'unavailable' },
+      error: { code: 'not_found' },
+    });
+    expect(await v11.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [{ name: 'x' }] })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
     });
 
     // 3. `session.launch` new + explicit overrides (without mutating global defaults) + workspace boundary checks.
@@ -952,5 +1002,116 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       expect(modelsRes.result['models']).toContainEqual(expect.objectContaining({ id: 'daemon-test-model' }));
       expect(Array.isArray(modelsRes.result['favorites'])).toBe(true);
     }
+  });
+
+  it('binds control sockets only for their holder and only to terminal sessions, and lets a handoff pause win over a move', async () => {
+    const { root, stateDir, runtimeDir, socketPath, workspace } = makeSandboxRoot();
+    const conversationsDir = path.join(stateDir, 'conversations');
+    const settingsDir = path.join(root, 'settings');
+    // The daemon opens control sockets in its own XDG_RUNTIME_DIR, which must be private.
+    const xdg = path.join(root, 'xdg');
+    fs.mkdirSync(xdg, { mode: 0o700 });
+    fs.chmodSync(xdg, 0o700);
+    const previousRuntimeDir = process.env.XDG_RUNTIME_DIR;
+    process.env.XDG_RUNTIME_DIR = xdg;
+    cleanups.push(() => {
+      if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR;
+      else process.env.XDG_RUNTIME_DIR = previousRuntimeDir;
+    });
+    fs.mkdirSync(settingsDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'mock-control', model: 'm' } },
+        // Nothing here starts a turn; the provider is never reached.
+        providers: [{ name: 'mock-control', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:9/v1', apiKey: 'k' }],
+        sandbox: { enabled: false },
+      }),
+    );
+    const daemon = await startTerm2Daemon({
+      stateDir,
+      conversationsDir,
+      socketPath,
+      env: { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir },
+    });
+    expect(daemon.kind).toBe('started');
+    if (daemon.kind !== 'started') return;
+    cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
+
+    const open = async () => {
+      const client = new TestUnixRpcClient(await connectRaw(socketPath));
+      cleanups.push(() => client.close());
+      const hello = await client.request('protocol.hello', {
+        protocolVersion: '1.1',
+        minSupportedVersion: '1.1',
+        clientKind: 'tui',
+        clientVersion: '1.1.0',
+      });
+      expect(hello.ok).toBe(true);
+      return client;
+    };
+    const holder = await open();
+    const other = await open();
+    const launch = async (clientMode?: 'headless' | 'acp') => {
+      const launched = await holder.request('session.launch', {
+        cwd: workspace,
+        selection: { kind: 'new' },
+        ...(clientMode ? { clientMode } : {}),
+      });
+      expect(launched.ok).toBe(true);
+      return launched.ok ? String((launched.result['session'] as { id: string }).id) : '';
+    };
+    const first = await launch();
+    const second = await launch();
+    const headless = await launch('headless');
+    const acp = await launch('acp');
+
+    // Only a terminal session gets a control socket, as in process.
+    for (const sessionId of [headless, acp]) {
+      expect(
+        await holder.request('session.control.bind', { sessionId, name: 'refused', discordInput: true }),
+      ).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+    }
+    expect(fs.existsSync(path.join(controlDirectory(xdg), 'refused.sock'))).toBe(false);
+
+    // Another connection cannot drive, release or pause the holder's lease, nor take its name.
+    const bound = await holder.request('session.control.bind', { sessionId: first, name: 'held', discordInput: false });
+    expect(bound.ok).toBe(true);
+    const leaseId = bound.ok ? String(bound.result['leaseId']) : '';
+    expect(await other.request('session.control.rebind', { leaseId, sessionId: second })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+    expect(await other.request('session.control.unbind', { leaseId })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+    expect(await other.request('session.control.unbind', { leaseId, pauseForHandoff: true })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+    expect(
+      await other.request('session.control.bind', { sessionId: first, name: 'held', discordInput: false }),
+    ).toMatchObject({ ok: false, error: { code: 'busy' } });
+    // Moving the lease to a headless session is refused and leaves it bound where it was.
+    expect(await holder.request('session.control.rebind', { leaseId, sessionId: headless })).toMatchObject({
+      ok: false,
+      error: { code: 'forbidden' },
+    });
+    expect(await holder.request('session.control.rebind', { leaseId, sessionId: first })).toMatchObject({ ok: true });
+
+    // A move in flight and a handoff pause on one lease: the pause wins, so the detached socket admits nothing.
+    const [moved, paused] = await Promise.all([
+      holder.request('session.control.rebind', { leaseId, sessionId: second }),
+      holder.request('session.control.unbind', { leaseId, pauseForHandoff: true }),
+    ]);
+    expect(moved).toMatchObject({ ok: true });
+    expect(paused).toMatchObject({ ok: true });
+    expect(
+      await controlSocketRequest(path.join(controlDirectory(xdg), 'held.sock'), 'submit', {
+        text: 'must not be admitted while paused',
+        clientRequestId: 'paused-1',
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'unavailable' } });
   });
 });

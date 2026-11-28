@@ -444,11 +444,7 @@ async function runTui(
 /** Runs after `prepareInteractiveTerminal` confirmed the start and sent the terminal probe. */
 export async function launchTui(request: InteractiveRequest, terminal: TerminalProbe): Promise<number> {
   const pending: Restart = {};
-  const useDaemon =
-    process.env['TERM2_DAEMON_MODE'] === '1' &&
-    process.env['TERM2_IN_PROCESS'] !== '1' &&
-    !request.ssh &&
-    !request.controlSocket;
+  const useDaemon = process.env['TERM2_DAEMON_MODE'] === '1' && process.env['TERM2_IN_PROCESS'] !== '1' && !request.ssh;
   let exitCode: number;
   try {
     if (useDaemon) {
@@ -459,6 +455,7 @@ export async function launchTui(request: InteractiveRequest, terminal: TerminalP
           restartState: pending,
           background: terminal.background,
           logger: request.selection.logger,
+          controlSocket: request.controlSocket,
         }),
       );
     } else {

@@ -71,6 +71,8 @@ function plan(
     ...(ssh ? { ssh } : {}),
     ...(server ? { control: { name: server.name, discordInput: server.discordInputEnabled } } : {}),
   });
+  // A daemon-owned socket stays paused for the replacement, which claims it with this.
+  Object.assign(restart.env, bridge.restartEnv?.() ?? {});
   return { ...restart, sessionId: snapshot.sessionId };
 }
 

@@ -3,6 +3,7 @@
  * - `set_goal` with strict schema validation, host-managed attachment, and `expectedGeneration` CAS.
  * - Server-resolved `skill` injection against the session's workspace.
  * - `quota.get` projection via `subscriptionQuotaView`.
+ * - `DaemonLaunchPolicies`: how each session was launched (approval policy, client mode, sandbox flag).
  */
 import type { Principal } from '../../host/in-process-direct-types.js';
 import { ClientApiRpcError } from '../../host/daemon/daemon-rpc.js';
@@ -12,6 +13,8 @@ import { createDurableGoal } from '../../session/goal.js';
 import { injectSkillIntoTurn } from '../../shared/types/user-turn.js';
 import type { DirectApplication } from '../application.js';
 import { requireLocalCaller } from '../application-workspaces.js';
+import type { SessionApprovalPolicy } from '../../protocol/client-api/client-api-schema.js';
+import type { DaemonLaunchFlags } from './daemon-v11-ops.js';
 
 const SET_GOAL_KEYS = new Set(['type', 'action', 'expectedGeneration', 'goal', 'proposalId']);
 const GOAL_PAYLOAD_KEYS = new Set(['text', 'successCriteria']);
@@ -142,5 +145,58 @@ export async function readDaemonSessionQuota(
     return { quota: subscriptionQuotaView(conn.snapshot) };
   } finally {
     conn.close();
+  }
+}
+
+/**
+ * How each live session was launched, read by its tool surface and by control-socket admission.
+ * A create or launch sets the pending policy and flags around its own session start; the first
+ * surface build of a session without a record adopts them. The pending values are daemon-wide,
+ * so a concurrent plain attach of a dormant session can adopt them too (see worth-revisiting.md).
+ */
+export class DaemonLaunchPolicies {
+  readonly #policies = new Map<string, SessionApprovalPolicy>();
+  readonly #flags = new Map<string, DaemonLaunchFlags>();
+  #pendingPolicy: SessionApprovalPolicy | undefined;
+  #pendingFlags: DaemonLaunchFlags | undefined;
+
+  /** `isHeldByAcp`: a session a live ACP client holds reopens only with the ACP surface, whoever reopens it. */
+  constructor(private readonly isHeldByAcp: (sessionId: string) => boolean) {}
+
+  setPendingPolicy(policy: SessionApprovalPolicy | undefined): void {
+    this.#pendingPolicy = policy;
+  }
+
+  setPendingFlags(flags: DaemonLaunchFlags | undefined): void {
+    this.#pendingFlags = flags;
+  }
+
+  /** The session's approval policy, adopting the pending launch values on first sight. */
+  policyFor(sessionId: string): SessionApprovalPolicy | undefined {
+    const held = this.isHeldByAcp(sessionId);
+    if (held && !this.#flags.has(sessionId)) this.#flags.set(sessionId, { clientMode: 'acp' });
+    if (!held && this.#pendingPolicy !== undefined && !this.#policies.has(sessionId)) {
+      this.#policies.set(sessionId, this.#pendingPolicy);
+    }
+    if (!held && this.#pendingFlags !== undefined && !this.#flags.has(sessionId)) {
+      this.#flags.set(sessionId, this.#pendingFlags);
+    }
+    return this.#policies.get(sessionId);
+  }
+
+  /** Reads the records only, without adopting pending values. */
+  modeOf(sessionId: string, policy = this.#policies.get(sessionId)) {
+    const flags = this.#flags.get(sessionId);
+    const isAcp = flags?.clientMode === 'acp';
+    return { flags, isAcp, isHeadless: policy?.mode === 'headless' || flags?.clientMode === 'headless' };
+  }
+
+  isAcp(sessionId: string): boolean {
+    return this.#flags.get(sessionId)?.clientMode === 'acp';
+  }
+
+  forget(sessionId: string): void {
+    this.#policies.delete(sessionId);
+    this.#flags.delete(sessionId);
   }
 }

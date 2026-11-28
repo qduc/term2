@@ -429,6 +429,42 @@ operations before `app.close`; `shutdown` then closes managers. Host
 A reopened session replaces the old entry in `createDirectMcpRefresh` so later
 catalog notifications target the new runtime.
 
+## ACP over the daemon
+
+In daemon mode (`TERM2_DAEMON_MODE=1` without `TERM2_IN_PROCESS=1`) `launchAcp` hands off to
+`launchAcpOverDaemon` (`acp/launch-acp-daemon.ts`), a daemon client behind the
+same `createAcpBackend`. Every session it creates or resumes goes through
+`session.launch` with `clientMode: 'acp'`; later attaches are plain
+`session.attach`. Policy shared by both hosts lives in `acp/acp-common.ts`:
+`ACP_SESSION_POLICY` (Ask at every open, required sandbox, no saved-default
+writes), `authorizeAcpModel` and the model catalog.
+
+Inside the daemon, `createDaemonAcp` (`acp/daemon-acp.ts`) gives a session that
+opened with the ACP flag that policy through `DirectRuntimeOptions.sessionPolicy`,
+the ACP model rule, and only the MCP servers its ACP client supplies, never the
+daemon's per-workspace pool. `session.acp.set_mcp` runs them through
+`createAcpSessions`, so validation, atomic replacement and tool generations are
+the in-process ones.
+
+The Unix connection whose ACP launch admitted a session holds it until that
+connection ends, as one in-process ACP process holds the writer lock: another
+ACP launch onto it is refused (`busy`), only the holder may change its MCP
+servers (`forbidden` for anyone else), and a new holder starts in Ask. The
+holder's EOF closes every MCP process the session had, including servers it
+cleared or replaced, and a session that stays open rebuilds its tools without
+them; session close closes them too. While a holder lives, the session reopens
+only with the ACP surface, whoever reopens it (`holds`, read by the daemon's
+`policyForSession`). The ACP client sends stdio servers its own default MCP
+environment (HOME, PATH, USER and the rest that the MCP SDK passes on), so the
+daemon's environment never reaches them. No client may put an ACP session in
+Assisted or Unattended, which need ACP v1's sandboxed-shell review that a launch
+cannot request, or turn its sandbox off. The session's own runtime enforces it:
+`DirectSessionPolicy.refuseSetting` is checked on every write to the session's
+settings (`SessionSettingsService.refuseValues`) and on every approval-mode
+configure, so no route (Unix launch or `settings.update`, the web config route,
+a later one) can apply it. `admitLaunch` and `guardV11` refuse earlier with a
+Client API error code.
+
 ## Serve workspace grants
 
 `DirectWorkspaceAuthority` (`host-config-workspace.ts`) owns the server's
@@ -447,3 +483,34 @@ refuses a resolved workspace wider than that identity, and the runtime builds
 its tools from the resolved one. `sessionConfiguration().workspaceAccess`
 reports it. The
 wire behavior is in contract 13, "Saved folder edits".
+
+## Control socket over the daemon
+
+In daemon mode the TUI's named control socket lives in the daemon, not in the
+TUI process. `src/app/daemon/leases/control-bridge.ts` is the TUI's
+`DirectControlBridge` there: `/bridge`, `--control-socket`, `/clear`/`/resume`
+and `/restart` send `session.control.bind`/`rebind`/`unbind` over the TUI's own
+daemon connection. `src/app/daemon/leases/control-lease.ts`
+(`DaemonControlLeases`) answers them by opening the same `ControlSocketServer`
+an in-process TUI opens (`startDirectControlSocket`), in the daemon's
+`XDG_RUNTIME_DIR`, so the standalone `control` client and the Discord bridge
+are unchanged. The advertisement names the daemon's pid, and the session's
+workspace root as its `cwd`.
+
+A lease lives as long as the connection that holds it (transport-unix.md §5.2):
+EOF or `unbind` closes the socket and detaches it from the session without
+closing the session. `/restart` calls `unbind` with `pauseForHandoff`: the
+socket keeps listening with mutations paused, detached from any connection, and
+the lease id reaches the replacement process in `TERM2_CONTROL_HANDOFF_LEASE`;
+its startup `rebind` claims the socket and resumes it. A socket nobody claims
+closes after 30 s, and a late replacement then binds the name afresh. A failed
+`rebind` closes the socket, as in-process. If the TUI's connection drops and it
+reconnects, it binds the name again. `rebind` and `unbind` on one lease run one
+at a time, so a move in flight cannot lift a handoff pause. Only terminal
+sessions get a socket: binding, or moving one, to a session launched headless
+or for ACP answers `forbidden`, since in-process only a TUI ever has one.
+
+Discord send for a daemon session's tools comes from the daemon's surface
+(`DaemonControlLeases.outbound`, interactive local sessions only, as
+in-process): authority resolves at each call to a live, opted-in, unpaused
+socket bound to that session.

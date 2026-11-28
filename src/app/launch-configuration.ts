@@ -37,11 +37,17 @@ export function createLaunchConfigurationScope(authorizeModel: AuthorizeModel = 
       const launch = context.getStore();
       return Boolean(launch?.sessionId === sessionId && launch.isLaunch);
     },
-    authorize(sessionId: string, next: ModelRef, previous: ModelRef): void | Promise<void> {
+    /** `sessionRule` replaces the application's rule for a session whose host serves several modes. */
+    authorize(
+      sessionId: string,
+      next: ModelRef,
+      previous: ModelRef,
+      sessionRule: AuthorizeModel = authorizeModel,
+    ): void | Promise<void> {
       const launch = context.getStore();
       const selected = launch?.sessionId === sessionId && launch.isLaunch ? launch.configuration.model : undefined;
       if (selected && selected.provider === next.provider && selected.model === next.model) return;
-      return authorizeModel(next, previous);
+      return sessionRule(next, previous);
     },
   };
 }

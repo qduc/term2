@@ -93,4 +93,58 @@ Each architectural, protocol, or operational decision made during the singleton 
   credential/query/hash redaction on TUI settings projections, and honors Step 5's
   contract-freeze rule.
 
+## D011 — Control sockets and ACP over the daemon (Step 14e Part 2, 2026-11-28)
+
+- **Context:** after Part 1 (#475), `local_leases` was advertised while
+  `session.control.*` and `session.acp.set_mcp` still answered `unavailable`. The
+  daemon-mode TUI had a no-op control bridge, `--control-socket` forced
+  in-process mode, and `term2 acp` built its own host.
+- **Choice: control sockets.** The daemon owns the TUI's named control socket
+  (`src/app/daemon/leases/control-lease.ts`). It is the same `ControlSocketServer`
+  as in-process (`startDirectControlSocket`), so the location, file modes (dir
+  0700, socket and advertisement 0600) and wire protocol are unchanged.
+  - The socket is bound to the binding connection: EOF releases it without
+    cancelling the session; `rebind` follows `/clear` and `/resume`.
+  - `/restart` sends `unbind {pauseForHandoff}`. The socket stays up with
+    mutations paused, and the replacement process claims it with `rebind` using
+    the lease id passed in `TERM2_CONTROL_HANDOFF_LEASE`. An unclaimed paused
+    socket closes after 30 s.
+  - Only terminal sessions get a socket: `bind`, or a `rebind` that moves onto a
+    headless or ACP session, answers `forbidden`, because in-process only a TUI
+    ever has one.
+  - `rebind` and `unbind` on one lease run one at a time, so a move in flight
+    cannot lift a handoff pause. Release runs outside that queue, so EOF and
+    shutdown never wait on a stuck operation.
+  - Discord send reaches daemon interactive sessions exactly as in-process TUI
+    sessions; headless and ACP sessions get no `discord_send`.
+- **Choice: ACP.** In daemon mode `term2 acp` opens and resumes sessions through
+  `session.launch { clientMode: 'acp' }`. The servers an ACP client supplies run
+  inside the daemon through `session.acp.set_mcp`, reusing `createAcpSessions`
+  (`src/app/acp/daemon-acp.ts`, `launch-acp-daemon.ts`).
+  - **Holder model.** The connection whose ACP launch admitted a session holds
+    it until that connection ends, like the in-process writer lock. A second ACP
+    launch gets `busy`. Only the holder may call `set_mcp` (`forbidden`
+    otherwise). When the holder disconnects, every MCP process the session ever
+    had is closed, including ones it cleared or replaced. A new holder is reset
+    to Ask before any requested configuration, or refused.
+  - **Posture lives in the session.** An ACP session's own settings refuse
+    Assisted, Unattended and sandbox-off on every write path, and `configure`
+    checks requested approval modes against `DirectSessionPolicy.refuseSetting`.
+    Per-RPC guards were not enough: the independent verifier reached Unattended
+    through the web session-config route after the Unix routes were guarded.
+    In-process ACP does not install this refusal, because ACP v1 may choose
+    Assisted there.
+  - **MCP isolation.** ACP servers never join the daemon's per-workspace MCP
+    pool, and their processes get only the six variables the MCP SDK passes on,
+    taken from the ACP client, never the daemon's environment (which holds
+    forwarded provider keys).
+- **Deviations:** bind/rebind return `{ leaseId, name, socketPath,
+  discordInputEnabled, startup, pid }`, a result shape the frozen schema does not
+  define (it freezes only params). The handoff lease id travels in a
+  client-internal environment variable. The daemon-mode startup message reads
+  `Control socket on: <name> (daemon)`.
+- **Why:** both surfaces move onto the daemon with in-process posture or
+  stricter, and the in-process path (`TERM2_IN_PROCESS=1`, or no
+  `TERM2_DAEMON_MODE`) is unchanged. Gaps that need a Client API change or an
+  owner decision are worth-revisiting items 11–16.
 

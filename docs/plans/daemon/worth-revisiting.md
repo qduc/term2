@@ -42,3 +42,52 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
 
 10. **Custom `--issuer` / `--audience` on `term2 serve`** *(Step 14e Part 1)*:
     - Frozen Client API v1.1 `daemon.serve.start` binds the standard `chatforge-bff` / `term2-gateway` issuer and audience (used by `term2-web` and default `term2 serve`). Deployments overriding `--issuer` or `--audience` fall back cleanly to in-process `term2 serve`. Consider adding optional `issuer` / `audience` fields in a future Client API minor bump if custom BFF deployments need daemon sharing.
+
+11. **ACP version over the daemon** *(D011)*:
+    - `clientMode` is only `'acp'`, so the daemon gives every ACP session v2's
+      shell behaviour. For v1 that is stricter in Ask, and in Assisted or
+      Unattended it would be weaker (a mutating sandboxed command ran unreviewed),
+      so the daemon refuses those two modes and points to `TERM2_IN_PROCESS=1`.
+      Fixing it needs a Client API change, for example `clientMode: 'acp_v1'` or a
+      `shellEscapeApproval` launch flag.
+
+12. **Session lifetime after the last client leaves** *(D011)*:
+    - Daemon sessions outlive their client: an ACP session's running turn keeps
+      running and a pending permission waits for the next client, where in-process
+      exit interrupts them. A TUI session stays live after the TUI exits, so ACP
+      cannot resume it until it is closed. Decide whether idle sessions should
+      close when their last client detaches.
+
+13. **Session titles from the daemon index** *(D011)*:
+    - Daemon clients see the session index's title (first line, up to 120
+      characters) rather than the store's normalized 60-character title. Affects
+      every daemon client; a `shortTitle` field or index change would fix it.
+
+14. **Control socket runtime directory** *(D011)*:
+    - The socket lands in the daemon's `XDG_RUNTIME_DIR`. The frozen bind params
+      carry no runtime directory, so a TUI started with a different value does not
+      find its socket where its own `term2 control` looks (`/bridge status` shows
+      the real path). A future schema revision could add the field.
+
+15. **Control socket handoff exposure** *(D011)*:
+    - For up to 30 s after `/restart`, the paused socket still answers read-only
+      `status`/`get` with no TUI behind it; in-process the socket vanishes during
+      the exec. The handoff lease id works as a bearer token for any same-user
+      daemon connection that can read the replacement's environment. Same user
+      only, who can already reach both sockets.
+
+16. **Two TUIs on one session** *(D011)*:
+    - In-process, the writer lock meant at most one control socket per session.
+      Over the daemon two TUIs can each bind one; Discord send then uses the
+      first opted-in live socket bound to that session. Confirm that rule.
+
+17. **Daemon-wide pending launch values** *(found verifying D011; code from Part 1)*:
+    - `DaemonLaunchPolicies` (formerly inline in `daemon.ts`) keeps one pending
+      approval policy and one pending flag set for the whole daemon. Launches are
+      serialized, but a plain `session.attach` that opens a dormant session during
+      a launch can adopt that launch's values. For ACP this only makes a session
+      stricter or causes a spurious `busy`, but a concurrent headless launch's
+      `approvalPolicy { autoApprove }` could reach the attached session. Keying per
+      launch needs the new session id before `createSession` returns it. Fix before
+      the Step 14f flip.
+

@@ -311,6 +311,9 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   produced on 2026-11-07:
   - Without `bwrap`/`socat`, 12 Bare-profile cases in `cli-headless.integration`
     got “Sandbox blocked this command”.
+  - Without `bwrap`/`socat`, `read-session-shell.integration` failed with
+    `expected [...] to include 'shell'`: read sessions get no shell tool when the
+    runner reports `missing_dependency` (seen 2026-11-28).
   - As root, `chmod 0o555` blocks nothing, so two `logging-failures` cases failed.
   - With pnpm 10, `pnpm publish --dry-run` delegated to npm 11 and contacted the
     fixture registry, failing three `release-identity` cases.

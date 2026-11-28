@@ -93,4 +93,45 @@ Each architectural, protocol, or operational decision made during the singleton 
   credential/query/hash redaction on TUI settings projections, and honors Step 5's
   contract-freeze rule.
 
+## D011 — Host `term2 serve` in the daemon behind a connection-bound lease (2026-11-28)
+
+- **Context:** Step 14e Part 1. `transport-unix.md` §5.1 already froze
+  `daemon.serve.start`/`stop` and `serve.pairing_otp`; nothing backed them, so
+  `local_leases` stayed unadvertised (D010) and `term2 serve` still built its own
+  host over `<stateDir>/conversations`.
+- **Choice:**
+  - The daemon composes the same serve stack (`src/app/serve/serve-composition.ts`)
+    over its single application while one local connection holds the lease. The
+    serve state directory still holds grants, trust, replay ledger, audit and the
+    `serve.lock.sqlite` lock, so an in-process serve and a daemon lease cannot share
+    a state directory. Conversations live in the daemon's store (D007).
+  - One application now has two authorities. `DaemonServeLeases.authority` routes
+    by principal (`via === 'local'` or not) and, for stored sessions, by the
+    binding the session recorded. To make that possible the session store passes
+    the recorded binding to `resolveWorkspace`, and `DirectAuthority.resolveStored`
+    takes it as an optional third argument. Root alone could not decide: a local
+    session and a web session can share a root.
+  - Web callers keep in-process serve's posture exactly: they reach only sessions
+    bound to them under a current grant. Unbound (local) sessions stay closed to
+    them (404, as for another owner's session) even though the session index lists
+    them under a covering grant (D007). Opening them to the web is a security
+    decision left to the owner (worth-revisiting item 10).
+  - Grant edits close only bound sessions in the root (`closeWorkspaceSessions`
+    gains an `include` filter), so a web grant edit never ends a terminal's session.
+    Bound sessions get serve's surface and never read the daemon's pending local
+    launch policy, which could otherwise hand a web session a headless
+    auto-approve policy during a concurrent local create.
+  - One lease per daemon; a second `daemon.serve.start` answers `busy`. Releasing a
+    lease (stop, EOF, shutdown) stops the listener; live web sessions keep running
+    in the daemon and are reachable again only through a later lease whose grants
+    admit them.
+  - `local_leases` is now advertised, although `session.control.*` (Part 2) still
+    answers `unavailable`. **Deviation** from `transport-unix.md` §5's "MUST NOT be
+    advertised … until backed by the Host": the token covers serve and control
+    leases together, so serve could not ship without it. Every client of this
+    contract ships from this repository at the same version and treats
+    `unavailable` as a clean refusal; Part 2 removes the gap.
+- **Why:** Moves serve onto the daemon without widening web authority, and keeps
+  the in-process path (`TERM2_IN_PROCESS=1`, or no `TERM2_DAEMON_MODE=1` until
+  the Step 14f flip) behaviourally unchanged.
 

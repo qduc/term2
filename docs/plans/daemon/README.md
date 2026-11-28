@@ -4,7 +4,7 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–14d complete; Step 14e (`term2 serve`, web UI, control socket, Discord, ACP over daemon) is next.
+- **Current phase:** Steps 0–14d merged. Step 14e Part 1 (`term2 serve` and the web UI over the daemon, D011) is in review; Part 2 (control socket, Discord, ACP) is next.
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
@@ -15,7 +15,7 @@ Status: in progress. Started 2026-11-27.
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Implement Step 14e Part 1 (`daemon.serve.start`/`stop` lease, `local_leases` capability, unified `term2 serve` + web UI over daemon), then Step 14e Part 2 (`session.control.bind`/`rebind`/`unbind`, `session.acp.set_mcp`, control socket / Discord / ACP over daemon), then Step 14f (default flip to daemon mode + `--in-process` escape hatch + full verification and smoke runs).
+- **Next concrete actions:** Land Step 14e Part 1. Then Step 14e Part 2: back `session.control.bind`/`rebind`/`unbind` and `session.acp.set_mcp` (both answer `unavailable` today although `local_leases` is advertised, D011), and route the control socket, Discord and ACP through the daemon. Then Step 14f: default flip to daemon mode, `--in-process` escape hatch, full verification and smoke runs. Owner review items 10–14 in [worth revisiting](worth-revisiting.md) came from Part 1.
 
 
 ## Goal

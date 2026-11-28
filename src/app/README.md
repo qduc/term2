@@ -447,3 +447,25 @@ refuses a resolved workspace wider than that identity, and the runtime builds
 its tools from the resolved one. `sessionConfiguration().workspaceAccess`
 reports it. The
 wire behavior is in contract 13, "Saved folder edits".
+
+## Serve over the daemon
+
+`src/app/serve/` holds the parts of `term2 serve` that do not depend on which
+process hosts the sessions (`serve-composition.ts`: state-dir lock, keys,
+grants, `serveSessionAuthority`, `createServeHttpTransport`). `launchServe`
+composes them over its own application; in daemon mode (`daemonModeEnabled()`)
+it runs `launchServeOverDaemon` instead, a client that holds a
+`daemon.serve.start` lease while the daemon's `DaemonServeLeases`
+(`daemon-serve-lease.ts`) hosts the listener over the daemon's application.
+
+That application serves local and web callers, so `DaemonServeLeases.authority`
+routes: `principal.via === 'local'` keeps the local authority, any other
+principal uses the active lease's grant authority, and `resolveStored` picks by
+the binding the session recorded (`DirectAuthority.resolveStored`'s third
+argument, passed by the session store): a bound or SSH session uses the lease's
+grants, an unbound one the local rules. Without a lease, web callers and bound
+sessions are refused. Unbound sessions stay closed to web callers, as
+in-process serve never held them, though the serve session index lists them
+under a covering grant (D007). A grant edit closes only bound sessions in that
+root (`closeWorkspaceSessions(root, include)`), and a bound session's surface
+never reads the daemon's pending local launch policy.

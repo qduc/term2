@@ -21,8 +21,9 @@ Tracks every step of [the singleton daemon plan](README.md), its status, key art
 | 14a | Daemon core (Unix socket + lifecycle + headless policy + sandbox lease fix) | Done | `DaemonUnixServer`, `DaemonRpc`, `GlobalMutationCoordinator`, `startTerm2Daemon`, `connectOrStartDaemon`, `term2 daemon [start\|status\|stop]`, D003 session-owned headless approvals, scoped sandbox leases | `bf0ef68` |
 | 14b | Remote `DirectConnection` over Unix socket | Done | `UnixRpcClient`, `createRemoteDirectHost`, `connectRemoteDirectHost`, `remote-direct-host.integration.test.ts` | `7a2c636c0` |
 | 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | `7a2c636c0` |
-| 14d | TUI zoom-in + TUI client over daemon | Done | `TuiBackend`, `daemon-tui-backend.ts`, `DaemonTuiSettingsStore`, `daemon-tui-providers.ts`, `daemon-tui.e2e.test.ts` (independent verifier: `accept`) | Pending PR |
-| 14e | Control socket, Discord, ACP, and web clients over daemon | Pending | Depends on Step 14d | — |
+| 14d | TUI zoom-in + TUI client over daemon | Done | `TuiBackend`, `daemon-tui-backend.ts`, `DaemonTuiSettingsStore`, `daemon-tui-providers.ts`, `daemon-tui.e2e.test.ts` (independent verifier: `accept`) | `54fb732` |
+| 14e.1 | `term2 serve` + web UI over daemon (serve lease) | In review | `DaemonServeLeases`, `launchServeOverDaemon`, `src/app/serve/`, `daemon-serve.integration.test.ts` (D011) | — |
+| 14e.2 | Control socket, Discord, ACP over daemon (control leases, `session.acp.set_mcp`) | Pending | Depends on 14e.1 | — |
 | 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e | — |
 
 ### Step 14d workspace and discovery
@@ -84,3 +85,20 @@ the three daemon and Client API integration suites.
   Independent verifier caught 4 defects on `19002d1` (`WireGoal.text` mapping,
   terminal `session.close` reconnect, OAuth `isInUse`, parallel `/resume` picker
   readiness); all 4 were fixed and independently verified `accept` on `ec3b19d32`.
+
+### Step 14e Part 1: `term2 serve` over the daemon
+
+- The daemon backs `daemon.serve.start`/`stop` (D011): it hosts the HTTP listener
+  over its own application while one Unix connection holds the lease, and emits
+  pairing OTPs as `serve.pairing_otp` on that connection only. `term2 serve` with
+  `TERM2_DAEMON_MODE=1` is the client (`src/app/serve/launch-serve-daemon.ts`).
+  The web UI reaches the daemon through the same listener, so it needs no change.
+- Authority routes by principal and by recorded session binding; web callers keep
+  in-process serve's posture. See D011 for what stayed closed and why.
+- Evidence: built-CLI `tests/host/gateway/daemon-serve.integration.test.ts` (HTTP
+  `daemon/status` names the Unix daemon; a terminal session is listed but 404s
+  over HTTP; a web turn runs in the daemon and logs into its store with the
+  owner binding; a second lease is refused; SIGTERM and SIGKILL both release the
+  listener and state-dir lock while the daemon lives on; OTP reaches stderr). All
+  13 `tests/host` integration suites pass, including the in-process
+  `serve.integration.test.ts`.

@@ -39,3 +39,37 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
      choices, and provider credentials explicit in the TUI API review. Review
      the chosen client-visible environment behavior with the SSH agent case in
      item 6.
+
+10. **Web access to local (unbound) sessions** *(D007, D011)*:
+    - The web sidebar now lists a terminal's sessions live under a covering grant,
+      but opening one answers 404, because in-process serve never held local
+      sessions and widening web authority is the owner's call. A proposed design:
+      admit an unbound session to a web caller only under a `read_write` grant
+      whose root equals the session root, and on revoke or narrow end the web
+      caller's attachments to unbound sessions in that root (they are not closed,
+      since a terminal may own them). Without the second half, an attached web
+      stream would outlive its grant.
+
+11. **`--issuer` / `--audience` on the serve lease** *(D011)*:
+    - The frozen v1.1 `daemon.serve.start` params have no issuer or audience, so
+      daemon mode refuses non-default values and points at `TERM2_IN_PROCESS=1`.
+      Add them in the next Client API minor revision.
+
+12. **One serve lease per daemon** *(D011)*:
+    - Two leases would mean two grant sets authorizing one application. If several
+      listeners are wanted (say a socket for the BFF and TLS for a LAN), they should
+      share one grant set rather than each carry their own.
+
+13. **Model catalog check for web sessions in the daemon** *(D011)*:
+    - In-process serve's `authorizeModel` refuses a model switch to a model missing
+      from the catalog; the daemon's application has no such check for any session,
+      web-bound ones included. It is input validation rather than authority, but a
+      per-session hook would restore serve's behaviour.
+
+14. **Web sessions without a lease** *(D011)*:
+    - With no lease active, the daemon cannot resolve web-bound sessions (their
+      grants live in the serve state directory), so they drop out of local listings
+      and cannot be opened from the terminal. The TUI resume picker can still list
+      one under its root and then fail to open it. Decide whether the owner should
+      be able to open web sessions locally without a running serve.
+

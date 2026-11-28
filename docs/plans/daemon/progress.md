@@ -23,7 +23,7 @@ Tracks every step of [the singleton daemon plan](README.md), its status, key art
 | 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | `7a2c636c0` |
 | 14d | TUI zoom-in + TUI client over daemon | Done | `TuiBackend`, `daemon-tui-backend.ts`, `DaemonTuiSettingsStore`, `daemon-tui-providers.ts`, `daemon-tui.e2e.test.ts` (independent verifier: `accept`) | `54fb732` |
 | 14e (Part 1) | `term2 serve` & web UI over daemon (`daemon.serve.start`/`stop`, `local_leases`) | Done | `DaemonServeLeaseManager`, `launchServeOverDaemon`, unified D007 store/`SessionIndex`/`GlobalMutationCoordinator`, `daemon-serve-lease.integration.test.ts`, 35/35 Playwright browser flows under `TERM2_DAEMON_MODE=1` (independent verifier: `accept` on `9b3772a`) | Pending PR |
-| 14e (Part 2) | Control socket, Discord, and ACP over daemon (`session.control.*`, `session.acp.set_mcp`) | Pending | Depends on Step 14e Part 1 | — |
+| 14e (Part 2) | Control socket, Discord, and ACP over daemon (`session.control.*`, `session.acp.set_mcp`) | In review | `control-lease.ts`, `control-bridge.ts`, `daemon-acp.ts`, `launch-acp-daemon.ts`, `DaemonLaunchPolicies`; daemon TUI e2e control case, `tests/clients/acp/daemon.integration.test.ts` (D011; independent verifiers: `accept`) | — |
 | 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e Part 2 | — |
 
 ### Step 14d workspace and discovery
@@ -107,3 +107,35 @@ the three daemon and Client API integration suites.
   `TERM2_DAEMON_MODE=1 pnpm test:web-browser` (35/35 Playwright Chromium flows passed).
   Independent verifier caught 5 defects on `a5233ba` and 1 bound-session posture gap on `48ffd16`;
   all were fixed, covered by regression tests, and independently verified **`accept`** on `9b3772a`.
+
+### Step 14e Part 2 (control socket, Discord, ACP over daemon)
+
+- Two parts built in parallel worktrees and combined: control socket and Discord
+  (`src/app/daemon/leases/control-{lease,bridge}.ts`) and ACP
+  (`src/app/acp/{daemon-acp,launch-acp-daemon,acp-common}.ts`). Design in D011.
+- A first version of both was built on a duplicate Part 1 (closed PR #476) and
+  ported onto #475's layout; only the ported versions were verified.
+- Evidence:
+  - Control: one built-CLI journey in `tests/cli/daemon-tui.e2e.test.ts` (daemon
+    pid owns the socket, in-process location and modes, `term2 control submit`
+    reaches the session, `/clear` moves it, a killed TUI releases it, `/restart`
+    keeps the same socket) plus a conformance case (terminal-only `bind`,
+    non-holder refusals, move plus pause). Eight mutations of the fix in the CLI
+    bundle each fail a check.
+  - ACP: `tests/clients/acp/daemon.integration.test.ts` drives two ACP processes
+    and an observer: daemon-owned MCP child processes, client-only environment,
+    holder refusals, Ask reset for a new holder, foreign close reopening in Ask
+    with the sandbox on, the web config route refusing Unattended, and an
+    unchanged `settings.json`. Eighteen bundle mutations each fail it.
+- Independent verification: control was accepted on `960da4159`, and its
+  follow-ups (terminal-only binds, per-lease serialization) on `003eab871`. ACP
+  was rejected twice before acceptance on `1cb7bc80a`:
+  - round 1: MCP processes outliving their owner after a clear, approval mode
+    inherited on resume, and a config write after a foreign close persisting to
+    `settings.json`;
+  - round 2: the web session-config route bypassing the per-RPC guards, which
+    moved the ACP rule into the session runtime.
+- Debugging trap: the subagents first shared one scratchpad folder, and one
+  overwrote another's backup of `dist/src/app/cli.bundle.cjs` mid red-proof. Keep
+  bundle backups in a per-agent folder and confirm restores with `cmp`.
+

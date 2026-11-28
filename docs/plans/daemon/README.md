@@ -4,7 +4,7 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–14e Part 1 complete (`term2 serve` & web UI over daemon); Step 14e Part 2 (control socket, Discord, ACP over daemon) is next.
+- **Current phase:** Steps 0–14e Part 1 merged (`term2 serve` & web UI over daemon). Step 14e Part 2 (control socket, Discord, ACP over daemon; D011) is in review; Step 14f is next.
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
@@ -15,7 +15,7 @@ Status: in progress. Started 2026-11-27.
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Implement Step 14e Part 2 (`session.control.bind`/`rebind`/`unbind`, `session.acp.set_mcp`, control socket / Discord / ACP over daemon), then Step 14f (default flip to daemon mode + `--in-process` escape hatch + full verification and smoke runs).
+- **Next concrete actions:** Land Step 14e Part 2, then Step 14f: default flip to daemon mode, `--in-process` escape hatch, the existing suites run with clients attached through the daemon, and one smoke run per surface. Owner review items 11–17 in [worth revisiting](worth-revisiting.md) came from Part 2; item 17 is a race on `main` to fix before the flip.
 
 
 ## Goal

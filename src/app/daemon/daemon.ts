@@ -362,8 +362,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       localWorkspaceIdForRoot,
       recordLocalWorkspace,
       resolveWorkspaceRoot,
-      setPendingCreatePolicy: (policy) => launches.setPendingPolicy(policy),
-      setPendingLaunchFlags: (flags) => launches.setPendingFlags(flags),
+      withLaunchValues: (values, start) => launches.withLaunch(values, start),
       admitLaunch: (sessionId, params) => activeDaemonAcp.admitLaunch(sessionId, params),
     });
     const v11Port = {
@@ -425,7 +424,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           requireLocalCaller(principal);
           return localGrant(resolveWorkspaceRoot(workspaceId));
         },
-        setPendingCreatePolicy: (policy) => launches.setPendingPolicy(policy),
+        withCreatePolicy: (policy, create) => launches.withLaunch(policy ? { policy } : {}, create),
         forkSession: (_principal, sourceSessionId) => localOwnerApp.forkSession(sourceSessionId),
         handoffSession: (_principal, sourceSessionId, input) =>
           localOwnerApp.handoff(sourceSessionId, undefined, input.text ?? ''),

@@ -49,7 +49,8 @@ export type DaemonControlPort = {
   shutdown(params: DaemonShutdownParams): Promise<void>;
   resolveCwdGrant(principal: Principal, cwd: string): Promise<WorkspaceGrant>;
   resolveWorkspaceGrant?(principal: Principal, workspaceId: string): Promise<WorkspaceGrant>;
-  setPendingCreatePolicy?(policy: SessionApprovalPolicy | undefined): void;
+  /** Runs `create` so that only the session it creates takes `policy`; a concurrent open of another session does not. */
+  withCreatePolicy?<T>(policy: SessionApprovalPolicy | undefined, create: () => Promise<T>): Promise<T>;
   forkSession(principal: Principal, sourceSessionId: string): Promise<string>;
   handoffSession(
     principal: Principal,
@@ -322,7 +323,7 @@ export class DaemonRpc {
   }
 
   #createSession(principal: Principal, rawParams: Record<string, unknown>): Promise<Record<string, unknown>> {
-    // Serialize creation so pendingCreatePolicy never crosses concurrent session.create calls.
+    // Creates and launches run one at a time. Their launch values do not rely on it: each call carries its own.
     const next = this.#createLock.then(() => this.#createSessionSerialized(principal, rawParams));
     this.#createLock = next.catch(() => undefined);
     return next;
@@ -342,13 +343,10 @@ export class DaemonRpc {
         : this.deps.control.resolveWorkspaceGrant
         ? await this.deps.control.resolveWorkspaceGrant(principal, parsed.workspaceId)
         : ({ workspaceId: parsed.workspaceId } as unknown as WorkspaceGrant);
-    this.deps.control.setPendingCreatePolicy?.(parsed.approvalPolicy);
-    let connection: DirectConnection;
-    try {
-      connection = await this.deps.host.createSession(principal, grant);
-    } finally {
-      this.deps.control.setPendingCreatePolicy?.(undefined);
-    }
+    const create = () => this.deps.host.createSession(principal, grant);
+    const connection: DirectConnection = this.deps.control.withCreatePolicy
+      ? await this.deps.control.withCreatePolicy(parsed.approvalPolicy, create)
+      : await create();
     try {
       if (parsed.model) {
         const configured = await connection.send({

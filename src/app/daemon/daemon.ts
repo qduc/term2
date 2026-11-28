@@ -39,6 +39,7 @@ import { createDaemonMcp } from './daemon-mcp.js';
 import {
   applyDaemonSetGoal,
   DaemonLaunchPolicies,
+  openDaemonLaunchTarget,
   prepareDaemonSkillText,
   readDaemonSessionQuota,
 } from './daemon-session-ops.js';
@@ -363,6 +364,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       recordLocalWorkspace,
       resolveWorkspaceRoot,
       withLaunchValues: (values, start) => launches.withLaunch(values, start),
+      openLaunchTarget: (principal, sessionId, values) =>
+        openDaemonLaunchTarget({ app: localOwnerApp, launches, sessionIndex }, principal, sessionId, values),
       admitLaunch: (sessionId, params) => activeDaemonAcp.admitLaunch(sessionId, params),
     });
     const v11Port = {

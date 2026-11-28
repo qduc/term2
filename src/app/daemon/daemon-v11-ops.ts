@@ -82,6 +82,12 @@ export type DaemonV11Deps = {
   readonly resolveWorkspaceRoot: (workspaceId: string) => string;
   /** Runs `start` so that only the session it starts takes `values` (`DaemonLaunchPolicies.withLaunch`). */
   readonly withLaunchValues: <T>(values: DaemonLaunchValues, start: () => Promise<T>) => Promise<T>;
+  /** Opens the session a resume or fork names with `values`, never on a wider live posture (`openDaemonLaunchTarget`). */
+  readonly openLaunchTarget: (
+    principal: Principal,
+    sessionId: string,
+    values: DaemonLaunchValues,
+  ) => Promise<{ readonly sessionId: string; close(): void }>;
   /** Refuses a launch whose client mode the live session's surface does not match. */
   readonly admitLaunch?: (sessionId: string, params: SessionLaunchParams) => void | Promise<void>;
   readonly sessionItemOrFallback: (principal: Principal, sessionId: string) => Promise<ClientApiSessionListItem>;
@@ -142,19 +148,14 @@ async function launchDaemonSession(
   let forkedFrom: string | undefined;
   let conn: { readonly sessionId: string; close(): void };
   const createdFresh = params.selection.kind === 'new' || params.selection.kind === 'fork';
-  const withLaunch = (open: () => Promise<typeof conn>, target?: string): Promise<typeof conn> =>
-    deps.withLaunchValues(
-      {
-        ...(params.approvalPolicy ? { policy: params.approvalPolicy } : {}),
-        ...(launchFlags ? { flags: launchFlags } : {}),
-        ...(target ? { sessionId: target } : {}),
-      },
-      open,
-    );
+  const values: DaemonLaunchValues = {
+    ...(params.approvalPolicy ? { policy: params.approvalPolicy } : {}),
+    ...(launchFlags ? { flags: launchFlags } : {}),
+  };
 
   if (params.selection.kind === 'new') {
     deps.recordLocalWorkspace(root);
-    conn = await withLaunch(() => deps.app.host.createSession(principal, grant));
+    conn = await deps.withLaunchValues(values, () => deps.app.host.createSession(principal, grant));
     sessionId = conn.sessionId;
   } else {
     const stored = await deps.app.listStoredSessions();
@@ -193,8 +194,7 @@ async function launchDaemonSession(
     } else {
       sessionId = targetSummary.id;
     }
-    const target = sessionId;
-    conn = await withLaunch(() => deps.app.host.connect(principal, target), target);
+    conn = await deps.openLaunchTarget(principal, sessionId, values);
   }
   try {
     await deps.admitLaunch?.(sessionId, params);

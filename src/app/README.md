@@ -514,3 +514,21 @@ Discord send for a daemon session's tools comes from the daemon's surface
 (`DaemonControlLeases.outbound`, interactive local sessions only, as
 in-process): authority resolves at each call to a live, opted-in, unpaused
 socket bound to that session.
+
+## Launch posture over the daemon
+
+`session.create` and `session.launch` hand their approval policy and launch flags
+(`clientMode`, `requireSandbox`) to the session they start, through
+`DaemonLaunchPolicies.withLaunch` (`src/app/daemon/daemon-session-ops.ts`): an
+async-local frame, so a concurrent attach of another session never adopts them.
+A session's surface reads them once, when it is built, and a live session keeps
+that surface. In-process, every run builds its own.
+
+So a resume or fork goes through `openDaemonLaunchTarget`. When the session is
+live with a different posture (headless or not, auto-approve, sandbox
+requirement), it is closed and reopened with the launch's values, provided it is
+idle (no turn, approval or background task) and no connection is open on it
+(`DirectHost.connectionCount`). Otherwise it is opened as it is, and the launch is
+refused with `busy` when that posture is wider than the one asked for:
+auto-approve the launch did not ask for, or no sandbox requirement when it asked
+for one. ACP sessions are left to `admitLaunch` and the holder rule.

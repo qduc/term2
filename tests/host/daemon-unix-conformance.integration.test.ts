@@ -21,6 +21,11 @@ import { connectOrStartDaemon } from '../../src/app/daemon/daemon-bootstrap.js';
 import { prepareSocketForBind } from '../../src/app/daemon/daemon-paths.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
 import { controlDirectory } from '../../src/clients/control-socket/control-socket.js';
+import {
+  HEADLESS_AUTO_APPROVE_REFUSAL,
+  HEADLESS_REFUSAL,
+  startTouchToolProvider,
+} from '../helpers/touch-tool-provider.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -178,6 +183,55 @@ async function controlSocketRequest(
   }
 }
 
+const sessionIdOf = (frame: UnixResponseFrame) => (frame.ok ? (frame.result['session'] as { id: string }).id : '');
+const streamIdOf = (frame: UnixResponseFrame) =>
+  frame.ok ? CLIENT_API_SCHEMAS.unixSessionAttachResult.parse(frame.result).streamId : '';
+
+type AcceptedEvent = { type?: string; payload?: Record<string, unknown> };
+const accepted = (frame: UnixEventFrame, streamId: string): AcceptedEvent[] =>
+  frame.streamId === streamId && frame.event === 'session.accepted' && Array.isArray(frame.payload['events'])
+    ? (frame.payload['events'] as AcceptedEvent[])
+    : [];
+
+async function firstOfType(client: TestUnixRpcClient, streamId: string, type: string) {
+  const frame = await client.waitForEvent((f) => accepted(f, streamId).some((e) => e.type === type), 15_000);
+  return accepted(frame, streamId).find((e) => e.type === type)?.payload ?? {};
+}
+
+/**
+ * Submits a turn whose model asks to `touch` `file` (`startTouchToolProvider`), and reports who resolved
+ * the approval it opens. With `answerAs`, the test answers as the person at the terminal. A session with
+ * no person (headless) has already resolved it by policy, and the policy's reason says whether the
+ * session holds auto-approve.
+ */
+async function approvalOutcome(
+  client: TestUnixRpcClient,
+  sessionId: string,
+  streamId: string,
+  file: string,
+  answerAs?: string,
+): Promise<{ source: string | undefined; reason: string | undefined }> {
+  const submitted = await client.request('session.command', {
+    sessionId,
+    command: { type: 'submit', requestId: `touch-${file}`, text: `Please create ${file}`, origin: { kind: 'cli' } },
+  });
+  expect(submitted.ok).toBe(true);
+  const opened = await firstOfType(client, streamId, 'interaction_opened');
+  const requestId = (opened['interaction'] as { requestId: string }).requestId;
+  if (answerAs) {
+    // Refused as stale when a policy resolved the request first; the resolution below says which won.
+    await client.request('session.command', {
+      sessionId,
+      command: { type: 'answer', requestId, decision: { kind: 'deny', reason: answerAs } },
+    });
+  }
+  const resolved = await firstOfType(client, streamId, 'interaction_resolved');
+  return {
+    source: (resolved['provenance'] as { source?: string } | undefined)?.source,
+    reason: (resolved['resolution'] as { reason?: string } | undefined)?.reason,
+  };
+}
+
 describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
   const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -207,6 +261,36 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     fs.writeFileSync(path.join(workspace, 'hello.txt'), 'world\n');
     cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
     return { root, stateDir, runtimeDir, socketPath, workspace };
+  }
+
+  async function touchProvider(): Promise<string> {
+    const provider = await startTouchToolProvider();
+    cleanups.push(provider.close);
+    return provider.baseUrl;
+  }
+
+  function writeTouchSettings(settingsDir: string, baseUrl: string): void {
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'touch', model: 'touch-model' }, retryAttempts: 0 },
+        providers: [{ name: 'touch', type: 'openai-compatible', baseUrl, apiKey: 'k' }],
+        sandbox: { enabled: false },
+      }),
+    );
+  }
+
+  async function openV11Client(socketPath: string, clientKind: 'tui' | 'headless'): Promise<TestUnixRpcClient> {
+    const client = new TestUnixRpcClient(await connectRaw(socketPath));
+    cleanups.push(() => client.close());
+    const hello = await client.request('protocol.hello', {
+      protocolVersion: '1.1',
+      minSupportedVersion: '1.1',
+      clientKind,
+      clientVersion: '1.1.0',
+    });
+    expect(hello.ok).toBe(true);
+    return client;
   }
 
   it('enforces 0700/0600 permissions, singleton lock, stale socket guard, handshake rules, and 4 MiB line cap', async () => {
@@ -1125,64 +1209,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     for (const dir of [settingsDir, gateDir, launchWs, dormantWs]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const launchRoot = fs.realpathSync(launchWs);
 
-    // The model asks to `touch` the file the latest user message names (a shell write, which an interactive
-    // session asks about), then stops once it sees the result.
-    const provider = http.createServer((req, res) => {
-      if (req.method === 'GET') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ object: 'list', data: [{ id: 'race-model' }] }));
-        return;
-      }
-      let body = '';
-      req.on('data', (chunk: Buffer) => {
-        body += chunk.toString('utf8');
-      });
-      req.on('end', () => {
-        const messages = (JSON.parse(body) as { messages: Array<{ role: string; content?: unknown }> }).messages;
-        const last = messages.at(-1);
-        const target = /create ([\w.-]+\.txt)/.exec(JSON.stringify(last?.content ?? ''))?.[1];
-        const delta =
-          last?.role === 'user' && target
-            ? {
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: `call_${target}`,
-                    type: 'function',
-                    function: {
-                      name: 'shell',
-                      arguments: JSON.stringify({ command: `touch ${target}`, description: 'Create a file' }),
-                    },
-                  },
-                ],
-              }
-            : { role: 'assistant', content: 'done' };
-        const finish = 'tool_calls' in delta ? 'tool_calls' : 'stop';
-        res.writeHead(200, { 'content-type': 'text/event-stream' });
-        res.end(
-          [
-            `data: ${JSON.stringify({ id: 'c', choices: [{ delta }] })}`,
-            '',
-            `data: ${JSON.stringify({ id: 'c', choices: [{ delta: {}, finish_reason: finish }] })}`,
-            '',
-            'data: [DONE]',
-            '',
-          ].join('\n'),
-        );
-      });
-    });
-    await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
-    cleanups.push(() => new Promise<void>((resolve) => provider.close(() => resolve())));
-    const address = provider.address();
-    const baseUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
-    fs.writeFileSync(
-      path.join(settingsDir, 'settings.json'),
-      JSON.stringify({
-        agent: { modelSelection: { provider: 'race', model: 'race-model' }, retryAttempts: 0 },
-        providers: [{ name: 'race', type: 'openai-compatible', baseUrl, apiKey: 'k' }],
-        sandbox: { enabled: false },
-      }),
-    );
+    writeTouchSettings(settingsDir, await touchProvider());
 
     // Holds the launch mid-start: a headless surface waits for its workspace's MCP servers to settle,
     // and this one never answers `initialize`. It marks that it started, then exits once released.
@@ -1218,21 +1245,8 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     if (daemon.kind !== 'started') return;
     cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
 
-    const open = async (clientKind: 'tui' | 'headless') => {
-      const client = new TestUnixRpcClient(await connectRaw(socketPath));
-      cleanups.push(() => client.close());
-      const hello = await client.request('protocol.hello', {
-        protocolVersion: '1.1',
-        minSupportedVersion: '1.1',
-        clientKind,
-        clientVersion: '1.1.0',
-      });
-      expect(hello.ok).toBe(true);
-      return client;
-    };
-    const tui = await open('tui');
-    const headless = await open('headless');
-    const sessionIdOf = (frame: UnixResponseFrame) => (frame.ok ? (frame.result['session'] as { id: string }).id : '');
+    const tui = await openV11Client(socketPath, 'tui');
+    const headless = await openV11Client(socketPath, 'headless');
 
     // A stored session nobody has open.
     const stored = await tui.request('session.launch', { cwd: dormantWs, selection: { kind: 'new' } });
@@ -1259,48 +1273,6 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(launched.ok).toBe(true);
     const launchedId = sessionIdOf(launched);
 
-    type AcceptedEvent = { type?: string; payload?: Record<string, unknown> };
-    const accepted = (frame: UnixEventFrame, streamId: string): AcceptedEvent[] =>
-      frame.streamId === streamId && frame.event === 'session.accepted' && Array.isArray(frame.payload['events'])
-        ? (frame.payload['events'] as AcceptedEvent[])
-        : [];
-    const firstOfType = async (client: TestUnixRpcClient, streamId: string, type: string) => {
-      const frame = await client.waitForEvent((f) => accepted(f, streamId).some((e) => e.type === type), 15_000);
-      return accepted(frame, streamId).find((e) => e.type === type)?.payload ?? {};
-    };
-    /**
-     * Submits a turn whose model asks to `touch` `file`, and reports who resolved the approval it opens. With
-     * `answerAs`, the test answers as the person at the terminal. A session with no person (headless) has
-     * already resolved it by policy, and the policy's reason says whether the session holds auto-approve.
-     */
-    const approvalOutcome = async (
-      client: TestUnixRpcClient,
-      sessionId: string,
-      streamId: string,
-      file: string,
-      answerAs?: string,
-    ) => {
-      const submitted = await client.request('session.command', {
-        sessionId,
-        command: { type: 'submit', requestId: `race-${file}`, text: `Please create ${file}`, origin: { kind: 'cli' } },
-      });
-      expect(submitted.ok).toBe(true);
-      const opened = await firstOfType(client, streamId, 'interaction_opened');
-      const requestId = (opened['interaction'] as { requestId: string }).requestId;
-      if (answerAs) {
-        // Refused as stale when a policy resolved the request first; the resolution below says which won.
-        await client.request('session.command', {
-          sessionId,
-          command: { type: 'answer', requestId, decision: { kind: 'deny', reason: answerAs } },
-        });
-      }
-      const resolved = await firstOfType(client, streamId, 'interaction_resolved');
-      return {
-        source: (resolved['provenance'] as { source?: string } | undefined)?.source,
-        reason: (resolved['resolution'] as { reason?: string } | undefined)?.reason,
-      };
-    };
-
     // The attached session keeps its interactive surface: the request waits for the person, who answers it.
     const dormantOutcome = await approvalOutcome(tui, dormantId, dormantStream, 'dormant.txt', 'person declined');
     expect(dormantOutcome.reason).toBe('person declined');
@@ -1315,7 +1287,67 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const ownStream = CLIENT_API_SCHEMAS.unixSessionAttachResult.parse(own.result).streamId;
     expect(await approvalOutcome(headless, launchedId, ownStream, 'launched.txt')).toEqual({
       source: 'policy',
-      reason: 'No person is available to approve this in a non-interactive run.',
+      reason: HEADLESS_AUTO_APPROVE_REFUSAL,
+    });
+  });
+
+  it('resumes a live session only with the approval posture the resume asked for, and refuses a wider one it cannot reopen', async () => {
+    const { root, stateDir, runtimeDir, socketPath, workspace } = makeSandboxRoot();
+    const settingsDir = path.join(root, 'settings');
+    fs.mkdirSync(settingsDir, { recursive: true, mode: 0o700 });
+    writeTouchSettings(settingsDir, await touchProvider());
+    const daemon = await startTerm2Daemon({
+      stateDir,
+      conversationsDir: path.join(stateDir, 'conversations'),
+      socketPath,
+      env: { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir },
+    });
+    expect(daemon.kind).toBe('started');
+    if (daemon.kind !== 'started') return;
+    cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
+
+    const tui = await openV11Client(socketPath, 'tui');
+    const headless = await openV11Client(socketPath, 'headless');
+    const interactive = { clientMode: 'interactive' };
+    const headlessAsk = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: false } };
+    const headlessAuto = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: true } };
+    const launch = (client: TestUnixRpcClient, sessionId: string | null, posture: Record<string, unknown>) =>
+      client.request('session.launch', {
+        cwd: workspace,
+        selection: sessionId === null ? { kind: 'new' } : { kind: 'resume', sessionId },
+        ...posture,
+      });
+    const attach = async (client: TestUnixRpcClient, sessionId: string) =>
+      streamIdOf(await client.request('session.attach', { sessionId }));
+
+    // Each launch below leaves its session live in the daemon, idle, with nobody attached.
+    // Interactive, then a headless resume: the session's own policy answers, as in a fresh headless run.
+    const first = sessionIdOf(await launch(tui, null, interactive));
+    expect(sessionIdOf(await launch(headless, first, headlessAsk))).toBe(first);
+    const firstStream = await attach(headless, first);
+    expect(await approvalOutcome(headless, first, firstStream, 'first.txt', 'person declined')).toEqual({
+      source: 'policy',
+      reason: HEADLESS_REFUSAL,
+    });
+
+    // Headless with auto-approve, then a terminal resume: the person is asked again.
+    const second = sessionIdOf(await launch(headless, null, headlessAuto));
+    expect(sessionIdOf(await launch(tui, second, interactive))).toBe(second);
+    const secondStream = await attach(tui, second);
+    const asked = await approvalOutcome(tui, second, secondStream, 'second.txt', 'person declined');
+    expect(asked.reason).toBe('person declined');
+    expect(asked.source).not.toBe('policy');
+
+    // While another client has an auto-approve session open, it cannot be reopened: a resume asking
+    // for less is refused, one asking for the same is admitted, and the session keeps its posture.
+    const third = sessionIdOf(await launch(headless, null, headlessAuto));
+    const held = await attach(headless, third);
+    expect(await launch(tui, third, interactive)).toMatchObject({ ok: false, error: { code: 'busy' } });
+    expect(await launch(headless, third, headlessAsk)).toMatchObject({ ok: false, error: { code: 'busy' } });
+    expect(await launch(headless, third, headlessAuto)).toMatchObject({ ok: true });
+    expect(await approvalOutcome(headless, third, held, 'third.txt')).toEqual({
+      source: 'policy',
+      reason: HEADLESS_AUTO_APPROVE_REFUSAL,
     });
   });
 });

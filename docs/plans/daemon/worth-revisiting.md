@@ -98,3 +98,24 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
       async context and sees no launch values. Reproduced and covered by the
       dormant-attach case in `tests/host/daemon-unix-conformance.integration.test.ts`.
 
+18. **Resume of a live session kept its earlier launch posture** *(found verifying item 17)*:
+    - Launch records were cleared only when a session closed, and a live session
+      keeps the surface it was built with. So `term2 --auto-approve "…"` followed by
+      `term2 --resume last "…"` without the flag ran the resume with auto-approve.
+      Conversely an interactive session resumed headless kept asking for a person
+      the headless client never answers, and a terminal resume of a live headless
+      session kept its headless (or auto-approve) surface.
+    - **Status: fixed** (`claude/daemon-headless-resume-posture`). Resume and fork
+      go through `openDaemonLaunchTarget`: a live session whose posture (headless,
+      auto-approve, sandbox requirement) differs from the launch's is closed and
+      reopened with the launch's values when it is idle and no connection is open
+      on it. Otherwise it opens as it is, and the launch is refused with `busy` when
+      the live posture is wider than asked. ACP sessions keep `admitLaunch` and the
+      holder rule. Rebuilding a live surface in place was not chosen: the runtime
+      captures its surface options once, at open. Covered by the built-CLI case in
+      `tests/host/remote-direct-host.integration.test.ts` and the live-resume case
+      in `tests/host/daemon-unix-conformance.integration.test.ts`.
+    - Owner question: a resume that differs only in a narrower way while another
+      client is connected still shares the live posture (for example a headless
+      resume of an interactive session a TUI has open, whose person answers).
+

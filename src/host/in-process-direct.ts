@@ -193,6 +193,11 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       await deps.authorize(principal, { kind: 'write', sessionId });
       await release(sessionId);
     },
+    connectionCount(sessionId) {
+      let count = 0;
+      for (const id of connections.values()) if (id === sessionId) count += 1;
+      return count;
+    },
     async closeWorkspaceSessions(root) {
       open();
       // Sessions already open start closing now, so none admits a turn under the old

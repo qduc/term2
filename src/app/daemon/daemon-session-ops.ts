@@ -9,6 +9,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Principal } from '../../host/in-process-direct-types.js';
 import { ClientApiRpcError } from '../../host/daemon/daemon-rpc.js';
+import type { SessionIndex } from '../../host/daemon/session-index.js';
 import { DirectProtocolError } from '../../protocol/errors.js';
 import { subscriptionQuotaView } from '../../protocol/state.js';
 import { createDurableGoal } from '../../session/goal.js';
@@ -240,4 +241,72 @@ export class DaemonLaunchPolicies {
     this.#policies.delete(sessionId);
     this.#flags.delete(sessionId);
   }
+
+  /**
+   * Compares the approval posture a live session runs with (its records; none means interactive)
+   * to the one a launch asks for. ACP sessions are left out: their surface is the strictest, and
+   * `admitLaunch` owns who may reopen them.
+   */
+  compare(sessionId: string, values: DaemonLaunchValues): { readonly differs: boolean; readonly wider: boolean } {
+    if (this.isAcp(sessionId) || this.isHeldByAcp(sessionId)) return { differs: false, wider: false };
+    const live = launchPosture(this.#policies.get(sessionId), this.#flags.get(sessionId));
+    const asked = launchPosture(values.policy, values.flags);
+    return {
+      differs:
+        live.headless !== asked.headless ||
+        live.autoApprove !== asked.autoApprove ||
+        live.requireSandbox !== asked.requireSandbox,
+      wider: (live.autoApprove && !asked.autoApprove) || (asked.requireSandbox && !live.requireSandbox),
+    };
+  }
+}
+
+/** What a session's surface takes from its launch values (`surface` in daemon.ts). */
+function launchPosture(policy: SessionApprovalPolicy | undefined, flags: DaemonLaunchFlags | undefined) {
+  return {
+    headless: policy?.mode === 'headless' || flags?.clientMode === 'headless',
+    autoApprove: policy?.mode === 'headless' && policy.autoApprove,
+    requireSandbox: flags?.requireSandbox === true,
+  };
+}
+
+/**
+ * Opens the existing session a resume or fork launch names, with that launch's values.
+ * A live session keeps the surface it was built with, so one running a different posture
+ * is closed and reopened first, when it is idle and nobody else is connected (in-process,
+ * every run builds its own surface). Whatever happened meanwhile, a session left running a
+ * wider posture than the launch asked for (auto-approve, or no sandbox requirement) is refused.
+ */
+export async function openDaemonLaunchTarget(
+  deps: {
+    readonly app: DirectApplication;
+    readonly launches: DaemonLaunchPolicies;
+    readonly sessionIndex: Pick<SessionIndex, 'get'>;
+  },
+  principal: Principal,
+  sessionId: string,
+  values: DaemonLaunchValues,
+): Promise<{ readonly sessionId: string; close(): void }> {
+  const { app, launches } = deps;
+  const isAcpLaunch = values.flags?.clientMode === 'acp';
+  if (!isAcpLaunch && app.liveSettings(sessionId) && launches.compare(sessionId, values).differs) {
+    const item = await deps.sessionIndex.get(principal, sessionId);
+    const idle =
+      item !== null &&
+      item.status !== 'running' &&
+      item.status !== 'awaiting_interaction' &&
+      (item.activeBackgroundTaskCount ?? 0) === 0;
+    if (idle && app.host.connectionCount?.(sessionId) === 0) await app.host.closeSession?.(principal, sessionId);
+  }
+  const conn = await launches.withLaunch({ ...values, sessionId }, () => app.host.connect(principal, sessionId));
+  if (!isAcpLaunch && launches.compare(sessionId, values).wider) {
+    conn.close();
+    throw new ClientApiRpcError(
+      'busy',
+      'This session is open elsewhere with a wider approval posture than this launch asked for. ' +
+        'Close it there, or wait until it is idle, and resume again.',
+      { retryable: true },
+    );
+  }
+  return conn;
 }

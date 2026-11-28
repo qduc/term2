@@ -19,6 +19,11 @@ import { connectRemoteDirectHost } from '../../src/app/daemon/connect-daemon-hos
 import { LOCAL_PRINCIPAL, localGrant } from '../../src/app/application-workspaces.js';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
+import {
+  HEADLESS_AUTO_APPROVE_REFUSAL,
+  HEADLESS_REFUSAL,
+  startTouchToolProvider,
+} from '../helpers/touch-tool-provider.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -481,5 +486,62 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
       { env },
     );
     await expect.poll(() => fs.existsSync(socketPath), { timeout: 5_000 }).toBe(false);
+  });
+
+  it('runs a built-CLI headless resume with only the approval policy it asked for, though the daemon still has the session live', async () => {
+    const { root, stateDir, runtimeDir, socketPath, workspace } = makeSandboxRoot();
+    const homeDir = path.join(root, 'home');
+    const cliPath = integrationCliPath();
+
+    const provider = await startTouchToolProvider();
+    cleanups.push(provider.close);
+    const { toolResults } = provider;
+
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: homeDir,
+      XDG_STATE_HOME: path.join(root, 'xdg-state'),
+      TERM2_DAEMON_MODE: '1',
+      TERM2_DAEMON_DIR: runtimeDir,
+      TERM2_DAEMON_SOCKET: socketPath,
+      TERM2_CONVERSATIONS_DIR: path.join(stateDir, 'conversations'),
+      DISABLE_LOGGING: '1',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir, env });
+    fs.mkdirSync(settingsDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'touch', model: 'touch-model' }, retryAttempts: 0 },
+        providers: [{ name: 'touch', type: 'openai-compatible', baseUrl: provider.baseUrl, apiKey: 'k' }],
+        sandbox: { enabled: false },
+      }),
+    );
+    env['TERM2_SETTINGS_DIR'] = settingsDir;
+    cleanups.push(async () => {
+      await execFileAsync(
+        process.execPath,
+        [cliPath, 'daemon', 'stop', '--socket', socketPath, '--state-dir', stateDir],
+        {
+          env,
+        },
+      ).catch(() => undefined);
+    });
+    const run = (...args: string[]) =>
+      execFileAsync(process.execPath, [cliPath, '--quiet', ...args], { cwd: workspace, env, timeout: 30_000 });
+
+    // The policy's reason for refusing a request no person can approve says which policy the session holds.
+    await run('--auto-approve', 'Please create first.txt');
+    expect(toolResults[0]).toContain(HEADLESS_AUTO_APPROVE_REFUSAL);
+
+    // The daemon keeps the session live after that run. Resuming it without --auto-approve must not inherit it.
+    await run('--resume', 'last', 'Please create second.txt');
+    expect(toolResults).toHaveLength(2);
+    expect(toolResults[1]).toContain(HEADLESS_REFUSAL);
+    expect(toolResults[1]).not.toContain(HEADLESS_AUTO_APPROVE_REFUSAL);
+
+    // Asking for auto-approve again gets it again.
+    await run('--auto-approve', '--resume', 'last', 'Please create third.txt');
+    expect(toolResults[2]).toContain(HEADLESS_AUTO_APPROVE_REFUSAL);
   });
 });

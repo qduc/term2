@@ -63,7 +63,54 @@ export function createWorld(prefix: string): World {
 }
 
 export function removeWorld(world: World | undefined): void {
-  if (world) fs.rmSync(world.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  if (!world) return;
+  const runtimeRoot = path.join(world.root, 'runtime');
+  const pids: number[] = [];
+  try {
+    for (const entry of fs.readdirSync(runtimeRoot)) {
+      const adPath = path.join(runtimeRoot, entry, 'daemon.json');
+      if (!fs.existsSync(adPath)) continue;
+      const ad = JSON.parse(fs.readFileSync(adPath, 'utf8')) as { pid?: number };
+      if (typeof ad.pid === 'number' && Number.isSafeInteger(ad.pid) && ad.pid > 1) {
+        pids.push(ad.pid);
+        try {
+          process.kill(ad.pid, 'SIGTERM');
+        } catch {
+          // Process already exited.
+        }
+      }
+    }
+  } catch {
+    // Best-effort cleanup when no daemon ran in this world.
+  }
+  if (pids.length > 0) {
+    const sleeper = new Int32Array(new SharedArrayBuffer(4));
+    const deadline = Date.now() + 2_000;
+    const isAlive = (pid: number): boolean => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    while (Date.now() < deadline && pids.some(isAlive)) {
+      Atomics.wait(sleeper, 0, 0, 20);
+    }
+    for (const pid of pids) {
+      if (!isAlive(pid)) continue;
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Already exited.
+      }
+    }
+    const killDeadline = Date.now() + 500;
+    while (Date.now() < killDeadline && pids.some(isAlive)) {
+      Atomics.wait(sleeper, 0, 0, 10);
+    }
+  }
+  fs.rmSync(world.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
 
 /** Write the world's settings with the loopback provider selected; `extra` is merged over the defaults. */

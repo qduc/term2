@@ -30,7 +30,13 @@ import {
 import type { Principal } from '../in-process-direct-types.js';
 import { ClientApiRpcError, toClientApiError } from './daemon-errors.js';
 import type { DaemonRpc } from './daemon-rpc.js';
-import { buildSlowConsumerFrame, type StreamEventFrame } from './daemon-streams.js';
+import {
+  createDaemonConnectionContext,
+  enqueueStreamFrame,
+  STREAM_CLOSE_OPEN_MAP,
+  STREAM_OPEN_METHODS,
+  type StreamEventFrame,
+} from './daemon-streams.js';
 import {
   attachIncrementalLineReader,
   UNIX_DRAIN_TIMEOUT_MS,
@@ -44,13 +50,6 @@ const MAX_IN_FLIGHT_REQUESTS = 64;
 const MAX_SUBSCRIPTIONS = 32;
 const MAX_STREAM_QUEUE = 256;
 
-const STREAM_OPEN_METHODS = new Set(['session.list.subscribe', 'session.attach', 'settings.subscribe']);
-const STREAM_CLOSE_OPEN_MAP = new Map<string, string>([
-  ['session.list.unsubscribe', 'session.list.subscribe'],
-  ['session.detach', 'session.attach'],
-  ['settings.unsubscribe', 'settings.subscribe'],
-]);
-
 type ActiveStream = {
   readonly streamId: string;
   readonly method: string;
@@ -61,6 +60,7 @@ type ActiveStream = {
 };
 
 type ClientConnection = {
+  readonly connectionId: string;
   readonly socket: net.Socket;
   negotiation?: { readonly version: string; readonly capabilities: ReadonlySet<string> };
   closed: boolean;
@@ -68,6 +68,7 @@ type ClientConnection = {
   pendingStreams: number;
   nextStreamSeq: number;
   readonly streams: Map<string, ActiveStream>;
+  readonly disconnectCleanups: Set<() => void | Promise<void>>;
   stopReader: () => void;
   handshakeTimer: ReturnType<typeof setTimeout> | null;
   drainTimer: ReturnType<typeof setTimeout> | null;
@@ -97,6 +98,7 @@ export class DaemonUnixServer {
   readonly #maxOutboundBufferBytes: number;
   readonly #drainTimeoutMs: number;
   readonly #maxStreamQueue: number;
+  #nextConnectionSeq = 0;
   #listening = false;
 
   constructor(private readonly options: DaemonUnixServerOptions) {
@@ -155,12 +157,14 @@ export class DaemonUnixServer {
 
   #onConnection(socket: net.Socket): void {
     const client: ClientConnection = {
+      connectionId: `conn-${++this.#nextConnectionSeq}`,
       socket,
       closed: false,
       inFlight: 0,
       pendingStreams: 0,
       nextStreamSeq: 0,
       streams: new Map(),
+      disconnectCleanups: new Set(),
       stopReader: () => undefined,
       handshakeTimer: null,
       drainTimer: null,
@@ -182,7 +186,6 @@ export class DaemonUnixServer {
         socket.destroy();
       },
     });
-
     socket.on('drain', () => {
       if (client.closed) return;
       client.backpressured = false;
@@ -190,7 +193,6 @@ export class DaemonUnixServer {
       client.drainTimer = null;
       this.#flushStreams(client);
     });
-
     const onEnd = () => this.#cleanupClient(client);
     socket.once('close', onEnd);
     socket.once('error', onEnd);
@@ -207,6 +209,8 @@ export class DaemonUnixServer {
     client.drainTimer = null;
     for (const stream of [...client.streams.values()]) this.#retireStream(client, stream);
     client.streams.clear();
+    for (const cleanup of [...client.disconnectCleanups]) void Promise.resolve(cleanup()).catch(() => undefined);
+    client.disconnectCleanups.clear();
   }
 
   #retireStream(client: ClientConnection, stream: ActiveStream): void {
@@ -250,7 +254,6 @@ export class DaemonUnixServer {
       });
       return;
     }
-
     client.inFlight += 1;
     try {
       if (!client.negotiation) {
@@ -284,8 +287,15 @@ export class DaemonUnixServer {
         this.#handleStreamClose(client, id, expectedOpen, params);
         return;
       }
+      const connection = createDaemonConnectionContext(
+        client.connectionId,
+        client.disconnectCleanups,
+        (event, payload) => this.#writeFrame(client, { kind: 'event', event, payload }),
+        () => client.closed,
+      );
       const result = await this.options.rpc.invoke(this.options.localOwnerPrincipal, method, params, {
         protocolVersion: client.negotiation.version,
+        connection,
       });
       if (!client.closed) this.#sendOk(client, id, result);
     } catch (error) {
@@ -349,7 +359,10 @@ export class DaemonUnixServer {
       return;
     }
 
-    const capabilities = negotiateCapabilities(this.options.capabilities, hello.data.capabilities);
+    const eligibleCapabilities = isClientApiVersionAtLeast(negotiated.version, '1.1')
+      ? this.options.capabilities
+      : this.options.capabilities.filter((cap) => cap !== 'local_leases');
+    const capabilities = negotiateCapabilities(eligibleCapabilities, hello.data.capabilities);
     client.negotiation = { version: negotiated.version, capabilities: new Set(capabilities) };
     if (client.handshakeTimer) clearTimeout(client.handshakeTimer);
     client.handshakeTimer = null;
@@ -430,18 +443,8 @@ export class DaemonUnixServer {
       this.#sendEvent(client, stream, frame);
       return;
     }
-    if (stream.queue.length >= this.#maxStreamQueue) {
-      if (frame.transient) return;
-      const transientIdx = stream.queue.findIndex((queued) => queued.transient === true);
-      if (transientIdx !== -1) {
-        stream.queue.splice(transientIdx, 1);
-      } else {
-        stream.queue.length = 0;
-        this.#sendEvent(client, stream, buildSlowConsumerFrame(stream.method, stream.sessionId));
-        return;
-      }
-    }
-    stream.queue.push(frame);
+    const slow = enqueueStreamFrame(stream.queue, this.#maxStreamQueue, stream.method, stream.sessionId, frame);
+    if (slow) this.#sendEvent(client, stream, slow);
   }
 
   #flushStreams(client: ClientConnection): void {

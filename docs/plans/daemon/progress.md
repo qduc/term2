@@ -21,9 +21,10 @@ Tracks every step of [the singleton daemon plan](README.md), its status, key art
 | 14a | Daemon core (Unix socket + lifecycle + headless policy + sandbox lease fix) | Done | `DaemonUnixServer`, `DaemonRpc`, `GlobalMutationCoordinator`, `startTerm2Daemon`, `connectOrStartDaemon`, `term2 daemon [start\|status\|stop]`, D003 session-owned headless approvals, scoped sandbox leases | `bf0ef68` |
 | 14b | Remote `DirectConnection` over Unix socket | Done | `UnixRpcClient`, `createRemoteDirectHost`, `connectRemoteDirectHost`, `remote-direct-host.integration.test.ts` | `7a2c636c0` |
 | 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | `7a2c636c0` |
-| 14d | TUI zoom-in + TUI client over daemon | Done | `TuiBackend`, `daemon-tui-backend.ts`, `DaemonTuiSettingsStore`, `daemon-tui-providers.ts`, `daemon-tui.e2e.test.ts` (independent verifier: `accept`) | Pending PR |
-| 14e | Control socket, Discord, ACP, and web clients over daemon | Pending | Depends on Step 14d | — |
-| 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e | — |
+| 14d | TUI zoom-in + TUI client over daemon | Done | `TuiBackend`, `daemon-tui-backend.ts`, `DaemonTuiSettingsStore`, `daemon-tui-providers.ts`, `daemon-tui.e2e.test.ts` (independent verifier: `accept`) | `54fb732` |
+| 14e (Part 1) | `term2 serve` & web UI over daemon (`daemon.serve.start`/`stop`, `local_leases`) | Done | `DaemonServeLeaseManager`, `launchServeOverDaemon`, unified D007 store/`SessionIndex`/`GlobalMutationCoordinator`, `daemon-serve-lease.integration.test.ts`, 35/35 Playwright browser flows under `TERM2_DAEMON_MODE=1` (independent verifier: `accept` on `9b3772a`) | Pending PR |
+| 14e (Part 2) | Control socket, Discord, and ACP over daemon (`session.control.*`, `session.acp.set_mcp`) | Pending | Depends on Step 14e Part 1 | — |
+| 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e Part 2 | — |
 
 ### Step 14d workspace and discovery
 
@@ -84,3 +85,25 @@ the three daemon and Client API integration suites.
   Independent verifier caught 4 defects on `19002d1` (`WireGoal.text` mapping,
   terminal `session.close` reconnect, OAuth `isInUse`, parallel `/resume` picker
   readiness); all 4 were fixed and independently verified `accept` on `ec3b19d32`.
+
+### Step 14e Part 1 (`term2 serve` & web UI over daemon)
+
+- Implemented connection-scoped `daemon.serve.start` / `daemon.serve.stop` local leases
+  (`src/app/daemon/leases/{serve-lease,serve-lease-helpers,launch-serve-daemon}.ts`,
+  `src/host/daemon/{daemon-rpc-v11,daemon-rpc,daemon-streams,daemon-unix}.ts`),
+  advertising `local_leases` on Unix v1.1+ only (gated off on Unix v1.0 and HTTP+SSE `1.0`).
+- Composed HTTP+SSE listeners directly over the daemon's ONE `DirectApplication`, ONE
+  conversation store (D007), ONE `GlobalMutationCoordinator`, and ONE `SessionIndex`,
+  with connection-scoped `serve.pairing_otp` delivery, race-free EOF mid-start teardown,
+  Symbol-tagged per-lease `SessionIndex` subscriber isolation, ALS-only `activeLease()`,
+  shared `findMatchingLocalGrant` ordering (preferring explicit directory grants over static
+  `host`), and live session posture enforcement (`enforceLivePosture`) preventing read-only
+  or sandboxed web leases from executing writes on wider live local or resumed bound sessions.
+- Routed opt-in `TERM2_DAEMON_MODE=1` `term2 serve` and `term2-web` (`scripts/start-web.mjs`)
+  through `launchServeOverDaemon` (recording custom `--issuer`/`--audience` in-process fallback
+  in `worth-revisiting.md`).
+- Verified with `daemon-serve-lease.integration.test.ts`, `daemon-unix-conformance.integration.test.ts`,
+  `tests/host/gateway/*` (both default and `TERM2_DAEMON_MODE=1`, 27/27 passed), and
+  `TERM2_DAEMON_MODE=1 pnpm test:web-browser` (35/35 Playwright Chromium flows passed).
+  Independent verifier caught 5 defects on `a5233ba` and 1 bound-session posture gap on `48ffd16`;
+  all were fixed, covered by regression tests, and independently verified **`accept`** on `9b3772a`.

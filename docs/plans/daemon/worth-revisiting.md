@@ -39,3 +39,6 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
      choices, and provider credentials explicit in the TUI API review. Review
      the chosen client-visible environment behavior with the SSH agent case in
      item 6.
+
+10. **Custom `--issuer` / `--audience` on `term2 serve`** *(Step 14e Part 1)*:
+    - Frozen Client API v1.1 `daemon.serve.start` binds the standard `chatforge-bff` / `term2-gateway` issuer and audience (used by `term2-web` and default `term2 serve`). Deployments overriding `--issuer` or `--audience` fall back cleanly to in-process `term2 serve`. Consider adding optional `issuer` / `audience` fields in a future Client API minor bump if custom BFF deployments need daemon sharing.

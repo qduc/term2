@@ -300,7 +300,62 @@ export async function openDaemonStream(
   throw new ClientApiRpcError('invalid_request', `Unknown stream method "${method}".`);
 }
 
-export function buildSlowConsumerFrame(method: string, sessionId?: string): StreamEventFrame {
+export function createDaemonConnectionContext(
+  connectionId: string,
+  cleanups: Set<() => void | Promise<void>>,
+  emit: (event: string, payload: Record<string, unknown>) => void,
+  isClosed: () => boolean,
+): {
+  readonly connectionId: string;
+  emitEvent(event: string, payload: Record<string, unknown>): void;
+  onDisconnect(cleanup: () => void | Promise<void>): () => void;
+} {
+  return {
+    connectionId,
+    emitEvent: emit,
+    onDisconnect(cleanup) {
+      if (isClosed()) {
+        void Promise.resolve(cleanup()).catch(() => undefined);
+        return () => undefined;
+      }
+      cleanups.add(cleanup);
+      return () => {
+        cleanups.delete(cleanup);
+      };
+    },
+  };
+}
+
+export const STREAM_OPEN_METHODS = new Set(['session.list.subscribe', 'session.attach', 'settings.subscribe']);
+export const STREAM_CLOSE_OPEN_MAP = new Map<string, string>([
+  ['session.list.unsubscribe', 'session.list.subscribe'],
+  ['session.detach', 'session.attach'],
+  ['settings.unsubscribe', 'settings.subscribe'],
+]);
+
+export function enqueueStreamFrame(
+  queue: StreamEventFrame[],
+  maxQueue: number,
+  method: string,
+  sessionId: string | undefined,
+  frame: StreamEventFrame,
+): StreamEventFrame | null {
+  if (queue.length < maxQueue) {
+    queue.push(frame);
+    return null;
+  }
+  if (frame.transient) return null;
+  const transientIdx = queue.findIndex((queued) => queued.transient === true);
+  if (transientIdx !== -1) {
+    queue.splice(transientIdx, 1);
+    queue.push(frame);
+    return null;
+  }
+  queue.length = 0;
+  return buildSlowConsumerFrame(method, sessionId);
+}
+
+function buildSlowConsumerFrame(method: string, sessionId?: string): StreamEventFrame {
   if (method === 'session.attach') {
     return {
       event: 'session.resync_required',

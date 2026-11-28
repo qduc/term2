@@ -46,10 +46,46 @@ const creation = new AsyncLocalStorage<Frame>();
  * for `sessions.create` on that call; a create outside that check fails closed.
  * Create and open keep the store's own result types.
  */
+export type LiveSessionPosture = {
+  readonly workspaceAccess: 'read' | 'read_write';
+  readonly allowUnsandboxed: boolean;
+};
+
+/**
+ * Match an unbound local session's canonical root against the principal's active
+ * local grants, preferring explicit directory grants over the static `host` grant
+ * (matching `DirectWorkspaceAuthority.resolveStoredRoot`).
+ */
+export function findMatchingLocalGrant(
+  authority: DirectWorkspaceAuthority,
+  principal: Principal,
+  root: string,
+): { readonly grant: WorkspaceGrant; readonly workspace: Workspace } | null {
+  const canonicalRoot = path.resolve(root);
+  const aliases = authority.list(principal);
+  const ordered = [...aliases].sort((a, b) => (a.kind === 'host' ? 1 : 0) - (b.kind === 'host' ? 1 : 0));
+  for (const alias of ordered) {
+    try {
+      const grant = authority.resolveGrant(principal, alias.workspaceId);
+      const { workspace } = authority.resolveWorkspace(principal, grant);
+      if (workspace.target === 'local' && path.resolve(workspace.root) === canonicalRoot) {
+        return { grant, workspace };
+      }
+    } catch {
+      // Skip invalid or inaccessible grants.
+    }
+  }
+  return null;
+}
+
 export function bindDirectSessionAccess<TCreated, TOpened>(options: {
   readonly authority: DirectWorkspaceAuthority;
   readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   readonly directory: string;
+  readonly allowUnboundLocal?: boolean;
+  readonly ownerUserId?: string;
+  readonly allowWrite?: boolean;
+  readonly liveSessionPosture?: (sessionId: string) => LiveSessionPosture | undefined;
 }): {
   readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   authorize(
@@ -104,7 +140,30 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       // The start fact never changes, so it is read once per session, not once per send.
       let started = starts.get(access.sessionId);
       if (!started) starts.set(access.sessionId, (started = sessionStart(directory, access.sessionId)));
-      if (!started.binding || started.binding.client !== principal.userId) throw forbidden();
+      const enforceLivePosture = (workspaceId: string, workspaceAccess: 'read' | 'read_write') => {
+        if (access.kind !== 'write') return;
+        const live = options.liveSessionPosture?.(access.sessionId);
+        if (!live) return;
+        const grantAllowsWrite = workspaceAccess === 'read_write' && options.allowWrite !== false;
+        const kind = options.authority.kindOf(workspaceId);
+        const grantAllowsUnsandboxed = kind === 'host' || (kind === 'ssh' && grantAllowsWrite);
+        if (
+          (live.workspaceAccess === 'read_write' && !grantAllowsWrite) ||
+          (live.allowUnsandboxed && !grantAllowsUnsandboxed)
+        ) {
+          throw forbidden();
+        }
+      };
+      if (!started.binding) {
+        if (!options.allowUnboundLocal || !options.ownerUserId || principal.userId !== options.ownerUserId) {
+          throw forbidden();
+        }
+        const matched = findMatchingLocalGrant(options.authority, principal, started.root);
+        if (!matched) throw forbidden();
+        enforceLivePosture(matched.grant.workspaceId, matched.workspace.access);
+        return;
+      }
+      if (started.binding.client !== principal.userId) throw forbidden();
       const grant = options.authority.resolveGrant(principal, started.binding.id);
       const resolved = options.authority.resolveWorkspace(principal, grant);
       const sameRoot =
@@ -112,6 +171,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
           ? path.resolve(resolved.workspace.root) === path.resolve(started.root)
           : path.posix.normalize(resolved.workspace.root) === path.posix.normalize(started.root);
       if (!sameRoot) throw forbidden();
+      enforceLivePosture(grant.workspaceId, resolved.workspace.access);
       // A read grant still chats, as in the legacy gateway: its tools, not its commands, are read-only.
     },
     resolveWorkspace(principal, grant) {

@@ -289,15 +289,15 @@ async function renderMountedTui(options: {
   readonly initial: DirectConnection;
   readonly unconfiguredSessionId?: string;
   readonly bridge: DirectControlBridge;
-  readonly pending: Restart;
+  readonly restartState: Restart;
   readonly background: TerminalBackground;
   readonly logger: LoggingService;
   readonly controlSocket?: InteractiveRequest['controlSocket'];
   readonly getExitCode: () => number;
   readonly setUnmount: (fn: (() => void) | null) => void;
 }): Promise<number> {
-  const { backend, root, remote, initial, unconfiguredSessionId, bridge, pending, background, logger, controlSocket } =
-    options;
+  const { backend, root, remote, initial, unconfiguredSessionId, bridge, restartState, background } = options;
+  const { logger, controlSocket } = options;
   if (!(stdin.isTTY && stdout.isTTY)) {
     stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
     return 1;
@@ -324,7 +324,7 @@ async function renderMountedTui(options: {
               // Node's native exec failure can abort rather than throw. Publish
               // recovery before cleanup as well, while this terminal still exists.
               stderr.write(`Restart recovery command: ${plan.manualCommand}\n`);
-              pending.plan = plan;
+              restartState.plan = plan;
             }}
             onExit={(snapshot) => {
               exitedSnapshot = snapshot;
@@ -340,7 +340,7 @@ async function renderMountedTui(options: {
   await instance.waitUntilExit();
   printUsage(exitedSnapshot); // legacy cli.tsx printUsageOnce, before the resume hint (restarts too)
   if (
-    !pending.plan &&
+    !restartState.plan &&
     options.getExitCode() === 0 &&
     exitedSnapshot?.messages.some((message) => message.role !== 'system')
   ) {
@@ -421,7 +421,7 @@ async function runTui(
           ? initial.sessionId
           : undefined,
       bridge,
-      pending,
+      restartState: pending,
       background,
       logger: selection.logger,
       controlSocket,
@@ -456,7 +456,7 @@ export async function launchTui(request: InteractiveRequest, terminal: TerminalP
         renderMountedTui({
           ...mounted,
           remote: undefined,
-          pending,
+          restartState: pending,
           background: terminal.background,
           logger: request.selection.logger,
         }),

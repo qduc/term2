@@ -193,6 +193,10 @@ Step 14f flip work. Each has a built-CLI case in
   (`source-tools.ts`). The TUI's approval prompt answers with a plain allow, so a
   command the person approved (after the reviewer declined, or in `off`) was
   refused with "An explicit outside-sandbox grant for the current working
-  directory is required." Nothing ran unreviewed: it failed closed. Local
+  directory is required." The flags never ran anything in-process would not:
+  where a person's approval was needed they failed closed, and `always` (no
+  review) and `auto` (after a passing review) ran as in-process does. Local
   sessions now take the in-process path (neither flag set); the web surface
-  keeps its grants, and ACP never had them.
+  keeps its grants, and ACP never had them. An independent parity run over 61
+  headless and TUI cases matched in-process except `off` with
+  `--auto-approve`, where the daemon stays stricter (already so on `main`).

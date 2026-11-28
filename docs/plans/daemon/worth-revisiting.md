@@ -211,3 +211,19 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
       Item 18's fix makes the daemon rebuild on such a write itself, so the
       posture holds, but the projection and anything else that reads the flag
       stay wrong until the TUI refreshes it.
+
+20. **Daemon headless runs ignore CLI `--approval-mode`** *(found verifying D012)*:
+    - Under `TERM2_DAEMON_MODE=1`, a headless run with
+      `--approval-mode off --show-review` over a saved `unattended` mode runs
+      `node -v`, which the in-process run refuses: the daemon run keeps the saved
+      mode. This is looser than in-process. The two `unattended-approval.e2e`
+      cases "keeps off-mode advisory assessment separate…" and the
+      `approval-mode.e2e` case with `cliPolicy` fail in daemon mode for this
+      reason. Present on `d60623817`; daemon mode is opt-in, so the default
+      posture is unchanged, but the Step 14f flip must not land before it is
+      fixed.
+    - The other direction also differs: in-process `--auto-approve` raises `off`
+      to `auto` (`raiseOffForAutoApprove`), and the daemon run does not, so it
+      refuses what in-process runs after review. Stricter, but a parity gap.
+    - Also failing only in daemon mode on that base: `/usage separates actual
+      model request usage` and `last-request context survives resume…`.

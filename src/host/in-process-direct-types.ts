@@ -39,8 +39,13 @@ export interface DirectHost {
   sendCommand?(principal: Principal, sessionId: string, command: WireCommand): Promise<WireCommandResult>;
   /** Explicitly drain/release a live Session and its subscriptions; retained logs remain reopenable. */
   closeSession?(principal: Principal, sessionId: string): Promise<void>;
-  /** How many connections (live and replay subscribers) are open on a session now. */
-  connectionCount?(sessionId: string): number;
+  /**
+   * Closes a live Session only when nothing uses it: no connection (live or replay) is open on it,
+   * it has no running turn, open interaction or active background task, and `unused()` holds.
+   * The check and the start of the close happen without yielding, so no attach or open lands
+   * between them. Resolves whether it closed.
+   */
+  closeSessionIfUnused?(principal: Principal, sessionId: string, unused: () => boolean): Promise<boolean>;
   /**
    * Close every live Session whose workspace root is `root`, including ones still
    * opening or being created, and cancel their running work. Used after the root's

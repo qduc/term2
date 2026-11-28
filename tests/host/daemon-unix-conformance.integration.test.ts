@@ -269,13 +269,13 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     return provider.baseUrl;
   }
 
-  function writeTouchSettings(settingsDir: string, baseUrl: string): void {
+  function writeTouchSettings(settingsDir: string, baseUrl: string, sandbox = false): void {
     fs.writeFileSync(
       path.join(settingsDir, 'settings.json'),
       JSON.stringify({
         agent: { modelSelection: { provider: 'touch', model: 'touch-model' }, retryAttempts: 0 },
         providers: [{ name: 'touch', type: 'openai-compatible', baseUrl, apiKey: 'k' }],
-        sandbox: { enabled: false },
+        sandbox: { enabled: sandbox },
       }),
     );
   }
@@ -851,10 +851,12 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const sessionId = (launched.result['session'] as { id: string }).id;
     expect(launched.result['workspace']).toMatchObject({ root: fs.realpathSync(wsA), target: 'local' });
 
-    // `session.launch` resume via 'last' and bare UUID, plus fork with approvalPolicy.
+    // `session.launch` resume via 'last' and bare UUID, plus fork with approvalPolicy. The resumes ask for the
+    // same approval mode: one without it reopens the idle session with the saved mode, as in-process.
     const resumedLast = await v11.request('session.launch', {
       cwd: wsA,
       selection: { kind: 'resume', sessionId: 'last' },
+      approvalMode: 'auto',
     });
     expect(resumedLast.ok).toBe(true);
     if (resumedLast.ok) expect((resumedLast.result['session'] as { id: string }).id).toBe(sessionId);
@@ -863,6 +865,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const resumedBare = await v11.request('session.launch', {
       cwd: wsA,
       selection: { kind: 'resume', sessionId: bareId },
+      approvalMode: 'auto',
     });
     expect(resumedBare.ok).toBe(true);
     if (resumedBare.ok) expect((resumedBare.result['session'] as { id: string }).id).toBe(sessionId);
@@ -1291,26 +1294,20 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     });
   });
 
-  it('resumes a live session only with the approval posture the resume asked for, and refuses a wider one it cannot reopen', async () => {
+  /** A daemon whose model is `startTouchToolProvider`; the saved settings turn the sandbox off unless `sandbox`. */
+  async function startTouchDaemon(sandbox = false) {
     const { root, stateDir, runtimeDir, socketPath, workspace } = makeSandboxRoot();
     const settingsDir = path.join(root, 'settings');
     fs.mkdirSync(settingsDir, { recursive: true, mode: 0o700 });
-    writeTouchSettings(settingsDir, await touchProvider());
+    writeTouchSettings(settingsDir, await touchProvider(), sandbox);
     const daemon = await startTerm2Daemon({
       stateDir,
       conversationsDir: path.join(stateDir, 'conversations'),
       socketPath,
       env: { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir },
     });
-    expect(daemon.kind).toBe('started');
-    if (daemon.kind !== 'started') return;
+    if (daemon.kind !== 'started') throw new Error('daemon did not start');
     cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
-
-    const tui = await openV11Client(socketPath, 'tui');
-    const headless = await openV11Client(socketPath, 'headless');
-    const interactive = { clientMode: 'interactive' };
-    const headlessAsk = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: false } };
-    const headlessAuto = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: true } };
     const launch = (client: TestUnixRpcClient, sessionId: string | null, posture: Record<string, unknown>) =>
       client.request('session.launch', {
         cwd: workspace,
@@ -1319,10 +1316,38 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       });
     const attach = async (client: TestUnixRpcClient, sessionId: string) =>
       streamIdOf(await client.request('session.attach', { sessionId }));
+    return {
+      socketPath,
+      launch,
+      attach,
+      /** One client run: launch, attach, then detach as the client exits. The session stays live and idle. */
+      async run(client: TestUnixRpcClient, sessionId: string | null, posture: Record<string, unknown>) {
+        const launched = await launch(client, sessionId, posture);
+        expect(launched.ok).toBe(true);
+        const id = sessionIdOf(launched);
+        const streamId = await attach(client, id);
+        expect(await client.request('session.detach', { streamId })).toMatchObject({ ok: true });
+        return id;
+      },
+      async liveSetting(client: TestUnixRpcClient, sessionId: string, key: string) {
+        const read = await client.request('settings.get', { sessionId, view: 'tui' });
+        if (!read.ok) throw new Error(`settings.get failed: ${JSON.stringify(read)}`);
+        return (read.result['settings'] as { entries: Record<string, { value: unknown }> }).entries[key]?.value;
+      },
+    };
+  }
 
-    // Each launch below leaves its session live in the daemon, idle, with nobody attached.
+  const interactive = { clientMode: 'interactive' };
+  const headlessAsk = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: false } };
+  const headlessAuto = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: true } };
+
+  it('resumes a live session only with the approval posture the resume asked for, and refuses a wider one it cannot reopen', async () => {
+    const { socketPath, launch, attach, run } = await startTouchDaemon();
+    const tui = await openV11Client(socketPath, 'tui');
+    const headless = await openV11Client(socketPath, 'headless');
+
     // Interactive, then a headless resume: the session's own policy answers, as in a fresh headless run.
-    const first = sessionIdOf(await launch(tui, null, interactive));
+    const first = await run(tui, null, interactive);
     expect(sessionIdOf(await launch(headless, first, headlessAsk))).toBe(first);
     const firstStream = await attach(headless, first);
     expect(await approvalOutcome(headless, first, firstStream, 'first.txt', 'person declined')).toEqual({
@@ -1331,7 +1356,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     });
 
     // Headless with auto-approve, then a terminal resume: the person is asked again.
-    const second = sessionIdOf(await launch(headless, null, headlessAuto));
+    const second = await run(headless, null, headlessAuto);
     expect(sessionIdOf(await launch(tui, second, interactive))).toBe(second);
     const secondStream = await attach(tui, second);
     const asked = await approvalOutcome(tui, second, secondStream, 'second.txt', 'person declined');
@@ -1349,5 +1374,67 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       source: 'policy',
       reason: HEADLESS_AUTO_APPROVE_REFUSAL,
     });
+  });
+
+  it('holds the first attach after a launch to what that launch asked for, whatever another launch did in between', async () => {
+    const { socketPath, launch, attach, run } = await startTouchDaemon();
+    const setup = await openV11Client(socketPath, 'headless');
+    const a = await openV11Client(socketPath, 'headless');
+    const b = await openV11Client(socketPath, 'headless');
+
+    // A launches a plain headless resume and has not attached yet when B asks for auto-approve.
+    // B may not reopen the session under A, so B runs with the narrower posture; A gets what it asked for.
+    const plain = await run(setup, null, headlessAsk);
+    expect(await launch(a, plain, headlessAsk)).toMatchObject({ ok: true });
+    expect(await launch(b, plain, headlessAuto)).toMatchObject({ ok: true });
+    const plainStream = await attach(a, plain);
+    expect(await approvalOutcome(a, plain, plainStream, 'plain.txt', 'person declined')).toEqual({
+      source: 'policy',
+      reason: HEADLESS_REFUSAL,
+    });
+
+    // The other way round, B's narrower resume is refused while A's auto-approve launch is still to attach.
+    const auto = await run(setup, null, headlessAuto);
+    expect(await launch(a, auto, headlessAuto)).toMatchObject({ ok: true });
+    expect(await launch(b, auto, headlessAsk)).toMatchObject({ ok: false, error: { code: 'busy' } });
+
+    // If the session closes before A attaches and B then opens it with auto-approve, A's attach is refused.
+    const closed = await run(setup, null, headlessAsk);
+    expect(await launch(a, closed, headlessAsk)).toMatchObject({ ok: true });
+    expect(await setup.request('session.close', { sessionId: closed })).toMatchObject({ ok: true });
+    expect(await launch(b, closed, headlessAuto)).toMatchObject({ ok: true });
+    expect(await a.request('session.attach', { sessionId: closed })).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+  });
+
+  it("compares the approval mode and sandbox a launch set for its session alone, which a fresh session wouldn't have", async () => {
+    const { socketPath, launch, attach, run, liveSetting } = await startTouchDaemon();
+    const tui = await openV11Client(socketPath, 'tui');
+    const headless = await openV11Client(socketPath, 'headless');
+
+    // `--approval-mode always`, then a resume without it: the resume runs with the saved mode, and asks.
+    const always = await run(tui, null, { ...interactive, approvalMode: 'always' });
+    expect(await liveSetting(tui, always, 'shell.autoApproveMode')).toBe('always');
+    expect(await launch(tui, always, interactive)).toMatchObject({ ok: true });
+    expect(await liveSetting(tui, always, 'shell.autoApproveMode')).toBe('off');
+    const alwaysStream = await attach(tui, always);
+    expect(await approvalOutcome(tui, always, alwaysStream, 'always.txt', 'person declined')).toMatchObject({
+      reason: 'person declined',
+    });
+
+    // While a terminal holds an `always` session, a plain headless resume of it is refused.
+    const held = sessionIdOf(await launch(tui, null, { ...interactive, approvalMode: 'always' }));
+    await attach(tui, held);
+    expect(await launch(headless, held, headlessAsk)).toMatchObject({ ok: false, error: { code: 'busy' } });
+
+    // A launch that turned the sandbox off, then a resume without that flag: the saved setting (on) again.
+    const sandboxed = await startTouchDaemon(true);
+    const tui2 = await openV11Client(sandboxed.socketPath, 'tui');
+    const off = await sandboxed.run(tui2, null, { ...interactive, sandboxEnabled: false });
+    expect(await sandboxed.liveSetting(tui2, off, 'sandbox.enabled')).toBe(false);
+    expect(await sandboxed.launch(tui2, off, interactive)).toMatchObject({ ok: true });
+    expect(await sandboxed.liveSetting(tui2, off, 'sandbox.enabled')).toBe(true);
   });
 });

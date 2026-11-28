@@ -81,6 +81,8 @@ export interface TuiBackend {
   skills(root: string, sessionId?: string): readonly TuiSkillEntry[];
   /** Hydrate per-session projections (settings stream, skills) before rendering a session. */
   prepareSession?(sessionId: string): Promise<void>;
+  /** Opens a `/resume` target as the startup `--resume` does, with this client's approval posture, before it is attached. */
+  resumeSession?(sessionId: string): Promise<void>;
   /** Reconnect to the same logical session after a dropped Unix connection or `resync_required`. */
   reconnectSession?(sessionId: string, retained: WireSnapshot): Promise<DirectConnection | DirectReplayConnection>;
   handoff(

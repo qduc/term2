@@ -94,6 +94,11 @@ export class DaemonRpc {
 
   constructor(private readonly deps: DaemonRpcDeps) {}
 
+  #refuseNewSessionsWhileDraining(): void {
+    if (!this.#draining) return;
+    throw new ClientApiRpcError('closed', 'Daemon is draining and not accepting new sessions.', { retryable: true });
+  }
+
   markShuttingDown(): void {
     this.#draining = true;
     this.#shutdownReason = 'daemon_shutdown';
@@ -114,7 +119,7 @@ export class DaemonRpc {
     principal: Principal,
     method: string,
     rawParams: unknown,
-    context?: DaemonRpcContext,
+    context?: DaemonRpcContext & { readonly connectionId?: string },
   ): Promise<StreamRegistration> {
     return openDaemonStream(
       {
@@ -125,11 +130,13 @@ export class DaemonRpc {
         readTuiSettings: this.deps.v11?.readTuiSettings,
         serializeSession: (sessionId, operation) => this.#serializeSession(sessionId, operation),
         shutdownReason: () => this.#shutdownReason,
+        attachSession: this.deps.v11?.attachSession,
       },
       principal,
       method,
       rawParams,
       context?.protocolVersion,
+      context?.connectionId,
     );
   }
 
@@ -160,11 +167,7 @@ export class DaemonRpc {
         if (!this.deps.v11?.launchSession) throw new ClientApiRpcError('unavailable', 'session.launch unavailable.');
         const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionLaunchParams, params, 'session.launch');
         const runLaunch = async () => {
-          if (this.#draining) {
-            throw new ClientApiRpcError('closed', 'Daemon is draining and not accepting new sessions.', {
-              retryable: true,
-            });
-          }
+          this.#refuseNewSessionsWhileDraining();
           return await this.deps.v11!.launchSession!(principal, parsed, context?.connection);
         };
         const targetId =
@@ -333,9 +336,7 @@ export class DaemonRpc {
     principal: Principal,
     rawParams: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    if (this.#draining) {
-      throw new ClientApiRpcError('closed', 'Daemon is draining and not accepting new sessions.', { retryable: true });
-    }
+    this.#refuseNewSessionsWhileDraining();
     const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionCreateParams, rawParams, 'session.create');
     const grant =
       'cwd' in parsed

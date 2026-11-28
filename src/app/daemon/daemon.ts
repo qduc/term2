@@ -15,6 +15,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { installationVersion } from '../../model/providers/fetch/logging-middleware.js';
 import {
   CLIENT_API_CAPABILITIES,
@@ -36,14 +37,10 @@ import { scanDirectoryEntries } from '../file-service.js';
 import { SessionContextService } from '../../model/traffic-context.js';
 import { buildEnvOverrides } from '../../config/settings/settings-env.js';
 import { createDaemonMcp } from './daemon-mcp.js';
-import {
-  applyDaemonSetGoal,
-  DaemonLaunchPolicies,
-  openDaemonLaunchTarget,
-  prepareDaemonSkillText,
-  readDaemonSessionQuota,
-} from './daemon-session-ops.js';
+import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import { createDaemonV11Port } from './daemon-v11-ops.js';
+import { createDaemonLaunchGate } from './launches/launch-gate.js';
+import { DaemonLaunchPolicies } from './launches/launch-policies.js';
 import { createDaemonAcp } from '../acp/daemon-acp.js';
 import { DaemonServeLeaseManager } from './leases/serve-lease.js';
 import { DaemonControlLeases } from './leases/control-lease.js';
@@ -79,12 +76,6 @@ export type Term2DaemonHandle =
       readonly shutdown: (params?: Partial<DaemonShutdownParams>) => Promise<void>;
       readonly closed: Promise<void>;
     };
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
 
 function localWorkspaceIdForRoot(root: string): string {
   return `local_${createHash('sha256').update(root).digest('hex').slice(0, 12)}`;
@@ -354,6 +345,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       return shutdownPromise;
     };
 
+    const launchGate = createDaemonLaunchGate({ app: localOwnerApp, launches, saved: product.service });
     const baseV11Port = createDaemonV11Port({
       app: localOwnerApp,
       sessionIndex,
@@ -363,9 +355,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       localWorkspaceIdForRoot,
       recordLocalWorkspace,
       resolveWorkspaceRoot,
-      withLaunchValues: (values, start) => launches.withLaunch(values, start),
-      openLaunchTarget: (principal, sessionId, values) =>
-        openDaemonLaunchTarget({ app: localOwnerApp, launches, sessionIndex }, principal, sessionId, values),
+      launchGate,
       admitLaunch: (sessionId, params) => activeDaemonAcp.admitLaunch(sessionId, params),
     });
     const v11Port = {
@@ -377,6 +367,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       controlRebind: controlLeases.controlRebind.bind(controlLeases),
       controlUnbind: controlLeases.controlUnbind.bind(controlLeases),
       acpSetMcp: activeDaemonAcp.setMcp,
+      attachSession: launchGate.attach,
     };
     const advertisedCapabilities = [...CLIENT_API_CAPABILITIES];
     const rpc = new DaemonRpc({

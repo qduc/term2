@@ -11,7 +11,11 @@ import { decodeStoredCustomProviderConfigs } from '../../config/settings/custom-
 import { SENSITIVE_SETTING_KEYS, SETTING_KEYS } from '../../config/settings/settings-schema.js';
 import { isSecretSetting } from '../../config/settings/settings-ui-metadata.js';
 import type { Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
-import { ClientApiRpcError, type DaemonV11ControlPort } from '../../host/daemon/daemon-rpc.js';
+import {
+  ClientApiRpcError,
+  type DaemonRpcConnectionContext,
+  type DaemonV11ControlPort,
+} from '../../host/daemon/daemon-rpc.js';
 import type { GlobalMutationCoordinator } from '../../host/daemon/global-mutations.js';
 import type { SessionIndex } from '../../host/daemon/session-index.js';
 import { ModelCatalogSession } from '../../model/models/model-catalog-session.js';
@@ -32,7 +36,8 @@ import { localGrant, requireLocalCaller } from '../application-workspaces.js';
 import type { DirectApprovalMode } from '../config-settings.js';
 import type { DirectGlobalConfiguration } from '../host-config.js';
 import type { SettingsService } from '../settings.js';
-import type { DaemonLaunchValues } from './daemon-session-ops.js';
+import type { DaemonLaunchGate } from './launches/launch-gate.js';
+import type { DaemonLaunchValues } from './launches/launch-policies.js';
 
 const FORBIDDEN_SETTING_KEYS = new Set<string>(['providers', 'hooks', 'hooks.commands', 'mcp', 'mcp.servers']);
 const URL_SETTING_KEYS = new Set<string>(['webSearch.firecrawl.baseUrl', 'webSearch.searxng.baseUrl']);
@@ -80,14 +85,8 @@ export type DaemonV11Deps = {
   readonly localWorkspaceIdForRoot: (root: string) => string;
   readonly recordLocalWorkspace: (root: string) => void;
   readonly resolveWorkspaceRoot: (workspaceId: string) => string;
-  /** Runs `start` so that only the session it starts takes `values` (`DaemonLaunchPolicies.withLaunch`). */
-  readonly withLaunchValues: <T>(values: DaemonLaunchValues, start: () => Promise<T>) => Promise<T>;
-  /** Opens the session a resume or fork names with `values`, never on a wider live posture (`openDaemonLaunchTarget`). */
-  readonly openLaunchTarget: (
-    principal: Principal,
-    sessionId: string,
-    values: DaemonLaunchValues,
-  ) => Promise<{ readonly sessionId: string; close(): void }>;
+  /** Opens each launch's session with its values, and holds it to the posture it asked for. */
+  readonly launchGate: DaemonLaunchGate;
   /** Refuses a launch whose client mode the live session's surface does not match. */
   readonly admitLaunch?: (sessionId: string, params: SessionLaunchParams) => void | Promise<void>;
   readonly sessionItemOrFallback: (principal: Principal, sessionId: string) => Promise<ClientApiSessionListItem>;
@@ -120,6 +119,7 @@ async function launchDaemonSession(
   deps: DaemonV11Deps,
   principal: Principal,
   params: SessionLaunchParams,
+  connection: DaemonRpcConnectionContext | undefined,
 ): Promise<Record<string, unknown>> {
   requireLocalCaller(principal);
   if ('ssh' in params) {
@@ -151,11 +151,13 @@ async function launchDaemonSession(
   const values: DaemonLaunchValues = {
     ...(params.approvalPolicy ? { policy: params.approvalPolicy } : {}),
     ...(launchFlags ? { flags: launchFlags } : {}),
+    ...(params.approvalMode !== undefined ? { approvalMode: params.approvalMode } : {}),
+    ...(params.sandboxEnabled !== undefined ? { sandboxEnabled: params.sandboxEnabled } : {}),
   };
 
   if (params.selection.kind === 'new') {
     deps.recordLocalWorkspace(root);
-    conn = await deps.withLaunchValues(values, () => deps.app.host.createSession(principal, grant));
+    conn = await deps.launchGate.withLaunch(values, () => deps.app.host.createSession(principal, grant));
     sessionId = conn.sessionId;
   } else {
     const stored = await deps.app.listStoredSessions();
@@ -194,7 +196,7 @@ async function launchDaemonSession(
     } else {
       sessionId = targetSummary.id;
     }
-    conn = await deps.openLaunchTarget(principal, sessionId, values);
+    conn = await deps.launchGate.openTarget(principal, sessionId, values, connection);
   }
   try {
     await deps.admitLaunch?.(sessionId, params);
@@ -219,6 +221,7 @@ async function launchDaemonSession(
     const details = deps.app.sessionDetails(sessionId);
     const profileMetadata = details.profileId ? getProfileMetadata(details.profileId) : undefined;
     const session = await deps.sessionItemOrFallback(principal, sessionId);
+    deps.launchGate.reserve(connection, sessionId, values);
     return {
       session,
       workspace: { workspaceId, root, target: 'local' as const },
@@ -481,7 +484,7 @@ export function createDaemonV11Port(
     },
   };
   return {
-    launchSession: (principal, params) => launchDaemonSession(fullDeps, principal, params),
+    launchSession: (principal, params, connection) => launchDaemonSession(fullDeps, principal, params, connection),
     canonicalizeCwd: (principal, cwd) => {
       requireLocalCaller(principal);
       return canonicalizeLocalCwd(cwd);

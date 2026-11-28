@@ -105,17 +105,36 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
       Conversely an interactive session resumed headless kept asking for a person
       the headless client never answers, and a terminal resume of a live headless
       session kept its headless (or auto-approve) surface.
-    - **Status: fixed** (`claude/daemon-headless-resume-posture`). Resume and fork
-      go through `openDaemonLaunchTarget`: a live session whose posture (headless,
-      auto-approve, sandbox requirement) differs from the launch's is closed and
-      reopened with the launch's values when it is idle and no connection is open
-      on it. Otherwise it opens as it is, and the launch is refused with `busy` when
-      the live posture is wider than asked. ACP sessions keep `admitLaunch` and the
-      holder rule. Rebuilding a live surface in place was not chosen: the runtime
-      captures its surface options once, at open. Covered by the built-CLI case in
-      `tests/host/remote-direct-host.integration.test.ts` and the live-resume case
-      in `tests/host/daemon-unix-conformance.integration.test.ts`.
-    - Owner question: a resume that differs only in a narrower way while another
-      client is connected still shares the live posture (for example a headless
-      resume of an interactive session a TUI has open, whose person answers).
+    - The comparison must cover the session-only settings a launch applies too:
+      after `--approval-mode always` (or `sandboxEnabled: false`), a resume without
+      the flag kept them. And the TUI's in-session `/resume` attached without any
+      launch, so it bypassed the check entirely.
+    - **Status: fixed** (`claude/daemon-headless-resume-posture`). The independent
+      verifier rejected the first attempt (`70ada1588`): it gated only the launch,
+      so a second launch could reopen the session before the first client attached
+      (the first client then ran with a posture it never asked for), it compared only
+      the surface flags, and it left `/resume` ungated. Now
+      `src/app/daemon/launches/launch-gate.ts`:
+      - compares surface flags and the saved approval mode, sandbox and unattended
+        escape review against what a fresh session for the launch would get;
+      - reopens a differing live session only when nothing uses it, checked and
+        closed without yielding (`DirectHost.closeSessionIfUnused`), and refuses
+        the launch with `busy` when the session stays wider than asked;
+      - leaves a reservation per launching connection: its next attach opens the
+        session with the launch's values and is refused if the session runs wider.
+        Until then no other launch reopens the session;
+      - is used by the daemon TUI's `/resume`, which now launches a resume first.
+      Rebuilding a live surface in place was not chosen: the runtime captures its
+      surface options once, at open. Covered by
+      `tests/host/remote-direct-host.integration.test.ts` (built CLI),
+      `tests/host/daemon-unix-conformance.integration.test.ts` (live resume,
+      launch-then-attach race, session-only settings) and
+      `tests/cli/daemon-tui.e2e.test.ts` (`/resume` of a live auto-approve session).
+    - Still open: a plain attach with no launch before it (another viewer, or a
+      TUI reattaching after its connection dropped) sees the session as it is. A
+      launch that leaves its session shared at a narrower posture than asked is
+      admitted; if that leaves a headless client with an interactive surface and
+      nobody at the other end, its approval waits for a person who is not there.
+      A reservation lasts until its connection attaches or disconnects, with no
+      timeout.
 

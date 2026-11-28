@@ -519,16 +519,33 @@ socket bound to that session.
 
 `session.create` and `session.launch` hand their approval policy and launch flags
 (`clientMode`, `requireSandbox`) to the session they start, through
-`DaemonLaunchPolicies.withLaunch` (`src/app/daemon/daemon-session-ops.ts`): an
-async-local frame, so a concurrent attach of another session never adopts them.
-A session's surface reads them once, when it is built, and a live session keeps
-that surface. In-process, every run builds its own.
+`DaemonLaunchPolicies.withLaunch` (`src/app/daemon/launches/launch-policies.ts`):
+an async-local frame, so a concurrent attach of another session never adopts
+them. A session's surface reads them once, when it is built, and a live session
+keeps that surface and any session-only settings a launch applied
+(`approvalMode`, `sandboxEnabled`). In-process, every run builds its own.
 
-So a resume or fork goes through `openDaemonLaunchTarget`. When the session is
-live with a different posture (headless or not, auto-approve, sandbox
-requirement), it is closed and reopened with the launch's values, provided it is
-idle (no turn, approval or background task) and no connection is open on it
-(`DirectHost.connectionCount`). Otherwise it is opened as it is, and the launch is
-refused with `busy` when that posture is wider than the one asked for:
-auto-approve the launch did not ask for, or no sandbox requirement when it asked
-for one. ACP sessions are left to `admitLaunch` and the holder rule.
+`src/app/daemon/launches/launch-gate.ts` makes a daemon launch behave like that:
+
+- A resume or fork that names a live session compares its posture with the one a
+  fresh session for this launch would run with: headless or not, auto-approve,
+  sandbox requirement, and the saved `shell.autoApproveMode`, `sandbox.enabled`
+  and `shell.unattendedEscapeReview` unless the launch sets them itself. When they
+  differ, the session is closed and reopened with the launch's values, provided
+  nothing uses it: no connection, no turn, open interaction or background task,
+  and no other connection's launch still to attach
+  (`DirectHost.closeSessionIfUnused` checks and starts the close without
+  yielding). Otherwise the launch opens it as it is, and is refused with `busy`
+  when that posture is wider than the one asked for.
+- Every launch leaves a reservation for its Unix connection. That connection's
+  next `session.attach` of the session opens it with the launch's values if it
+  was closed meanwhile, and is refused with `busy` if it now runs wider. Until it
+  attaches or disconnects, no other launch reopens the session.
+- The daemon TUI's `/resume <id>` runs a `session.launch` resume with the TUI's
+  posture flags (`TuiBackend.resumeSession`) before it attaches, as the startup
+  `--resume` does. `/clear` and handoff successors are attached directly: they
+  continue their predecessor's settings.
+
+ACP sessions are left to `admitLaunch` and the holder rule. A plain attach with
+no launch before it (another viewer, or the TUI reattaching after a dropped
+connection) sees the session as it is.

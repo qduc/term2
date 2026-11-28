@@ -228,6 +228,18 @@ async function openDaemonTuiSession(
       persistentSettings: store.globalSettings,
       serverResolvesSkills: true,
       liveSettings: (sessionId) => store.liveSettings(sessionId),
+      async resumeSession(sessionId) {
+        // Only the posture flags: the resumed session keeps its own model, profile and goal.
+        const { clientMode, approvalMode, showReview, sandboxEnabled } = buildLaunchParams(request, root);
+        await host.launchSession({
+          cwd: root,
+          selection: { kind: 'resume', sessionId },
+          clientMode,
+          ...(approvalMode !== undefined ? { approvalMode } : {}),
+          ...(showReview !== undefined ? { showReview } : {}),
+          ...(sandboxEnabled !== undefined ? { sandboxEnabled } : {}),
+        });
+      },
       sessionDetails: (sessionId) => {
         const meta = store.sessionMeta(sessionId);
         return {

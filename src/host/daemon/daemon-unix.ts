@@ -391,6 +391,7 @@ export class DaemonUnixServer {
     try {
       registration = await this.options.rpc.openStream(this.options.localOwnerPrincipal, method, params, {
         protocolVersion: client.negotiation?.version,
+        connectionId: client.connectionId,
       });
     } finally {
       client.pendingStreams -= 1;

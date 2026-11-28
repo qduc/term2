@@ -28,6 +28,8 @@ const APPROVAL_MODE = 'shell.autoApproveMode';
 const SANDBOX = 'sandbox.enabled';
 const ESCAPE_REVIEW = 'shell.unattendedEscapeReview';
 const POSTURE_KEYS = [APPROVAL_MODE, SANDBOX, ESCAPE_REVIEW] as const;
+/** The session-only settings a launch may write (`applySettings`). */
+const APPLIED_KEYS = [APPROVAL_MODE, SANDBOX, 'shell.showReview'] as const;
 
 /** What a session runs with that decides what may run without a person. */
 type Posture = {
@@ -203,24 +205,34 @@ export function createDaemonLaunchGate(deps: {
       params: SessionLaunchParams,
     ): Promise<void> {
       const live = app.liveSettings(sessionId);
-      if (params.showReview !== undefined) live?.set('shell.showReview', params.showReview, { persist: false });
-      if (params.sandboxEnabled !== undefined) live?.set(SANDBOX, params.sandboxEnabled, { persist: false });
-      if (params.requireSandbox) live?.set(SANDBOX, true, { persist: false });
-      const asked = params.approvalMode as DirectApprovalMode | undefined;
-      const enforced = app.enforcedSettings(sessionId)?.getDynamic(APPROVAL_MODE);
-      const mode = asked !== undefined && enforced !== asked ? asked : undefined;
-      if (mode !== undefined || Object.keys(configuration).length > 0) {
-        try {
-          await app.applyLaunchConfiguration(sessionId, configuration, mode);
-        } catch (error) {
-          mapLaunchConfigError(error);
+      // Restored if the session refuses the launch's configure (`busy` mid-turn, say): a refused launch
+      // must not leave its sandbox or review choice on a session someone else is running.
+      const earlier = live ? APPLIED_KEYS.map((key) => [key, live.getDynamic(key)] as const) : [];
+      try {
+        if (params.showReview !== undefined) live?.set('shell.showReview', params.showReview, { persist: false });
+        if (params.sandboxEnabled !== undefined) live?.set(SANDBOX, params.sandboxEnabled, { persist: false });
+        if (params.requireSandbox) live?.set(SANDBOX, true, { persist: false });
+        const asked = params.approvalMode as DirectApprovalMode | undefined;
+        const enforced = app.enforcedSettings(sessionId)?.getDynamic(APPROVAL_MODE);
+        const mode = asked !== undefined && enforced !== asked ? asked : undefined;
+        if (mode !== undefined || Object.keys(configuration).length > 0) {
+          try {
+            await app.applyLaunchConfiguration(sessionId, configuration, mode);
+          } catch (error) {
+            mapLaunchConfigError(error);
+          }
         }
+        const after = app.liveSettings(sessionId);
+        if (after && mode !== undefined && after.getDynamic(APPROVAL_MODE) !== mode) {
+          after.set(APPROVAL_MODE, mode, { persist: false });
+        }
+        await syncEnforced(principal, sessionId);
+      } catch (error) {
+        for (const [key, value] of earlier) {
+          if (!isDeepStrictEqual(live?.getDynamic(key), value)) live?.setDynamic(key, value, { persist: false });
+        }
+        throw error;
       }
-      const after = app.liveSettings(sessionId);
-      if (after && mode !== undefined && after.getDynamic(APPROVAL_MODE) !== mode) {
-        after.set(APPROVAL_MODE, mode, { persist: false });
-      }
-      await syncEnforced(principal, sessionId);
     },
 
     syncEnforced,

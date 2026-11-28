@@ -1534,6 +1534,44 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(await turn(d, off, await sandboxed.attach(d, off), 'sandboxed.txt')).toBe('ran');
   });
 
+  it("leaves a session's settings as they were when it refuses a launch's configure", async () => {
+    const { socketPath, launch, attach, liveSetting } = await startTouchDaemon(true);
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    const running = sessionIdOf(await launch(a, null, interactive));
+    const stream = await attach(a, running);
+    // A turn waits on the person (with the sandbox off, the write asks), then the person turns the sandbox on.
+    const read = await a.request('settings.get', { sessionId: running, view: 'tui' });
+    const expectedRevision = read.ok ? String(read.result['revision']) : '';
+    const off = [{ key: 'sandbox.enabled', value: false }];
+    expect(
+      await a.request('settings.update', { sessionId: running, expectedRevision, persist: false, changes: off }),
+    ).toMatchObject({ ok: true });
+    const submitted = await a.request('session.command', {
+      sessionId: running,
+      command: { type: 'submit', requestId: 'refused-1', text: 'Please create refused.txt', origin: { kind: 'cli' } },
+    });
+    expect(submitted.ok).toBe(true);
+    await firstOfType(a, stream, 'interaction_opened');
+    const reread = await a.request('settings.get', { sessionId: running, view: 'tui' });
+    const on = [{ key: 'sandbox.enabled', value: true }];
+    expect(
+      await a.request('settings.update', {
+        sessionId: running,
+        expectedRevision: reread.ok ? String(reread.result['revision']) : '',
+        persist: false,
+        changes: on,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await a.request('session.detach', { streamId: stream })).toMatchObject({ ok: true });
+
+    // B's launch needs a configure for its approval mode, which the session cannot take mid-turn.
+    const refused = await launch(b, running, { ...interactive, sandboxEnabled: false, approvalMode: 'auto' });
+    expect(refused).toMatchObject({ ok: false, error: { code: 'busy' } });
+    expect(await liveSetting(b, running, 'sandbox.enabled')).toBe(true);
+    expect(await liveSetting(b, running, 'shell.autoApproveMode')).toBe('off');
+  });
+
   it('lands an explicit approval mode on the live value an in-session change moved, so the attach is admitted', async () => {
     const { socketPath, launch, attach, liveSetting } = await startTouchDaemon();
     const a = await openV11Client(socketPath, 'tui');

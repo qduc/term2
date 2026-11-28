@@ -149,7 +149,9 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
       it cannot take a configure. A launch's applied settings are synced the same
       way, and the gate compares the values in force
       (`DirectApplication.enforcedSettings`). A rebuilt session's in-session mode
-      change therefore needs it idle, as the TUI's rebuild already did.
+      change therefore needs it idle, as the TUI's rebuild already did. A launch
+      the session refuses that way leaves its settings as they were: the values
+      it wrote before its configure are restored.
       Rebuilding a live surface in place was not chosen: the runtime captures its
       surface options once, at open. Covered by
       `tests/host/remote-direct-host.integration.test.ts` (built CLI),
@@ -179,6 +181,13 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
         `dockerHostControlProjects`, `hooks.*`, `tools.*`. The TUI does not write
         them per session, but a raw v1.1 `settings.update { sessionId,
         persist: false }` does.
+      - Serve's web `configuration` and ACP admission read
+        `sessionConfiguration().approvalMode`, which for a session never rebuilt
+        is the snapshot taken when it opened, not the live mode. The web UI can
+        show a stale mode; for ACP admission it is harmless.
+      - A `persist: true` session-scoped write refused mid-turn (it needed a
+        rebuild) still saves the global preference, and publishes no
+        `settings.changed` for it.
       - `/resume` changes: the daemon TUI refuses a target another client is
         using when its posture is looser (or, when the TUI was started with
         `--approval-mode`, one that is mid-turn or has background work, since the

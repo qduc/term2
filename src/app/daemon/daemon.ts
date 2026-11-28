@@ -205,8 +205,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           interactive: !isHeadless,
           sessionBrowser: !isHeadless && !isAcp,
           allowUnsandboxed,
-          shellEscapeApproval: !isAcp,
-          preserveSandboxedShellApproval: true,
+          // No outside-sandbox grants: those are the web surface's (serve lease, above). A local TUI or
+          // headless session decides `sandbox: 'unsandboxed'` as in-process, through its approval mode.
           mcp: isAcp ? acp().surface(sessionId) : undefined,
         };
       },

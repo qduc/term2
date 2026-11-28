@@ -1448,6 +1448,44 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(await posture()).toEqual(['always', true]);
   });
 
+  it('lands an explicit approval mode on the live value an in-session change moved, so the attach is admitted', async () => {
+    const { socketPath, launch, attach, liveSetting } = await startTouchDaemon();
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    const d = await openV11Client(socketPath, 'tui');
+    /** `/auto-approve <mode>` in the session: a session-only live change, no configure. */
+    const setMode = async (client: TestUnixRpcClient, sessionId: string, mode: string) => {
+      const read = await client.request('settings.get', { sessionId, view: 'tui' });
+      const expectedRevision = read.ok ? String(read.result['revision']) : '';
+      const changes = [{ key: 'shell.autoApproveMode', value: mode }];
+      expect(
+        await client.request('settings.update', { sessionId, expectedRevision, persist: false, changes }),
+      ).toMatchObject({ ok: true });
+    };
+
+    // Changed to auto in the session, then everyone leaves; a new terminal asks for off explicitly.
+    const moved = sessionIdOf(await launch(a, null, interactive));
+    const movedStream = await attach(a, moved);
+    await setMode(a, moved, 'auto');
+    expect(await a.request('session.detach', { streamId: movedStream })).toMatchObject({ ok: true });
+    expect(await launch(d, moved, { ...interactive, approvalMode: 'off' })).toMatchObject({ ok: true });
+    expect(await d.request('session.attach', { sessionId: moved })).toMatchObject({ ok: true });
+    expect(await liveSetting(d, moved, 'shell.autoApproveMode')).toBe('off');
+
+    // B, still attached, changed it to auto while A was away. A comes back asking for what it last saw (off):
+    // a tighter mode applies to a shared session, and A's attach is admitted.
+    const shared = sessionIdOf(await launch(a, null, interactive));
+    const sharedStream = await attach(a, shared);
+    await attach(b, shared);
+    expect(await a.request('session.detach', { streamId: sharedStream })).toMatchObject({ ok: true });
+    await setMode(b, shared, 'auto');
+    expect(await launch(a, shared, { ...interactive, approvalMode: 'off', sandboxEnabled: false })).toMatchObject({
+      ok: true,
+    });
+    expect(await a.request('session.attach', { sessionId: shared })).toMatchObject({ ok: true });
+    expect(await liveSetting(b, shared, 'shell.autoApproveMode')).toBe('off');
+  });
+
   it("compares the approval mode and sandbox a launch set for its session alone, which a fresh session wouldn't have", async () => {
     const { socketPath, launch, attach, run, liveSetting } = await startTouchDaemon();
     const tui = await openV11Client(socketPath, 'tui');

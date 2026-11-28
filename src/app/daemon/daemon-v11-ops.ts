@@ -33,7 +33,6 @@ import type { DirectCommandConfiguration } from '../../session/command-types.js'
 import { createDurableGoal } from '../../session/goal.js';
 import type { DirectApplication } from '../application.js';
 import { localGrant, requireLocalCaller } from '../application-workspaces.js';
-import type { DirectApprovalMode } from '../config-settings.js';
 import type { DirectGlobalConfiguration } from '../host-config.js';
 import type { SettingsService } from '../settings.js';
 import type { DaemonLaunchGate } from './launches/launch-gate.js';
@@ -106,15 +105,6 @@ function canonicalizeLocalCwd(cwd: string): string {
   return resolved;
 }
 
-function mapLaunchConfigError(error: unknown): never {
-  if (error instanceof ClientApiRpcError) throw error;
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('background work') || message.toLowerCase().includes('busy')) {
-    throw new ClientApiRpcError('busy', message, { retryable: true });
-  }
-  throw new ClientApiRpcError('invalid_request', message);
-}
-
 async function launchDaemonSession(
   deps: DaemonV11Deps,
   principal: Principal,
@@ -135,7 +125,6 @@ async function launchDaemonSession(
     ...(params.reasoning ? { reasoning: params.reasoning } : {}),
     ...(params.profileId ? { profileId: params.profileId } : {}),
   };
-  const approvalMode = params.approvalMode as DirectApprovalMode | undefined;
   const launchFlags =
     params.requireSandbox !== undefined || params.clientMode !== undefined
       ? {
@@ -200,21 +189,7 @@ async function launchDaemonSession(
   }
   try {
     await deps.admitLaunch?.(sessionId, params);
-    if (approvalMode !== undefined || Object.keys(launchConfig).length > 0) {
-      try {
-        await deps.app.applyLaunchConfiguration(sessionId, launchConfig, approvalMode);
-      } catch (error) {
-        mapLaunchConfigError(error);
-      }
-    }
-    const liveSettings = deps.app.liveSettings(sessionId);
-    if (liveSettings) {
-      if (params.showReview !== undefined) liveSettings.set('shell.showReview', params.showReview, { persist: false });
-      if (params.sandboxEnabled !== undefined) {
-        liveSettings.set('sandbox.enabled', params.sandboxEnabled, { persist: false });
-      }
-      if (params.requireSandbox) liveSettings.set('sandbox.enabled', true, { persist: false });
-    }
+    await deps.launchGate.applySettings(sessionId, launchConfig, params);
     if (params.goal) {
       await deps.app.setGoal(sessionId, createDurableGoal(params.goal.text, params.goal.successCriteria), 'launcher');
     }

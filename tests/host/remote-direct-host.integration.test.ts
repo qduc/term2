@@ -18,7 +18,7 @@ import { startTerm2Daemon, type Term2DaemonHandle } from '../../src/app/daemon/d
 import { connectRemoteDirectHost } from '../../src/app/daemon/connect-daemon-host.js';
 import { LOCAL_PRINCIPAL, localGrant } from '../../src/app/application-workspaces.js';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
-import { readmitDaemonTuiSession } from '../../src/app/daemon/launches/tui-launch-params.js';
+import { reattachDaemonTuiSession } from '../../src/app/daemon/launches/tui-launch-params.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
 import {
   HEADLESS_AUTO_APPROVE_REFUSAL,
@@ -546,7 +546,8 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     expect(toolResults[2]).toContain(HEADLESS_AUTO_APPROVE_REFUSAL);
   });
 
-  it('re-admits a terminal that lost its attachment, so a looser reopen in the gap does not reach it', async () => {
+  /** An in-process daemon whose model is `startTouchToolProvider`, and Client API 1.1 hosts connected to it. */
+  async function startTouchDaemonHosts() {
     const { stateDir, runtimeDir, socketPath, workspace, settingsDir } = makeSandboxRoot();
     const conversationsDir = path.join(stateDir, 'conversations');
     const provider = await startTouchToolProvider();
@@ -561,8 +562,7 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     );
     const env: NodeJS.ProcessEnv = { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir };
     const daemon = await startTerm2Daemon({ stateDir, conversationsDir, socketPath, env });
-    expect(daemon.kind).toBe('started');
-    if (daemon.kind !== 'started') return;
+    if (daemon.kind !== 'started') throw new Error('daemon did not start');
     cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
     const connect = async (clientKind: string) => {
       const { host } = await connectRemoteDirectHost({
@@ -578,31 +578,50 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
       cleanups.push(() => host.dispose());
       return host;
     };
-    const root = fs.realpathSync(workspace);
+    type Host = Awaited<ReturnType<typeof connect>>;
+    /** The session settings a TUI's projection holds, as its backend's reconnect reads them. */
+    const seen = async (host: Host, sessionId: string) => {
+      const view = (await host.readSettings({ sessionId, view: 'tui' })) as {
+        revision: string;
+        settings: { entries: Record<string, { value: unknown }> };
+      };
+      return { revision: view.revision, getDynamic: (key: string) => view.settings.entries[key]?.value };
+    };
+    return { connect, seen, root: fs.realpathSync(workspace) };
+  }
+
+  /** Waits for the next approval request on `connection`, as one consumer of its events. */
+  async function nextApproval(connection: { readonly events: AsyncIterable<WireEvent> }): Promise<string> {
+    for await (const event of connection.events) {
+      if (event.type === 'interaction_opened') {
+        return (event as unknown as { payload: { interaction: { requestId: string } } }).payload.interaction.requestId;
+      }
+    }
+    throw new Error('the connection ended before an approval opened');
+  }
+
+  it('re-admits a terminal that lost its attachment, so a looser reopen in the gap does not reach it', async () => {
+    const { connect, seen, root } = await startTouchDaemonHosts();
 
     // A terminal starts a session and attaches, then its attachment drops.
     const tui = await connect('tui');
     const { session } = await tui.launchSession({ cwd: root, selection: { kind: 'new' }, clientMode: 'interactive' });
-    const view = (await tui.readSettings({ sessionId: session.id, view: 'tui' })) as {
-      settings: { entries: Record<string, { value: unknown }> };
-    };
-    const seen = { getDynamic: (key: string) => view.settings.entries[key]?.value };
+    const last = await seen(tui, session.id);
     (await tui.connect(LOCAL_PRINCIPAL, session.id)).close();
 
     // In that gap a headless --auto-approve run reopens the idle session with its own posture, and exits.
     const headless = await connect('headless');
-    const auto = { mode: 'headless', autoApprove: true } as const;
     await headless.launchSession({
       cwd: root,
       selection: { kind: 'resume', sessionId: session.id },
       clientMode: 'headless',
-      approvalPolicy: auto,
+      approvalPolicy: { mode: 'headless', autoApprove: true },
     });
     (await headless.connect(LOCAL_PRINCIPAL, session.id)).close();
 
-    // The terminal reattaches as its backend's reconnect does: re-admitted through the gate, then attached.
-    await readmitDaemonTuiSession(tui, root, session.id, seen);
-    const again = await tui.connect(LOCAL_PRINCIPAL, session.id);
+    // The terminal reattaches through its backend's reconnect step: re-admitted through the gate, then attached.
+    const again = await reattachDaemonTuiSession(tui, root, session.id, last, null);
+    if (!again) throw new Error('reattach failed');
     const submitted = await again.send({
       type: 'submit',
       requestId: 'readmit-1',
@@ -628,6 +647,43 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
       }
     }
     expect(reason).toBe('person declined');
+    again.close();
+  });
+
+  it('reattaches a terminal mid-turn after an in-session approval mode change', async () => {
+    const { connect, seen, root } = await startTouchDaemonHosts();
+    const tui = await connect('tui');
+    const { session } = await tui.launchSession({ cwd: root, selection: { kind: 'new' }, clientMode: 'interactive' });
+    const first = await tui.connect(LOCAL_PRINCIPAL, session.id);
+    const submitted = await first.send({
+      type: 'submit',
+      requestId: 'midturn-1',
+      text: 'Please create midturn.txt',
+      origin: { kind: 'cli' },
+    });
+    expect(submitted.ok).toBe(true);
+    const requestId = await nextApproval(first);
+
+    // While the turn waits on the person, they change the approval mode in the session (`/auto-approve`).
+    const before = await seen(tui, session.id);
+    await tui.updateScopedSettings({
+      sessionId: session.id,
+      expectedRevision: before.revision,
+      persist: false,
+      changes: [{ key: 'shell.autoApproveMode', value: 'auto' }],
+    });
+    const last = await seen(tui, session.id);
+    expect(last.getDynamic('shell.autoApproveMode')).toBe('auto');
+    const retainedSeq = first.snapshot.seq;
+    first.close();
+
+    // The reconnect, replaying from where the terminal was, gets the session back and the request is still the person's.
+    const again = await reattachDaemonTuiSession(tui, root, session.id, last, retainedSeq);
+    if (!again) throw new Error('reattach failed');
+    expect(
+      await again.send({ type: 'answer', requestId, decision: { kind: 'deny', reason: 'person declined' } }),
+    ).toMatchObject({ ok: true });
+    expect((await seen(tui, session.id)).getDynamic('shell.autoApproveMode')).toBe('auto');
     again.close();
   });
 });

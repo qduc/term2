@@ -5,6 +5,8 @@
 import type { RemoteDirectHost } from '../../../host/daemon/remote-direct-host.js';
 import { ClientApiRpcError } from '../../../host/daemon/daemon-errors.js';
 import type { SessionLaunchParams } from '../../../protocol/client-api/client-api-schema.js';
+import type { DirectConnection, DirectReplayConnection } from '../../../host/in-process-direct-types.js';
+import { LOCAL_PRINCIPAL } from '../../application-workspaces.js';
 import type { DirectLaunchRequest } from '../../launch-types.js';
 
 export type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
@@ -76,7 +78,7 @@ export function isLaunchRefusal(error: unknown): boolean {
  * settings it carried (from `/clear`, say) survive a reopen, and a session another launch reopened
  * looser meanwhile is reopened as it was, or refused while that other client still uses it.
  */
-export async function readmitDaemonTuiSession(
+async function readmitDaemonTuiSession(
   host: Pick<RemoteDirectHost, 'launchSession'>,
   root: string,
   sessionId: string,
@@ -104,4 +106,33 @@ export function resumeLaunchParams(request: InteractiveRequest, root: string, se
     ...(showReview !== undefined ? { showReview } : {}),
     ...(sandboxEnabled !== undefined ? { sandboxEnabled } : {}),
   };
+}
+
+/**
+ * Reattaches this TUI to a session after its stream or connection dropped: each attach is re-admitted
+ * through the launch gate first (`readmitDaemonTuiSession`), then made from `fromSeq` when there is one,
+ * else from a snapshot. Resolves null when the attaches failed for another reason (a dead transport, say:
+ * the caller reconnects); a launch refusal is thrown, since attaching as a plain viewer would skip the gate.
+ */
+export async function reattachDaemonTuiSession(
+  host: Pick<RemoteDirectHost, 'launchSession' | 'connect'>,
+  root: string,
+  sessionId: string,
+  last: { getDynamic(key: string): unknown } | null,
+  fromSeq: number | null,
+): Promise<DirectConnection | DirectReplayConnection | null> {
+  const attempts: (() => Promise<DirectConnection | DirectReplayConnection>)[] = [
+    ...(fromSeq !== null ? [() => host.connect(LOCAL_PRINCIPAL, sessionId, fromSeq)] : []),
+    () => host.connect(LOCAL_PRINCIPAL, sessionId),
+  ];
+  for (const attach of attempts) {
+    try {
+      await readmitDaemonTuiSession(host, root, sessionId, last);
+      return await attach();
+    } catch (error) {
+      if (isLaunchRefusal(error)) throw error;
+      // A replay the daemon cannot serve falls back to a snapshot attach; anything else ends with null.
+    }
+  }
+  return null;
 }

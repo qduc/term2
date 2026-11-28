@@ -130,16 +130,32 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
       reattaching after a dropped connection attached as a plain viewer (it now
       launches a resume first, with the approval mode and sandbox it last saw);
       and a failed attach left its reservation behind (it is now released).
+      A third review found that applying a launch's approval mode compared it with
+      the session's accepted configuration while the gate compared the live value,
+      which an in-session `/auto-approve` changes alone. So a re-admission mid-turn
+      sent a needless configure and the reconnect failed, and an explicit tighter
+      mode on an unused session was a no-op whose attach was then refused. The
+      apply step now compares the live value too: equal is a true no-op, and a
+      different mode lands on the live settings even when the configure has
+      nothing to change. A refusal now ends the TUI's reconnect on every path.
       Rebuilding a live surface in place was not chosen: the runtime captures its
       surface options once, at open. Covered by
       `tests/host/remote-direct-host.integration.test.ts` (built CLI),
       `tests/host/daemon-unix-conformance.integration.test.ts` (live resume,
       launch-then-attach race, session-only settings) and
       `tests/cli/daemon-tui.e2e.test.ts` (`/resume` of a live auto-approve session),
-      plus the loosening and re-admit cases in the two host suites.
+      plus the loosening, re-admit, mid-turn reattach and explicit-mode cases in
+      the two host suites.
     - Still open:
       - A plain attach with no launch before it (another viewer) sees the session
         as it is.
+      - A TUI's re-admission asks for the approval mode it last saw, so it
+        tightens a mode another client loosened in the session meanwhile (and is
+        refused if it would loosen one tightened meanwhile while that client is
+        still there).
+      - A launch that sets a different approval mode on a live session it shares
+        changes the live value for the other client, and leaves the session's
+        accepted configuration (what `/restart` carries) as the configure left it.
       - A launch that leaves its session shared at a narrower posture than asked
         is admitted. If that leaves a headless client with an interactive surface
         and nobody at the other end, its approval waits for a person who is not

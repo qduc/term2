@@ -540,6 +540,13 @@ keeps that surface and any session-only settings a launch applied
   it open and the launch's own `approvalMode`/`sandboxEnabled` would loosen it
   there. Equal or tighter values still apply to a shared session: tightening never
   lets anything run unasked.
+- A launch's approval mode is compared with the live value, which approvals read
+  and an in-session `/auto-approve` changes without a configure. An equal one is
+  left alone, so re-admitting a session mid-turn sends no configure. A different
+  one goes through the session's configure and is set on the live settings too,
+  since that configure has nothing to do when only an in-session change moved
+  the live value. A configure the session cannot take now (a turn or background
+  work running) is refused with `busy`.
 - Every launch leaves a reservation for its Unix connection. That connection's
   next `session.attach` of the session opens it with the launch's values if it
   was closed meanwhile, and is refused with `busy` if it now runs wider. Until it
@@ -550,9 +557,11 @@ keeps that surface and any session-only settings a launch applied
   `--resume` does. `/clear` and handoff successors are attached directly: they
   continue their predecessor's settings. When the TUI reattaches after its
   connection or stream dropped, it launches a resume first too, asking for the
-  approval mode and sandbox it last saw (`launches/tui-launch-params.ts`), so
-  what it carried survives a reopen and a looser reopen by another launch in
-  the gap is undone or refused.
+  approval mode and sandbox it last saw (`reattachDaemonTuiSession` in
+  `launches/tui-launch-params.ts`), so what it carried survives a reopen and a
+  looser reopen by another launch in the gap is undone or refused. A refusal ends
+  the reconnect, on the existing connection or a new one; only a failed attach
+  for another reason (a dead transport) moves on to a new connection.
 - `/resume` therefore refuses what an in-process TUI refuses: a session another
   client is using with a looser posture (in-process, its writer lock is taken),
   and a session of another workspace (`forbidden`; in-process, `canRun`).

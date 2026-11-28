@@ -16,7 +16,10 @@
  */
 import { ClientApiRpcError, type DaemonRpcConnectionContext } from '../../../host/daemon/daemon-rpc.js';
 import type { DirectConnection, DirectReplayConnection, Principal } from '../../../host/in-process-direct-types.js';
+import type { SessionLaunchParams } from '../../../protocol/client-api/client-api-schema.js';
+import type { DirectCommandConfiguration } from '../../../session/command-types.js';
 import type { DirectApplication } from '../../application.js';
+import type { DirectApprovalMode } from '../../config-settings.js';
 import type { DaemonLaunchPolicies, DaemonLaunchValues } from './launch-policies.js';
 
 const APPROVAL_MODE = 'shell.autoApproveMode';
@@ -55,6 +58,14 @@ function refusal(): ClientApiRpcError {
       'Close it there, or wait until it is idle, and resume again.',
     { retryable: true },
   );
+}
+
+/** A configure the session cannot take now (a turn or background work running) is `busy`, not malformed. */
+function mapLaunchConfigError(error: unknown): never {
+  if (error instanceof ClientApiRpcError) throw error;
+  const message = error instanceof Error ? error.message : String(error);
+  const busy = /background work|busy|requires an idle Session/i.test(message);
+  throw new ClientApiRpcError(busy ? 'busy' : 'invalid_request', message, busy ? { retryable: true } : undefined);
 }
 
 function loosening(): ClientApiRpcError {
@@ -149,6 +160,37 @@ export function createDaemonLaunchGate(deps: {
         throw after.wider ? refusal() : loosening();
       }
       return conn;
+    },
+
+    /**
+     * Applies a launch's session settings. The approval mode is compared with the live value, which is
+     * what approvals read and what this gate compares: an equal one is left alone, so re-admitting a
+     * session mid-turn needs no configure. A different one goes through the session's configure (with
+     * the model, effort and profile), and is set on the live settings too when that configure had
+     * nothing to do because an in-session change had moved the live value off the accepted one.
+     */
+    async applySettings(
+      sessionId: string,
+      configuration: DirectCommandConfiguration,
+      params: SessionLaunchParams,
+    ): Promise<void> {
+      const asked = params.approvalMode as DirectApprovalMode | undefined;
+      const mode =
+        asked !== undefined && app.liveSettings(sessionId)?.getDynamic(APPROVAL_MODE) !== asked ? asked : undefined;
+      if (mode !== undefined || Object.keys(configuration).length > 0) {
+        try {
+          await app.applyLaunchConfiguration(sessionId, configuration, mode);
+        } catch (error) {
+          mapLaunchConfigError(error);
+        }
+      }
+      const live = app.liveSettings(sessionId);
+      if (!live) return;
+      if (mode !== undefined && live.getDynamic(APPROVAL_MODE) !== mode)
+        live.set(APPROVAL_MODE, mode, { persist: false });
+      if (params.showReview !== undefined) live.set('shell.showReview', params.showReview, { persist: false });
+      if (params.sandboxEnabled !== undefined) live.set(SANDBOX, params.sandboxEnabled, { persist: false });
+      if (params.requireSandbox) live.set(SANDBOX, true, { persist: false });
     },
 
     /** Called before the launch on `connection` returns `sessionId`, while it still holds the session open. */

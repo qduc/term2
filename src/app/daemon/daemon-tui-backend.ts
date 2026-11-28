@@ -27,7 +27,7 @@ import { DaemonTuiSettingsStore } from './daemon-tui-settings-store.js';
 import {
   buildLaunchParams,
   isLaunchRefusal,
-  readmitDaemonTuiSession,
+  reattachDaemonTuiSession,
   resumeLaunchParams,
   type InteractiveRequest,
 } from './launches/tui-launch-params.js';
@@ -126,30 +126,15 @@ async function openDaemonTuiSession(
       sessionId: string,
       retained: WireSnapshot,
     ): Promise<DirectConnection | DirectReplayConnection> => {
-      // Each attach goes through the launch gate again, asking for what this TUI last saw, so it never lands
-      // on a looser session another launch reopened meanwhile. A refusal ends the reconnect.
+      // Each attach is re-admitted through the launch gate with what this TUI last saw (reattachDaemonTuiSession).
+      // A refusal ends the reconnect; only a failed transport moves on to a new connection.
       const last = store.liveSettings(sessionId);
-      const admitted = async <T>(attach: () => Promise<T>): Promise<T> => {
-        await readmitDaemonTuiSession(host, root, sessionId, last);
-        return await attach();
-      };
       // First attempt fast re-attach on the existing Unix connection if it is still open.
       if (!host.rpc.closed) {
-        if (retained.seq !== null) {
-          try {
-            return await admitted(() => host.connect(LOCAL_PRINCIPAL, sessionId, retained.seq!));
-          } catch (error) {
-            if (isLaunchRefusal(error)) throw error;
-            // Fall through to full snapshot attach on cursor_out_of_range or transient stream close.
-          }
-        }
-        try {
-          const fresh = await admitted(() => host.connect(LOCAL_PRINCIPAL, sessionId));
-          await prepareSession(sessionId);
-          return fresh;
-        } catch (error) {
-          if (isLaunchRefusal(error)) throw error;
-          // Transport is dead; fall through to reconnect/restart daemon below.
+        const again = await reattachDaemonTuiSession(host, root, sessionId, last, retained.seq);
+        if (again) {
+          if (again.snapshot !== null) await prepareSession(sessionId);
+          return again;
         }
       }
 
@@ -164,12 +149,14 @@ async function openDaemonTuiSession(
           store.replaceHost(host);
           void previousHost.dispose().catch(() => undefined);
           await store.hydrateGlobal();
-          const attached = await admitted(() => host.connect(LOCAL_PRINCIPAL, sessionId));
+          const attached = await reattachDaemonTuiSession(host, root, sessionId, last, null);
+          if (!attached) throw new Error('Could not reattach to the Term2 daemon session.');
           await prepareSession(sessionId);
           // A control socket leased on the old connection was released with it.
           await onReconnected(sessionId).catch(() => undefined);
           return attached;
         } catch (error) {
+          if (isLaunchRefusal(error)) throw error;
           lastError = error;
         }
       }

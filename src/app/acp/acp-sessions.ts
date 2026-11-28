@@ -25,7 +25,7 @@ const empty: McpToolSource = {
 };
 
 /** Validate the entire list before connecting anything; never expand client env or persist secrets. */
-function configs(request: AcpSessionSetup): ResolvedMcpServerConfig[] {
+export function resolveAcpMcpServers(request: AcpSessionSetup): ResolvedMcpServerConfig[] {
   const names = new Set<string>();
   return (request.mcpServers ?? []).map((server) => {
     if (!server.name.trim() || names.has(server.name))
@@ -145,7 +145,7 @@ export function createAcpSessions() {
     async open(request: AcpSessionSetup, connect: () => Promise<DirectConnection>): Promise<DirectConnection> {
       if (stopped) throw new acp.RequestError(-32010, 'ACP session resources are closed');
       const servers = request.mcpServers ?? [];
-      const resolved = configs(request);
+      const resolved = resolveAcpMcpServers(request);
       const previous = request.sessionId ? current.get(request.sessionId) : undefined;
       const resource: Resource = {
         servers,

@@ -59,6 +59,11 @@ export type DirectLauncherSurface = Omit<ToolSurfaceOptions, 'workspace' | 'inte
   readonly mcp: ToolSurfaceOptions['mcp'] | undefined;
 };
 
+export type DirectSessionPolicy = Pick<
+  DirectRuntimeOptions,
+  'approvalAlwaysAsks' | 'requireSandbox' | 'persistSessionConfiguration' | 'authorizeModel'
+>;
+
 export type DirectRuntimeOptions = {
   readonly conversationsDir?: string;
   readonly selection: ProfileSelection;
@@ -74,6 +79,8 @@ export type DirectRuntimeOptions = {
   readonly requireSandbox?: boolean;
   /** False keeps native model/effort/profile/temperature changes out of global defaults. */
   readonly persistSessionConfiguration?: boolean;
+  /** One host serving several modes: overrides these app-wide rules for one session, read once as it opens. */
+  readonly sessionPolicy?: (sessionId: string, context: { binding?: DirectBinding }) => DirectSessionPolicy | undefined;
   /** Stamped on every session this application creates, and required of every one it opens. */
   readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
@@ -180,7 +187,8 @@ export function createDirectRuntimes(
       }
       // Before anything is registered for this session: the probe is the only wait here.
       const sandboxAvailable = await probeReadSessionSandbox(context.workspace);
-      const settings = createSessionSettings(options, context);
+      const policy = { ...options, ...options.sessionPolicy?.(context.id, { binding: context.binding }) };
+      const settings = createSessionSettings(policy, context);
       const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
       const reasoning = createForegroundReasoningPublisher(context.id);
       const selection = withEffortRejection(
@@ -324,7 +332,8 @@ export function createDirectRuntimes(
           configuration: { ...configuration, approvalMode },
           capabilities: bound.capabilities,
           memoryBinding,
-          authorizeModel: (next, previous) => launchConfiguration.authorize(context.id, next, previous),
+          authorizeModel: (next, previous) =>
+            launchConfiguration.authorize(context.id, next, previous, policy.authorizeModel),
         });
         try {
           bindCheckIns(generation.surface, bound.port);
@@ -374,7 +383,7 @@ export function createDirectRuntimes(
             queueMicrotask(() => {
               try {
                 recordDirectConfigSettings(settings, intent, nextProfile.id, {
-                  persist: !isLaunch && options.persistSessionConfiguration !== false,
+                  persist: !isLaunch && policy.persistSessionConfiguration !== false,
                   approvalMode,
                 });
                 options.onSurface?.(generation.surface, getProfileMetadata(nextProfile.id));

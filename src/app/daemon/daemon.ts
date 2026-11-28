@@ -37,7 +37,9 @@ import { SessionContextService } from '../../model/traffic-context.js';
 import { buildEnvOverrides } from '../../config/settings/settings-env.js';
 import { createDaemonMcp } from './daemon-mcp.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
-import { createDaemonV11Port } from './daemon-v11-ops.js';
+import { createDaemonV11Port, type DaemonLaunchFlags } from './daemon-v11-ops.js';
+import { createDaemonAcp } from '../acp/daemon-acp.js';
+import { ACP_SESSION_POLICY } from '../acp/acp-common.js';
 import { DaemonServeLeaseManager } from './leases/serve-lease.js';
 import {
   acquireLockOrDetectPeer,
@@ -112,6 +114,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
   let daemonMcp: ReturnType<typeof createDaemonMcp> | null = null;
   let serveLeases: DaemonServeLeaseManager | null = null;
   let unixServer: DaemonUnixServer | null = null;
+  let daemonAcp: ReturnType<typeof createDaemonAcp> | null = null;
+  const closeMcp = () => Promise.all([daemonAcp?.close(), daemonMcp?.close()]);
 
   try {
     // Step 3: While holding lock, verify & clean any stale socket.
@@ -156,14 +160,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     });
     serveLeases = activeServeLeases;
     const sessionPolicies = new Map<string, SessionApprovalPolicy>();
-    const sessionLaunchFlags = new Map<
-      string,
-      { readonly requireSandbox?: boolean; readonly clientMode?: 'interactive' | 'headless' | 'acp' }
-    >();
+    const sessionLaunchFlags = new Map<string, DaemonLaunchFlags>();
     let pendingCreatePolicy: SessionApprovalPolicy | undefined;
-    let pendingLaunchFlags:
-      | { readonly requireSandbox?: boolean; readonly clientMode?: 'interactive' | 'headless' | 'acp' }
-      | undefined;
+    let pendingLaunchFlags: DaemonLaunchFlags | undefined;
     const policyForSession = (sessionId: string): SessionApprovalPolicy | undefined => {
       if (pendingCreatePolicy !== undefined && !sessionPolicies.has(sessionId)) {
         sessionPolicies.set(sessionId, pendingCreatePolicy);
@@ -173,6 +172,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       }
       return sessionPolicies.get(sessionId);
     };
+    // ACP sessions keep in-process ACP's posture and per-session MCP (src/app/acp/daemon-acp.ts).
+    const isAcpSession = (sessionId: string) => sessionLaunchFlags.get(sessionId)?.clientMode === 'acp';
+    const acp = () => daemonAcp!;
     const lifecycleObserver: { current?: (event: DirectHostLifecycleEvent) => void } = {};
     daemonMcp = createDaemonMcp({
       conversationsDir: paths.conversationsDir,
@@ -186,9 +188,18 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       selection,
       resolveDefaultModel: () => configuration.currentModelSelection(),
       authorizeModel: (next, previous) => activeServeLeases.authorizeModel(next, previous),
-      prepareSurface: (sessionId, ctx) =>
-        activeServeLeases.prepareServeSurface(ctx) ??
-        activeDaemonMcp.prepare(sessionId, ctx.workspace, policyForSession(sessionId)?.mode !== 'headless'),
+      sessionPolicy: (sessionId, { binding }) => {
+        if (binding) return undefined;
+        policyForSession(sessionId);
+        return isAcpSession(sessionId) ? { ...ACP_SESSION_POLICY, authorizeModel: acp().authorizeModel } : undefined;
+      },
+      prepareSurface: async (sessionId, ctx) => {
+        const serve = activeServeLeases.prepareServeSurface(ctx);
+        if (serve) return await serve;
+        const interactive = policyForSession(sessionId)?.mode !== 'headless';
+        if (isAcpSession(sessionId)) return acp().prepare(sessionId);
+        return await activeDaemonMcp.prepare(sessionId, ctx.workspace, interactive);
+      },
       surface: (sessionId, ctx) => {
         const serveSurface = activeServeLeases.serveSurfaceOptions(sessionId, ctx);
         if (serveSurface) return serveSurface;
@@ -208,7 +219,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           allowUnsandboxed,
           shellEscapeApproval: !isAcp,
           preserveSandboxedShellApproval: true,
-          mcp: undefined,
+          mcp: isAcp ? acp().surface(sessionId) : undefined,
         };
       },
       mcpCatalog: null,
@@ -220,6 +231,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           sessionLaunchFlags.delete(event.sessionId);
         }
         activeServeLeases.observeLifecycle(event);
+        daemonAcp?.observeLifecycle(event);
         lifecycleObserver.current?.(event);
       },
       authority: activeServeLeases.createUnifiedAuthority(),
@@ -253,6 +265,12 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     });
     activeServeLeases.bindRuntime(localOwnerApp, sessionIndex);
     lifecycleObserver.current = (event) => sessionIndex.observeLifecycle(event);
+    const activeDaemonAcp = (daemonAcp = createDaemonAcp({
+      app: localOwnerApp,
+      selection,
+      isAcpSession,
+      sessionIndex,
+    }));
     await sessionIndex.seed();
     const discoveryRoot = async (
       principal: Principal,
@@ -314,7 +332,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
               await serveLeases?.closeAll();
               sessionIndex.dispose();
               await app?.close();
-              await daemonMcp?.close();
+              await closeMcp();
             } finally {
               // Step 6: remove daemon.json and unlink daemon.sock BEFORE releasing daemon.lock.sqlite.
               if (advertisementWritten) {
@@ -351,9 +369,11 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         setPendingLaunchFlags: (flags) => {
           pendingLaunchFlags = flags;
         },
+        admitLaunch: (sessionId, params) => activeDaemonAcp.admitLaunch(sessionId, params),
       }),
       serveStart: activeServeLeases.startLease.bind(activeServeLeases),
       serveStop: activeServeLeases.stopLease.bind(activeServeLeases),
+      acpSetMcp: activeDaemonAcp.setMcp,
     };
     const advertisedCapabilities = [...CLIENT_API_CAPABILITIES];
     const rpc = new DaemonRpc({
@@ -463,7 +483,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     advertisementWritten = true;
     return { kind: 'started', daemonId, paths, status, shutdown: performShutdown, closed };
   } catch (error) {
-    await Promise.allSettled([unixServer?.close(), serveLeases?.closeAll(), app?.close(), daemonMcp?.close()]);
+    await Promise.allSettled([unixServer?.close(), serveLeases?.closeAll(), app?.close(), closeMcp()]);
     if (advertisementWritten) removeFileIfPresent(paths.advertisementPath);
     if (socketBound) removeFileIfPresent(paths.socketPath);
     releaseLock();

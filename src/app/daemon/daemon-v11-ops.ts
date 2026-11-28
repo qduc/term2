@@ -71,6 +71,9 @@ function sanitizeSettingProjectionValue(key: string, value: unknown): unknown {
   return value;
 }
 
+/** Launch-only surface flags; the daemon records them for the runtime the launch opens. */
+export type DaemonLaunchFlags = Pick<SessionLaunchParams, 'requireSandbox' | 'clientMode'>;
+
 export type DaemonV11Deps = {
   readonly app: DirectApplication;
   readonly sessionIndex: SessionIndex;
@@ -81,9 +84,9 @@ export type DaemonV11Deps = {
   readonly recordLocalWorkspace: (root: string) => void;
   readonly resolveWorkspaceRoot: (workspaceId: string) => string;
   readonly setPendingCreatePolicy: (policy: SessionApprovalPolicy | undefined) => void;
-  readonly setPendingLaunchFlags: (
-    flags: { readonly requireSandbox?: boolean; readonly clientMode?: 'interactive' | 'headless' | 'acp' } | undefined,
-  ) => void;
+  readonly setPendingLaunchFlags: (flags: DaemonLaunchFlags | undefined) => void;
+  /** Refuses a launch whose client mode the live session's surface does not match. */
+  readonly admitLaunch?: (sessionId: string, params: SessionLaunchParams) => void;
   readonly sessionItemOrFallback: (principal: Principal, sessionId: string) => Promise<ClientApiSessionListItem>;
   readonly recentSettingsReceipts: Map<string, Record<string, unknown>>;
 };
@@ -142,17 +145,20 @@ async function launchDaemonSession(
   let forkedFrom: string | undefined;
   let conn: { readonly sessionId: string; close(): void };
   const createdFresh = params.selection.kind === 'new' || params.selection.kind === 'fork';
-
-  if (params.selection.kind === 'new') {
-    deps.recordLocalWorkspace(root);
+  const withPending = async (open: () => Promise<typeof conn>): Promise<typeof conn> => {
     deps.setPendingCreatePolicy(params.approvalPolicy);
     deps.setPendingLaunchFlags(launchFlags);
     try {
-      conn = await deps.app.host.createSession(principal, grant);
+      return await open();
     } finally {
       deps.setPendingCreatePolicy(undefined);
       deps.setPendingLaunchFlags(undefined);
     }
+  };
+
+  if (params.selection.kind === 'new') {
+    deps.recordLocalWorkspace(root);
+    conn = await withPending(() => deps.app.host.createSession(principal, grant));
     sessionId = conn.sessionId;
   } else {
     const stored = await deps.app.listStoredSessions();
@@ -191,16 +197,10 @@ async function launchDaemonSession(
     } else {
       sessionId = targetSummary.id;
     }
-    deps.setPendingCreatePolicy(params.approvalPolicy);
-    deps.setPendingLaunchFlags(launchFlags);
-    try {
-      conn = await deps.app.host.connect(principal, sessionId);
-    } finally {
-      deps.setPendingCreatePolicy(undefined);
-      deps.setPendingLaunchFlags(undefined);
-    }
+    conn = await withPending(() => deps.app.host.connect(principal, sessionId));
   }
   try {
+    deps.admitLaunch?.(sessionId, params);
     if (approvalMode !== undefined || Object.keys(launchConfig).length > 0) {
       try {
         await deps.app.applyLaunchConfiguration(sessionId, launchConfig, approvalMode);

@@ -429,6 +429,29 @@ operations before `app.close`; `shutdown` then closes managers. Host
 A reopened session replaces the old entry in `createDirectMcpRefresh` so later
 catalog notifications target the new runtime.
 
+## ACP over the daemon
+
+In daemon mode (`TERM2_DAEMON_MODE=1` without `TERM2_IN_PROCESS=1`) `launchAcp` hands off to
+`launchAcpOverDaemon` (`acp/launch-acp-daemon.ts`), a daemon client behind the
+same `createAcpBackend`. Every session it creates or resumes goes through
+`session.launch` with `clientMode: 'acp'`; later attaches are plain
+`session.attach`. Policy shared by both hosts lives in `acp/acp-common.ts`:
+`ACP_SESSION_POLICY` (Ask at every open, required sandbox, no saved-default
+writes), `authorizeAcpModel` and the model catalog.
+
+Inside the daemon, `createDaemonAcp` (`acp/daemon-acp.ts`) gives a session that
+opened with the ACP flag that policy through `DirectRuntimeOptions.sessionPolicy`,
+the ACP model rule, and only the MCP servers its ACP client supplies, never the
+daemon's per-workspace pool. `session.acp.set_mcp` runs them through
+`createAcpSessions`, so validation, atomic replacement and tool generations are
+the in-process ones. The calling connection owns an installation: its EOF, like
+session close, closes the servers, and a session that stays open rebuilds its
+tools without them. The ACP client sends stdio servers its own default MCP
+environment (HOME, PATH, USER and the rest that the MCP SDK passes on), so the
+daemon's environment never reaches them. `admitLaunch` refuses an ACP launch onto
+a session live under another client's surface, and Assisted or Unattended
+approval, which need ACP v1's sandboxed-shell review that a launch cannot request.
+
 ## Serve workspace grants
 
 `DirectWorkspaceAuthority` (`host-config-workspace.ts`) owns the server's

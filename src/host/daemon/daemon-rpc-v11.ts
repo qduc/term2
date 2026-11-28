@@ -12,11 +12,14 @@ import {
   type SettingsUpdateParamsV11,
 } from '../../protocol/client-api/client-api-schema.js';
 import { isClientApiVersionAtLeast } from '../../protocol/client-api/version-negotiation.js';
+import type { z } from 'zod';
 import type { Principal } from '../in-process-direct-types.js';
 import type { ProviderWriteInput, SafeSettingValue, ServerConfiguration } from '../server-contracts.js';
 import { ClientApiRpcError, parseStrict } from './daemon-errors.js';
 import type { GlobalMutationCoordinator } from './global-mutations.js';
 import type { SessionIndex } from './session-index.js';
+
+type SessionAcpSetMcpParams = z.infer<typeof CLIENT_API_SCHEMAS.sessionAcpSetMcpParams>;
 
 export type DaemonRpcConnectionContext = {
   readonly connectionId: string;
@@ -53,6 +56,12 @@ export type DaemonV11ControlPort = {
     leaseId: string,
     connection: DaemonRpcConnectionContext,
   ): Promise<Record<string, unknown>>;
+  /** `session.acp.set_mcp`: per-session ACP MCP servers, owned by the calling connection. */
+  acpSetMcp?(
+    principal: Principal,
+    params: SessionAcpSetMcpParams,
+    connection: DaemonRpcConnectionContext,
+  ): Promise<void>;
 };
 
 export function isV11(protocolVersion?: string): boolean {
@@ -300,12 +309,14 @@ export async function handleLocalLeaseMethod(
     const parsed = parseStrict(CLIENT_API_SCHEMAS.daemonServeStopParams, params, 'daemon.serve.stop');
     return await v11.serveStop(principal, parsed.leaseId, connection);
   }
-  if (
-    method === 'session.control.bind' ||
-    method === 'session.control.rebind' ||
-    method === 'session.control.unbind' ||
-    method === 'session.acp.set_mcp'
-  ) {
+  if (method === 'session.acp.set_mcp') {
+    if (!v11?.acpSetMcp || !connection) {
+      throw new ClientApiRpcError('unavailable', 'ACP MCP configuration is unavailable.');
+    }
+    await v11.acpSetMcp(principal, parseStrict(CLIENT_API_SCHEMAS.sessionAcpSetMcpParams, params, method), connection);
+    return {};
+  }
+  if (method === 'session.control.bind' || method === 'session.control.rebind' || method === 'session.control.unbind') {
     throw new ClientApiRpcError('unavailable', `Local lease method "${method}" is unavailable.`);
   }
   return undefined;

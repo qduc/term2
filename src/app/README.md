@@ -514,3 +514,63 @@ Discord send for a daemon session's tools comes from the daemon's surface
 (`DaemonControlLeases.outbound`, interactive local sessions only, as
 in-process): authority resolves at each call to a live, opted-in, unpaused
 socket bound to that session.
+
+## Launch posture over the daemon
+
+`session.create` and `session.launch` hand their approval policy and launch flags
+(`clientMode`, `requireSandbox`) to the session they start, through
+`DaemonLaunchPolicies.withLaunch` (`src/app/daemon/launches/launch-policies.ts`):
+an async-local frame, so a concurrent attach of another session never adopts
+them. A session's surface reads them once, when it is built, and a live session
+keeps that surface and any session-only settings a launch applied
+(`approvalMode`, `sandboxEnabled`). In-process, every run builds its own.
+
+`src/app/daemon/launches/launch-gate.ts` makes a daemon launch behave like that:
+
+- A resume or fork that names a live session compares its posture with the one a
+  fresh session for this launch would run with: headless or not, auto-approve,
+  sandbox requirement, and the saved `shell.autoApproveMode`, `sandbox.enabled`
+  and `shell.unattendedEscapeReview` unless the launch sets them itself. When they
+  differ, the session is closed and reopened with the launch's values, provided
+  nothing uses it: no connection, no turn, open interaction or background task,
+  and no other connection's launch still to attach
+  (`DirectHost.closeSessionIfUnused` checks and starts the close without
+  yielding). Otherwise the launch opens it as it is, and is refused with `busy`
+  when that posture is wider than the one asked for, or when another client has
+  it open and the launch's own `approvalMode`/`sandboxEnabled` would loosen it
+  there. Equal or tighter values still apply to a shared session: tightening never
+  lets anything run unasked.
+- The gate compares the values a session's tools enforce
+  (`DirectApplication.enforcedSettings`): its live settings before any rebuild,
+  the copy its last rebuild took after one. A launch's approval mode equal to the
+  enforced one is left alone, so re-admitting a session mid-turn sends no
+  configure. A different one goes through the session's configure and is set on
+  the live settings too, since that configure has nothing to do when only an
+  in-session change moved the live value. A configure the session cannot take
+  now (a turn or background work running) is refused with `busy`.
+- A session-scoped write of `shell.autoApproveMode`, `sandbox.enabled` or
+  `shell.unattendedEscapeReview` on a rebuilt session (`settings.update`, or a
+  launch's own settings) rebuilds it at once (`launchGate.syncEnforced`), so its
+  tools never enforce something other than its settings show. While it cannot
+  take that configure, the write is refused with `busy` and rolled back.
+- Every launch leaves a reservation for its Unix connection. That connection's
+  next `session.attach` of the session opens it with the launch's values if it
+  was closed meanwhile, and is refused with `busy` if it now runs wider. Until it
+  attaches (successfully or not) or disconnects, no other launch reopens the
+  session.
+- The daemon TUI's `/resume <id>` runs a `session.launch` resume with the TUI's
+  posture flags (`TuiBackend.resumeSession`) before it attaches, as the startup
+  `--resume` does. `/clear` and handoff successors are attached directly: they
+  continue their predecessor's settings. When the TUI reattaches after its
+  connection or stream dropped, it launches a resume first too, asking for the
+  approval mode and sandbox it last saw (`reattachDaemonTuiSession` in
+  `launches/tui-launch-params.ts`), so what it carried survives a reopen and a
+  looser reopen by another launch in the gap is undone or refused. A refusal ends
+  the reconnect, on the existing connection or a new one; only a failed attach
+  for another reason (a dead transport) moves on to a new connection.
+- `/resume` therefore refuses what an in-process TUI refuses: a session another
+  client is using with a looser posture (in-process, its writer lock is taken),
+  and a session of another workspace (`forbidden`; in-process, `canRun`).
+
+ACP sessions are left to `admitLaunch` and the holder rule. A plain attach with
+no launch before it (another viewer) sees the session as it is.

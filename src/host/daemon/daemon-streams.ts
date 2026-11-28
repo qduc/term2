@@ -33,6 +33,16 @@ export type DaemonStreamDeps = {
   readonly readTuiSettings?: (principal: Principal, sessionId?: string) => Promise<Record<string, unknown>>;
   readonly serializeSession: <T>(sessionId: string, operation: () => Promise<T>) => Promise<T>;
   readonly shutdownReason: () => 'closed' | 'daemon_shutdown';
+  /**
+   * Opens the connection behind a `session.attach`, given the Unix connection that asked, so the
+   * daemon can hold it to what that connection launched. Without it, a plain `host.connect`.
+   */
+  readonly attachSession?: (
+    principal: Principal,
+    sessionId: string,
+    fromSeq: number | undefined,
+    connectionId: string | undefined,
+  ) => Promise<DirectConnection | DirectReplayConnection>;
 };
 
 function earliestReplayableOf(snapshot: WireSnapshot | null): number {
@@ -120,8 +130,10 @@ async function attachSessionStream(
   deps: DaemonStreamDeps,
   principal: Principal,
   params: { readonly sessionId: string; readonly fromSeq?: number; readonly sessionEpoch?: string },
+  connectionId: string | undefined,
 ): Promise<StreamRegistration> {
   const expectedEpoch = params.sessionId;
+  const attach = deps.attachSession;
   if (params.fromSeq !== undefined && params.sessionEpoch !== undefined && params.sessionEpoch !== expectedEpoch) {
     const indexed = await deps.sessionIndex.get(principal, params.sessionId);
     throw new ClientApiRpcError('cursor_out_of_range', 'Session epoch mismatch; re-attach with a fresh snapshot.', {
@@ -136,7 +148,9 @@ async function attachSessionStream(
   if (params.fromSeq !== undefined) {
     let replayConn: DirectReplayConnection;
     try {
-      replayConn = await deps.host.connect(principal, params.sessionId, params.fromSeq);
+      replayConn = attach
+        ? ((await attach(principal, params.sessionId, params.fromSeq, connectionId)) as DirectReplayConnection)
+        : await deps.host.connect(principal, params.sessionId, params.fromSeq);
     } catch (error) {
       if (error instanceof DirectProtocolError && error.code === 'replay_unavailable') {
         const indexed = await deps.sessionIndex.get(principal, params.sessionId);
@@ -156,7 +170,9 @@ async function attachSessionStream(
     };
   }
 
-  const connection = await deps.host.connect(principal, params.sessionId);
+  const connection = attach
+    ? ((await attach(principal, params.sessionId, undefined, connectionId)) as DirectConnection)
+    : await deps.host.connect(principal, params.sessionId);
   const cut = connection.cut?.();
   const snapshot = cut?.snapshot ?? connection.snapshot;
   const cutOrdinal = cut?.ordinal ?? -1;
@@ -184,6 +200,7 @@ export async function openDaemonStream(
   method: string,
   rawParams: unknown,
   protocolVersion?: string,
+  connectionId?: string,
 ): Promise<StreamRegistration> {
   const params = rawParams === undefined ? {} : asRecord(rawParams, method);
   const allowV11 = isClientApiVersionAtLeast(protocolVersion ?? '1.0', '1.1');
@@ -294,7 +311,9 @@ export async function openDaemonStream(
 
   if (method === 'session.attach') {
     const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionAttachParams, params, 'session.attach');
-    return await deps.serializeSession(parsed.sessionId, () => attachSessionStream(deps, principal, parsed));
+    return await deps.serializeSession(parsed.sessionId, () =>
+      attachSessionStream(deps, principal, parsed, connectionId),
+    );
   }
 
   throw new ClientApiRpcError('invalid_request', `Unknown stream method "${method}".`);

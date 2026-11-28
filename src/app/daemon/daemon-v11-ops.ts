@@ -11,7 +11,11 @@ import { decodeStoredCustomProviderConfigs } from '../../config/settings/custom-
 import { SENSITIVE_SETTING_KEYS, SETTING_KEYS } from '../../config/settings/settings-schema.js';
 import { isSecretSetting } from '../../config/settings/settings-ui-metadata.js';
 import type { Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
-import { ClientApiRpcError, type DaemonV11ControlPort } from '../../host/daemon/daemon-rpc.js';
+import {
+  ClientApiRpcError,
+  type DaemonRpcConnectionContext,
+  type DaemonV11ControlPort,
+} from '../../host/daemon/daemon-rpc.js';
 import type { GlobalMutationCoordinator } from '../../host/daemon/global-mutations.js';
 import type { SessionIndex } from '../../host/daemon/session-index.js';
 import { ModelCatalogSession } from '../../model/models/model-catalog-session.js';
@@ -29,10 +33,10 @@ import type { DirectCommandConfiguration } from '../../session/command-types.js'
 import { createDurableGoal } from '../../session/goal.js';
 import type { DirectApplication } from '../application.js';
 import { localGrant, requireLocalCaller } from '../application-workspaces.js';
-import type { DirectApprovalMode } from '../config-settings.js';
 import type { DirectGlobalConfiguration } from '../host-config.js';
 import type { SettingsService } from '../settings.js';
-import type { DaemonLaunchValues } from './daemon-session-ops.js';
+import type { DaemonLaunchGate } from './launches/launch-gate.js';
+import type { DaemonLaunchValues } from './launches/launch-policies.js';
 
 const FORBIDDEN_SETTING_KEYS = new Set<string>(['providers', 'hooks', 'hooks.commands', 'mcp', 'mcp.servers']);
 const URL_SETTING_KEYS = new Set<string>(['webSearch.firecrawl.baseUrl', 'webSearch.searxng.baseUrl']);
@@ -80,8 +84,8 @@ export type DaemonV11Deps = {
   readonly localWorkspaceIdForRoot: (root: string) => string;
   readonly recordLocalWorkspace: (root: string) => void;
   readonly resolveWorkspaceRoot: (workspaceId: string) => string;
-  /** Runs `start` so that only the session it starts takes `values` (`DaemonLaunchPolicies.withLaunch`). */
-  readonly withLaunchValues: <T>(values: DaemonLaunchValues, start: () => Promise<T>) => Promise<T>;
+  /** Opens each launch's session with its values, and holds it to the posture it asked for. */
+  readonly launchGate: DaemonLaunchGate;
   /** Refuses a launch whose client mode the live session's surface does not match. */
   readonly admitLaunch?: (sessionId: string, params: SessionLaunchParams) => void | Promise<void>;
   readonly sessionItemOrFallback: (principal: Principal, sessionId: string) => Promise<ClientApiSessionListItem>;
@@ -101,19 +105,11 @@ function canonicalizeLocalCwd(cwd: string): string {
   return resolved;
 }
 
-function mapLaunchConfigError(error: unknown): never {
-  if (error instanceof ClientApiRpcError) throw error;
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('background work') || message.toLowerCase().includes('busy')) {
-    throw new ClientApiRpcError('busy', message, { retryable: true });
-  }
-  throw new ClientApiRpcError('invalid_request', message);
-}
-
 async function launchDaemonSession(
   deps: DaemonV11Deps,
   principal: Principal,
   params: SessionLaunchParams,
+  connection: DaemonRpcConnectionContext | undefined,
 ): Promise<Record<string, unknown>> {
   requireLocalCaller(principal);
   if ('ssh' in params) {
@@ -129,7 +125,6 @@ async function launchDaemonSession(
     ...(params.reasoning ? { reasoning: params.reasoning } : {}),
     ...(params.profileId ? { profileId: params.profileId } : {}),
   };
-  const approvalMode = params.approvalMode as DirectApprovalMode | undefined;
   const launchFlags =
     params.requireSandbox !== undefined || params.clientMode !== undefined
       ? {
@@ -142,19 +137,16 @@ async function launchDaemonSession(
   let forkedFrom: string | undefined;
   let conn: { readonly sessionId: string; close(): void };
   const createdFresh = params.selection.kind === 'new' || params.selection.kind === 'fork';
-  const withLaunch = (open: () => Promise<typeof conn>, target?: string): Promise<typeof conn> =>
-    deps.withLaunchValues(
-      {
-        ...(params.approvalPolicy ? { policy: params.approvalPolicy } : {}),
-        ...(launchFlags ? { flags: launchFlags } : {}),
-        ...(target ? { sessionId: target } : {}),
-      },
-      open,
-    );
+  const values: DaemonLaunchValues = {
+    ...(params.approvalPolicy ? { policy: params.approvalPolicy } : {}),
+    ...(launchFlags ? { flags: launchFlags } : {}),
+    ...(params.approvalMode !== undefined ? { approvalMode: params.approvalMode } : {}),
+    ...(params.sandboxEnabled !== undefined ? { sandboxEnabled: params.sandboxEnabled } : {}),
+  };
 
   if (params.selection.kind === 'new') {
     deps.recordLocalWorkspace(root);
-    conn = await withLaunch(() => deps.app.host.createSession(principal, grant));
+    conn = await deps.launchGate.withLaunch(values, () => deps.app.host.createSession(principal, grant));
     sessionId = conn.sessionId;
   } else {
     const stored = await deps.app.listStoredSessions();
@@ -193,32 +185,18 @@ async function launchDaemonSession(
     } else {
       sessionId = targetSummary.id;
     }
-    const target = sessionId;
-    conn = await withLaunch(() => deps.app.host.connect(principal, target), target);
+    conn = await deps.launchGate.openTarget(principal, sessionId, values, connection);
   }
   try {
     await deps.admitLaunch?.(sessionId, params);
-    if (approvalMode !== undefined || Object.keys(launchConfig).length > 0) {
-      try {
-        await deps.app.applyLaunchConfiguration(sessionId, launchConfig, approvalMode);
-      } catch (error) {
-        mapLaunchConfigError(error);
-      }
-    }
-    const liveSettings = deps.app.liveSettings(sessionId);
-    if (liveSettings) {
-      if (params.showReview !== undefined) liveSettings.set('shell.showReview', params.showReview, { persist: false });
-      if (params.sandboxEnabled !== undefined) {
-        liveSettings.set('sandbox.enabled', params.sandboxEnabled, { persist: false });
-      }
-      if (params.requireSandbox) liveSettings.set('sandbox.enabled', true, { persist: false });
-    }
+    await deps.launchGate.applySettings(principal, sessionId, launchConfig, params);
     if (params.goal) {
       await deps.app.setGoal(sessionId, createDurableGoal(params.goal.text, params.goal.successCriteria), 'launcher');
     }
     const details = deps.app.sessionDetails(sessionId);
     const profileMetadata = details.profileId ? getProfileMetadata(details.profileId) : undefined;
     const session = await deps.sessionItemOrFallback(principal, sessionId);
+    deps.launchGate.reserve(connection, sessionId, values);
     return {
       session,
       workspace: { workspaceId, root, target: 'local' as const },
@@ -385,8 +363,11 @@ async function updateDaemonScopedSettings(
           else target.setDynamic(change.key, change.value, { persist: false });
         }
       }
+      // A rebuilt session's tools enforce an approval mode or sandbox change only once rebuilt.
+      if (live && params.sessionId) await deps.launchGate.syncEnforced(principal, params.sessionId);
     } catch (error) {
-      if (!persist) {
+      // The session keeps what it had; a saved preference stays saved for later sessions.
+      if (!persist || live) {
         for (const { key, hadValue } of previousValues) {
           try {
             target.setDynamic(key, hadValue, { persist: false });
@@ -481,7 +462,7 @@ export function createDaemonV11Port(
     },
   };
   return {
-    launchSession: (principal, params) => launchDaemonSession(fullDeps, principal, params),
+    launchSession: (principal, params, connection) => launchDaemonSession(fullDeps, principal, params, connection),
     canonicalizeCwd: (principal, cwd) => {
       requireLocalCaller(principal);
       return canonicalizeLocalCwd(cwd);

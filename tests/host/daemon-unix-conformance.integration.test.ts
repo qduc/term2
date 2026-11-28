@@ -21,6 +21,11 @@ import { connectOrStartDaemon } from '../../src/app/daemon/daemon-bootstrap.js';
 import { prepareSocketForBind } from '../../src/app/daemon/daemon-paths.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
 import { controlDirectory } from '../../src/clients/control-socket/control-socket.js';
+import {
+  HEADLESS_AUTO_APPROVE_REFUSAL,
+  HEADLESS_REFUSAL,
+  startTouchToolProvider,
+} from '../helpers/touch-tool-provider.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -178,6 +183,55 @@ async function controlSocketRequest(
   }
 }
 
+const sessionIdOf = (frame: UnixResponseFrame) => (frame.ok ? (frame.result['session'] as { id: string }).id : '');
+const streamIdOf = (frame: UnixResponseFrame) =>
+  frame.ok ? CLIENT_API_SCHEMAS.unixSessionAttachResult.parse(frame.result).streamId : '';
+
+type AcceptedEvent = { type?: string; payload?: Record<string, unknown> };
+const accepted = (frame: UnixEventFrame, streamId: string): AcceptedEvent[] =>
+  frame.streamId === streamId && frame.event === 'session.accepted' && Array.isArray(frame.payload['events'])
+    ? (frame.payload['events'] as AcceptedEvent[])
+    : [];
+
+async function firstOfType(client: TestUnixRpcClient, streamId: string, type: string) {
+  const frame = await client.waitForEvent((f) => accepted(f, streamId).some((e) => e.type === type), 15_000);
+  return accepted(frame, streamId).find((e) => e.type === type)?.payload ?? {};
+}
+
+/**
+ * Submits a turn whose model asks to `touch` `file` (`startTouchToolProvider`), and reports who resolved
+ * the approval it opens. With `answerAs`, the test answers as the person at the terminal. A session with
+ * no person (headless) has already resolved it by policy, and the policy's reason says whether the
+ * session holds auto-approve.
+ */
+async function approvalOutcome(
+  client: TestUnixRpcClient,
+  sessionId: string,
+  streamId: string,
+  file: string,
+  answerAs?: string,
+): Promise<{ source: string | undefined; reason: string | undefined }> {
+  const submitted = await client.request('session.command', {
+    sessionId,
+    command: { type: 'submit', requestId: `touch-${file}`, text: `Please create ${file}`, origin: { kind: 'cli' } },
+  });
+  expect(submitted.ok).toBe(true);
+  const opened = await firstOfType(client, streamId, 'interaction_opened');
+  const requestId = (opened['interaction'] as { requestId: string }).requestId;
+  if (answerAs) {
+    // Refused as stale when a policy resolved the request first; the resolution below says which won.
+    await client.request('session.command', {
+      sessionId,
+      command: { type: 'answer', requestId, decision: { kind: 'deny', reason: answerAs } },
+    });
+  }
+  const resolved = await firstOfType(client, streamId, 'interaction_resolved');
+  return {
+    source: (resolved['provenance'] as { source?: string } | undefined)?.source,
+    reason: (resolved['resolution'] as { reason?: string } | undefined)?.reason,
+  };
+}
+
 describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
   const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -207,6 +261,36 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     fs.writeFileSync(path.join(workspace, 'hello.txt'), 'world\n');
     cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
     return { root, stateDir, runtimeDir, socketPath, workspace };
+  }
+
+  async function touchProvider(): Promise<string> {
+    const provider = await startTouchToolProvider();
+    cleanups.push(provider.close);
+    return provider.baseUrl;
+  }
+
+  function writeTouchSettings(settingsDir: string, baseUrl: string, sandbox = false): void {
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'touch', model: 'touch-model' }, retryAttempts: 0 },
+        providers: [{ name: 'touch', type: 'openai-compatible', baseUrl, apiKey: 'k' }],
+        sandbox: { enabled: sandbox },
+      }),
+    );
+  }
+
+  async function openV11Client(socketPath: string, clientKind: 'tui' | 'headless'): Promise<TestUnixRpcClient> {
+    const client = new TestUnixRpcClient(await connectRaw(socketPath));
+    cleanups.push(() => client.close());
+    const hello = await client.request('protocol.hello', {
+      protocolVersion: '1.1',
+      minSupportedVersion: '1.1',
+      clientKind,
+      clientVersion: '1.1.0',
+    });
+    expect(hello.ok).toBe(true);
+    return client;
   }
 
   it('enforces 0700/0600 permissions, singleton lock, stale socket guard, handshake rules, and 4 MiB line cap', async () => {
@@ -767,10 +851,12 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const sessionId = (launched.result['session'] as { id: string }).id;
     expect(launched.result['workspace']).toMatchObject({ root: fs.realpathSync(wsA), target: 'local' });
 
-    // `session.launch` resume via 'last' and bare UUID, plus fork with approvalPolicy.
+    // `session.launch` resume via 'last' and bare UUID, plus fork with approvalPolicy. The resumes ask for the
+    // same approval mode: one without it reopens the idle session with the saved mode, as in-process.
     const resumedLast = await v11.request('session.launch', {
       cwd: wsA,
       selection: { kind: 'resume', sessionId: 'last' },
+      approvalMode: 'auto',
     });
     expect(resumedLast.ok).toBe(true);
     if (resumedLast.ok) expect((resumedLast.result['session'] as { id: string }).id).toBe(sessionId);
@@ -779,6 +865,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const resumedBare = await v11.request('session.launch', {
       cwd: wsA,
       selection: { kind: 'resume', sessionId: bareId },
+      approvalMode: 'auto',
     });
     expect(resumedBare.ok).toBe(true);
     if (resumedBare.ok) expect((resumedBare.result['session'] as { id: string }).id).toBe(sessionId);
@@ -1125,64 +1212,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     for (const dir of [settingsDir, gateDir, launchWs, dormantWs]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const launchRoot = fs.realpathSync(launchWs);
 
-    // The model asks to `touch` the file the latest user message names (a shell write, which an interactive
-    // session asks about), then stops once it sees the result.
-    const provider = http.createServer((req, res) => {
-      if (req.method === 'GET') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ object: 'list', data: [{ id: 'race-model' }] }));
-        return;
-      }
-      let body = '';
-      req.on('data', (chunk: Buffer) => {
-        body += chunk.toString('utf8');
-      });
-      req.on('end', () => {
-        const messages = (JSON.parse(body) as { messages: Array<{ role: string; content?: unknown }> }).messages;
-        const last = messages.at(-1);
-        const target = /create ([\w.-]+\.txt)/.exec(JSON.stringify(last?.content ?? ''))?.[1];
-        const delta =
-          last?.role === 'user' && target
-            ? {
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: `call_${target}`,
-                    type: 'function',
-                    function: {
-                      name: 'shell',
-                      arguments: JSON.stringify({ command: `touch ${target}`, description: 'Create a file' }),
-                    },
-                  },
-                ],
-              }
-            : { role: 'assistant', content: 'done' };
-        const finish = 'tool_calls' in delta ? 'tool_calls' : 'stop';
-        res.writeHead(200, { 'content-type': 'text/event-stream' });
-        res.end(
-          [
-            `data: ${JSON.stringify({ id: 'c', choices: [{ delta }] })}`,
-            '',
-            `data: ${JSON.stringify({ id: 'c', choices: [{ delta: {}, finish_reason: finish }] })}`,
-            '',
-            'data: [DONE]',
-            '',
-          ].join('\n'),
-        );
-      });
-    });
-    await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
-    cleanups.push(() => new Promise<void>((resolve) => provider.close(() => resolve())));
-    const address = provider.address();
-    const baseUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
-    fs.writeFileSync(
-      path.join(settingsDir, 'settings.json'),
-      JSON.stringify({
-        agent: { modelSelection: { provider: 'race', model: 'race-model' }, retryAttempts: 0 },
-        providers: [{ name: 'race', type: 'openai-compatible', baseUrl, apiKey: 'k' }],
-        sandbox: { enabled: false },
-      }),
-    );
+    writeTouchSettings(settingsDir, await touchProvider());
 
     // Holds the launch mid-start: a headless surface waits for its workspace's MCP servers to settle,
     // and this one never answers `initialize`. It marks that it started, then exits once released.
@@ -1218,21 +1248,8 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     if (daemon.kind !== 'started') return;
     cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
 
-    const open = async (clientKind: 'tui' | 'headless') => {
-      const client = new TestUnixRpcClient(await connectRaw(socketPath));
-      cleanups.push(() => client.close());
-      const hello = await client.request('protocol.hello', {
-        protocolVersion: '1.1',
-        minSupportedVersion: '1.1',
-        clientKind,
-        clientVersion: '1.1.0',
-      });
-      expect(hello.ok).toBe(true);
-      return client;
-    };
-    const tui = await open('tui');
-    const headless = await open('headless');
-    const sessionIdOf = (frame: UnixResponseFrame) => (frame.ok ? (frame.result['session'] as { id: string }).id : '');
+    const tui = await openV11Client(socketPath, 'tui');
+    const headless = await openV11Client(socketPath, 'headless');
 
     // A stored session nobody has open.
     const stored = await tui.request('session.launch', { cwd: dormantWs, selection: { kind: 'new' } });
@@ -1259,48 +1276,6 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(launched.ok).toBe(true);
     const launchedId = sessionIdOf(launched);
 
-    type AcceptedEvent = { type?: string; payload?: Record<string, unknown> };
-    const accepted = (frame: UnixEventFrame, streamId: string): AcceptedEvent[] =>
-      frame.streamId === streamId && frame.event === 'session.accepted' && Array.isArray(frame.payload['events'])
-        ? (frame.payload['events'] as AcceptedEvent[])
-        : [];
-    const firstOfType = async (client: TestUnixRpcClient, streamId: string, type: string) => {
-      const frame = await client.waitForEvent((f) => accepted(f, streamId).some((e) => e.type === type), 15_000);
-      return accepted(frame, streamId).find((e) => e.type === type)?.payload ?? {};
-    };
-    /**
-     * Submits a turn whose model asks to `touch` `file`, and reports who resolved the approval it opens. With
-     * `answerAs`, the test answers as the person at the terminal. A session with no person (headless) has
-     * already resolved it by policy, and the policy's reason says whether the session holds auto-approve.
-     */
-    const approvalOutcome = async (
-      client: TestUnixRpcClient,
-      sessionId: string,
-      streamId: string,
-      file: string,
-      answerAs?: string,
-    ) => {
-      const submitted = await client.request('session.command', {
-        sessionId,
-        command: { type: 'submit', requestId: `race-${file}`, text: `Please create ${file}`, origin: { kind: 'cli' } },
-      });
-      expect(submitted.ok).toBe(true);
-      const opened = await firstOfType(client, streamId, 'interaction_opened');
-      const requestId = (opened['interaction'] as { requestId: string }).requestId;
-      if (answerAs) {
-        // Refused as stale when a policy resolved the request first; the resolution below says which won.
-        await client.request('session.command', {
-          sessionId,
-          command: { type: 'answer', requestId, decision: { kind: 'deny', reason: answerAs } },
-        });
-      }
-      const resolved = await firstOfType(client, streamId, 'interaction_resolved');
-      return {
-        source: (resolved['provenance'] as { source?: string } | undefined)?.source,
-        reason: (resolved['resolution'] as { reason?: string } | undefined)?.reason,
-      };
-    };
-
     // The attached session keeps its interactive surface: the request waits for the person, who answers it.
     const dormantOutcome = await approvalOutcome(tui, dormantId, dormantStream, 'dormant.txt', 'person declined');
     expect(dormantOutcome.reason).toBe('person declined');
@@ -1315,7 +1290,352 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const ownStream = CLIENT_API_SCHEMAS.unixSessionAttachResult.parse(own.result).streamId;
     expect(await approvalOutcome(headless, launchedId, ownStream, 'launched.txt')).toEqual({
       source: 'policy',
-      reason: 'No person is available to approve this in a non-interactive run.',
+      reason: HEADLESS_AUTO_APPROVE_REFUSAL,
     });
+  });
+
+  /** A daemon whose model is `startTouchToolProvider`; the saved settings turn the sandbox off unless `sandbox`. */
+  async function startTouchDaemon(sandbox = false) {
+    const { root, stateDir, runtimeDir, socketPath, workspace } = makeSandboxRoot();
+    const settingsDir = path.join(root, 'settings');
+    fs.mkdirSync(settingsDir, { recursive: true, mode: 0o700 });
+    writeTouchSettings(settingsDir, await touchProvider(), sandbox);
+    const daemon = await startTerm2Daemon({
+      stateDir,
+      conversationsDir: path.join(stateDir, 'conversations'),
+      socketPath,
+      env: { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir },
+    });
+    if (daemon.kind !== 'started') throw new Error('daemon did not start');
+    cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
+    const launch = (client: TestUnixRpcClient, sessionId: string | null, posture: Record<string, unknown>) =>
+      client.request('session.launch', {
+        cwd: workspace,
+        selection: sessionId === null ? { kind: 'new' } : { kind: 'resume', sessionId },
+        ...posture,
+      });
+    const attach = async (client: TestUnixRpcClient, sessionId: string) =>
+      streamIdOf(await client.request('session.attach', { sessionId }));
+    return {
+      socketPath,
+      launch,
+      attach,
+      /** One client run: launch, attach, then detach as the client exits. The session stays live and idle. */
+      async run(client: TestUnixRpcClient, sessionId: string | null, posture: Record<string, unknown>) {
+        const launched = await launch(client, sessionId, posture);
+        expect(launched.ok).toBe(true);
+        const id = sessionIdOf(launched);
+        const streamId = await attach(client, id);
+        expect(await client.request('session.detach', { streamId })).toMatchObject({ ok: true });
+        return id;
+      },
+      async liveSetting(client: TestUnixRpcClient, sessionId: string, key: string) {
+        const read = await client.request('settings.get', { sessionId, view: 'tui' });
+        if (!read.ok) throw new Error(`settings.get failed: ${JSON.stringify(read)}`);
+        return (read.result['settings'] as { entries: Record<string, { value: unknown }> }).entries[key]?.value;
+      },
+    };
+  }
+
+  const interactive = { clientMode: 'interactive' };
+  const headlessAsk = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: false } };
+  const headlessAuto = { clientMode: 'headless', approvalPolicy: { mode: 'headless', autoApprove: true } };
+
+  it('resumes a live session only with the approval posture the resume asked for, and refuses a wider one it cannot reopen', async () => {
+    const { socketPath, launch, attach, run } = await startTouchDaemon();
+    const tui = await openV11Client(socketPath, 'tui');
+    const headless = await openV11Client(socketPath, 'headless');
+
+    // Interactive, then a headless resume: the session's own policy answers, as in a fresh headless run.
+    const first = await run(tui, null, interactive);
+    expect(sessionIdOf(await launch(headless, first, headlessAsk))).toBe(first);
+    const firstStream = await attach(headless, first);
+    expect(await approvalOutcome(headless, first, firstStream, 'first.txt', 'person declined')).toEqual({
+      source: 'policy',
+      reason: HEADLESS_REFUSAL,
+    });
+
+    // Headless with auto-approve, then a terminal resume: the person is asked again.
+    const second = await run(headless, null, headlessAuto);
+    expect(sessionIdOf(await launch(tui, second, interactive))).toBe(second);
+    const secondStream = await attach(tui, second);
+    const asked = await approvalOutcome(tui, second, secondStream, 'second.txt', 'person declined');
+    expect(asked.reason).toBe('person declined');
+    expect(asked.source).not.toBe('policy');
+
+    // While another client has an auto-approve session open, it cannot be reopened: a resume asking
+    // for less is refused, one asking for the same is admitted, and the session keeps its posture.
+    const third = sessionIdOf(await launch(headless, null, headlessAuto));
+    const held = await attach(headless, third);
+    expect(await launch(tui, third, interactive)).toMatchObject({ ok: false, error: { code: 'busy' } });
+    expect(await launch(headless, third, headlessAsk)).toMatchObject({ ok: false, error: { code: 'busy' } });
+    expect(await launch(headless, third, headlessAuto)).toMatchObject({ ok: true });
+    expect(await approvalOutcome(headless, third, held, 'third.txt')).toEqual({
+      source: 'policy',
+      reason: HEADLESS_AUTO_APPROVE_REFUSAL,
+    });
+  });
+
+  it('holds the first attach after a launch to what that launch asked for, whatever another launch did in between', async () => {
+    const { socketPath, launch, attach, run } = await startTouchDaemon();
+    const setup = await openV11Client(socketPath, 'headless');
+    const a = await openV11Client(socketPath, 'headless');
+    const b = await openV11Client(socketPath, 'headless');
+
+    // A launches a plain headless resume and has not attached yet when B asks for auto-approve.
+    // B may not reopen the session under A, so B runs with the narrower posture; A gets what it asked for.
+    const plain = await run(setup, null, headlessAsk);
+    expect(await launch(a, plain, headlessAsk)).toMatchObject({ ok: true });
+    expect(await launch(b, plain, headlessAuto)).toMatchObject({ ok: true });
+    const plainStream = await attach(a, plain);
+    expect(await approvalOutcome(a, plain, plainStream, 'plain.txt', 'person declined')).toEqual({
+      source: 'policy',
+      reason: HEADLESS_REFUSAL,
+    });
+
+    // The other way round, B's narrower resume is refused while A's auto-approve launch is still to attach.
+    const auto = await run(setup, null, headlessAuto);
+    expect(await launch(a, auto, headlessAuto)).toMatchObject({ ok: true });
+    expect(await launch(b, auto, headlessAsk)).toMatchObject({ ok: false, error: { code: 'busy' } });
+
+    // If the session closes before A attaches and B then opens it with auto-approve, A's attach is refused.
+    const closed = await run(setup, null, headlessAsk);
+    expect(await launch(a, closed, headlessAsk)).toMatchObject({ ok: true });
+    expect(await setup.request('session.close', { sessionId: closed })).toMatchObject({ ok: true });
+    expect(await launch(b, closed, headlessAuto)).toMatchObject({ ok: true });
+    expect(await a.request('session.attach', { sessionId: closed })).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+
+    // An attach that fails (here a bad replay cursor) ends the launch's hold too, so B may reopen the session.
+    const failed = await run(setup, null, headlessAuto);
+    expect(await launch(a, failed, headlessAuto)).toMatchObject({ ok: true });
+    expect(
+      await a.request('session.attach', { sessionId: failed, fromSeq: 999_999, sessionEpoch: failed }),
+    ).toMatchObject({ ok: false, error: { code: 'cursor_out_of_range' } });
+    expect(await launch(b, failed, headlessAsk)).toMatchObject({ ok: true });
+  });
+
+  it('refuses a launch that would loosen the approval mode or sandbox of a session another client has open', async () => {
+    const { socketPath, launch, attach, liveSetting } = await startTouchDaemon(true);
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    const shared = sessionIdOf(await launch(a, null, interactive));
+    const held = await attach(a, shared);
+    const posture = async () => [
+      await liveSetting(a, shared, 'shell.autoApproveMode'),
+      await liveSetting(a, shared, 'sandbox.enabled'),
+    ];
+
+    expect(await launch(b, shared, { ...interactive, approvalMode: 'always' })).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+    expect(await launch(b, shared, { ...interactive, sandboxEnabled: false })).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+    expect(await posture()).toEqual(['off', true]);
+    // The same settings, or tighter ones, may still be applied to a session someone else has open.
+    expect(await launch(b, shared, { ...interactive, approvalMode: 'off', sandboxEnabled: true })).toMatchObject({
+      ok: true,
+    });
+
+    // Once nobody else has it open, the launch's own settings apply.
+    expect(await a.request('session.detach', { streamId: held })).toMatchObject({ ok: true });
+    expect(await launch(b, shared, { ...interactive, approvalMode: 'always' })).toMatchObject({ ok: true });
+    expect(await posture()).toEqual(['always', true]);
+  });
+
+  it('keeps a rebuilt session enforcing the approval mode and sandbox its settings show', async () => {
+    /** A session-scoped temporary write (`/auto-approve`, `/sandbox`); returns the response. */
+    const setSetting = async (client: TestUnixRpcClient, sessionId: string, key: string, value: unknown) => {
+      const read = await client.request('settings.get', { sessionId, view: 'tui' });
+      const expectedRevision = read.ok ? String(read.result['revision']) : '';
+      const changes = [{ key, value }];
+      return await client.request('settings.update', { sessionId, expectedRevision, persist: false, changes });
+    };
+    /** A configure that rebuilds the session's tools, keeping its model. */
+    const rebuild = (client: TestUnixRpcClient, sessionId: string) =>
+      client.request('session.command', {
+        sessionId,
+        command: { type: 'configure', commandId: `rebuild-${sessionId}`, configuration: { model: touchModel } },
+      });
+    /** Submits a turn that asks to `touch` `file`: 'asked' when a person is asked (and declines), else 'ran'. */
+    const turn = async (client: TestUnixRpcClient, sessionId: string, streamId: string, file: string) => {
+      const submitted = await client.request('session.command', {
+        sessionId,
+        command: { type: 'submit', requestId: `turn-${file}`, text: `Please create ${file}`, origin: { kind: 'cli' } },
+      });
+      expect(submitted.ok).toBe(true);
+      const frame = await client.waitForEvent(
+        (f) => accepted(f, streamId).some((e) => e.type === 'interaction_opened' || e.type === 'turn_ended'),
+        15_000,
+      );
+      const opened = accepted(frame, streamId).find((e) => e.type === 'interaction_opened');
+      if (!opened) return 'ran';
+      const requestId = (opened.payload!['interaction'] as { requestId: string }).requestId;
+      await client.request('session.command', {
+        sessionId,
+        command: { type: 'answer', requestId, decision: { kind: 'deny', reason: 'person declined' } },
+      });
+      return 'asked';
+    };
+    const touchModel = { provider: 'touch', model: 'touch-model' };
+
+    // Launched with `always` (its configure rebuilt it), then set back to off in the session, then left.
+    // A resume asking for off, or asking nothing, must find off in force: its write asks the person.
+    const { socketPath, launch, attach } = await startTouchDaemon();
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    for (const [label, posture] of [
+      ['explicit', { ...interactive, approvalMode: 'off' }],
+      ['plain', interactive],
+    ] as const) {
+      const always = sessionIdOf(await launch(a, null, { ...interactive, approvalMode: 'always' }));
+      const left = await attach(a, always);
+      expect(await setSetting(a, always, 'shell.autoApproveMode', 'off')).toMatchObject({ ok: true });
+      expect(await a.request('session.detach', { streamId: left })).toMatchObject({ ok: true });
+      expect(await launch(b, always, posture)).toMatchObject({ ok: true });
+      expect(await turn(b, always, await attach(b, always), `${label}.txt`)).toBe('asked');
+    }
+
+    // Mid-turn, a rebuilt session cannot take such a write (it would need a rebuild): refused, nothing changes.
+    const busy = sessionIdOf(await launch(a, null, interactive));
+    const busyStream = await attach(a, busy);
+    expect(await rebuild(a, busy)).toMatchObject({ ok: true });
+    const submitted = await a.request('session.command', {
+      sessionId: busy,
+      command: { type: 'submit', requestId: 'busy-1', text: 'Please create busy.txt', origin: { kind: 'cli' } },
+    });
+    expect(submitted.ok).toBe(true);
+    await firstOfType(a, busyStream, 'interaction_opened');
+    expect(await setSetting(a, busy, 'shell.autoApproveMode', 'always')).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+    const read = await a.request('settings.get', { sessionId: busy, view: 'tui' });
+    expect(
+      read.ok && (read.result['settings'] as { entries: Record<string, { value: unknown }> }).entries,
+    ).toMatchObject({ 'shell.autoApproveMode': { value: 'off' } });
+
+    // The sandbox: turned off at launch and taken into a rebuild, then turned back on in the session, then left.
+    // A plain resume (the saved setting is on) must find it on: the workspace write runs sandboxed, unasked.
+    const sandboxed = await startTouchDaemon(true);
+    const c = await openV11Client(sandboxed.socketPath, 'tui');
+    const d = await openV11Client(sandboxed.socketPath, 'tui');
+    const off = sessionIdOf(await sandboxed.launch(c, null, { ...interactive, sandboxEnabled: false }));
+    const offStream = await sandboxed.attach(c, off);
+    expect(await rebuild(c, off)).toMatchObject({ ok: true });
+    expect(await setSetting(c, off, 'sandbox.enabled', true)).toMatchObject({ ok: true });
+    expect(await c.request('session.detach', { streamId: offStream })).toMatchObject({ ok: true });
+    expect(await sandboxed.launch(d, off, interactive)).toMatchObject({ ok: true });
+    expect(await turn(d, off, await sandboxed.attach(d, off), 'sandboxed.txt')).toBe('ran');
+  });
+
+  it("leaves a session's settings as they were when it refuses a launch's configure", async () => {
+    const { socketPath, launch, attach, liveSetting } = await startTouchDaemon(true);
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    const running = sessionIdOf(await launch(a, null, interactive));
+    const stream = await attach(a, running);
+    // A turn waits on the person (with the sandbox off, the write asks), then the person turns the sandbox on.
+    const read = await a.request('settings.get', { sessionId: running, view: 'tui' });
+    const expectedRevision = read.ok ? String(read.result['revision']) : '';
+    const off = [{ key: 'sandbox.enabled', value: false }];
+    expect(
+      await a.request('settings.update', { sessionId: running, expectedRevision, persist: false, changes: off }),
+    ).toMatchObject({ ok: true });
+    const submitted = await a.request('session.command', {
+      sessionId: running,
+      command: { type: 'submit', requestId: 'refused-1', text: 'Please create refused.txt', origin: { kind: 'cli' } },
+    });
+    expect(submitted.ok).toBe(true);
+    await firstOfType(a, stream, 'interaction_opened');
+    const reread = await a.request('settings.get', { sessionId: running, view: 'tui' });
+    const on = [{ key: 'sandbox.enabled', value: true }];
+    expect(
+      await a.request('settings.update', {
+        sessionId: running,
+        expectedRevision: reread.ok ? String(reread.result['revision']) : '',
+        persist: false,
+        changes: on,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await a.request('session.detach', { streamId: stream })).toMatchObject({ ok: true });
+
+    // B's launch needs a configure for its approval mode, which the session cannot take mid-turn.
+    const refused = await launch(b, running, { ...interactive, sandboxEnabled: false, approvalMode: 'auto' });
+    expect(refused).toMatchObject({ ok: false, error: { code: 'busy' } });
+    expect(await liveSetting(b, running, 'sandbox.enabled')).toBe(true);
+    expect(await liveSetting(b, running, 'shell.autoApproveMode')).toBe('off');
+  });
+
+  it('lands an explicit approval mode on the live value an in-session change moved, so the attach is admitted', async () => {
+    const { socketPath, launch, attach, liveSetting } = await startTouchDaemon();
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    const d = await openV11Client(socketPath, 'tui');
+    /** `/auto-approve <mode>` in the session: a session-only live change, no configure. */
+    const setMode = async (client: TestUnixRpcClient, sessionId: string, mode: string) => {
+      const read = await client.request('settings.get', { sessionId, view: 'tui' });
+      const expectedRevision = read.ok ? String(read.result['revision']) : '';
+      const changes = [{ key: 'shell.autoApproveMode', value: mode }];
+      expect(
+        await client.request('settings.update', { sessionId, expectedRevision, persist: false, changes }),
+      ).toMatchObject({ ok: true });
+    };
+
+    // Changed to auto in the session, then everyone leaves; a new terminal asks for off explicitly.
+    const moved = sessionIdOf(await launch(a, null, interactive));
+    const movedStream = await attach(a, moved);
+    await setMode(a, moved, 'auto');
+    expect(await a.request('session.detach', { streamId: movedStream })).toMatchObject({ ok: true });
+    expect(await launch(d, moved, { ...interactive, approvalMode: 'off' })).toMatchObject({ ok: true });
+    expect(await d.request('session.attach', { sessionId: moved })).toMatchObject({ ok: true });
+    expect(await liveSetting(d, moved, 'shell.autoApproveMode')).toBe('off');
+
+    // B, still attached, changed it to auto while A was away. A comes back asking for what it last saw (off):
+    // a tighter mode applies to a shared session, and A's attach is admitted.
+    const shared = sessionIdOf(await launch(a, null, interactive));
+    const sharedStream = await attach(a, shared);
+    await attach(b, shared);
+    expect(await a.request('session.detach', { streamId: sharedStream })).toMatchObject({ ok: true });
+    await setMode(b, shared, 'auto');
+    expect(await launch(a, shared, { ...interactive, approvalMode: 'off', sandboxEnabled: false })).toMatchObject({
+      ok: true,
+    });
+    expect(await a.request('session.attach', { sessionId: shared })).toMatchObject({ ok: true });
+    expect(await liveSetting(b, shared, 'shell.autoApproveMode')).toBe('off');
+  });
+
+  it("compares the approval mode and sandbox a launch set for its session alone, which a fresh session wouldn't have", async () => {
+    const { socketPath, launch, attach, run, liveSetting } = await startTouchDaemon();
+    const tui = await openV11Client(socketPath, 'tui');
+    const headless = await openV11Client(socketPath, 'headless');
+
+    // `--approval-mode always`, then a resume without it: the resume runs with the saved mode, and asks.
+    const always = await run(tui, null, { ...interactive, approvalMode: 'always' });
+    expect(await liveSetting(tui, always, 'shell.autoApproveMode')).toBe('always');
+    expect(await launch(tui, always, interactive)).toMatchObject({ ok: true });
+    expect(await liveSetting(tui, always, 'shell.autoApproveMode')).toBe('off');
+    const alwaysStream = await attach(tui, always);
+    expect(await approvalOutcome(tui, always, alwaysStream, 'always.txt', 'person declined')).toMatchObject({
+      reason: 'person declined',
+    });
+
+    // While a terminal holds an `always` session, a plain headless resume of it is refused.
+    const held = sessionIdOf(await launch(tui, null, { ...interactive, approvalMode: 'always' }));
+    await attach(tui, held);
+    expect(await launch(headless, held, headlessAsk)).toMatchObject({ ok: false, error: { code: 'busy' } });
+
+    // A launch that turned the sandbox off, then a resume without that flag: the saved setting (on) again.
+    const sandboxed = await startTouchDaemon(true);
+    const tui2 = await openV11Client(sandboxed.socketPath, 'tui');
+    const off = await sandboxed.run(tui2, null, { ...interactive, sandboxEnabled: false });
+    expect(await sandboxed.liveSetting(tui2, off, 'sandbox.enabled')).toBe(false);
+    expect(await sandboxed.launch(tui2, off, interactive)).toMatchObject({ ok: true });
+    expect(await sandboxed.liveSetting(tui2, off, 'sandbox.enabled')).toBe(true);
   });
 });

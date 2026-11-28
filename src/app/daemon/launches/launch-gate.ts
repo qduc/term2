@@ -57,6 +57,15 @@ function refusal(): ClientApiRpcError {
   );
 }
 
+function loosening(): ClientApiRpcError {
+  return new ClientApiRpcError(
+    'busy',
+    'This session is open in another client, and this launch would loosen its approval mode or sandbox there. ' +
+      'Resume it without those settings, or close it in the other client first.',
+    { retryable: true },
+  );
+}
+
 export type DaemonLaunchGate = ReturnType<typeof createDaemonLaunchGate>;
 
 export function createDaemonLaunchGate(deps: {
@@ -88,7 +97,7 @@ export function createDaemonLaunchGate(deps: {
    */
   const compare = (sessionId: string, values: DaemonLaunchValues, beforeApply: boolean) => {
     const live = livePosture(sessionId);
-    if (!live) return { differs: false, wider: false };
+    if (!live) return { differs: false, wider: false, loosens: false };
     const requireSandbox = values.flags?.requireSandbox === true;
     const asked: Posture = {
       headless: values.policy?.mode === 'headless' || values.flags?.clientMode === 'headless',
@@ -98,9 +107,19 @@ export function createDaemonLaunchGate(deps: {
       sandbox: requireSandbox ? true : values.sandboxEnabled ?? saved.getDynamic(SANDBOX),
       escapeReview: saved.getDynamic(ESCAPE_REVIEW),
     };
+    // What the launch's own settings make of the live session once applied.
+    const applied: Posture = {
+      ...live,
+      ...(values.approvalMode !== undefined ? { approvalMode: values.approvalMode } : {}),
+      ...(requireSandbox
+        ? { sandbox: true }
+        : values.sandboxEnabled !== undefined
+        ? { sandbox: values.sandboxEnabled }
+        : {}),
+    };
     if (beforeApply && values.approvalMode !== undefined) asked.approvalMode = live.approvalMode;
     if (beforeApply && (requireSandbox || values.sandboxEnabled !== undefined)) asked.sandbox = live.sandbox;
-    return { differs: differs(live, asked), wider: wider(live, asked) };
+    return { differs: differs(live, asked), wider: wider(live, asked), loosens: wider(applied, live) };
   };
 
   return {
@@ -121,9 +140,13 @@ export function createDaemonLaunchGate(deps: {
         await app.host.closeSessionIfUnused?.(principal, sessionId, unused);
       }
       const conn = await launches.withLaunch({ ...values, sessionId }, () => app.host.connect(principal, sessionId));
-      if (gated && compare(sessionId, values, true).wider) {
+      const after = gated ? compare(sessionId, values, true) : undefined;
+      // Another client has it open (beyond this launch's own connection): its settings are not this launch's to loosen.
+      const shared = () =>
+        (app.host.connectionCount?.(sessionId) ?? 0) > 1 || launches.awaitedByAnother(sessionId, own);
+      if (after?.wider || (after?.loosens && shared())) {
         conn.close();
-        throw refusal();
+        throw after.wider ? refusal() : loosening();
       }
       return conn;
     },
@@ -149,9 +172,14 @@ export function createDaemonLaunchGate(deps: {
           : app.host.connect(principal, sessionId, fromSeq);
       const values = launches.reservation(connectionId, sessionId);
       if (!values) return await open();
-      const conn = await launches.withLaunch({ ...values, sessionId }, open);
-      // Held open by this connection now, so the reservation has done its job.
-      launches.release(connectionId, sessionId, values);
+      let conn: DirectConnection | DirectReplayConnection;
+      try {
+        conn = await launches.withLaunch({ ...values, sessionId }, open);
+      } finally {
+        // Held open by this connection now, or the attach failed (a bad cursor, say): either way the
+        // reservation is done, so it no longer keeps other launches from reopening the session.
+        launches.release(connectionId, sessionId, values);
+      }
       if (compare(sessionId, values, false).wider) {
         conn.close();
         throw refusal();

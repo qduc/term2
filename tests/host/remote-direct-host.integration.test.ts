@@ -18,6 +18,7 @@ import { startTerm2Daemon, type Term2DaemonHandle } from '../../src/app/daemon/d
 import { connectRemoteDirectHost } from '../../src/app/daemon/connect-daemon-host.js';
 import { LOCAL_PRINCIPAL, localGrant } from '../../src/app/application-workspaces.js';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
+import { readmitDaemonTuiSession } from '../../src/app/daemon/launches/tui-launch-params.js';
 import { integrationCliPath } from '../helpers/integration-cli.js';
 import {
   HEADLESS_AUTO_APPROVE_REFUSAL,
@@ -543,5 +544,90 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     // Asking for auto-approve again gets it again.
     await run('--auto-approve', '--resume', 'last', 'Please create third.txt');
     expect(toolResults[2]).toContain(HEADLESS_AUTO_APPROVE_REFUSAL);
+  });
+
+  it('re-admits a terminal that lost its attachment, so a looser reopen in the gap does not reach it', async () => {
+    const { stateDir, runtimeDir, socketPath, workspace, settingsDir } = makeSandboxRoot();
+    const conversationsDir = path.join(stateDir, 'conversations');
+    const provider = await startTouchToolProvider();
+    cleanups.push(provider.close);
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'touch', model: 'touch-model' }, retryAttempts: 0 },
+        providers: [{ name: 'touch', type: 'openai-compatible', baseUrl: provider.baseUrl, apiKey: 'k' }],
+        sandbox: { enabled: false },
+      }),
+    );
+    const env: NodeJS.ProcessEnv = { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir };
+    const daemon = await startTerm2Daemon({ stateDir, conversationsDir, socketPath, env });
+    expect(daemon.kind).toBe('started');
+    if (daemon.kind !== 'started') return;
+    cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
+    const connect = async (clientKind: string) => {
+      const { host } = await connectRemoteDirectHost({
+        clientKind,
+        socketPath,
+        stateDir,
+        conversationsDir,
+        allowAutoStart: false,
+        protocolVersion: '1.1',
+        minSupportedVersion: '1.1',
+        env,
+      });
+      cleanups.push(() => host.dispose());
+      return host;
+    };
+    const root = fs.realpathSync(workspace);
+
+    // A terminal starts a session and attaches, then its attachment drops.
+    const tui = await connect('tui');
+    const { session } = await tui.launchSession({ cwd: root, selection: { kind: 'new' }, clientMode: 'interactive' });
+    const view = (await tui.readSettings({ sessionId: session.id, view: 'tui' })) as {
+      settings: { entries: Record<string, { value: unknown }> };
+    };
+    const seen = { getDynamic: (key: string) => view.settings.entries[key]?.value };
+    (await tui.connect(LOCAL_PRINCIPAL, session.id)).close();
+
+    // In that gap a headless --auto-approve run reopens the idle session with its own posture, and exits.
+    const headless = await connect('headless');
+    const auto = { mode: 'headless', autoApprove: true } as const;
+    await headless.launchSession({
+      cwd: root,
+      selection: { kind: 'resume', sessionId: session.id },
+      clientMode: 'headless',
+      approvalPolicy: auto,
+    });
+    (await headless.connect(LOCAL_PRINCIPAL, session.id)).close();
+
+    // The terminal reattaches as its backend's reconnect does: re-admitted through the gate, then attached.
+    await readmitDaemonTuiSession(tui, root, session.id, seen);
+    const again = await tui.connect(LOCAL_PRINCIPAL, session.id);
+    const submitted = await again.send({
+      type: 'submit',
+      requestId: 'readmit-1',
+      text: 'Please create readmit.txt',
+      origin: { kind: 'cli' },
+    });
+    expect(submitted.ok).toBe(true);
+    // One consumer for the whole turn: answer as the person when the request opens, unless a policy already did.
+    let reason: string | undefined;
+    for await (const event of again.events) {
+      const { payload } = event as unknown as {
+        payload: { interaction?: { requestId: string }; resolution?: { reason?: string } };
+      };
+      if (event.type === 'interaction_opened') {
+        await again.send({
+          type: 'answer',
+          requestId: payload.interaction!.requestId,
+          decision: { kind: 'deny', reason: 'person declined' },
+        });
+      } else if (event.type === 'interaction_resolved') {
+        reason = payload.resolution?.reason;
+        break;
+      }
+    }
+    expect(reason).toBe('person declined');
+    again.close();
   });
 });

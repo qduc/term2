@@ -1407,6 +1407,45 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       ok: false,
       error: { code: 'busy' },
     });
+
+    // An attach that fails (here a bad replay cursor) ends the launch's hold too, so B may reopen the session.
+    const failed = await run(setup, null, headlessAuto);
+    expect(await launch(a, failed, headlessAuto)).toMatchObject({ ok: true });
+    expect(
+      await a.request('session.attach', { sessionId: failed, fromSeq: 999_999, sessionEpoch: failed }),
+    ).toMatchObject({ ok: false, error: { code: 'cursor_out_of_range' } });
+    expect(await launch(b, failed, headlessAsk)).toMatchObject({ ok: true });
+  });
+
+  it('refuses a launch that would loosen the approval mode or sandbox of a session another client has open', async () => {
+    const { socketPath, launch, attach, liveSetting } = await startTouchDaemon(true);
+    const a = await openV11Client(socketPath, 'tui');
+    const b = await openV11Client(socketPath, 'tui');
+    const shared = sessionIdOf(await launch(a, null, interactive));
+    const held = await attach(a, shared);
+    const posture = async () => [
+      await liveSetting(a, shared, 'shell.autoApproveMode'),
+      await liveSetting(a, shared, 'sandbox.enabled'),
+    ];
+
+    expect(await launch(b, shared, { ...interactive, approvalMode: 'always' })).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+    expect(await launch(b, shared, { ...interactive, sandboxEnabled: false })).toMatchObject({
+      ok: false,
+      error: { code: 'busy' },
+    });
+    expect(await posture()).toEqual(['off', true]);
+    // The same settings, or tighter ones, may still be applied to a session someone else has open.
+    expect(await launch(b, shared, { ...interactive, approvalMode: 'off', sandboxEnabled: true })).toMatchObject({
+      ok: true,
+    });
+
+    // Once nobody else has it open, the launch's own settings apply.
+    expect(await a.request('session.detach', { streamId: held })).toMatchObject({ ok: true });
+    expect(await launch(b, shared, { ...interactive, approvalMode: 'always' })).toMatchObject({ ok: true });
+    expect(await posture()).toEqual(['always', true]);
   });
 
   it("compares the approval mode and sandbox a launch set for its session alone, which a fresh session wouldn't have", async () => {

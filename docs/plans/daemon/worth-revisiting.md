@@ -124,17 +124,37 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
         session with the launch's values and is refused if the session runs wider.
         Until then no other launch reopens the session;
       - is used by the daemon TUI's `/resume`, which now launches a resume first.
+      A second review found three more gaps, now closed: a launch could loosen
+      a session another client had open with its own `approvalMode` or
+      `sandboxEnabled` (now `busy`; equal or tighter values still apply); a TUI
+      reattaching after a dropped connection attached as a plain viewer (it now
+      launches a resume first, with the approval mode and sandbox it last saw);
+      and a failed attach left its reservation behind (it is now released).
       Rebuilding a live surface in place was not chosen: the runtime captures its
       surface options once, at open. Covered by
       `tests/host/remote-direct-host.integration.test.ts` (built CLI),
       `tests/host/daemon-unix-conformance.integration.test.ts` (live resume,
       launch-then-attach race, session-only settings) and
-      `tests/cli/daemon-tui.e2e.test.ts` (`/resume` of a live auto-approve session).
-    - Still open: a plain attach with no launch before it (another viewer, or a
-      TUI reattaching after its connection dropped) sees the session as it is. A
-      launch that leaves its session shared at a narrower posture than asked is
-      admitted; if that leaves a headless client with an interactive surface and
-      nobody at the other end, its approval waits for a person who is not there.
-      A reservation lasts until its connection attaches or disconnects, with no
-      timeout.
+      `tests/cli/daemon-tui.e2e.test.ts` (`/resume` of a live auto-approve session),
+      plus the loosening and re-admit cases in the two host suites.
+    - Still open:
+      - A plain attach with no launch before it (another viewer) sees the session
+        as it is.
+      - A launch that leaves its session shared at a narrower posture than asked
+        is admitted. If that leaves a headless client with an interactive surface
+        and nobody at the other end, its approval waits for a person who is not
+        there.
+      - A reservation lasts until its connection attaches or disconnects, with no
+        timeout.
+      - Session settings outside the comparison survive a resume of a live
+        session: `sandbox.allowNetworking`, `readPolicy`, `allowReadExtra`,
+        `dockerHostControlProjects`, `hooks.*`, `tools.*`. The TUI does not write
+        them per session, but a raw v1.1 `settings.update { sessionId,
+        persist: false }` does.
+      - `/resume` changes: the daemon TUI refuses a target another client is
+        using when its posture is looser (or, when the TUI was started with
+        `--approval-mode`, one that is mid-turn or has background work, since the
+        mode is applied as a configure), and a target in another workspace. These
+        match what an in-process TUI refuses (writer lock, `canRun`), but they are
+        new for daemon users.
 

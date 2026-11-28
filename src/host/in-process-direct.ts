@@ -194,6 +194,11 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       await deps.authorize(principal, { kind: 'write', sessionId });
       await release(sessionId);
     },
+    connectionCount(sessionId) {
+      let count = 0;
+      for (const id of connections.values()) if (id === sessionId) count += 1;
+      return count;
+    },
     async closeSessionIfUnused(principal, sessionId, unused) {
       open();
       await deps.authorize(principal, { kind: 'write', sessionId });

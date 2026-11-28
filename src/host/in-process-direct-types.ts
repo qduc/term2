@@ -46,6 +46,8 @@ export interface DirectHost {
    * between them. Resolves whether it closed.
    */
   closeSessionIfUnused?(principal: Principal, sessionId: string, unused: () => boolean): Promise<boolean>;
+  /** How many connections (live and replay subscribers) are open on a session now. */
+  connectionCount?(sessionId: string): number;
   /**
    * Close every live Session whose workspace root is `root`, including ones still
    * opening or being created, and cancel their running work. Used after the root's

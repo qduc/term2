@@ -536,16 +536,26 @@ keeps that surface and any session-only settings a launch applied
   and no other connection's launch still to attach
   (`DirectHost.closeSessionIfUnused` checks and starts the close without
   yielding). Otherwise the launch opens it as it is, and is refused with `busy`
-  when that posture is wider than the one asked for.
+  when that posture is wider than the one asked for, or when another client has
+  it open and the launch's own `approvalMode`/`sandboxEnabled` would loosen it
+  there. Equal or tighter values still apply to a shared session: tightening never
+  lets anything run unasked.
 - Every launch leaves a reservation for its Unix connection. That connection's
   next `session.attach` of the session opens it with the launch's values if it
   was closed meanwhile, and is refused with `busy` if it now runs wider. Until it
-  attaches or disconnects, no other launch reopens the session.
+  attaches (successfully or not) or disconnects, no other launch reopens the
+  session.
 - The daemon TUI's `/resume <id>` runs a `session.launch` resume with the TUI's
   posture flags (`TuiBackend.resumeSession`) before it attaches, as the startup
   `--resume` does. `/clear` and handoff successors are attached directly: they
-  continue their predecessor's settings.
+  continue their predecessor's settings. When the TUI reattaches after its
+  connection or stream dropped, it launches a resume first too, asking for the
+  approval mode and sandbox it last saw (`launches/tui-launch-params.ts`), so
+  what it carried survives a reopen and a looser reopen by another launch in
+  the gap is undone or refused.
+- `/resume` therefore refuses what an in-process TUI refuses: a session another
+  client is using with a looser posture (in-process, its writer lock is taken),
+  and a session of another workspace (`forbidden`; in-process, `canRun`).
 
 ACP sessions are left to `admitLaunch` and the holder rule. A plain attach with
-no launch before it (another viewer, or the TUI reattaching after a dropped
-connection) sees the session as it is.
+no launch before it (another viewer) sees the session as it is.

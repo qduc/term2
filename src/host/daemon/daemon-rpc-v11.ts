@@ -14,7 +14,7 @@ import {
 import type { SessionControlBindParams } from '../../protocol/client-api/client-api-schema-v11.js';
 import { isClientApiVersionAtLeast } from '../../protocol/client-api/version-negotiation.js';
 import type { z } from 'zod';
-import type { Principal } from '../in-process-direct-types.js';
+import type { DirectConnection, DirectReplayConnection, Principal } from '../in-process-direct-types.js';
 import type { ProviderWriteInput, SafeSettingValue, ServerConfiguration } from '../server-contracts.js';
 import { ClientApiRpcError, parseStrict } from './daemon-errors.js';
 import type { GlobalMutationCoordinator } from './global-mutations.js';
@@ -34,6 +34,13 @@ export type DaemonV11ControlPort = {
     params: SessionLaunchParams,
     connection?: DaemonRpcConnectionContext,
   ): Promise<Record<string, unknown>>;
+  /** Opens a `session.attach`, holding the asking connection to what it launched (`DaemonStreamDeps.attachSession`). */
+  attachSession?(
+    principal: Principal,
+    sessionId: string,
+    fromSeq: number | undefined,
+    connectionId: string | undefined,
+  ): Promise<DirectConnection | DirectReplayConnection>;
   canonicalizeCwd?(principal: Principal, cwd: string): string;
   handoffSessionV11?(
     principal: Principal,

@@ -10,7 +10,7 @@ import type { MenuModelInfo, MenuPathEntry } from '../../clients/tui/integration
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 import type { RemoteDirectHost } from '../../host/daemon/remote-direct-host.js';
 import { getModelContextWindow } from '../../model/providers/model-catalog/catalog.js';
-import type { SessionLaunchParams, SessionLaunchResult } from '../../protocol/client-api/client-api-schema.js';
+import type { SessionLaunchResult } from '../../protocol/client-api/client-api-schema.js';
 import { displaySessionId } from '../../protocol/session-id.js';
 import type { WireCommand, WireSnapshot } from '../../protocol/wire.js';
 import type { DurableGoal } from '../../session/goal.js';
@@ -20,13 +20,17 @@ import { LOCAL_PRINCIPAL } from '../application-workspaces.js';
 import type { DirectControlBridge } from '../launch-control.js';
 import { createDaemonControlBridge, type DaemonControlBridge } from './leases/control-bridge.js';
 import type { UnixRpcClient } from '../../host/daemon/unix-rpc-client.js';
-import type { DirectLaunchRequest } from '../launch-types.js';
 import type { TuiBackend, TuiSkillEntry } from '../lib/tui-backend.js';
 import { connectRemoteDirectHost } from './connect-daemon-host.js';
 import { createDaemonProviderMenu } from './daemon-tui-providers.js';
 import { DaemonTuiSettingsStore } from './daemon-tui-settings-store.js';
-
-type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
+import {
+  buildLaunchParams,
+  isLaunchRefusal,
+  reattachDaemonTuiSession,
+  resumeLaunchParams,
+  type InteractiveRequest,
+} from './launches/tui-launch-params.js';
 
 const RECONNECT_BACKOFF_MS = [150, 400, 900] as const;
 
@@ -35,62 +39,6 @@ function waitMs(ms: number): Promise<void> {
     const timer = setTimeout(resolve, ms);
     timer.unref?.();
   });
-}
-
-function isLaunchOverrideSource(source: string | undefined): boolean {
-  return source === 'cli' || source === 'env';
-}
-
-function buildLaunchParams(request: InteractiveRequest, root: string): SessionLaunchParams {
-  const { settings } = request.selection;
-  const selection: SessionLaunchParams['selection'] =
-    request.resumeId === undefined
-      ? { kind: 'new' }
-      : request.fork
-      ? { kind: 'fork', sessionId: request.resumeId }
-      : { kind: 'resume', sessionId: request.resumeId };
-
-  const cliModel =
-    request.resumeConfiguration?.model ??
-    (isLaunchOverrideSource(settings.getSource?.('agent.modelSelection'))
-      ? settings.get('agent.modelSelection')
-      : undefined);
-  const cliReasoning =
-    request.resumeConfiguration?.reasoning ??
-    (isLaunchOverrideSource(settings.getSource?.('agent.reasoningEffort'))
-      ? settings.get('agent.reasoningEffort')
-      : undefined);
-  const cliApproval = isLaunchOverrideSource(settings.getSource?.('shell.autoApproveMode'))
-    ? settings.get('shell.autoApproveMode')
-    : undefined;
-  const cliShowReview = isLaunchOverrideSource(settings.getSource?.('shell.showReview'))
-    ? settings.get('shell.showReview')
-    : undefined;
-  const cliSandbox = isLaunchOverrideSource(settings.getSource?.('sandbox.enabled'))
-    ? settings.get('sandbox.enabled')
-    : undefined;
-
-  return {
-    cwd: root,
-    selection,
-    clientMode: 'interactive',
-    ...(cliModel ? { model: { provider: cliModel.provider, model: cliModel.model } } : {}),
-    ...(cliReasoning ? { reasoning: cliReasoning } : {}),
-    ...(request.profileExplicit
-      ? { profileId: String(settings.get('app.activeProfileId')), profileExplicit: true }
-      : {}),
-    ...(cliApproval ? { approvalMode: cliApproval } : {}),
-    ...(cliShowReview !== undefined ? { showReview: cliShowReview } : {}),
-    ...(cliSandbox !== undefined ? { sandboxEnabled: cliSandbox } : {}),
-    ...(request.goal
-      ? {
-          goal: {
-            text: request.goal.outcome,
-            ...(request.goal.successCriteria ? { successCriteria: request.goal.successCriteria } : {}),
-          },
-        }
-      : {}),
-  };
 }
 
 function mapMcpStatusView(raw: Record<string, unknown>): McpStatusView {
@@ -178,21 +126,15 @@ async function openDaemonTuiSession(
       sessionId: string,
       retained: WireSnapshot,
     ): Promise<DirectConnection | DirectReplayConnection> => {
+      // Each attach is re-admitted through the launch gate with what this TUI last saw (reattachDaemonTuiSession).
+      // A refusal ends the reconnect; only a failed transport moves on to a new connection.
+      const last = store.liveSettings(sessionId);
       // First attempt fast re-attach on the existing Unix connection if it is still open.
       if (!host.rpc.closed) {
-        if (retained.seq !== null) {
-          try {
-            return await host.connect(LOCAL_PRINCIPAL, sessionId, retained.seq);
-          } catch {
-            // Fall through to full snapshot attach on cursor_out_of_range or transient stream close.
-          }
-        }
-        try {
-          const fresh = await host.connect(LOCAL_PRINCIPAL, sessionId);
-          await prepareSession(sessionId);
-          return fresh;
-        } catch {
-          // Transport is dead; fall through to reconnect/restart daemon below.
+        const again = await reattachDaemonTuiSession(host, root, sessionId, last, retained.seq);
+        if (again) {
+          if (again.snapshot !== null) await prepareSession(sessionId);
+          return again;
         }
       }
 
@@ -207,12 +149,14 @@ async function openDaemonTuiSession(
           store.replaceHost(host);
           void previousHost.dispose().catch(() => undefined);
           await store.hydrateGlobal();
-          const attached = await host.connect(LOCAL_PRINCIPAL, sessionId);
+          const attached = await reattachDaemonTuiSession(host, root, sessionId, last, null);
+          if (!attached) throw new Error('Could not reattach to the Term2 daemon session.');
           await prepareSession(sessionId);
           // A control socket leased on the old connection was released with it.
           await onReconnected(sessionId).catch(() => undefined);
           return attached;
         } catch (error) {
+          if (isLaunchRefusal(error)) throw error;
           lastError = error;
         }
       }
@@ -228,6 +172,9 @@ async function openDaemonTuiSession(
       persistentSettings: store.globalSettings,
       serverResolvesSkills: true,
       liveSettings: (sessionId) => store.liveSettings(sessionId),
+      async resumeSession(sessionId) {
+        await host.launchSession(resumeLaunchParams(request, root, sessionId));
+      },
       sessionDetails: (sessionId) => {
         const meta = store.sessionMeta(sessionId);
         return {

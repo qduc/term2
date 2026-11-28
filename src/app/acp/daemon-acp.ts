@@ -218,7 +218,7 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
     guardV11(port: DaemonV11ControlPort): Pick<DaemonV11ControlPort, 'launchSession' | 'updateScopedSettings'> {
       return {
         launchSession: (principal, params, connection) =>
-          launching.run(connection, () => port.launchSession!(principal, params)),
+          launching.run(connection, () => port.launchSession!(principal, params, connection)),
         updateScopedSettings(principal, params: SettingsUpdateParamsV11) {
           if (params.sessionId && deps.isAcpSession(params.sessionId)) {
             for (const change of params.changes) {

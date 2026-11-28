@@ -8,6 +8,7 @@ import { DirectProtocolError } from '../protocol/errors.js';
 import { directReplayView } from './in-process-direct-replay.js';
 import type { DirectEventQueue } from './in-process-direct-queue.js';
 import { DirectAttachment } from './in-process-direct-attachment.js';
+import { deriveSnapshotSummary } from './server-projection.js';
 import type {
   DirectConnection,
   DirectReplayConnection,
@@ -192,6 +193,26 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       open();
       await deps.authorize(principal, { kind: 'write', sessionId });
       await release(sessionId);
+    },
+    connectionCount(sessionId) {
+      let count = 0;
+      for (const id of connections.values()) if (id === sessionId) count += 1;
+      return count;
+    },
+    async closeSessionIfUnused(principal, sessionId, unused) {
+      open();
+      await deps.authorize(principal, { kind: 'write', sessionId });
+      open();
+      // From here to release() starting the close, nothing yields.
+      const pending = attachments.get(sessionId);
+      const attached = pending ? settled.get(pending) : undefined;
+      if (!attached || closingSessions.has(sessionId)) return false;
+      for (const id of connections.values()) if (id === sessionId) return false;
+      const summary = deriveSnapshotSummary(attached.snapshot);
+      if (summary.status === 'running' || summary.status === 'awaiting_interaction') return false;
+      if (summary.activeBackgroundTaskCount > 0 || !unused()) return false;
+      await release(sessionId);
+      return true;
     },
     async closeWorkspaceSessions(root) {
       open();

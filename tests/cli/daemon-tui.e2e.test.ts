@@ -555,6 +555,74 @@ describe('Built CLI TUI over daemon (Step 14d)', () => {
   );
 
   it(
+    'asks the person after /resume of a session the daemon still has live from a headless --auto-approve run',
+    async () => {
+      const touch = (file: string) => ({
+        toolCall: {
+          id: `call_${file}`,
+          name: 'shell',
+          args: { command: `touch ${file}`, description: 'Create a file' },
+        },
+      });
+      const provider = await startProvider([touch('seed.txt'), 'seed-done', touch('tui.txt'), 'tui-done']);
+      cleanups.push(() => provider.close());
+      const fixture = createFixture(provider.baseUrl, 'term2-daemon-tui-resume-posture-e2e');
+      cleanups.push(() => fs.rmSync(fixture.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+      const daemonEnv = createTestChildEnv(fixture.env);
+      cleanups.push(async () => {
+        await execFileAsync(
+          process.execPath,
+          [builtCli, 'daemon', 'stop', '--socket', fixture.socketPath, '--state-dir', fixture.stateDir],
+          { cwd: fixture.daemonCwd, env: daemonEnv, timeout: 10_000 },
+        ).catch(() => undefined);
+      });
+
+      // The headless run leaves its session live in the daemon, with its auto-approve policy.
+      await execFileAsync(process.execPath, [builtCli, '--quiet', '--auto-approve', 'seed auto session'], {
+        cwd: fixture.workspace,
+        env: daemonEnv,
+        timeout: 25_000,
+      });
+      expect(JSON.stringify(provider.requests()[1]?.messages.at(-1))).toContain('No person is available');
+      const inspector = await connectRemoteDirectHost({
+        clientKind: 'control',
+        conversationsDir: fixture.conversationsDir,
+        protocolVersion: '1.1',
+        minSupportedVersion: '1.1',
+        env: daemonEnv,
+      });
+      cleanups.push(() => inspector.host.dispose());
+      const [seeded] = (await inspector.host.listSessionsByCwd(fixture.workspace)).sessions;
+
+      const tui = spawnTerminal(process.execPath, [builtCli], {
+        cwd: fixture.workspace,
+        env: fixture.env,
+        cols: 100,
+        rows: 30,
+      });
+      cleanups.push(() => tui.dispose());
+      await waitForHarnessIdleGeneration(fixture.idlePath, { timeoutMs: 60_000 });
+      const resumeCmd = `/resume ${displaySessionId(seeded!.id)}`;
+      tui.write(resumeCmd);
+      await waitForHarnessComposerValue(fixture.idlePath, resumeCmd, { timeoutMs: 30_000 });
+      await tui.waitForOutput('seed auto session', 30_000);
+      tui.write('\r');
+      await tui.waitForOutput('seed-done', 30_000);
+      await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
+
+      // The terminal asks its person, rather than the headless run's policy refusing on its own.
+      await submitLine(tui, fixture.idlePath, 'create the tui file');
+      const approvalReady = `${fixture.idlePath}.approval`;
+      await expect
+        .poll(() => fs.existsSync(approvalReady) || provider.requests().length > 3, { timeout: 30_000 })
+        .toBe(true);
+      expect(provider.requests()).toHaveLength(3);
+      expect(fs.existsSync(approvalReady)).toBe(true);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     'hosts the TUI control socket in the daemon: control and Discord reach the session through it, /clear moves it, a killed TUI releases it, and /restart hands it over',
     async () => {
       // The model reads the session's Discord authority through `discord_send` (a run_code script tool).

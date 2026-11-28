@@ -432,6 +432,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     async switchSession(sessionId) {
       // Native rollover rotates the backing log, not this attached logical Session.
       if (sessionId === latest().sessionId) return;
+      if (resumed.has(sessionId)) await backend.resumeSession?.(sessionId);
       const next = await backend.host.connect(backend.principal, sessionId);
       await backend.prepareSession?.(sessionId);
       if (resumed.delete(sessionId)) saveResumedSelection(sessionId);

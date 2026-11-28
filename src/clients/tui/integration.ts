@@ -374,6 +374,10 @@ export interface TuiProps {
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   /** New durable events only; snapshot/replay callbacks do not trigger side effects. */
   readonly onLiveEvent?: (event: WireEvent) => void;
+  /** Disable client-driven background notification drain when the host drains authoritatively (daemon mode). */
+  readonly disableClientNotificationDrain?: boolean;
+  /** Called when the underlying event stream drops or closes while mounted; lets the app reconnect. */
+  readonly onConnectionLost?: (reason: string) => void;
   readonly onExit: () => void;
 }
 

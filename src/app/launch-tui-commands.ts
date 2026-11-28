@@ -14,7 +14,6 @@ import { randomUUID } from 'node:crypto';
 import { createDurableGoal, formatGoalStatus } from '../session/conversation/durable-goal.js';
 import { composeHandoffMessage } from '../shared/handoff/handoff-flow-reducer.js';
 import { formatMcpStatus } from '../tools/mcp/mcp-status.js';
-import type { DirectMcp } from './mcp.js';
 import { injectSkillIntoTurn } from '../shared/types/user-turn.js';
 import { helpText } from '../clients/tui/slash-commands.js';
 import { copyToClipboard } from '../shared/utils/clipboard.js';
@@ -24,23 +23,18 @@ import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { previewConfirmation, receiptNotice, sendNativeCommand, submitText } from '../clients/tui/commands.js';
 import type { BridgeStatus, TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireCommand, WireSnapshot } from '../protocol/wire.js';
-import type { DirectApplication } from './application.js';
 import type { DirectSessionTarget } from './application-target.js';
 import type { DirectControlBridge } from './launch-control.js';
 import { prepareRestart, type DirectRestartPlan } from './launch-tui-restart.js';
 import { createDirectTuiSettings } from './launch-tui-settings.js';
+import type { TuiBackend } from './tui-backend.js';
 import { displaySessionId, storedSessionId } from '../protocol/session-id.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 
 export type DirectTuiCommandOptions = {
-  readonly app: DirectApplication;
-  readonly modelCatalog: (
-    sessionId: string,
-    provider: string,
-  ) => Promise<{ models: readonly { id: string }[]; error?: string }>;
+  readonly backend: TuiBackend;
   readonly root: string;
-  readonly mcp?: DirectMcp;
   readonly onMcpAuthorizationUrl?: (url: string) => void;
   readonly bridge: DirectControlBridge;
   readonly remote?: DirectSessionTarget['restart'];
@@ -99,13 +93,12 @@ function assistantTexts(snapshot: WireSnapshot): readonly string[] {
 }
 
 export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIntegration {
-  const { app, root, bridge, remote, latest, publish, restart } = options;
-  const { host, principal } = app;
+  const { backend, root, bridge, remote, latest, publish, restart } = options;
 
-  const configuration = createDirectTuiSettings(app, latest);
+  const configuration = createDirectTuiSettings(backend, latest);
 
   const listResumeSessions = async () => {
-    const { sessions } = await app.listWorkspaceSessions(root);
+    const { sessions } = await backend.listWorkspaceSessions(root);
     return sessions
       .map((session) => ({
         id: session.id,
@@ -122,7 +115,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   // which saves them; the switch to a resumed session does the same once that session is open.
   const resumed = new Set<string>();
   const saveResumedSelection = (sessionId: string) => {
-    const settings = app.liveSettings(sessionId);
+    const settings = backend.liveSettings(sessionId);
     if (!settings) return;
     for (const key of ['agent.modelSelection', 'agent.reasoningEffort', 'app.activeProfileId'])
       settings.setDynamic(key, settings.getDynamic(key));
@@ -154,20 +147,20 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     // The legacy menu submits `/model <id> --provider=<provider>`; legacy also takes a bare id on the
     // current provider. `<provider>/<model>` stays for next's existing callers.
     const legacy = parseModelProviderArg(args);
-    const current = app.sessionDetails(connection.sessionId).settings?.get('agent.modelSelection');
+    const current = backend.sessionDetails(connection.sessionId).settings?.get('agent.modelSelection');
     const provider =
       legacy.provider || !legacy.modelId.includes('/') ? legacy.provider ?? current?.provider : undefined;
     const reference = provider === undefined ? legacy.modelId : `${provider}/${legacy.modelId}`;
     const done = provider === undefined ? `Model set to ${reference}.` : `Set model to ${legacy.modelId} (${provider})`;
     const selected = parseModel(reference);
     // Legacy model-command.ts saves the selection as the default for the next launch.
-    const save = (result: CommandResult): CommandResult => {
-      if (result.applied) app.saveApprovalPreference(connection.sessionId, 'agent.modelSelection');
+    const save = async (result: CommandResult): Promise<CommandResult> => {
+      if (result.applied) await backend.saveApprovalPreference(connection.sessionId, 'agent.modelSelection');
       return result;
     };
     // Legacy set a `<id> [--provider=]` selection without checking the catalog; the menu submits that form.
-    if (provider !== undefined) return save(await configure(connection, { model: selected }, done));
-    const catalog = await options.modelCatalog(connection.sessionId, selected.provider);
+    if (provider !== undefined) return await save(await configure(connection, { model: selected }, done));
+    const catalog = await backend.modelCatalog(connection.sessionId, selected.provider);
     if (catalog.error || catalog.models.length === 0) {
       throw new Error(
         `Cannot validate ${reference}: ${
@@ -182,7 +175,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           .join(', ')}.`,
       );
     }
-    return save(await configure(connection, { model: selected }, done));
+    return await save(await configure(connection, { model: selected }, done));
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
@@ -203,13 +196,10 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const goal = async (sessionId: string, input: string): Promise<CommandResult> => {
     const [action, ...parts] = input.trim().split(/\s+/);
     const empty = 'No durable goal is set. Use /goal set <outcome> [--criteria <text>].';
-    const write = async (next: Parameters<typeof formatGoalStatus>[0]): Promise<CommandResult> => {
-      await app.setGoal(sessionId, next, 'user');
-      return { message: formatGoalStatus(next) };
-    };
+    const expectedGeneration = latest().goalGeneration ?? 0;
     try {
       if (!action || action === 'show') {
-        const current = await app.goal(sessionId);
+        const current = await backend.goal(sessionId, latest());
         return { message: current ? formatGoalStatus(current) : empty };
       }
       if (action === 'set') {
@@ -217,12 +207,16 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         const marker = text.indexOf(' --criteria ');
         const outcome = marker < 0 ? text : text.slice(0, marker);
         const criteria = marker < 0 ? undefined : text.slice(marker + ' --criteria '.length);
-        return await write(createDurableGoal(outcome, criteria));
+        const next = createDurableGoal(outcome, criteria);
+        await backend.setGoal(sessionId, { action: 'set', goal: next, expectedGeneration });
+        return { message: formatGoalStatus(next) };
       }
       if (action === 'achieved' || action === 'abandon') {
-        const current = await app.goal(sessionId);
+        const current = await backend.goal(sessionId, latest());
         if (!current) throw new Error('No durable goal is set. Use /goal set <outcome> first.');
-        return await write({ ...current, status: action === 'achieved' ? 'achieved' : 'abandoned' });
+        const next = { ...current, status: action === 'achieved' ? ('achieved' as const) : ('abandoned' as const) };
+        await backend.setGoal(sessionId, { action, expectedGeneration });
+        return { message: formatGoalStatus(next) };
       }
       return { message: 'Usage: /goal [show|set <outcome> [--criteria <text>]|achieved|abandon]' };
     } catch (error) {
@@ -274,7 +268,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const skills = async (connection: TuiConnection, input: string): Promise<CommandResult> => {
     if (remote) return { message: 'Skills are read from this machine, so they are not available over SSH.' };
     const [, name, request] = /^\/skills(?:\s+(\S+)(?:\s+([\s\S]*))?)?$/.exec(input.trim()) ?? [];
-    const available = app.skills(root);
+    const available = backend.skills(root, connection.sessionId);
     // Legacy's bare /skills reopens its menu: the command puts its trigger back in the input.
     if (!name) return { draft: { text: '/skills ', attachments: [] } };
     const skill = available.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase());
@@ -285,7 +279,43 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         draft: { text: `/skills ${skill.name} `, attachments: [] },
       };
     }
-    const { name: skillName, description, body } = skill;
+    if (backend.serverResolvesSkills) {
+      let held: string | null = null;
+      try {
+        const previewRes = await connection.send({
+          type: 'preview',
+          text: request,
+          skill: skill.name,
+        } as unknown as WireCommand);
+        if (!previewRes.ok) throw new Error(`${previewRes.code}: ${previewRes.message}`);
+        if (previewRes.kind === 'preview' && previewRes.requiresConfirmation) {
+          held =
+            previewRes.notices.map((notice) => notice.message).join(' ') || 'Confirmation required before sending.';
+        }
+      } catch (error) {
+        return {
+          message: error instanceof Error ? error.message : String(error),
+          draft: { text: input.trim(), attachments: [] },
+        };
+      }
+      if (held !== null) {
+        return {
+          message: `${held} Not sent; the request is in the input box.`,
+          draft: { text: input.trim(), attachments: [] },
+        };
+      }
+      const submitRes = await connection.send({
+        type: 'submit',
+        requestId: randomUUID(),
+        text: request,
+        delivery: 'auto',
+        skill: skill.name,
+        origin: { kind: 'tui', skill: { name: skill.name, request } },
+      } as unknown as WireCommand);
+      if (!submitRes.ok) throw new Error(`${submitRes.code}: ${submitRes.message}`);
+      return {};
+    }
+    const { name: skillName, description, body = '' } = skill;
     const turn = { text: request, skill: { name: skillName, description, body } };
     const injected = injectSkillIntoTurn(turn).text;
     // Hand the expanded request back as an ordinary draft; Enter then confirms like any other send.
@@ -320,13 +350,11 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       stage: 'selecting_model',
       ...(handoffMessage ? { handoffMessage } : {}),
     });
-    return { sessionId: await app.handoff(connection.sessionId, named, text) };
+    return { sessionId: await backend.handoff(connection.sessionId, named, text) };
   };
 
-  const requireMcp = (): DirectMcp => {
+  const assertLocalMcp = (): void => {
     if (remote) throw new Error('MCP servers are not available over SSH in this executable.');
-    if (!options.mcp) throw new Error('MCP is not enabled for this application.');
-    return options.mcp;
   };
 
   return {
@@ -367,11 +395,14 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           return skills(connection, input);
         case 'handoff':
           return handoff(connection, input);
-        case 'mcp':
-          return { message: formatMcpStatus(requireMcp().status()) };
+        case 'mcp': {
+          assertLocalMcp();
+          return { message: formatMcpStatus(await backend.mcpStatus(connection.sessionId)) };
+        }
         case 'mcp-login': {
+          assertLocalMcp();
           if (!argument || rest.length !== 1) throw new Error('Usage: /mcp-login <server>');
-          const server = await requireMcp().login(argument, options.onMcpAuthorizationUrl);
+          const server = await backend.mcpLogin(connection.sessionId, argument, options.onMcpAuthorizationUrl);
           return { message: `MCP server "${server.name}" is ${server.state}.` };
         }
         case 'goal':
@@ -381,7 +412,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           restart(
             await prepareRestart(
               latest,
-              app,
+              backend,
               bridge,
               remote,
               argument === 'stop' ? (sent) => connection.send(sent) : undefined,
@@ -395,7 +426,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     async switchSession(sessionId) {
       // Native rollover rotates the backing log, not this attached logical Session.
       if (sessionId === latest().sessionId) return;
-      const next = await host.connect(principal, sessionId);
+      const next = await backend.host.connect(backend.principal, sessionId);
+      await backend.prepareSession?.(sessionId);
       if (resumed.delete(sessionId)) saveResumedSelection(sessionId);
       // The session has really changed by now, so the client follows it even if control cannot.
       const failure = await bridge.rebind(sessionId).then(

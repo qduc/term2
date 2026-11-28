@@ -24,7 +24,8 @@ import { createSettingsCommand, parseSettingValue } from './settings-command.js'
 import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireConfigureRequest, WireSnapshot } from '../protocol/wire.js';
-import type { DirectApplication } from './application.js';
+import type { SettingsService } from './settings.js';
+import type { TuiBackend } from './tui-backend.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 
@@ -74,28 +75,28 @@ function acknowledgeProfile(id: string = BARE_PROFILE_ID): CommandResult {
 /** The Session owns these, so a value the settings command saved is also sent to it. */
 const SELECTION_KEYS = new Set(['agent.modelSelection', 'agent.reasoningEffort']);
 
-export function createDirectTuiSettings(app: DirectApplication, latest: () => WireSnapshot) {
+export function createDirectTuiSettings(backend: TuiBackend, latest: () => WireSnapshot) {
   const detailsOf = (sessionId: string) => {
-    const { settings, rebuilt } = app.sessionDetails(sessionId);
+    const { settings, rebuilt } = backend.sessionDetails(sessionId);
     if (!settings) throw new Error('This session has no live runtime.');
-    return { settings, rebuilt };
+    return { settings: settings as SettingsService, rebuilt };
   };
 
   /** One keyed command, sent once. Sending the current model changes nothing but the tool graph. */
   const rebuild = async (
     connection: TuiConnection,
-    undo: () => void,
+    undo: () => Promise<void> | void,
     done: string,
-    applied?: () => CommandResult,
+    applied?: () => Promise<CommandResult> | CommandResult,
   ): Promise<CommandResult> => {
     const command = { type: 'configure', commandId: randomUUID(), configuration: { model: latest().model } } as const;
     const result = await sendNativeCommand(connection, command);
     if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured')
-      return applied ? applied() : { message: done, applied: true };
+      return applied ? await applied() : { message: done, applied: true };
     // Refused outright, so it must not arrive with some later rebuild. Anything less
     // certain stays written: the Session may well have installed it.
     if (result.kind === 'rejected' || result.kind === 'error') {
-      undo();
+      await undo();
       throw new Error(receiptNotice(result));
     }
     return { message: receiptNotice(result) };
@@ -104,16 +105,15 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
   /** Most tool gates read settings as they run, so only a reconfigured session has to wait for a rebuild. */
   const write = async (
     connection: TuiConnection,
-    apply: () => void,
-    undo: () => void,
+    apply: () => Promise<void> | void,
+    undo: () => Promise<void> | void,
     done: string,
     key: 'shell.autoApproveMode' | 'sandbox.enabled' | readonly ('shell.autoApproveMode' | 'shell.showReview')[],
   ): Promise<CommandResult> => {
-    apply();
-    const save = (): CommandResult => {
-      const results = (typeof key === 'string' ? [key] : key).map((item) =>
-        app.saveApprovalPreference(connection.sessionId, item),
-      );
+    await apply();
+    const save = async (): Promise<CommandResult> => {
+      const keys = typeof key === 'string' ? [key] : key;
+      const results = await Promise.all(keys.map((item) => backend.saveApprovalPreference(connection.sessionId, item)));
       const result = results.find((item) => item.status !== 'saved') ?? results[0]!;
       return {
         message: result.status === 'saved' ? done : `${done} Could not save preference (${result.reason}).`,

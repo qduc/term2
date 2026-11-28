@@ -3,8 +3,7 @@ import { formatShellExecutionOutput } from '../shared/utils/shell/shell-output.j
 /** The interactive terminal client on the direct host. The app owns the connection and replaces it across sessions. */
 import fs from 'node:fs';
 import { stderr, stdin, stdout } from 'node:process';
-import { collectProviderModels } from '../model/models/model-listing.js';
-import React, { useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, render } from 'ink';
 import Banner from '../clients/tui/presentation/components/layout/Banner.js';
 import { SettingsSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
@@ -19,8 +18,8 @@ import {
 import { useSetting } from '../clients/tui/presentation/hooks/use-setting.js';
 import type { LoggingService } from '../session/logging/logging-service.js';
 import { Tui, type TuiIntegration } from '../clients/tui/index.js';
-import type { DirectConnection } from '../host/in-process-direct-types.js';
-import { createDirectApplication, type DirectApplication } from './application.js';
+import type { DirectConnection, DirectReplayConnection } from '../host/in-process-direct-types.js';
+import { createDirectApplication } from './application.js';
 import { openDirectSessionTarget, type DirectSessionTarget } from './application-target.js';
 import { createDirectControlBridge, type DirectControlBridge } from './launch-control.js';
 import { createDirectTuiCommands } from './launch-tui-commands.js';
@@ -34,28 +33,27 @@ import { INTERACTIVE_TERMINAL_REQUIRED } from './launch.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
 import { displaySessionId } from '../protocol/session-id.js';
+import { createInProcessTuiBackend, type TuiBackend } from './tui-backend.js';
+import { openDaemonTuiSession } from './daemon/daemon-tui-backend.js';
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
 type TerminalProbe = { readonly background: TerminalBackground; readonly programStatus: TerminalProgramStatus };
+type ActiveConnection = DirectConnection | DirectReplayConnection;
 
 function DirectTui({
   unconfiguredSessionId,
-  app,
-  persistentSettings,
+  backend,
   root,
   remote,
-  mcp,
   initial,
   bridge,
   restart,
   onExit,
   logger,
 }: {
-  readonly app: DirectApplication;
-  readonly persistentSettings: ISettingsService;
+  readonly backend: TuiBackend;
   readonly root: string;
   readonly remote: DirectSessionTarget['restart'];
-  readonly mcp?: DirectMcp;
   readonly initial: DirectConnection;
   readonly unconfiguredSessionId?: string;
   readonly bridge: DirectControlBridge;
@@ -63,24 +61,27 @@ function DirectTui({
   readonly onExit: (snapshot: WireSnapshot) => void;
   readonly logger: LoggingService;
 }): React.ReactElement {
-  const [connection, setConnection] = useState(initial);
+  const [connection, setConnection] = useState<ActiveConnection>(initial);
+  const [retained, setRetained] = useState<WireSnapshot | undefined>(undefined);
   // The notifier already owns terminal focus and all three preference gates.
   // Never use launch defaults: attached sessions own separate mutable settings.
-  const settings = app.liveSettings(connection.sessionId);
+  const settings = backend.liveSettings(connection.sessionId);
   if (!settings) throw new Error('The attached session has no live settings.');
   return (
     <TuiServicesProvider settingsService={settings} loggingService={logger as ILoggingService}>
       <DirectTuiSession
-        app={app}
-        persistentSettings={persistentSettings}
+        backend={backend}
         settings={settings}
         root={root}
         remote={remote}
-        mcp={mcp}
         initial={initial}
         unconfiguredSessionId={unconfiguredSessionId}
         connection={connection}
-        onConnectionChange={setConnection}
+        retainedSnapshot={retained}
+        onConnectionChange={(next, nextRetained) => {
+          setRetained(nextRetained);
+          setConnection(next);
+        }}
         bridge={bridge}
         restart={restart}
         onExit={onExit}
@@ -92,42 +93,43 @@ function DirectTui({
 
 function ProviderBanner({
   settingsService,
+  backend,
   onHeightChange,
 }: {
   readonly settingsService: ISettingsService;
+  readonly backend: TuiBackend;
   readonly onHeightChange: (height: number) => void;
 }): React.ReactElement {
   const selection = useSetting(settingsService, 'agent.modelSelection');
-  const providerLabel = getProvider(selection.provider)?.label || selection.provider;
+  const providerLabel =
+    backend.providerLabel?.(selection.provider) || getProvider(selection.provider)?.label || selection.provider;
   return <Banner settingsService={settingsService} providerLabel={providerLabel} onHeightChange={onHeightChange} />;
 }
 
 function DirectTuiSession({
   unconfiguredSessionId,
-  app,
-  persistentSettings,
+  backend,
   settings,
   root,
   remote,
-  mcp,
   initial,
   connection,
+  retainedSnapshot,
   onConnectionChange,
   bridge,
   restart,
   onExit,
   logger,
 }: {
-  readonly app: DirectApplication;
+  readonly backend: TuiBackend;
   readonly unconfiguredSessionId?: string;
-  readonly persistentSettings: ISettingsService;
   readonly settings: ISettingsService;
   readonly root: string;
   readonly remote: DirectSessionTarget['restart'];
-  readonly mcp?: DirectMcp;
   readonly initial: DirectConnection;
-  readonly connection: DirectConnection;
-  readonly onConnectionChange: (next: DirectConnection) => void;
+  readonly connection: ActiveConnection;
+  readonly retainedSnapshot?: WireSnapshot;
+  readonly onConnectionChange: (next: ActiveConnection, retained?: WireSnapshot) => void;
   readonly bridge: DirectControlBridge;
   readonly restart: (plan: DirectRestartPlan) => void;
   readonly onExit: (snapshot: WireSnapshot) => void;
@@ -138,19 +140,43 @@ function DirectTuiSession({
   const latest = useRef(initial.snapshot);
   // Approval notifications wait one macrotask (see onLiveEvent); this lets a same-burst close cancel one.
   const pendingNotices = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const reconnecting = useRef(false);
   const displayMode = useSetting(settings, 'ui.displayMode') ?? 'concise';
   const notifier = useTerminalFocusNotifier({ stdout });
+  const handleConnectionLost = useCallback(() => {
+    if (!backend.reconnectSession || reconnecting.current) return;
+    reconnecting.current = true;
+    const snap = latest.current;
+    void backend
+      .reconnectSession(snap.sessionId, snap)
+      .then((next) => {
+        if (next.snapshot) latest.current = next.snapshot;
+        onConnectionChange(next, next.snapshot ? undefined : snap);
+      })
+      .catch(() => {
+        // Leave the visible connection error from useClient in place when reconnect fails.
+      })
+      .finally(() => {
+        reconnecting.current = false;
+      });
+  }, [backend, onConnectionChange]);
   const integration: TuiIntegration = useMemo(
     () => ({
-      menus: createDirectTuiMenus({ app, persistentSettings, logger, root, unconfiguredSessionId }),
+      menus: createDirectTuiMenus({
+        backend,
+        logger,
+        root,
+        unconfiguredSessionId,
+        currentSessionId: () => latest.current.sessionId,
+      }),
       async shell(sessionId, command) {
         if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
-        const settings = app.liveSettings(sessionId);
-        if (!settings) throw new Error('The attached session has no live settings.');
+        const currentSettings = backend.liveSettings(sessionId);
+        if (!currentSettings) throw new Error('The attached session has no live settings.');
         const startedAt = Date.now();
         const result = await executeShellCommand(command, {
           cwd: root,
-          timeout: settings.get('shell.timeout') ?? undefined,
+          timeout: currentSettings.get('shell.timeout') ?? undefined,
           maxBuffer: 1024 * 1024,
         });
         const formatted = await formatShellExecutionOutput({
@@ -160,42 +186,36 @@ function DirectTuiSession({
           stderr: result.stderr,
           exitCode: result.exitCode,
           timedOut: result.timedOut,
-          maxOutputLength: settings.get('tools.maxOutputChars') ?? undefined,
-          maxOutputLines: settings.get('shell.maxOutputLines') ?? undefined,
+          maxOutputLength: currentSettings.get('tools.maxOutputChars') ?? undefined,
+          maxOutputLines: currentSettings.get('shell.maxOutputLines') ?? undefined,
           durationMs: Date.now() - startedAt,
         });
         return { command, output: formatted.text, exitCode: result.exitCode, timedOut: result.timedOut };
       },
       preferences(sessionId) {
-        const current = app.liveSettings(sessionId);
+        const current = backend.liveSettings(sessionId);
         if (!current) throw new Error('The attached session has no live settings.');
         return { historySize: current.get('ui.historySize'), pasteThreshold: current.get('ui.pasteThreshold') };
       },
       status(sessionId) {
-        const current = app.liveSettings(sessionId);
+        const current = backend.liveSettings(sessionId);
         if (!current) throw new Error('The attached session has no live settings.');
+        const providerId = latest.current.model.provider;
         return {
-          contextWindow: app.contextWindow(latest.current.model) ?? undefined,
+          contextWindow: backend.contextWindow(latest.current.model) ?? undefined,
           effort: current.get('agent.reasoningEffort'),
           approval: current.get('shell.autoApproveMode'),
           provider: {
-            id: latest.current.model.provider,
-            label: getProvider(latest.current.model.provider)?.label || latest.current.model.provider,
+            id: providerId,
+            label: backend.providerLabel?.(providerId) || getProvider(providerId)?.label || providerId,
           },
         };
       },
       ...createDirectTuiCommands({
-        app,
-        async modelCatalog(sessionId, provider) {
-          const settingsService = app.liveSettings(sessionId);
-          if (!settingsService) return { models: [], error: 'session settings unavailable' };
-          const [group] = await collectProviderModels({ settingsService, loggingService: logger }, [provider]);
-          return group ?? { models: [], error: 'provider catalog unavailable' };
-        },
+        backend,
         root,
         bridge,
         remote,
-        mcp,
         onMcpAuthorizationUrl: (url) => stderr.write(`MCP authorization: ${url}\n`),
         restart,
         latest: () => latest.current,
@@ -205,16 +225,20 @@ function DirectTuiSession({
         },
       }),
     }),
-    [app, persistentSettings, root, remote, mcp, bridge, restart, logger, onConnectionChange, unconfiguredSessionId],
+    [backend, root, remote, bridge, restart, logger, onConnectionChange, unconfiguredSessionId],
   );
   return (
     <Tui
       connection={connection}
+      retainedSnapshot={retainedSnapshot}
+      disableClientNotificationDrain={backend.mode === 'daemon'}
+      onConnectionLost={backend.reconnectSession ? handleConnectionLost : undefined}
       header={
         <Box paddingLeft={2}>
           <ProviderBanner
             key={`header:${connection.sessionId}`}
             settingsService={settings}
+            backend={backend}
             onHeightChange={setHeaderHeight}
           />
         </Box>
@@ -255,6 +279,151 @@ function DirectTuiSession({
 
 type Restart = { plan?: DirectRestartPlan };
 
+function createDaemonNoOpControlBridge(): DirectControlBridge {
+  return {
+    server: undefined,
+    isStartup: false,
+    outbound: () => ({
+      discordSend: async () => {
+        throw new Error('Control bridge is unavailable on this daemon TUI session.');
+      },
+      isDiscordInputEnabled: () => false,
+    }),
+    attachAtStartup: async () => '',
+    connect: async () => {
+      throw new Error('Runtime control sockets over daemon require Step 14e control leases.');
+    },
+    rebind: async () => undefined,
+    disconnect: async () => undefined,
+    hold: () => undefined,
+    close: async () => undefined,
+  };
+}
+
+async function renderMountedTui(options: {
+  readonly backend: TuiBackend;
+  readonly root: string;
+  readonly remote: DirectSessionTarget['restart'];
+  readonly initial: DirectConnection;
+  readonly unconfiguredSessionId?: string;
+  readonly bridge: DirectControlBridge;
+  readonly pending: Restart;
+  readonly background: TerminalBackground;
+  readonly logger: LoggingService;
+  readonly controlSocket?: InteractiveRequest['controlSocket'];
+  readonly getExitCode: () => number;
+  readonly setUnmount: (fn: (() => void) | null) => void;
+}): Promise<number> {
+  const { backend, root, remote, initial, unconfiguredSessionId, bridge, pending, background, logger, controlSocket } =
+    options;
+  if (!(stdin.isTTY && stdout.isTTY)) {
+    stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
+    return 1;
+  }
+  const detectedBackground = await background;
+  if (options.getExitCode() !== 0) return options.getExitCode();
+  if (controlSocket) stderr.write(`${await bridge.attachAtStartup(initial.sessionId, controlSocket)}\n`);
+  if (options.getExitCode() !== 0) return options.getExitCode();
+
+  let exitedSnapshot: WireSnapshot | undefined;
+  const instance = render(
+    (
+      <SettingsThemeProvider settingsService={backend.persistentSettings} detectedBackground={detectedBackground}>
+        <SettingsSkinProvider settingsService={backend.persistentSettings}>
+          <DirectTui
+            backend={backend}
+            root={root}
+            remote={remote}
+            initial={initial}
+            unconfiguredSessionId={unconfiguredSessionId}
+            logger={logger}
+            bridge={bridge}
+            restart={(plan) => {
+              // Node's native exec failure can abort rather than throw. Publish
+              // recovery before cleanup as well, while this terminal still exists.
+              stderr.write(`Restart recovery command: ${plan.manualCommand}\n`);
+              pending.plan = plan;
+            }}
+            onExit={(snapshot) => {
+              exitedSnapshot = snapshot;
+              instance.unmount();
+            }}
+          />
+        </SettingsSkinProvider>
+      </SettingsThemeProvider>
+    ) as ReactNode,
+    getInkRenderOptions(),
+  );
+  options.setUnmount(() => instance.unmount());
+  await instance.waitUntilExit();
+  printUsage(exitedSnapshot); // legacy cli.tsx printUsageOnce, before the resume hint (restarts too)
+  if (
+    !pending.plan &&
+    options.getExitCode() === 0 &&
+    exitedSnapshot?.messages.some((message) => message.role !== 'system')
+  ) {
+    // Legacy's getResumeCommand: the `term2` command, arguments unquoted.
+    const args = ['term2'];
+    if (remote) {
+      args.push('--ssh', remote.target, '--remote-dir', remote.directory);
+      if (remote.port && remote.port !== 22) args.push('--ssh-port', String(remote.port));
+    }
+    args.push('--resume', displaySessionId(exitedSnapshot.sessionId));
+    stdout.write(
+      `\nSession: ${displaySessionId(exitedSnapshot.sessionId)}\nTo resume this conversation: ${args.join(' ')}\n`,
+    );
+  }
+  return options.getExitCode();
+}
+
+async function runDaemonTui(
+  request: InteractiveRequest,
+  pending: Restart,
+  { background }: TerminalProbe,
+): Promise<number> {
+  const root = fs.realpathSync(process.cwd());
+  const bridge = createDaemonNoOpControlBridge();
+  let unmount: (() => void) | null = null;
+  let exitCode = 0;
+  const onSignal = (signal: NodeJS.Signals): void => {
+    exitCode = signal === 'SIGINT' ? 130 : 143;
+    if (unmount) unmount();
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  const { backend, initial, launched } = await openDaemonTuiSession(request, root);
+  try {
+    if (launched.forkedFrom) {
+      stderr.write(
+        `Forked conversation ${displaySessionId(launched.forkedFrom)} → ${displaySessionId(initial.sessionId)}\n`,
+      );
+    }
+    if (request.resumeId !== undefined) stdout.write(`Resumed conversation: ${displaySessionId(initial.sessionId)}\n`);
+    return await renderMountedTui({
+      backend,
+      root: launched.workspace.root,
+      remote: undefined,
+      initial,
+      unconfiguredSessionId:
+        request.resumeId === undefined && backend.persistentSettings.getSource?.('agent.modelSelection') === 'default'
+          ? initial.sessionId
+          : undefined,
+      bridge,
+      pending,
+      background,
+      logger: request.selection.logger,
+      getExitCode: () => exitCode,
+      setUnmount: (fn) => {
+        unmount = fn;
+      },
+    });
+  } finally {
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+    await backend.close();
+  }
+}
+
 async function runTui(
   request: InteractiveRequest,
   target: DirectSessionTarget,
@@ -284,6 +453,7 @@ async function runTui(
     ...(target.binding ? { sessionBinding: target.binding } : {}),
     hooks: { root: fs.realpathSync(process.cwd()), mode: 'interactive', programStatus },
   });
+  const backend = createInProcessTuiBackend({ app, persistentSettings: settings, logger: selection.logger, mcp });
   let unmount: (() => void) | null = null;
   let exitCode = 0;
   // Raw Ctrl+C is owned by Tui; outside signals unwind through the same cleanup.
@@ -307,107 +477,71 @@ async function runTui(
     if (sessionId !== undefined) stdout.write(`Resumed conversation: ${displaySessionId(initial.sessionId)}\n`);
     if (request.goal) await app.setGoal(initial.sessionId, request.goal, 'launcher');
 
-    // An admitted CLI goal belongs to Session even when this process cannot render Ink.
-    if (!(stdin.isTTY && stdout.isTTY)) {
-      stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
-      return 1;
-    }
-
-    // Read before Ink takes stdin: the terminal's reply arrives as input.
-    const detectedBackground = await background;
-
-    if (exitCode !== 0) return exitCode;
-    if (controlSocket) stderr.write(`${await bridge.attachAtStartup(initial.sessionId, controlSocket)}\n`);
-    if (exitCode !== 0) return exitCode;
-
-    let exitedSnapshot: WireSnapshot | undefined;
-    const instance = render(
-      (
-        <SettingsThemeProvider settingsService={settings} detectedBackground={detectedBackground}>
-          <SettingsSkinProvider settingsService={settings}>
-            <DirectTui
-              app={app}
-              persistentSettings={settings}
-              root={root}
-              remote={target.restart}
-              mcp={mcp}
-              initial={initial}
-              unconfiguredSessionId={
-                sessionId === undefined && settings.getSource?.('agent.modelSelection') === 'default'
-                  ? initial.sessionId
-                  : undefined
-              }
-              logger={selection.logger}
-              bridge={bridge}
-              restart={(plan) => {
-                // Node's native exec failure can abort rather than throw. Publish
-                // recovery before cleanup as well, while this terminal still exists.
-                stderr.write(`Restart recovery command: ${plan.manualCommand}\n`);
-                pending.plan = plan;
-              }}
-              onExit={(snapshot) => {
-                exitedSnapshot = snapshot;
-                instance.unmount();
-              }}
-            />
-          </SettingsSkinProvider>
-        </SettingsThemeProvider>
-      ) as ReactNode,
-      getInkRenderOptions(),
-    );
-    unmount = () => instance.unmount();
-    await instance.waitUntilExit();
-    printUsage(exitedSnapshot); // legacy cli.tsx printUsageOnce, before the resume hint (restarts too)
-    if (!pending.plan && exitCode === 0 && exitedSnapshot?.messages.some((message) => message.role !== 'system')) {
-      // Legacy's getResumeCommand: the `term2` command, arguments unquoted.
-      const args = ['term2'];
-      if (target.restart) {
-        args.push('--ssh', target.restart.target, '--remote-dir', target.restart.directory);
-        if (target.restart.port && target.restart.port !== 22) args.push('--ssh-port', String(target.restart.port));
-      }
-      args.push('--resume', displaySessionId(exitedSnapshot.sessionId));
-      stdout.write(
-        `\nSession: ${displaySessionId(exitedSnapshot.sessionId)}\nTo resume this conversation: ${args.join(' ')}\n`,
-      );
-    }
-    return exitCode;
+    return await renderMountedTui({
+      backend,
+      root,
+      remote: target.restart,
+      initial,
+      unconfiguredSessionId:
+        sessionId === undefined && settings.getSource?.('agent.modelSelection') === 'default'
+          ? initial.sessionId
+          : undefined,
+      bridge,
+      pending,
+      background,
+      logger: selection.logger,
+      controlSocket,
+      getExitCode: () => exitCode,
+      setUnmount: (fn) => {
+        unmount = fn;
+      },
+    });
   } finally {
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
     try {
       await bridge.close();
     } finally {
-      await app.close();
+      await backend.close();
     }
   }
 }
 
 /** Runs after `prepareInteractiveTerminal` confirmed the start and sent the terminal probe. */
 export async function launchTui(request: InteractiveRequest, terminal: TerminalProbe): Promise<number> {
-  const target = await openDirectSessionTarget(request.ssh, request.lite, new AbortController().signal);
   const pending: Restart = {};
+  const useDaemon =
+    process.env['TERM2_DAEMON_MODE'] === '1' &&
+    process.env['TERM2_IN_PROCESS'] !== '1' &&
+    !request.ssh &&
+    !request.controlSocket;
   let exitCode: number;
-  let mcp: DirectMcp | undefined;
   try {
-    try {
-      // Terminal refusal must not start MCP subprocesses or authorization flows.
-      if (stdin.isTTY && stdout.isTTY) {
-        mcp = await openDirectApplicationMcp({
-          target,
-          conversationsDir: request.conversationsDir,
-          interactive: true,
-          onNotice: (message) => stderr.write(`MCP: ${message}\n`),
-        });
-      }
-      exitCode = await runTui(request, target, pending, terminal, mcp);
-    } finally {
+    if (useDaemon) {
+      exitCode = await runDaemonTui(request, pending, terminal);
+    } else {
+      const target = await openDirectSessionTarget(request.ssh, request.lite, new AbortController().signal);
+      let mcp: DirectMcp | undefined;
       try {
-        await mcp?.close();
+        // Terminal refusal must not start MCP subprocesses or authorization flows.
+        if (stdin.isTTY && stdout.isTTY) {
+          mcp = await openDirectApplicationMcp({
+            target,
+            conversationsDir: request.conversationsDir,
+            interactive: true,
+            onNotice: (message) => stderr.write(`MCP: ${message}\n`),
+          });
+        }
+        exitCode = await runTui(request, target, pending, terminal, mcp);
       } finally {
-        await target.close();
+        try {
+          await mcp?.close();
+        } finally {
+          await target.close();
+        }
       }
     }
-    if (pending.plan) performRestart(pending.plan, request.conversationsDir);
+    if (pending.plan) performRestart(pending.plan, request.conversationsDir, { skipWriterLockCheck: useDaemon });
   } catch (error) {
     if (!pending.plan) throw error;
     // Legacy cli.tsx: a failed restart cleanup never attempts the replacement.

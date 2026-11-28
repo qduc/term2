@@ -137,16 +137,18 @@ it.each(['codex', 'grok'] as const)(
     expect(second.sessionAccount(provider)).toBe(secondAccount.id);
 
     const menus = createDirectTuiMenus({
-      app: {
+      backend: {
+        mode: 'in-process',
+        persistentSettings: settings,
         liveSettings: () => settings,
         skills: () => [],
         listWorkspaceSessions: async () => ({ sessions: [] }),
-        sessionAccount: (sessionId, providerId) =>
+        sessionAccount: (sessionId: string, providerId: 'codex' | 'grok') =>
           (sessionId === 'first-session' ? first : second).sessionAccount(providerId),
-      },
-      persistentSettings: settings,
+      } as unknown as Parameters<typeof createDirectTuiMenus>[0]['backend'],
       logger: logger as unknown as LoggingService,
       root: scratch,
+      currentSessionId: () => 'first-session',
     });
     const firstView = menus.providers!.listAccounts('first-session', provider);
     expect(firstView.map(({ id, isSelected, isInUse }) => ({ id, isSelected, isInUse }))).toEqual([

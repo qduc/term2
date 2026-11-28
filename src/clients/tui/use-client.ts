@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
+import { DirectProtocolError } from '../../protocol/errors.js';
 import type { WireEvent, WireSnapshot } from '../../protocol/wire.js';
 import { reduceWireEvent } from '../../protocol/reducer.js';
 import { projectSnapshot } from './projection.js';
@@ -21,11 +22,18 @@ export function useClient(
   retained?: WireSnapshot,
   onSnapshot?: (state: WireSnapshot) => void,
   onLiveEvent?: (event: WireEvent) => void,
+  options?: {
+    readonly disableClientNotificationDrain?: boolean;
+    readonly onConnectionLost?: (reason: string, info?: { readonly terminal?: boolean }) => void;
+  },
 ): { state: TuiState; error: string | null; historyRevision: number } {
   const callback = useRef(onSnapshot);
   callback.current = onSnapshot;
   const liveCallback = useRef(onLiveEvent);
   liveCallback.current = onLiveEvent;
+  const lostCallback = useRef(options?.onConnectionLost);
+  lostCallback.current = options?.onConnectionLost;
+  const disableDrain = options?.disableClientNotificationDrain === true;
   const [current, setCurrent] = useState(() => ({
     connection,
     wire: initialSnapshot(connection, retained),
@@ -47,7 +55,10 @@ export function useClient(
       try {
         // The wire wakes this attached client; only Session may consume notices
         // and admit their silent turn. Never resume a paused user queue to do so.
+        // Daemon hosts run `autoDrainBackgroundNotifications: true` authoritatively,
+        // so daemon-attached clients disable client-driven drain (`client-api.md` §7.1).
         const drain = async () => {
+          if (disableDrain) return;
           if (!active || wire.status !== 'idle' || wire.activeTurnId || wire.queueState !== 'idle' || wire.queue.length)
             return;
           const delivered = new Set(wire.notifications?.deliveries.flatMap((item) => item.notificationIds));
@@ -76,24 +87,28 @@ export function useClient(
           // timers; a busy Session is reconsidered at its next wire boundary.
           await drain();
         }
-        if (active)
-          setCurrent((previous) =>
-            previous.connection === connection ? { ...previous, error: 'Connection closed.' } : previous,
-          );
+        if (active) {
+          const reason = connection.closeReason?.() ?? null;
+          const terminal = reason === 'closed' || reason === 'workspace_revoked';
+          const message = reason === 'closed' ? 'Session closed.' : 'Connection closed.';
+          setCurrent((previous) => (previous.connection === connection ? { ...previous, error: message } : previous));
+          lostCallback.current?.(message, { terminal });
+        }
       } catch (error) {
-        if (active)
-          setCurrent((previous) =>
-            previous.connection === connection
-              ? { ...previous, error: `Connection failed: ${error instanceof Error ? error.message : String(error)}` }
-              : previous,
-          );
+        if (active) {
+          const message = `Connection failed: ${error instanceof Error ? error.message : String(error)}`;
+          const terminal =
+            error instanceof DirectProtocolError && (error.code === 'closed' || error.code === 'forbidden');
+          setCurrent((previous) => (previous.connection === connection ? { ...previous, error: message } : previous));
+          lostCallback.current?.(message, { terminal });
+        }
       }
     })();
     return () => {
       active = false;
       connection.close();
     };
-  }, [connection]);
+  }, [connection, disableDrain]);
   // Viewport measurements update local React state. Keep their unchanged wire
   // input stable so those updates do not schedule another transcript render.
   const state = useMemo(() => projectSnapshot(visible.wire), [visible.wire]);

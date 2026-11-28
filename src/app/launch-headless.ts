@@ -9,7 +9,7 @@ import { createDirectApplication, type DirectApplication } from './application.j
 import { openDirectSessionTarget, type DirectSessionTarget } from './application-target.js';
 import type { DirectHeadlessHandle, DirectHeadlessRequest, DirectHeadlessResult } from './launch-types.js';
 import { displaySessionId } from '../protocol/session-id.js';
-import { LOCAL_PRINCIPAL, localGrant } from './application-workspaces.js';
+import { LOCAL_PRINCIPAL } from './application-workspaces.js';
 import { connectRemoteDirectHost } from './daemon/connect-daemon-host.js';
 
 function mapHeadlessOutcome(outcome: string): DirectHeadlessResult {
@@ -34,19 +34,49 @@ async function runHeadlessOverDaemon(
   const connected = await connectRemoteDirectHost({
     clientKind: 'headless',
     conversationsDir,
+    protocolVersion: '1.1',
+    minSupportedVersion: '1.1',
     defaultApprovalPolicy: { mode: 'headless', autoApprove },
     env: process.env,
   });
   try {
-    const sessionId =
-      resumeId !== undefined && request.fork ? (await connected.host.forkSession(resumeId)).id : resumeId;
-    if (sessionId !== resumeId) {
-      io.stderr.write(`Forked conversation ${displaySessionId(resumeId!)} → ${displaySessionId(sessionId!)}\n`);
+    const { settings } = selection;
+    const cliModel =
+      request.resumeConfiguration?.model ??
+      (settings.getSource?.('agent.modelSelection') === 'cli' ? settings.get('agent.modelSelection') : undefined);
+    const cliReasoning =
+      request.resumeConfiguration?.reasoning ??
+      (settings.getSource?.('agent.reasoningEffort') === 'cli' ? settings.get('agent.reasoningEffort') : undefined);
+    const launched = await connected.host.launchSession({
+      cwd: fs.realpathSync(process.cwd()),
+      selection:
+        resumeId === undefined
+          ? { kind: 'new' }
+          : request.fork
+          ? { kind: 'fork', sessionId: resumeId }
+          : { kind: 'resume', sessionId: resumeId },
+      approvalPolicy: { mode: 'headless', autoApprove },
+      clientMode: 'headless',
+      ...(cliModel ? { model: { provider: cliModel.provider, model: cliModel.model } } : {}),
+      ...(cliReasoning ? { reasoning: cliReasoning } : {}),
+      ...(request.profileExplicit
+        ? { profileId: String(settings.get('app.activeProfileId')), profileExplicit: true }
+        : {}),
+      ...(request.goal
+        ? {
+            goal: {
+              text: request.goal.outcome,
+              ...(request.goal.successCriteria ? { successCriteria: request.goal.successCriteria } : {}),
+            },
+          }
+        : {}),
+    });
+    if (launched.forkedFrom) {
+      io.stderr.write(
+        `Forked conversation ${displaySessionId(launched.forkedFrom)} → ${displaySessionId(launched.session.id)}\n`,
+      );
     }
-    const connection =
-      sessionId === undefined
-        ? await connected.host.createSession(LOCAL_PRINCIPAL, localGrant(fs.realpathSync(process.cwd())))
-        : await connected.host.connect(LOCAL_PRINCIPAL, sessionId);
+    const connection = await connected.host.connect(LOCAL_PRINCIPAL, launched.session.id);
     try {
       setActive(true);
       const { outcome } = await runDirectHeadless(connection, {
@@ -54,12 +84,13 @@ async function runHeadlessOverDaemon(
         io,
         output,
         autoApprove,
+        ...(launched.profileMetadata ? { profileMetadata: launched.profileMetadata } : {}),
         backgroundWaitTimeoutMs: selection.settings.get('agent.backgroundWaitTimeoutMs'),
         ...(request.showReasoning === undefined ? {} : { showReasoning: request.showReasoning }),
         ...(request.quiet === undefined ? {} : { quiet: request.quiet }),
         signal: stop.signal,
         sessionHandlesHeadlessApprovals: true,
-        ...(sessionId === undefined ? {} : { expectedSessionId: sessionId }),
+        ...(resumeId === undefined ? {} : { expectedSessionId: launched.session.id }),
       });
       return mapHeadlessOutcome(outcome);
     } finally {
@@ -77,14 +108,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
 
   const execute = async (): Promise<DirectHeadlessResult> => {
     const { io, prompt, resumeId, conversationsDir, selection, autoApprove = false, output = 'plain' } = request;
-    if (
-      process.env['TERM2_DAEMON_MODE'] === '1' &&
-      process.env['TERM2_IN_PROCESS'] !== '1' &&
-      !request.ssh &&
-      !request.lite &&
-      !request.goal &&
-      !(resumeId !== undefined && request.resumeConfiguration)
-    ) {
+    if (process.env['TERM2_DAEMON_MODE'] === '1' && process.env['TERM2_IN_PROCESS'] !== '1' && !request.ssh) {
       try {
         return await runHeadlessOverDaemon(request, stop, (v) => {
           active = v;

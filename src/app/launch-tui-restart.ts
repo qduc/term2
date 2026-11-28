@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createRestartPlan } from '../shared/utils/process-restart.js';
 import { acquireDirectWriterLock } from '../session/writer-lock.js';
 import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/wire.js';
-import type { DirectApplication } from './application.js';
+import type { TuiBackend } from './lib/tui-backend.js';
 import type { DirectControlBridge, DirectControlHold } from './launch-control.js';
 
 export type DirectRestartPlan = ReturnType<typeof createRestartPlan> & { readonly sessionId: string };
@@ -52,11 +52,11 @@ type RestartTarget = Parameters<typeof createRestartPlan>[0]['ssh'];
 
 function plan(
   snapshot: WireSnapshot,
-  app: DirectApplication,
+  backend: Pick<TuiBackend, 'sessionDetails'>,
   bridge: DirectControlBridge,
   ssh: RestartTarget,
 ): DirectRestartPlan {
-  const { settings, profileId } = app.sessionDetails(snapshot.sessionId);
+  const { settings, profileId } = backend.sessionDetails(snapshot.sessionId);
   if (!settings || !profileId) throw new Error('This session has no live runtime to restart.');
   const server = bridge.server;
   const restart = createRestartPlan({
@@ -81,12 +81,12 @@ function plan(
  */
 export async function prepareRestart(
   latest: () => WireSnapshot,
-  app: DirectApplication,
+  backend: Pick<TuiBackend, 'sessionDetails'>,
   bridge: DirectControlBridge,
   ssh: RestartTarget,
   stopTasks?: (command: WireCommand) => Promise<WireCommandResult>,
 ): Promise<DirectRestartPlan> {
-  const restart = plan(latest(), app, bridge, ssh);
+  const restart = plan(latest(), backend, bridge, ssh);
   try {
     assertSupported();
   } catch (error) {
@@ -102,20 +102,26 @@ export async function prepareRestart(
     await hold?.drained;
     assertIdle(latest(), stopTasks !== undefined);
     if (stopTasks) await stopLiveTasks(latest(), stopTasks);
-    return plan(latest(), app, bridge, ssh);
+    return plan(latest(), backend, bridge, ssh);
   } catch (error) {
     hold?.release();
     throw error;
   }
 }
 
-/** Replaces this process. Runs after the host closed, so the new one is the only writer. */
-export function performRestart({ args, env, sessionId }: DirectRestartPlan, conversationsDir: string): void {
-  // Legacy cli.tsx refuses when the conversation lock outlives shutdown.
-  try {
-    acquireDirectWriterLock(path.join(conversationsDir, `${sessionId}.jsonl`))();
-  } catch (error) {
-    throw new Error('Conversation lock remains after shutdown; refusing same-PID restart.', { cause: error });
+/** Replaces this process. Runs after the host closed (in-process) or detached (daemon). */
+export function performRestart(
+  { args, env, sessionId }: DirectRestartPlan,
+  conversationsDir: string,
+  options?: { readonly skipWriterLockCheck?: boolean },
+): void {
+  if (!options?.skipWriterLockCheck) {
+    // Legacy cli.tsx refuses when the conversation lock outlives shutdown.
+    try {
+      acquireDirectWriterLock(path.join(conversationsDir, `${sessionId}.jsonl`))();
+    } catch (error) {
+      throw new Error('Conversation lock remains after shutdown; refusing same-PID restart.', { cause: error });
+    }
   }
   process.execve?.(process.execPath, [process.execPath, ...args], env);
 }

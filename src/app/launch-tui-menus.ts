@@ -84,12 +84,16 @@ import {
 } from '../model/provider-credentials.js';
 import type {
   MenuConversationEntry,
+  MenuModelCatalog,
+  MenuModelInfo,
+  MenuPathEntry,
   MenuSettingsService,
+  MenuWorkspaceEntriesMeta,
   TuiMenus,
   TuiModelSettings,
   TuiProviderMenu,
 } from '../clients/tui/integration.js';
-import type { DirectApplication } from './application.js';
+import type { TuiBackend } from './lib/tui-backend.js';
 
 import { displaySessionId } from '../protocol/session-id.js';
 
@@ -98,13 +102,41 @@ const RECENT_CONVERSATIONS = 10;
 
 type MenuOptions = {
   readonly unconfiguredSessionId?: string;
-  readonly app: Pick<DirectApplication, 'liveSettings' | 'skills' | 'listWorkspaceSessions' | 'sessionAccount'>;
-  /** The settings file; favorite, nickname and provider edits are saved there as legacy did. */
-  readonly persistentSettings: ISettingsService;
+  readonly backend: TuiBackend;
   readonly logger: LoggingService;
   /** The workspace the TUI was launched in: saved conversations and skills are listed for it. */
   readonly root: string;
+  readonly currentSessionId: () => string;
 };
+
+function createDaemonModelCatalog(backend: TuiBackend, sessionId: string): MenuModelCatalog {
+  const cache = new Map<string, MenuModelInfo[]>();
+  const forceRefresh = new Set<string>();
+  return {
+    getCached: (provider) => cache.get(provider),
+    async load(provider) {
+      const refresh = forceRefresh.delete(provider);
+      const cached = cache.get(provider);
+      if (cached && !refresh) return { kind: 'cached', models: cached };
+      const group = await backend.modelCatalog(sessionId, provider, { ...(refresh ? { refresh: true } : {}) });
+      const models = [...group.models];
+      cache.set(provider, models);
+      return { kind: 'loaded', models };
+    },
+    begin: () => undefined,
+    refresh: (provider) => {
+      forceRefresh.add(provider);
+    },
+    invalidate: (provider) => {
+      cache.delete(provider);
+      forceRefresh.add(provider);
+    },
+    clear: () => {
+      cache.clear();
+      forceRefresh.clear();
+    },
+  };
+}
 
 /**
  * Legacy hands the provider manager its one global SettingsService. Here writes go to the persistent service (as
@@ -133,7 +165,7 @@ function providerSettings(persistent: ISettingsService, live: ISettingsService |
 function createProviderMenu(
   persistent: ISettingsService,
   live: (sessionId: string) => ISettingsService | null,
-  sessionAccount: DirectApplication['sessionAccount'],
+  sessionAccount: TuiBackend['sessionAccount'],
 ) {
   const settings = (sessionId: string) => providerSettings(persistent, live(sessionId));
   const menu: TuiProviderMenu = {
@@ -168,24 +200,41 @@ function createProviderMenu(
 }
 
 /** The legacy model services bound to one session's live settings. */
-function modelSettings(live: ISettingsService, options: MenuOptions): TuiModelSettings {
+function modelSettings(live: ISettingsService, sessionId: string, options: MenuOptions): TuiModelSettings {
+  const { backend } = options;
   const save = (key: 'agent.favoriteModels' | 'agent.modelNicknames') =>
-    options.persistentSettings.setPersistentDynamic(key, live.get(key));
+    backend.persistentSettings.setPersistentDynamic(key, live.get(key));
+  const isDaemon = backend.mode === 'daemon';
+  const hasCreds = (id: string) =>
+    isDaemon ? backend.providerStatus?.(sessionId, id)?.hasCredentials ?? false : hasProviderCredentials(live, id);
+  const isDisabled = (id: string) =>
+    isDaemon ? backend.providerStatus?.(sessionId, id)?.isDisabled ?? false : isProviderDisabled(live, id);
   return {
     get: (key) => live.get(key as never),
     getDynamic: (key) => live.getDynamic(key),
     isRuntimeModifiable: (key) => RUNTIME_MODIFIABLE_SETTINGS.has(key),
     onChange: live.onChange ? (listener) => live.onChange!(listener) : undefined,
-    providerIds: () => getProviderIds(),
+    providerIds: () =>
+      isDaemon && backend.providerIds ? backend.providerIds(sessionId).map((p) => p.id) : getProviderIds(),
     orderedProviderIds: (ids) => orderedProviderIds(live, ids),
-    providers: () => getAllProviders(),
-    providerLabel: (id) => getProvider(id)?.label,
-    availableProviderIds: (ids) => getAvailableProviderIds(live, ids),
-    hasProviderCredentials: (id) => hasProviderCredentials(live, id),
-    unavailableReason: (id) => resolveProviderCredentials(live, id).unavailableReason,
+    providers: () => (isDaemon && backend.providerIds ? backend.providerIds(sessionId) : getAllProviders()),
+    providerLabel: (id) => (isDaemon ? backend.providerLabel?.(id) : undefined) ?? getProvider(id)?.label,
+    availableProviderIds: (ids) =>
+      isDaemon ? ids.filter((id) => hasCreds(id) && !isDisabled(id)) : getAvailableProviderIds(live, ids),
+    hasProviderCredentials: hasCreds,
+    unavailableReason: (id) => {
+      if (!isDaemon) return resolveProviderCredentials(live, id).unavailableReason;
+      if (hasCreds(id)) return undefined;
+      if (id === 'codex') return 'missing-codex-login';
+      if (id === 'grok') return 'missing-grok-login';
+      return 'missing-credentials';
+    },
     credentialSettingKey: getProviderCredentialSettingKey,
     providerIdForCredentialSettingKey: getProviderIdForCredentialSettingKey,
-    createCatalog: () => new ModelCatalogSession({ settingsService: live, loggingService: options.logger }),
+    createCatalog: () =>
+      isDaemon
+        ? createDaemonModelCatalog(backend, sessionId)
+        : new ModelCatalogSession({ settingsService: live, loggingService: options.logger }),
     favoriteModelInfos: () => getFavoriteModelInfos(live),
     toggleFavorite(provider, modelId) {
       const favorited = toggleFavoriteModel(live, provider, modelId);
@@ -206,23 +255,40 @@ function modelSettings(live: ISettingsService, options: MenuOptions): TuiModelSe
       return removed;
     },
     filterModels,
-    providerItems: () => loadProviderItems(live),
+    providerItems: () =>
+      isDaemon && backend.providerMenu ? backend.providerMenu.list(sessionId) : loadProviderItems(live),
   };
 }
 
 export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
-  const { app, logger, persistentSettings, root } = options;
+  const { backend, logger, root, currentSessionId } = options;
+  const persistentSettings = backend.persistentSettings;
   const bySession = new Map<string, { live: ISettingsService; settings: TuiModelSettings }>();
   const services = new Map<string, MenuSettingsService>();
+  let daemonPathsMeta: MenuWorkspaceEntriesMeta = {
+    lastLoadedAt: null,
+    totalEntries: 0,
+    truncated: false,
+    truncatedByTotalLimit: false,
+    limit: 2_000,
+  };
+  let daemonPathsCache: MenuPathEntry[] | null = null;
+  const loadDaemonPaths = async (force: boolean): Promise<MenuPathEntry[]> => {
+    if (!force && daemonPathsCache) return daemonPathsCache;
+    const loaded = await backend.workspaceFiles!(currentSessionId());
+    daemonPathsCache = [...loaded.entries];
+    daemonPathsMeta = loaded.meta;
+    return daemonPathsCache;
+  };
   return {
     requiresModelSelection: (sessionId) => sessionId === options.unconfiguredSessionId,
     copy: copyToClipboard,
-    skills: { list: () => [...app.skills(root)] },
+    skills: { list: () => [...backend.skills(root, currentSessionId())] },
     resume: {
       // Legacy takes the 10 most recent session files, the one in use included (newest when it has not
       // been saved yet, as legacy writes it at launch), then hides it; the hook drops zero-message entries.
       async list(sessionId) {
-        const { sessions } = await app.listWorkspaceSessions(root);
+        const { sessions } = await backend.listWorkspaceSessions(root);
         const ranked = [...sessions].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
         const recent = ranked.some((session) => session.id === sessionId)
           ? ranked.slice(0, RECENT_CONVERSATIONS)
@@ -269,42 +335,44 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
       service(sessionId) {
         const cached = services.get(sessionId);
         if (cached) return cached;
-        const settings = app.liveSettings(sessionId);
+        const settings = backend.liveSettings(sessionId) as ISettingsService & Partial<MenuSettingsService>;
         if (!settings) throw new Error('The attached session has no live settings.');
         const service: MenuSettingsService = {
           getDynamic: (key) => settings.getDynamic(key),
-          getDefault: (key) => settings.getDefault(key),
+          getDefault: (key) => settings.getDefault!(key),
           // A session keeps its start facts (model, effort, profile) and every in-session change as unsaved
           // values, which legacy's service would report as 'cli'. Only a real launch flag is a command-line
           // flag; otherwise report the saved source where the value is the saved one, else 'config', as
           // legacy reported a change its menu had just saved.
           getSource: (key) => {
-            const source = settings.getSource(key);
+            const source = settings.getSource?.(key) ?? 'default';
             if (source !== 'cli') return source;
             const saved = persistentSettings.getSource?.(key) ?? 'default';
             if (saved === 'cli') return 'cli';
             return isDeepStrictEqual(settings.getDynamic(key), persistentSettings.getDynamic(key)) ? saved : 'config';
           },
-          getStartupOverride: (key) => settings.getStartupOverride(key),
-          isRuntimeModifiable: (key) => settings.isRuntimeModifiable(key),
-          onChange: (listener) => settings.onChange(() => listener()),
+          getStartupOverride: (key) => settings.getStartupOverride?.(key),
+          isRuntimeModifiable: (key) => settings.isRuntimeModifiable?.(key) ?? RUNTIME_MODIFIABLE_SETTINGS.has(key),
+          onChange: (listener) => settings.onChange?.(() => listener()) ?? (() => undefined),
         };
         services.set(sessionId, service);
         return service;
       },
     },
-    providers: createProviderMenu(
-      persistentSettings,
-      (sessionId) => app.liveSettings(sessionId) ?? null,
-      (sessionId, providerId) => app.sessionAccount(sessionId, providerId),
-    ),
+    providers:
+      backend.providerMenu ??
+      createProviderMenu(
+        persistentSettings,
+        (sessionId) => backend.liveSettings(sessionId) ?? null,
+        (sessionId, providerId) => backend.sessionAccount(sessionId, providerId),
+      ),
     models: {
       settings(sessionId) {
-        const live = options.app.liveSettings(sessionId);
+        const live = backend.liveSettings(sessionId);
         if (!live) throw new Error('The attached session has no live settings.');
         const cached = bySession.get(sessionId);
         if (cached?.live === live) return cached.settings;
-        const settings = modelSettings(live, options);
+        const settings = modelSettings(live, sessionId, options);
         bySession.set(sessionId, { live, settings });
         return settings;
       },
@@ -313,11 +381,17 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
       warn: (message, details) => logger.warn(message, details),
       error: (message, details) => logger.error(message, details),
     },
-    paths: {
-      entries: getWorkspaceEntries,
-      refresh: refreshWorkspaceEntries,
-      meta: getWorkspaceEntriesMeta,
-    },
+    paths: backend.workspaceFiles
+      ? {
+          entries: () => loadDaemonPaths(false),
+          refresh: () => loadDaemonPaths(true),
+          meta: () => daemonPathsMeta,
+        }
+      : {
+          entries: getWorkspaceEntries,
+          refresh: refreshWorkspaceEntries,
+          meta: getWorkspaceEntriesMeta,
+        },
     schema: {
       isKnownSettingKey,
       label: getSettingLabel,

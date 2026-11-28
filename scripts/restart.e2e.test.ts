@@ -288,21 +288,21 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         if (fault === 'cleanup')
           await patchFixtureModule(
             tui,
-            'await app.close();',
-            `if (${pending}.plan) throw new Error('fixture cleanup failure');\nawait app.close();`,
+            'await backend.close();',
+            `if (${pending}.plan) throw new Error('fixture cleanup failure');\nawait backend.close();`,
           );
         if (fault === 'lock')
           // Hold the session's writer lock past shutdown, as a leaked writer would.
           await patchFixtureModule(
             tui,
-            'await app.close();',
-            `await app.close();\nif (${pending}.plan) globalThis.fixtureLock = (await import('../session/writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, \`\${${pending}.plan.sessionId}.jsonl\`));`,
+            'await backend.close();',
+            `await backend.close();\nif (${pending}.plan) globalThis.fixtureLock = (await import('../session/writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, \`\${${pending}.plan.sessionId}.jsonl\`));`,
           );
         if (fault === 'writer-close')
           await patchFixtureModule(
             tui,
-            'await app.close();',
-            `await app.close();\nif (${pending}.plan) throw new Error('fixture writer close failure');`,
+            'await backend.close();',
+            `await backend.close();\nif (${pending}.plan) throw new Error('fixture writer close failure');`,
           );
         if (fault === 'native-exec')
           await patchFixtureModule(

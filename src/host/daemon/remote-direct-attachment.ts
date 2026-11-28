@@ -32,6 +32,7 @@ export async function attachRemoteDirectSession(
 ): Promise<DirectConnection | DirectReplayConnection> {
   let handle: UnixStreamHandle | null = null;
   let retired = false;
+  let closeReason: 'closed' | 'daemon_shutdown' | 'workspace_revoked' | 'transport_lost' | null = null;
   let ordinal = 0;
   let current: WireSnapshot | undefined;
   let lastSeq = fromSeq;
@@ -103,6 +104,12 @@ export async function attachRemoteDirectSession(
         retired = true;
         const closed = CLIENT_API_SCHEMAS.sessionClosedEvent.safeParse(frame.payload);
         const reason = closed.success ? closed.data.reason : 'closed';
+        closeReason =
+          reason === 'workspace_revoked'
+            ? 'workspace_revoked'
+            : reason === 'daemon_shutdown'
+            ? 'daemon_shutdown'
+            : 'closed';
         const error =
           reason === 'workspace_revoked'
             ? new DirectProtocolError('forbidden', 'Workspace access was revoked.')
@@ -123,9 +130,10 @@ export async function attachRemoteDirectSession(
     onEvent,
     onClose(error) {
       retired = true;
-      const closed = new DirectProtocolError('closed', error?.message ?? 'Daemon connection closed.');
-      resolveSnapshot?.(closed);
-      if (error) queue.fail(closed);
+      if (closeReason === null) closeReason = 'transport_lost';
+      const dropped = new DirectProtocolError('unavailable', error?.message ?? 'Daemon connection closed.');
+      resolveSnapshot?.(dropped);
+      if (error) queue.fail(dropped);
       else queue.close();
     },
   });
@@ -135,6 +143,7 @@ export async function attachRemoteDirectSession(
     sessionId,
     events: queue,
     batches: () => queue.batches(),
+    closeReason: () => closeReason,
     async send(command: WireCommand) {
       return queue.closed ? ({ ok: false, code: 'closed', message: 'Connection is closed.' } as const) : send(command);
     },

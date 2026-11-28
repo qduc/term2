@@ -161,7 +161,7 @@ export function createDaemonProviderMenu(
         id: account.id,
         label: account.label,
         isSelected: account.isSelected,
-        isInUse: account.isInUse ?? (inUse !== null && inUse === account.id),
+        isInUse: inUse !== null ? inUse === account.id : account.isInUse === true,
       }));
     },
     loginCommand: (id) => (isOAuthAccountProvider(id) ? oauthLoginCommand(id) : ''),

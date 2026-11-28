@@ -450,13 +450,47 @@ describe('Built CLI TUI over daemon (Step 14d)', () => {
       await tui.waitForOutput('No MCP servers are configured.', 30_000);
       await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
 
-      // 4. /resume switches to the seeded session and renders its persisted assistant reply.
-      await submitLine(tui, fixture.idlePath, `/resume ${displaySessionId(seededSessionId)}`);
+      // 4. /goal set + /goal show reads WireGoal.text cleanly (never prints undefined).
+      await submitLine(tui, fixture.idlePath, '/goal set Ship daemon TUI --criteria All gates pass');
+      await tui.waitForOutput('Goal (active): Ship daemon TUI', 30_000);
+      await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
+      await submitLine(tui, fixture.idlePath, '/goal show');
+      await tui.waitForOutput('Success criteria: All gates pass', 30_000);
+      expect(tui.getVisibleOutput()).not.toContain('Goal (active): undefined');
+      await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
+
+      // 5. /resume waits for the async resume picker list before Enter so it never races under parallel load.
+      const resumeCmd = `/resume ${displaySessionId(seededSessionId)}`;
+      tui.write(resumeCmd);
+      await waitForHarnessComposerValue(fixture.idlePath, resumeCmd, { timeoutMs: 30_000 });
+      await tui.waitForOutput('seed prior session', 30_000);
+      tui.write('\r');
       await tui.waitForOutput('seed-session-reply', 30_000);
       await waitForHarnessComposerValue(fixture.idlePath, '', { timeoutMs: 15_000 });
 
-      await submitLine(tui, fixture.idlePath, '/quit');
-      const exit = await tui.waitForExit(20_000);
+      // 6. Explicit session.close from a peer client is terminal: TUI reports the closed error and does NOT re-open it.
+      const statusBeforeClose = await inspector.host.status();
+      await inspector.host.closeSession!(LOCAL_PRINCIPAL, seededSessionId);
+      await tui.waitForOutput('Session closed.', 30_000);
+      const statusAfterClose = await inspector.host.status();
+      expect(statusAfterClose.activeSessionCount).toBe(statusBeforeClose.activeSessionCount - 1);
+
+      // Exit cleanly with double Ctrl+C across separate PTY reads (composer is disabled on a terminal session error).
+      let exited: { exitCode: number } | null = null;
+      const exitPromise = tui.waitForExit(20_000).then((res) => {
+        exited = res;
+        return res;
+      });
+      await expect
+        .poll(
+          () => {
+            if (!exited) tui.write('\x03');
+            return exited !== null;
+          },
+          { timeout: 10_000, interval: 80 },
+        )
+        .toBe(true);
+      const exit = await exitPromise;
       expect(exit.exitCode).toBe(0);
     },
     TIMEOUT_MS,

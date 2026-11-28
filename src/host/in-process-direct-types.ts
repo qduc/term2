@@ -17,6 +17,8 @@ export interface DirectConnection {
   readonly batches?: () => AsyncIterable<WireEventBatch>;
   /** The current snapshot and the last publication it contains, read together. Omitted where `batches` is. */
   readonly cut?: () => { readonly snapshot: WireSnapshot; readonly ordinal: number };
+  /** Optional remote-host close reason so clients distinguish terminal close/revocation from retryable drops. */
+  readonly closeReason?: () => 'closed' | 'daemon_shutdown' | 'workspace_revoked' | 'transport_lost' | null;
   send(command: WireCommand): Promise<WireCommandResult>;
   /** Unsubscribe only; closing a connection never cancels or closes the Session. */
   close(): void;

@@ -312,7 +312,16 @@ async function openDaemonTuiSession(request: InteractiveRequest, root: string): 
         return next.id;
       },
       async goal(_sessionId, latest) {
-        return (latest.goal as DurableGoal | null) ?? null;
+        const goal = latest.goal;
+        if (!goal) return null;
+        const status: DurableGoal['status'] =
+          goal.status === 'achieved' || goal.status === 'abandoned' ? goal.status : 'active';
+        return {
+          id: goal.id,
+          outcome: goal.text,
+          status,
+          ...(goal.successCriteria !== undefined ? { successCriteria: goal.successCriteria } : {}),
+        };
       },
       async setGoal(sessionId, input) {
         const command = {

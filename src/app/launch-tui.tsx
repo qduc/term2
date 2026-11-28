@@ -143,23 +143,26 @@ function DirectTuiSession({
   const reconnecting = useRef(false);
   const displayMode = useSetting(settings, 'ui.displayMode') ?? 'concise';
   const notifier = useTerminalFocusNotifier({ stdout });
-  const handleConnectionLost = useCallback(() => {
-    if (!backend.reconnectSession || reconnecting.current) return;
-    reconnecting.current = true;
-    const snap = latest.current;
-    void backend
-      .reconnectSession(snap.sessionId, snap)
-      .then((next) => {
-        if (next.snapshot) latest.current = next.snapshot;
-        onConnectionChange(next, next.snapshot ? undefined : snap);
-      })
-      .catch(() => {
-        // Leave the visible connection error from useClient in place when reconnect fails.
-      })
-      .finally(() => {
-        reconnecting.current = false;
-      });
-  }, [backend, onConnectionChange]);
+  const handleConnectionLost = useCallback(
+    (_reason: string, info?: { readonly terminal?: boolean }) => {
+      if (info?.terminal || !backend.reconnectSession || reconnecting.current) return;
+      reconnecting.current = true;
+      const snap = latest.current;
+      void backend
+        .reconnectSession(snap.sessionId, snap)
+        .then((next) => {
+          if (next.snapshot) latest.current = next.snapshot;
+          onConnectionChange(next, next.snapshot ? undefined : snap);
+        })
+        .catch(() => {
+          // Leave the visible connection error from useClient in place when reconnect fails.
+        })
+        .finally(() => {
+          reconnecting.current = false;
+        });
+    },
+    [backend, onConnectionChange],
+  );
   const integration: TuiIntegration = useMemo(
     () => ({
       menus: createDirectTuiMenus({

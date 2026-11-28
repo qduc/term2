@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
+import { DirectProtocolError } from '../../protocol/errors.js';
 import type { WireEvent, WireSnapshot } from '../../protocol/wire.js';
 import { reduceWireEvent } from '../../protocol/reducer.js';
 import { projectSnapshot } from './projection.js';
@@ -23,7 +24,7 @@ export function useClient(
   onLiveEvent?: (event: WireEvent) => void,
   options?: {
     readonly disableClientNotificationDrain?: boolean;
-    readonly onConnectionLost?: (reason: string) => void;
+    readonly onConnectionLost?: (reason: string, info?: { readonly terminal?: boolean }) => void;
   },
 ): { state: TuiState; error: string | null; historyRevision: number } {
   const callback = useRef(onSnapshot);
@@ -87,16 +88,19 @@ export function useClient(
           await drain();
         }
         if (active) {
-          setCurrent((previous) =>
-            previous.connection === connection ? { ...previous, error: 'Connection closed.' } : previous,
-          );
-          lostCallback.current?.('Connection closed.');
+          const reason = connection.closeReason?.() ?? null;
+          const terminal = reason === 'closed' || reason === 'workspace_revoked';
+          const message = reason === 'closed' ? 'Session closed.' : 'Connection closed.';
+          setCurrent((previous) => (previous.connection === connection ? { ...previous, error: message } : previous));
+          lostCallback.current?.(message, { terminal });
         }
       } catch (error) {
         if (active) {
           const message = `Connection failed: ${error instanceof Error ? error.message : String(error)}`;
+          const terminal =
+            error instanceof DirectProtocolError && (error.code === 'closed' || error.code === 'forbidden');
           setCurrent((previous) => (previous.connection === connection ? { ...previous, error: message } : previous));
-          lostCallback.current?.(message);
+          lostCallback.current?.(message, { terminal });
         }
       }
     })();

@@ -6,10 +6,11 @@
  * in-process fallback: HTTP `daemon/status` must name the daemon the Unix socket reports,
  * and the web session's log must land in the daemon's conversation store.
  */
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -452,4 +453,95 @@ describe('term2 serve over the daemon (built CLI)', () => {
       expect(fs.existsSync(httpSocket), `delay ${delayMs}`).toBe(false);
     }
   }, 180_000);
+
+  it('reports a listener that cannot bind, in process and through the daemon, and keeps the daemon usable', async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-serve-bind-')));
+    cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
+    const home = path.join(root, 'home');
+    const runtimeDir = path.join(root, 'run');
+    const daemonSocket = path.join(runtimeDir, 'daemon.sock');
+    const daemonState = path.join(root, 'daemon-state');
+    fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
+    const certPath = path.join(root, 'cert.pem');
+    const keyPath = path.join(root, 'key.pem');
+    execFileSync(
+      'openssl',
+      ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', keyPath, '-out', certPath].concat([
+        '-subj',
+        '/CN=localhost',
+        '-days',
+        '1',
+      ]),
+      { stdio: 'ignore', timeout: 30_000 },
+    );
+    // Holds the port, so the serve listener's bind fails after its socket is created.
+    const busy = net.createServer();
+    await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
+    cleanups.push(() => new Promise<void>((resolve) => busy.close(() => resolve())));
+    const busyPort = (busy.address() as net.AddressInfo).port;
+    const env = createTestChildEnv({
+      HOME: home,
+      XDG_STATE_HOME: path.join(root, 'xdg-state'),
+      DISABLE_LOGGING: '1',
+      TERM2_DAEMON_DIR: runtimeDir,
+      TERM2_DAEMON_SOCKET: daemonSocket,
+      TERM2_CONVERSATIONS_DIR: path.join(daemonState, 'conversations'),
+    });
+    const cliPath = integrationCliPath();
+    cleanups.push(async () => {
+      await execFileAsync(
+        process.execPath,
+        [cliPath, 'daemon', 'stop', '--socket', daemonSocket, '--state-dir', daemonState],
+        { env },
+      ).catch(() => undefined);
+    });
+    const serveArgs = (stateDir: string) => [
+      cliPath,
+      'serve',
+      '--state-dir',
+      stateDir,
+      '--local-owner',
+      'user-1',
+      '--pairing',
+      '--listen',
+      `127.0.0.1:${busyPort}`,
+      '--tls-cert',
+      certPath,
+      '--tls-key',
+      keyPath,
+    ];
+    const run = (args: string[], childEnv: NodeJS.ProcessEnv) =>
+      new Promise<{ code: number | null; stderr: string }>((resolve) => {
+        const child = spawn(process.execPath, args, { env: childEnv });
+        cleanups.push(() => {
+          child.kill('SIGKILL');
+        });
+        let stderr = '';
+        child.stderr.on('data', (chunk: Buffer | string) => (stderr += String(chunk)));
+        child.on('close', (code) => resolve({ code, stderr }));
+      });
+
+    const inProcess = await run(serveArgs(path.join(root, 'in-process-state')), env);
+    expect(inProcess.code).toBe(1);
+    expect(inProcess.stderr).toContain('server failed to start');
+    expect(inProcess.stderr).toContain('EADDRINUSE');
+
+    const daemonEnv = { ...env, TERM2_DAEMON_MODE: '1' };
+    const serveState = path.join(root, 'serve-state');
+    const viaDaemon = await run(serveArgs(serveState), daemonEnv);
+    expect(viaDaemon.code).toBe(1);
+    expect(viaDaemon.stderr).toContain('server failed to start');
+    expect(viaDaemon.stderr).toContain('EADDRINUSE');
+    expect(fs.existsSync(path.join(serveState, 'serve.lock.pid'))).toBe(false);
+
+    // The failed start left no lease, lock or pin behind: a lease on a free socket starts at once.
+    const usable = await startServe(
+      cliPath,
+      ['--state-dir', serveState, '--local-owner', 'user-1', '--pairing'],
+      daemonEnv,
+    );
+    usable.child.kill('SIGTERM');
+    expect(await usable.exited).toBe(0);
+  }, 120_000);
 });

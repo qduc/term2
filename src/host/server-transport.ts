@@ -90,13 +90,17 @@ export class DirectServerTransport {
         await chmod(options.socketPath, 0o660);
       }
     } catch (error) {
-      await this.stop();
+      // Not stop(): stop() waits for this very start to settle.
+      await this.#close();
       throw error;
     }
   }
   async stop(): Promise<void> {
     // A stop during start must close what start is about to bind, not return before it exists.
     if (this.#starting) await this.#starting.catch(() => undefined);
+    await this.#close();
+  }
+  async #close(): Promise<void> {
     const server = this.#server;
     if (!server) return;
     this.#server = undefined;

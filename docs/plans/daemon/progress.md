@@ -117,3 +117,9 @@ the three daemon and Client API integration suites.
   integration test drops the client 0–20 ms into `serve.start` and requires the
   next lease to start; it fails with `gateway socket is already in use` when the
   `stop()` wait is removed from the bundle.
+- Its third round (`a3e2b0f`) found that wait deadlocked when `start()` failed after
+  binding began, since `start()`'s own cleanup called `stop()`: in-process serve on
+  a busy TLS port exited 0 silently, and a daemon lease hung and blocked later
+  leases. That cleanup now closes the server directly. A second test binds a busy
+  TLS port in both modes and requires exit 1 with `EADDRINUSE`, then a working
+  lease; it fails with exit 0 when the old `stop()` call is put back in the bundle.

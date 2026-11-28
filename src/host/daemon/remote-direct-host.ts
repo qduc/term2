@@ -13,7 +13,11 @@ import type {
   ClientApiSessionListItem,
   DaemonShutdownParams,
   DaemonStatusResult,
+  ModelsListParamsV11,
   SessionApprovalPolicy,
+  SessionLaunchParams,
+  SessionLaunchResult,
+  SettingsUpdateParamsV11,
   UnixEventFrame,
 } from '../../protocol/client-api/client-api-schema.js';
 import type { DirectSessionStore } from '../../session/facade-types.js';
@@ -41,10 +45,19 @@ export interface RemoteDirectHost extends DirectHost {
   readonly rpc: UnixRpcClient;
   status(): Promise<DaemonStatusResult>;
   shutdown(params?: Partial<DaemonShutdownParams>): Promise<void>;
+  launchSession(params: SessionLaunchParams): Promise<SessionLaunchResult>;
+  listSessionsByCwd(
+    cwd: string,
+    options?: { readonly limit?: number; readonly cursor?: string },
+  ): Promise<{ readonly sessions: readonly ClientApiSessionListItem[]; readonly nextCursor: string | null }>;
   forkSession(sourceSessionId: string): Promise<ClientApiSessionListItem>;
   handoffSession(
     sourceSessionId: string,
-    input?: { readonly name?: string; readonly text?: string },
+    input?: {
+      readonly name?: string;
+      readonly text?: string;
+      readonly model?: { readonly provider: string; readonly model: string };
+    },
   ): Promise<ClientApiSessionListItem>;
   subscribeSessionList(
     onEvent: (frame: UnixEventFrame) => void,
@@ -52,14 +65,23 @@ export interface RemoteDirectHost extends DirectHost {
   ): Promise<{ readonly streamId: string; unsubscribe: () => Promise<void> }>;
   subscribeSettings(
     onEvent: (frame: UnixEventFrame) => void,
-    options?: { readonly onClose?: (error?: Error) => void },
+    options?: {
+      readonly sessionId?: string;
+      readonly view?: 'web' | 'tui';
+      readonly onClose?: (error?: Error) => void;
+    },
   ): Promise<{ readonly streamId: string; unsubscribe: () => Promise<void> }>;
-  readSettings(): Promise<Record<string, unknown>>;
+  readSettings(options?: {
+    readonly sessionId?: string;
+    readonly view?: 'web' | 'tui';
+  }): Promise<Record<string, unknown>>;
   updateSettings(
     expectedRevision: string,
     changes: readonly { readonly key: string; readonly value: unknown }[],
   ): Promise<Record<string, unknown>>;
-  listModels(): Promise<readonly Record<string, unknown>[]>;
+  updateScopedSettings(params: SettingsUpdateParamsV11): Promise<Record<string, unknown>>;
+  listModels(options?: ModelsListParamsV11): Promise<readonly Record<string, unknown>[]>;
+  listProviderModels(options: ModelsListParamsV11): Promise<Record<string, unknown>>;
   listProviderPresets(): Promise<Record<string, unknown>>;
   upsertProvider(params: Record<string, unknown>): Promise<Record<string, unknown>>;
   deleteProvider(providerId: string): Promise<Record<string, unknown>>;
@@ -255,6 +277,21 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
       ensureOpen();
       await rpc.request('daemon.shutdown', params ? { ...params } : { mode: 'graceful' });
     },
+    async launchSession(params) {
+      ensureOpen();
+      return (await rpc.request<SessionLaunchResult>(
+        'session.launch',
+        params as unknown as Record<string, unknown>,
+      )) as SessionLaunchResult;
+    },
+    async listSessionsByCwd(cwd, listOptions) {
+      ensureOpen();
+      return (await rpc.request('session.list', {
+        cwd,
+        ...(listOptions?.limit !== undefined ? { limit: listOptions.limit } : {}),
+        ...(listOptions?.cursor !== undefined ? { cursor: listOptions.cursor } : {}),
+      })) as { readonly sessions: readonly ClientApiSessionListItem[]; readonly nextCursor: string | null };
+    },
     async forkSession(sourceSessionId) {
       ensureOpen();
       const res = await rpc.request<{ readonly session: ClientApiSessionListItem }>('session.fork', {
@@ -268,6 +305,7 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
         sourceSessionId,
         ...(input?.name ? { name: input.name } : {}),
         ...(input?.text ? { text: input.text } : {}),
+        ...(input?.model ? { model: input.model } : {}),
       });
       return res.session;
     },
@@ -290,7 +328,11 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
     },
     async subscribeSettings(onEvent, subOptions) {
       ensureOpen();
-      const handle = await rpc.subscribe('settings.subscribe', {}, { onEvent, onClose: subOptions?.onClose });
+      const params: Record<string, unknown> = {
+        ...(subOptions?.sessionId ? { sessionId: subOptions.sessionId } : {}),
+        ...(subOptions?.view ? { view: subOptions.view } : {}),
+      };
+      const handle = await rpc.subscribe('settings.subscribe', params, { onEvent, onClose: subOptions?.onClose });
       return {
         streamId: handle.streamId,
         async unsubscribe() {
@@ -301,18 +343,33 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
         },
       };
     },
-    async readSettings() {
+    async readSettings(readOptions) {
       ensureOpen();
-      return await rpc.request('settings.get');
+      const params: Record<string, unknown> = {
+        ...(readOptions?.sessionId ? { sessionId: readOptions.sessionId } : {}),
+        ...(readOptions?.view ? { view: readOptions.view } : {}),
+      };
+      return await rpc.request('settings.get', Object.keys(params).length ? params : undefined);
     },
     async updateSettings(expectedRevision, changes) {
       ensureOpen();
       return await rpc.request('settings.update', { expectedRevision, changes });
     },
-    async listModels() {
+    async updateScopedSettings(params) {
       ensureOpen();
-      const res = await rpc.request<{ readonly models: readonly Record<string, unknown>[] }>('models.list');
+      return await rpc.request('settings.update', params as unknown as Record<string, unknown>);
+    },
+    async listModels(modelOptions) {
+      ensureOpen();
+      const res = await rpc.request<{ readonly models: readonly Record<string, unknown>[] }>(
+        'models.list',
+        modelOptions ? (modelOptions as unknown as Record<string, unknown>) : undefined,
+      );
       return res.models;
+    },
+    async listProviderModels(modelOptions) {
+      ensureOpen();
+      return await rpc.request('models.list', modelOptions as unknown as Record<string, unknown>);
     },
     async listProviderPresets() {
       ensureOpen();

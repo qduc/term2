@@ -26,6 +26,7 @@ export type SessionIndexRecord = {
   readonly latestSequence: number;
   readonly title?: string;
   readonly model?: WireModel;
+  readonly messageCount?: number;
   readonly pendingInteractionCount: number;
   readonly activeBackgroundTaskCount: number;
   readonly live: boolean;
@@ -70,7 +71,12 @@ export interface SessionIndex {
   notifyWorkspaceGranted(principal: Principal, root: string): Promise<void>;
   list(
     principal: Principal,
-    options?: { readonly limit?: number; readonly cursor?: string; readonly workspaceId?: string },
+    options?: {
+      readonly limit?: number;
+      readonly cursor?: string;
+      readonly workspaceId?: string;
+      readonly workspaceRoot?: string;
+    },
   ): Promise<{ readonly sessions: ClientApiSessionListItem[]; readonly nextCursor: string | null }>;
   get(principal: Principal, sessionId: string): Promise<ClientApiSessionListItem | null>;
   subscribe(
@@ -93,7 +99,12 @@ type Subscriber = {
   readonly listener: (event: SessionListStreamEvent) => void;
 };
 
-type ListCursor = { readonly ownerUserId: string; readonly updatedAt: string; readonly id: string };
+type ListCursor = {
+  readonly ownerUserId: string;
+  readonly updatedAt: string;
+  readonly id: string;
+  readonly scope?: string;
+};
 
 const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/u;
 
@@ -107,11 +118,13 @@ function normalizeDormantStatus(status: WireStatus | undefined): WireStatus {
   return status ?? 'idle';
 }
 
-function encodeListCursor(ownerUserId: string, item: ClientApiSessionListItem): string {
-  return Buffer.from(JSON.stringify({ ownerUserId, updatedAt: item.updatedAt, id: item.id })).toString('base64url');
+function encodeListCursor(ownerUserId: string, item: ClientApiSessionListItem, scope?: string): string {
+  return Buffer.from(
+    JSON.stringify({ ownerUserId, updatedAt: item.updatedAt, id: item.id, ...(scope ? { scope } : {}) }),
+  ).toString('base64url');
 }
 
-function decodeListCursor(cursor: string, ownerUserId: string): ListCursor {
+function decodeListCursor(cursor: string, ownerUserId: string, expectedScope?: string): ListCursor {
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as ListCursor | null;
     if (
@@ -119,7 +132,8 @@ function decodeListCursor(cursor: string, ownerUserId: string): ListCursor {
       parsed.ownerUserId !== ownerUserId ||
       typeof parsed.updatedAt !== 'string' ||
       typeof parsed.id !== 'string' ||
-      !OPAQUE_ID.test(parsed.id)
+      !OPAQUE_ID.test(parsed.id) ||
+      (parsed.scope ?? undefined) !== (expectedScope ?? undefined)
     ) {
       throw new Error('invalid');
     }
@@ -176,6 +190,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
     latestSequence: record.latestSequence,
     ...(record.title ? { title: record.title } : {}),
     ...(record.model ? { model: { provider: record.model.provider, model: record.model.model } } : {}),
+    ...(record.messageCount !== undefined ? { messageCount: record.messageCount } : {}),
     ...(includeCounts
       ? {
           pendingInteractionCount: record.pendingInteractionCount,
@@ -253,6 +268,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
       latestSequence: summary.latestSequence ?? 0,
       ...(title ? { title } : {}),
       model: summary.model,
+      ...(summary.messageCount !== undefined ? { messageCount: summary.messageCount } : {}),
       pendingInteractionCount: 0,
       activeBackgroundTaskCount: 0,
       live: false,
@@ -261,9 +277,14 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
     else records.set(next.id, next);
   };
 
-  const collectVisible = async (principal: Principal, workspaceId?: string): Promise<ClientApiSessionListItem[]> => {
+  const collectVisible = async (
+    principal: Principal,
+    workspaceId?: string,
+    workspaceRoot?: string,
+  ): Promise<ClientApiSessionListItem[]> => {
     const items: ClientApiSessionListItem[] = [];
     for (const record of records.values()) {
+      if (workspaceRoot && record.workspaceRoot !== workspaceRoot) continue;
       try {
         const vis = await deps.resolveVisibility(principal, record);
         if (vis.visible && (!workspaceId || workspaceId === vis.workspaceId)) {
@@ -306,6 +327,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
           latestSequence: summary.latestSequence || existing?.latestSequence || 0,
           ...(summary.title ?? existing?.title ? { title: summary.title ?? existing?.title } : {}),
           ...(summary.model ?? existing?.model ? { model: summary.model ?? existing?.model } : {}),
+          messageCount: event.lastSnapshot.messages.length,
           pendingInteractionCount: 0,
           activeBackgroundTaskCount: 0,
           live: false,
@@ -331,6 +353,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
         latestSequence: summary.latestSequence,
         ...(summary.title ? { title: summary.title } : {}),
         ...(summary.model ? { model: summary.model } : {}),
+        messageCount: event.snapshot.messages.length,
         pendingInteractionCount: summary.pendingInteractionCount,
         activeBackgroundTaskCount: summary.activeBackgroundTaskCount,
         live: true,
@@ -384,8 +407,13 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
 
     async list(principal, options) {
       const limit = Math.max(1, Math.min(100, options?.limit ?? 20));
-      const after = options?.cursor ? decodeListCursor(options.cursor, principal.userId) : undefined;
-      const all = await collectVisible(principal, options?.workspaceId);
+      const scope = options?.workspaceId
+        ? `ws:${options.workspaceId}`
+        : options?.workspaceRoot
+        ? `root:${options.workspaceRoot}`
+        : undefined;
+      const after = options?.cursor ? decodeListCursor(options.cursor, principal.userId, scope) : undefined;
+      const all = await collectVisible(principal, options?.workspaceId, options?.workspaceRoot);
       const remaining = after
         ? all.filter(
             (item) => item.updatedAt < after.updatedAt || (item.updatedAt === after.updatedAt && item.id > after.id),
@@ -393,7 +421,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
         : all;
       const sessions = remaining.slice(0, limit);
       const last = sessions[sessions.length - 1];
-      const nextCursor = remaining.length > limit && last ? encodeListCursor(principal.userId, last) : null;
+      const nextCursor = remaining.length > limit && last ? encodeListCursor(principal.userId, last, scope) : null;
       return { sessions, nextCursor };
     },
 
@@ -417,16 +445,11 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
         const sessions = all.slice(0, limit);
         const truncated = all.length > limit;
         const last = sessions[sessions.length - 1];
-        const nextCursor = truncated && last ? encodeListCursor(principal.userId, last) : null;
+        const scope = options.workspaceId ? `ws:${options.workspaceId}` : undefined;
+        const nextCursor = truncated && last ? encodeListCursor(principal.userId, last, scope) : null;
         for (const item of all) subscriber.visibleIds.add(item.id);
         const streamEpoch = `ep_${randomUUID().replaceAll('-', '')}`;
-        listener({
-          event: 'session.list.snapshot',
-          streamEpoch,
-          sessions,
-          truncated,
-          nextCursor,
-        });
+        listener({ event: 'session.list.snapshot', streamEpoch, sessions, truncated, nextCursor });
         ready = true;
         for (const buffered of queued) listener(buffered);
         queued.length = 0;
@@ -434,11 +457,7 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
         subscribers.delete(subscriber);
         throw error;
       }
-      return {
-        unsubscribe: () => {
-          subscribers.delete(subscriber);
-        },
-      };
+      return { unsubscribe: () => void subscribers.delete(subscriber) };
     },
 
     async get(principal, sessionId) {

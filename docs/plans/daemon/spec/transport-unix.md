@@ -1,7 +1,7 @@
-# Term2 Client API — Unix Domain Socket Transport Binding (v1.0)
+# Term2 Client API — Unix Domain Socket Transport Binding (v1.1)
 
-- **Applies to:** Core Protocol Specification `1.0` ([`client-api.md`](client-api.md))
-- **Status:** Frozen (2026-11-27)
+- **Applies to:** Core Protocol Specification `1.1` (backward-compatible with `1.0`, [`client-api.md`](client-api.md))
+- **Status:** Frozen (v1.1 frozen 2026-11-28 under D010; v1.0 frozen 2026-11-27 under D008)
 - **Primary Consumers:** Trusted local-owner CLI surfaces ONLY — TUI, Headless CLI, Control CLI, and local ACP.
 - **Explicit Prohibition:** Clients MUST NOT proxy untrusted, remote, or multi-user principals (e.g., Web BFF or multi-user bridges) over `daemon.sock`. Proxying surfaces MUST connect via the [HTTP + SSE Binding](transport-http-sse.md) with per-request RS256 assertions.
 
@@ -122,3 +122,12 @@ When a local CLI launches in default daemon mode (without `--in-process` / `TERM
 3. Once connected, Client runs `protocol.hello`:
    - On `protocol.welcome`: proceed normally.
    - On `protocol_incompatible` (after which Host closes the socket): if `activeTurnCount === 0` and local upgrade is permitted, Client MAY open a fresh connection to `<socketPath>`, send the pre-handshake recovery request `daemon.shutdown({ mode: "graceful", whenIdle: true })`, wait for socket exit, respawn the daemon, and retry once; otherwise report an actionable version mismatch error.
+
+---
+
+## 5. Local Operator Leases (v1.1, Capability `local_leases`)
+
+Negotiated only on the local Unix binding when `protocolVersion >= 1.1` AND capability `"local_leases"` is negotiated (MUST NOT be advertised on HTTP+SSE or until backed by the Host):
+
+1. **`daemon.serve.start` / `daemon.serve.stop` (`C -> H`, `owner`):** Registers a foreground `term2 serve` HTTP/HTTPS/BFF listener bound to the calling Unix connection's lifetime (`leaseId`). Pairing OTPs are delivered ONLY as `serve.pairing_otp` events on that connection. Connection EOF, explicit `daemon.serve.stop`, or daemon shutdown releases the listener immediately.
+2. **`session.control.bind` / `session.control.rebind` / `session.control.unbind` (`C -> H`, `owner`):** Registers a named control socket owned by the daemon and bound to the calling TUI connection's lifetime (with optional `pauseForHandoff` on TUI restart so a replacement process can claim the name without losing the binding). On connection EOF without handoff, the daemon releases the control socket without cancelling the underlying session.

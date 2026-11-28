@@ -6,6 +6,7 @@ import { createSettingsService, type SettingsService } from './settings.js';
 
 import type { ILoggingService } from '../shared/service-interfaces.js';
 import { getAllProviders, getProvider, getProviderIds } from '../model/providers/index.js';
+import { decodeStoredCustomProviderConfigs } from '../config/settings/custom-provider-normalization.js';
 import {
   deleteCustomProvider,
   loadProviderItems,
@@ -166,13 +167,22 @@ export function createDirectAccountPorts(service: ProductSettings): {
             return { ok: false, error: 'Built-in providers cannot be edited here.' };
           }
         }
+        const stored = input.originalId
+          ? decodeStoredCustomProviderConfigs(service.getDynamic('providers')).find(
+              (entry) => entry.id === input.originalId,
+            )
+          : undefined;
+        const resolvedBaseUrl =
+          input.baseUrl && input.baseUrl.length > 0 ? input.baseUrl : input.keepBaseUrl ? stored?.baseUrl : undefined;
+        const resolvedApiKey =
+          input.apiKey && input.apiKey.length > 0 ? input.apiKey : input.keepApiKey ? stored?.apiKey : undefined;
         const saved = saveProvider(
           service,
           {
             name: input.name,
             type: input.type as (typeof PROVIDER_TYPES)[number],
-            ...(input.baseUrl ? { baseUrl: input.baseUrl } : {}),
-            ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+            ...(resolvedBaseUrl ? { baseUrl: resolvedBaseUrl } : {}),
+            ...(resolvedApiKey ? { apiKey: resolvedApiKey } : {}),
           },
           input.originalId ?? null,
         );

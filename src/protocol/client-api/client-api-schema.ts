@@ -1,5 +1,5 @@
 /**
- * Authoritative TypeScript / Zod schema for the Term2 Client API v1.0.
+ * Authoritative TypeScript / Zod schema for the Term2 Client API v1.1 (backward-compatible over v1.0).
  * Self-contained (depends only on `zod`) for future graduation into @qduc/agent-wire (Decision D006).
  * Generates `docs/plans/daemon/spec/client-api.schema.json` via `scripts/generate-client-api-schema.mjs`.
  *
@@ -10,6 +10,17 @@
  *   additive properties remain forward-compatible in both Zod and generated JSON Schema.
  */
 import { z } from 'zod';
+import { CLIENT_API_SCHEMAS_V11 } from './client-api-schema-v11.js';
+
+export type {
+  DaemonServeStartParams,
+  ModelsListParamsV11,
+  ProviderUpsertParamsV11,
+  SessionControlBindParams,
+  SessionLaunchParams,
+  SessionLaunchResult,
+  SettingsUpdateParamsV11,
+} from './client-api-schema-v11.js';
 
 // --- Primitives (client-api.md §1.1) ---
 
@@ -24,7 +35,13 @@ const ControlFreeString = z
   .regex(/^[^\x00-\x1F\x7F]+$/);
 const ClientKind = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
 
-export const CLIENT_API_CAPABILITIES = ['session_list_stream', 'settings_stream', 'daemon_control', 'mcp'] as const;
+export const CLIENT_API_HTTP_CAPABILITIES = [
+  'session_list_stream',
+  'settings_stream',
+  'daemon_control',
+  'mcp',
+] as const;
+export const CLIENT_API_CAPABILITIES = [...CLIENT_API_HTTP_CAPABILITIES, 'local_leases'] as const;
 
 const CLIENT_API_ERROR_CODES = [
   'protocol_incompatible',
@@ -125,6 +142,7 @@ const SessionListItemSchema = z.looseObject({
   latestSequence: NonNegativeInt,
   title: ControlFreeString.max(120).optional(),
   model: SessionModelSummaryOutSchema.optional(),
+  messageCount: NonNegativeInt.optional(),
   pendingInteractionCount: NonNegativeInt.optional(),
   activeBackgroundTaskCount: NonNegativeInt.optional(),
 });
@@ -358,6 +376,7 @@ export const CLIENT_API_SCHEMAS = {
   unixResponseFrame: UnixResponseFrameSchema,
   unixEventFrame: UnixEventFrameSchema,
   unixFrame: UnixFrameSchema,
+  ...CLIENT_API_SCHEMAS_V11,
 } as const;
 
 export type ClientApiErrorCode = z.infer<typeof ClientApiErrorCodeSchema>;

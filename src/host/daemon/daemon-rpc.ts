@@ -13,19 +13,25 @@ import {
 } from '../../protocol/client-api/client-api-schema.js';
 import { CLIENT_API_VERSION } from '../../protocol/client-api/version-negotiation.js';
 import type { DirectConnection, DirectHost, Principal, WorkspaceGrant } from '../in-process-direct-types.js';
-import type {
-  ModelCatalogEntry,
-  SafeSettingValue,
-  ServerConfiguration,
-  ServerWorkspaces,
-  SkillSummary,
-} from '../server-contracts.js';
+import type { ModelCatalogEntry, ServerConfiguration, ServerWorkspaces, SkillSummary } from '../server-contracts.js';
 import type { GlobalMutationCoordinator } from './global-mutations.js';
 import type { SessionIndex } from './session-index.js';
 import { asRecord, ClientApiRpcError, mapCommandFailure, parseStrict, requireString } from './daemon-errors.js';
 import { openDaemonStream, type StreamRegistration } from './daemon-streams.js';
+import {
+  handleMcpLogin,
+  handleModelsList,
+  handleSessionHandoff,
+  handleSessionList,
+  handleSettingsGet,
+  handleSettingsUpdate,
+  isV11,
+  parseProviderUpsert,
+  type DaemonV11ControlPort,
+} from './daemon-rpc-v11.js';
 
 export { ClientApiRpcError } from './daemon-errors.js';
+export type { DaemonV11ControlPort } from './daemon-rpc-v11.js';
 
 type WorkspaceScope = { readonly workspaceId?: string; readonly sessionId?: string };
 
@@ -69,6 +75,7 @@ export type DaemonRpcDeps = {
   readonly sessionIndex: SessionIndex;
   readonly mutations: GlobalMutationCoordinator;
   readonly control: DaemonControlPort;
+  readonly v11?: DaemonV11ControlPort;
   readonly configuration?: ServerConfiguration;
   readonly workspaces?: ServerWorkspaces;
   readonly models?: () => readonly ModelCatalogEntry[] | Promise<readonly ModelCatalogEntry[]>;
@@ -106,7 +113,7 @@ export class DaemonRpc {
     principal: Principal,
     method: string,
     rawParams: unknown,
-    _context?: DaemonRpcContext,
+    context?: DaemonRpcContext,
   ): Promise<StreamRegistration> {
     return openDaemonStream(
       {
@@ -114,12 +121,14 @@ export class DaemonRpc {
         sessionIndex: this.deps.sessionIndex,
         mutations: this.deps.mutations,
         configuration: this.deps.configuration,
+        readTuiSettings: this.deps.v11?.readTuiSettings,
         serializeSession: (sessionId, operation) => this.#serializeSession(sessionId, operation),
         shutdownReason: () => this.#shutdownReason,
       },
       principal,
       method,
       rawParams,
+      context?.protocolVersion,
     );
   }
 
@@ -127,9 +136,10 @@ export class DaemonRpc {
     principal: Principal,
     method: string,
     rawParams: unknown,
-    _context?: DaemonRpcContext,
+    context?: DaemonRpcContext,
   ): Promise<Record<string, unknown>> {
     const params = rawParams === undefined ? {} : asRecord(rawParams, method);
+    const allowV11 = isV11(context?.protocolVersion);
     switch (method) {
       case 'protocol.ping':
         return { now: new Date().toISOString() };
@@ -140,12 +150,32 @@ export class DaemonRpc {
         await this.deps.control.shutdown(parsed);
         return {};
       }
-      case 'session.list': {
-        const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionListParams, params, 'session.list');
-        return await this.deps.sessionIndex.list(principal, parsed);
-      }
+      case 'session.list':
+        return await handleSessionList(this.deps.sessionIndex, this.deps.v11, principal, params, allowV11);
       case 'session.create':
         return await this.#createSession(principal, params);
+      case 'session.launch': {
+        if (!allowV11) throw new ClientApiRpcError('invalid_request', 'session.launch requires Client API 1.1.');
+        if (!this.deps.v11?.launchSession) throw new ClientApiRpcError('unavailable', 'session.launch unavailable.');
+        const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionLaunchParams, params, 'session.launch');
+        const runLaunch = async () => {
+          if (this.#draining) {
+            throw new ClientApiRpcError('closed', 'Daemon is draining and not accepting new sessions.', {
+              retryable: true,
+            });
+          }
+          return await this.deps.v11!.launchSession!(principal, parsed);
+        };
+        const targetId =
+          parsed.selection.kind !== 'new' && parsed.selection.sessionId !== 'last'
+            ? parsed.selection.sessionId
+            : undefined;
+        const next = this.#createLock.then(() =>
+          targetId ? this.#serializeSession(targetId, runLaunch) : runLaunch(),
+        );
+        this.#createLock = next.catch(() => undefined);
+        return await next;
+      }
       case 'session.fork': {
         const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionForkParams, params, 'session.fork');
         const sessionId = await this.deps.control.forkSession(principal, parsed.sourceSessionId);
@@ -153,11 +183,7 @@ export class DaemonRpc {
         return { session: await this.#sessionItemOrFallback(principal, sessionId) };
       }
       case 'session.handoff': {
-        const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionHandoffParams, params, 'session.handoff');
-        const sessionId = await this.deps.control.handoffSession(principal, parsed.sourceSessionId, {
-          ...(parsed.name !== undefined ? { name: parsed.name } : {}),
-          ...(parsed.text !== undefined ? { text: parsed.text } : {}),
-        });
+        const sessionId = await handleSessionHandoff(this.deps.control, this.deps.v11, principal, params, allowV11);
         await this.deps.sessionIndex.seed();
         return { session: await this.#sessionItemOrFallback(principal, sessionId) };
       }
@@ -187,22 +213,29 @@ export class DaemonRpc {
       }
       case 'session.command':
         return await this.#sessionCommand(principal, params);
-      case 'settings.get': {
-        const projection = await this.#requireConfig('read')();
-        return { revision: projection.revision, settings: { ...projection } };
-      }
+      case 'settings.get':
+        return await handleSettingsGet(this.deps.configuration, this.deps.v11, principal, params, allowV11);
       case 'settings.update':
-        return await this.#settingsUpdate(params);
+        return await handleSettingsUpdate(
+          this.deps.configuration,
+          this.deps.mutations,
+          this.deps.v11,
+          principal,
+          params,
+          allowV11,
+        );
       case 'models.list':
-        return this.deps.models ? { models: await this.deps.models() } : { models: [] };
+        return await handleModelsList(this.deps.models, this.deps.v11, principal, params, allowV11);
       case 'providers.presets':
         return await this.#requireConfig('listProviderPresets')();
-      case 'providers.upsert':
+      case 'providers.upsert': {
+        const writeInput = parseProviderUpsert(params, allowV11);
         return await this.deps.mutations.runSettings(async () => {
-          const res = (await this.#requireConfig('writeProvider')(params as never)) as Record<string, unknown>;
+          const res = (await this.#requireConfig('writeProvider')(writeInput)) as Record<string, unknown>;
           await this.#publishCurrentSettings();
           return res;
         });
+      }
       case 'providers.delete': {
         const providerId = requireString(params, 'providerId');
         return await this.deps.mutations.runSettings(async () => {
@@ -278,23 +311,10 @@ export class DaemonRpc {
         if (!this.deps.control.mcpStatus) throw new ClientApiRpcError('unavailable', 'MCP status unavailable.');
         return await this.deps.control.mcpStatus(principal, scope);
       }
-      case 'mcp.login': {
-        if (!this.deps.control.mcpLogin) throw new ClientApiRpcError('unavailable', 'MCP login unavailable.');
-        const serverId = requireString(params, 'serverId');
-        for (const key of Object.keys(params)) {
-          if (key !== 'serverId' && key !== 'workspaceId') {
-            throw new ClientApiRpcError('invalid_request', `Unrecognized key "${key}" in mcp.login.`);
-          }
-        }
-        const scope =
-          params['workspaceId'] !== undefined
-            ? parseStrict(CLIENT_API_SCHEMAS.skillsListParams, { workspaceId: params['workspaceId'] }, 'mcp.login')
-            : {};
-        return await this.deps.control.mcpLogin(principal, {
-          serverId,
-          ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
-        });
-      }
+      case 'mcp.login':
+        return await handleMcpLogin(this.deps.control.mcpLogin, this.deps.v11, principal, params, allowV11);
+      case 'session.acp.set_mcp':
+        throw new ClientApiRpcError('unavailable', 'ACP per-session MCP configuration is unavailable.');
       default:
         throw new ClientApiRpcError('invalid_request', `Unknown method "${method}".`);
     }
@@ -399,19 +419,6 @@ export class DaemonRpc {
     }
   }
 
-  async #settingsUpdate(rawParams: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const parsed = parseStrict(CLIENT_API_SCHEMAS.settingsUpdateParams, rawParams, 'settings.update');
-    const write = this.#requireConfig('write');
-    return await this.deps.mutations.runSettings(async () => {
-      const projection = await write(
-        parsed.expectedRevision,
-        parsed.changes as { key: string; value: SafeSettingValue }[],
-      );
-      this.deps.mutations.publishSettings(projection);
-      return { committed: true, revision: projection.revision, settings: { ...projection } };
-    });
-  }
-
   async #handleOAuth(
     method: 'oauth.login' | 'oauth.select' | 'oauth.delete',
     params: Record<string, unknown>,
@@ -455,10 +462,8 @@ export class DaemonRpc {
       throw new ClientApiRpcError('invalid_request', 'Invalid access mode.');
     }
     const idKey = op === 'select' ? 'candidateId' : 'workspaceId';
-    return (await this.#requireWorkspaces(op)(principal, requireString(params, idKey), access)) as Record<
-      string,
-      unknown
-    >;
+    const result = await this.#requireWorkspaces(op)(principal, requireString(params, idKey), access);
+    return result as Record<string, unknown>;
   }
 
   async #sessionItemOrFallback(

@@ -6,7 +6,7 @@
 import type { Principal } from '../in-process-direct-types.js';
 import type { ServerResult } from '../server-contracts.js';
 import type { SessionIndex, SessionListStreamEvent } from './session-index.js';
-import { CLIENT_API_VERSION } from '../../protocol/client-api/version-negotiation.js';
+import { CLIENT_API_HTTP_VERSION } from '../../protocol/client-api/version-negotiation.js';
 import { CLIENT_API_SCHEMAS } from '../../protocol/client-api/client-api-schema.js';
 
 const HEARTBEAT_MS = 15_000;
@@ -32,7 +32,7 @@ export function sessionListEventStream(
   principal: Principal,
   options: SessionListSseOptions = {},
 ): ServerResult {
-  const version = options.negotiatedVersion ?? CLIENT_API_VERSION;
+  const version = options.negotiatedVersion ?? CLIENT_API_HTTP_VERSION;
   let stopStream: (() => void) | null = null;
   return {
     status: 200,

@@ -67,3 +67,30 @@ Each architectural, protocol, or operational decision made during the singleton 
   Smaller changes keep the existing entry point usable while the daemon backend
   gains parity.
 
+## D010 — Reopen, review, and freeze Client API v1.1 (Unix minor bump) (2026-11-28)
+
+- **Context:** Per D009 and the TUI + Step 14e surface zoom-ins (`zoom/tui.md`),
+  Client API v1.0 lacked additive local-owner operations required for full TUI
+  and local-surface parity: `session.launch` (workspace/selection/override
+  admission before attach), `session.list { cwd }` + `messageCount`,
+  `session.handoff { model }`, scoped TUI `settings.get`/`settings.subscribe`/
+  `settings.update` (`view: "tui"`, `sessionId`, `persist`, `reset`, `requestId`),
+  per-provider `models.list { provider, refresh }` with favorites/nicknames,
+  `providers.upsert { keepApiKey, keepBaseUrl }`, `mcp.login { handoffUrl }`,
+  and connection-bound local leases (`daemon.serve.start`/`stop`,
+  `session.control.bind`/`rebind`/`unbind`, `session.acp.set_mcp`) gated behind
+  the `local_leases` capability.
+- **Choice:** Bump the Unix transport protocol version to `1.1` (backward
+  compatible with `1.0`, strict connect-time version negotiation rejecting v1.1
+  methods/fields on `1.0` connections) while keeping the HTTP+SSE transport
+  pinned to `1.0` (`CLIENT_API_HTTP_VERSION = '1.0'`,
+  `CLIENT_API_HTTP_CAPABILITIES`). Withhold `local_leases` from `protocol.hello`
+  capabilities until Step 14e wires those lease handlers. Freeze `1.1` after two
+  independent review rounds (Security/Threat-Model Lens 1 and Protocol/Conformance
+  Lens 2 both returned PASS) and full schema + conformance verification.
+- **Why:** Keeps v1.0 clients and the HTTP+SSE security boundary unchanged,
+  avoids ad-hoc side channels for TUI/serve/control/ACP, enforces secret and URL
+  credential/query/hash redaction on TUI settings projections, and honors Step 5's
+  contract-freeze rule.
+
+

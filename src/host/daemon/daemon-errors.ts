@@ -87,7 +87,7 @@ export function toClientApiError(error: unknown): ClientApiError {
   }
   if (error instanceof Error) {
     const anyErr = error as { code?: unknown; status?: unknown; surface?: unknown; details?: unknown };
-    if (error.name === 'DirectHostConfigError') {
+    if (error.name === 'DirectHostConfigError' || error.name === 'ServerHttpError') {
       const code = mapConfigErrorCode(anyErr.code, anyErr.status, anyErr.surface);
       return {
         code,

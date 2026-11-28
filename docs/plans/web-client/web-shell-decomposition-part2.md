@@ -1,6 +1,6 @@
 # Design: finish the web chat shell decomposition (part two)
 
-Status: built on `claude/optimistic-brown-2d0lrp` (2026-11-26). The owner took the recommended answer to each question
+Status: merged as `fcb4576fe` (qduc/term2#437). The owner took the recommended answer to each question
 in section 14 (in-house data layer, retry draft cleared on leaving, page error not cleared on a chat change, no
 visual change, queued settings writes, the third rule kept). Where the build departs from this design, see
 [section 15](#15-build-notes). It finishes what

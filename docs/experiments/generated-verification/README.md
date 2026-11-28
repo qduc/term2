@@ -13,9 +13,11 @@ traditional permanent-unit-test ban. This is not a restored example-based suite.
 ## Use it on a real change
 
 Read the production contract before choosing a property. Run the installed command
-from the repository root after installing dependencies:
+from the repository root after installing dependencies. Build the browser fold
+before running all properties or targeting `wire`.
 
 ```sh
+node scripts/build-web-fold.mjs
 pnpm verify:generated --seed 424242
 pnpm verify:generated --target history --runs 1000
 pnpm verify:generated --help
@@ -44,6 +46,14 @@ Do not weaken an invariant to silence a supported defect. Fix confirmed defects
 or obtain human agreement to defer them. Independently verify high-risk fixes.
 
 ## Current scope
+
+- `shell.machine-rules` (`--target shell`) drives the web chat's state machine
+  through generated user actions, including late or out-of-order command
+  results for a chat the user has left.
+- `web.resource-latest-wins` and `web.settings-writes-in-order`
+  (`--target data`) check resource request ownership and settings write order.
+  The settings property checks that a stale read cannot replace the revision
+  returned by a more recent successful write or conflict.
 
 - `wire.frames-round-trip` and `wire.snapshot-is-fold` (`--target wire`): generated
   sessions (turns, deltas, reasoning, tools, usage, hidden facts, subagent branches)
@@ -151,6 +161,6 @@ are tracked in [PLAN.md](PLAN.md).
 
 The ledger rollout evidence and limits are in [LEDGER-PLAN.md](LEDGER-PLAN.md).
 The remaining hotspot rollout is tracked in [HOTSPOTS-PLAN.md](HOTSPOTS-PLAN.md).
-The default samples the ten properties `run.mjs` registers (10,000 cases total);
-`--target history` samples `history.pair-projection`. A recorded replay can report fewer cases
-because it continues from a shrunk path, not a fresh full seed run.
+The default samples every property registered in `run.mjs`.
+`--target history` samples `history.pair-projection`. A recorded replay can report
+fewer cases because it continues from the stored shrink path.

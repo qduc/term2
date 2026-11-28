@@ -1,7 +1,7 @@
 # Improvement plan: `run_code` primary path
 
-**Status: experiments in progress (opened 2026-09-04).** Derived from the
-field test in [code-mode-field-test.md](code-mode-field-test.md) — read its
+This record collects the 2026-09-04 experiments and follow-up questions.
+It draws on the field test in [code-mode-field-test.md](code-mode-field-test.md) — read its
 Round 1, 1.5, and 2 results first; this document only proposes repairs for
 what those rounds actually observed.
 
@@ -292,7 +292,7 @@ across arms in a single run. Raw input tokens are the primary metric here.
 E5 completed all 18 planned cells (three tasks × three models × two arms),
 with one run per cell. The full tables, repeat measurements, quality notes,
 and data-integrity corrections are recorded in
-[`.coord/field-test/e5/RESULTS.md`](../../../../.coord/field-test/e5/RESULTS.md).
+[the original E5 results](https://github.com/qduc/term2/blob/824f3d0a325904d1f43304aec6da3f2ec418f4fa/.coord/field-test/e5/RESULTS.md).
 
 - Across the nine paired task/model cells, codemode used 5,355,622 input
   tokens versus 6,084,480 for no-codemode (-12.0%). The initial 18-cell

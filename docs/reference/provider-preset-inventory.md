@@ -1,6 +1,6 @@
 # Provider preset inventory
 
-`source/providers/provider-presets.json` describes setup templates, not configured
+[`src/model/providers/provider-presets.json`](../../src/model/providers/provider-presets.json) describes setup templates, not configured
 connections or a ranking of services. The Add Provider menu validates it through
 `parseProviderInventory`, sorts entries alphabetically, and searches by name and
 category. The selected entry links to its service documentation.
@@ -33,9 +33,7 @@ follow the existing credential policy rather than a special inventory exemption.
 `builtinProviderId` entries instead open an already registered provider's existing
 key or account setup. They must not also contain `type` or `baseUrl`. This retains
 OpenAI/OpenRouter's native adapters and existing credential storage and preserves
-Codex/Grok OAuth account handling. These legacy built-ins still have fixed
-identities and their existing management restrictions; this change does not
-migrate them to independently named/removable custom connections.
+Codex/Grok OAuth account handling. These built-ins retain fixed identities and their management restrictions.
 
 Your Providers lists custom connections (including ones missing credentials) and
 credential-ready built-ins. Missing built-in credentials are configured through

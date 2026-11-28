@@ -18,5 +18,6 @@ Once the wire release is visible, replace the vendored development dependency
 with a normal runtime dependency. Remove the embedded copy and its build step
 together, then rebuild and validate the root CLI tarball.
 
-See [shared package ownership and handoff](release-agent-packages.md) for the
-publication boundary. Term2's existing publish workflow remains Term2-only.
+Term2's publishing workflow publishes only `@qduc/term2`. See the
+[vendored artifacts inventory](../../vendor/README.md) for the wire tarball's
+provenance.

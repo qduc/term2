@@ -10,9 +10,8 @@ Survey context: this document records the verified legacy surface of the setting
 subsystem and a staged, decision-gated removal program. It is the follow-on the
 menu-system-redesign plan's non-goal reserved ("do not change settings domain
 behavior" / "do not rewrite menu presentation while changing ownership" - both
-owners are settled now). The string/free-form value-entry UX pain is deliberately
-NOT in scope; it is owned by a separate plan (`docs/plans/settings/settings-field-editor.md`
-not yet written).
+owners are settled now). The string/free-form value-entry UX pain was
+outside this plan's scope. See the [settings field editor plan](settings-field-editor.md).
 
 Two claims in the 2026-09-06 survey conversation were corrected while writing this
 document and are recorded correctly here: the legacy role-keyed model settings and

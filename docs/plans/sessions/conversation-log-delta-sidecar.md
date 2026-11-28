@@ -1,10 +1,8 @@
 # Conversation log: move streaming deltas to a droppable sidecar
 
-**Status: implemented.** The sidecar split is live: `conversation-persistence.ts:182-231`
-writes, merges, and reaps delta sidecars, and `gateway/persistence/projection.ts:113-115`
-treats a corrupt sidecar as losing only the unsettled turn. Retained for the rationale.
-**Owner:** qduc (implementation unassigned).
-**Branch:** `delta-sidecar-log`, worktree `.worktrees/delta-sidecar-log`.
+Status: shipped in `445b80a4b`. The current session persistence code reads
+and merges delta sidecars in `readEnvelopes` in
+[conversation-persistence.ts](../../../src/session/conversation/conversation-persistence.ts).
 
 ## Problem
 
@@ -374,8 +372,7 @@ Still open, deferred by default:
 
 ## Resume here
 
-**Steps 1–6 are implemented on `delta-sidecar-log`.** The plan is complete apart
-from the one open policy question below.
+**Steps 1–6 shipped in `445b80a4b`.** The merge deferred the policy question below.
 
 Shipped in step 2/3:
 

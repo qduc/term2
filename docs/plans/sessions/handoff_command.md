@@ -1,10 +1,16 @@
-**Implementation Plan**
+# Original terminal handoff plan
+
+The file links below point to the pre-rewrite source. The TUI handoff now
+lives in [use-handoff.tsx](../../../src/clients/tui/use-handoff.tsx) and
+[handoff-flow.ts](../../../src/clients/tui/handoff-flow.ts).
+
+## Implementation plan
 
 Implement `/handoff` as an internal workflow, not as simulated `/copy`, `/clear`, or `/model` commands. The workflow will capture the last assistant response from in-memory messages, clear the current conversation, optionally open the existing model selector, then send a new prompt.
 
 **Files To Edit**
 
-1. [source/hooks/use-app-commands.ts](../source/hooks/use-app-commands.ts)
+1. [source/hooks/use-app-commands.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/hooks/use-app-commands.ts)
   - Symbols:
     - `UseAppCommandsProps`
     - `getLastFinalAssistantText`
@@ -17,7 +23,7 @@ Implement `/handoff` as an internal workflow, not as simulated `/copy`, `/clear`
     - Do not call `/copy`.
     - Do not touch clipboard.
 
-2. [source/app.tsx](../source/app.tsx)
+2. [source/app.tsx](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/app.tsx)
   - Symbols:
     - `HandoffStage`
     - `HandoffState`
@@ -33,7 +39,7 @@ Implement `/handoff` as an internal workflow, not as simulated `/copy`, `/clear`
     - After model selection, send `Implement this:\n\n${capturedText}`.
     - If no, send immediately.
 
-3. [source/hooks/use-app-commands.test.ts](../source/hooks/use-app-commands.test.ts)
+3. [source/hooks/use-app-commands.test.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/hooks/use-app-commands.test.ts)
   - Purpose:
     - Update/add tests for slash command behavior.
     - Verify `/handoff` captures assistant text internally and does not use clipboard.
@@ -41,7 +47,7 @@ Implement `/handoff` as an internal workflow, not as simulated `/copy`, `/clear`
 
 4. Add or update an App-level test if an existing test harness supports it.
   - Candidate files to inspect during execution:
-    - [source/app.tsx](../source/app.tsx)
+    - [source/app.tsx](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/app.tsx)
     - existing app tests if present, located via `rg -n "render\\(<App|handleSubmit|handoff" source test`
   - Purpose:
     - Cover workflow behavior that `use-app-commands.test.ts` cannot observe: confirmation, model-selection continuation, and final submitted prompt.
@@ -141,7 +147,7 @@ npm run test:verbose -- source/components/InputBox.test.tsx
 npm run test:verbose -- source/hooks/use-model-selection.test.tsx
 ```
 
-2. In [source/hooks/use-app-commands.ts](../source/hooks/use-app-commands.ts):
+2. In [source/hooks/use-app-commands.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/hooks/use-app-commands.ts):
   - Add or clean a dedicated `createHandoffSlashCommand`.
   - Use `getLastFinalAssistantText(messages)` directly.
   - Remove any clipboard/copy behavior from `/handoff`.
@@ -160,7 +166,7 @@ onHandoff?.(text);
 return true;
 ```
 
-3. In [source/app.tsx](../source/app.tsx):
+3. In [source/app.tsx](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/app.tsx):
   - Rename handoff state field from `copiedText` to `capturedText`.
   - Move conversation clearing into `handleHandoff`.
   - In `handleHandoff`:
@@ -208,7 +214,7 @@ const sendHandoffPrompt = async (capturedText: string) => {
     - Treat as cancel/skip and send with current model, or keep selector open.
     - Recommended default: if the user submitted no model from selector, skip model change and continue.
 
-6. Tests in [source/hooks/use-app-commands.test.ts](../source/hooks/use-app-commands.test.ts):
+6. Tests in [source/hooks/use-app-commands.test.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/hooks/use-app-commands.test.ts):
   - Add/update tests:
     - `/handoff` with no assistant response adds `No assistant response available to hand off.`
     - `/handoff` with assistant response calls `onHandoff` with the exact text.

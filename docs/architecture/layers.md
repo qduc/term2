@@ -14,17 +14,16 @@ root `tests/` folder, laid out by the same layer names.
 Each folder in `src/` is one layer, named after its job. A layer may only use
 the layers listed after its name, so dependencies always point down.
 
-Every file under `src/` is reached from `src/app/cli.ts`; the reachability
-check below enforces it, and its allowlist names the 12 exceptions with
-reasons. `session/adopted/` is the one adopted folder left: it keeps the old
-session-fact validator for the offline v3 conversation migration and is not
-reached from the CLI.
+The reachability check walks value imports from `src/app/cli.ts`.
+[`scripts/reachability-allowlist.json`](../../scripts/reachability-allowlist.json)
+records exceptions such as worker entry points and the offline v3 conversation
+migration.
 
 | Layer       | Job                                                           | May depend on                  |
 | ----------- | ------------------------------------------------------------- | ------------------------------ |
 | `clients/`  | Render the protocol (TUI, headless, ACP, control, Discord)    | host, protocol                 |
-| `host/`     | Transport and access: in-process host, HTTP server, auth      | protocol, session              |
-| `protocol/` | The one public event and command format, one projection       | delegation and everything below |
+| `host/`     | Transport and access: in-process host, Unix daemon binding, HTTP server, auth      | protocol, session              |
+| `protocol/` | Native event and command types, shared projection and fold     | delegation and everything below |
 | `delegation/` | Child agents, roles/pools, runners and workflow execution   | session and everything below   |
 | `session/`  | One durable conversation and its host policy: log, replay, branches, permissions, completion and billing | engine, model, tools |
 | `engine/`   | Compatibility types and continuity/history helpers for the portable harness | portable package contracts |
@@ -49,7 +48,7 @@ The portable harness owns turn mechanics and imports only its own contracts,
 Node builtins and optional schema dependencies. `src/engine` contains only its
 compatibility surfaces and has an empty import-exception baseline. Term2-specific
 agent resolution, permission scopes, budgets, completion verification, prompt
-notices and history presentation live in `session/`. These host modules configure
+notices and history presentation live in `session/` and `app/`. These host modules configure
 the harness; they are not part of the reusable package. Their source moves in
 #224 preserve existing policy and call paths.
 
@@ -59,53 +58,46 @@ Tool-facing schemas/results/control ports stay in tools, while resolved child
 definitions, execution-tree budgets and session-running policy stay above it.
 See [the delegation public interface](../../src/delegation/README.md).
 
-## Rules that make it different from the old engine
+## Session ownership
 
-- **One log.** A session stores a single append-only JSONL log of native facts
-  (`session/facts.ts`). History, status, the pending interaction, the queue and
-  retry eligibility are all replayed from it (`session/replay.ts`), so there is
-  no second journal to keep in sync.
-- **One projection.** `protocol/projection.ts` turns session updates
-  into wire events once per session, and every client attached to that session
-  reads the same events, so no client keeps its own event translator.
-- **The engine waits instead of calling up.** An approval or question is an
-  `interaction_required` event; the turn waits in memory for the session to
-  answer it, and the session alone writes the pending interaction to the log.
-  A process that dies while a turn waits reopens that turn as interrupted;
-  nothing resumes on its own.
-- **Names are jobs.** No new layer or file under `src/` is called service, adapter or orchestrator (14 pre-#87 paths remain grandfathered under `jobNameExceptions` in `scripts/rule-baseline.json`).
+- A session writes accepted facts to one append-only JSONL conversation log
+  (`session/facts.ts`, `session/log.ts`). `session/replay.ts` projects durable
+  history, queue and interaction state from those facts.
+- `protocol/projection.ts` turns session updates into native wire events.
+  Attachments share that projection. Unix RPC and HTTP own their transport
+  envelopes and access rules.
+- The portable turn emits `interaction_required` and waits in memory. The
+  session commits durable human interaction facts. When a running turn is
+  recovered from disk, the session records the interruption.
+- Names under `src/` describe the file's job. The name guard's grandfathered
+  exceptions live under `jobNameExceptions` in `scripts/rule-baseline.json`.
 
 ## Rule checks
 
-Every rule above and every claim below has a check, or it is not a rule. Each check was shown failing on a
-seeded violation (`bash scripts/prove-checks.sh` redoes that in about a minute). The independent CI `quality`
-job runs production typechecking, static architecture and repository guards, and the golden-change review
-policy without waiting for behavioral tests. Static checks need no build. The headless contract bench and
-message-path probe run in `integration`; golden parity runs in `e2e`. The expensive lanes can skip inert
-pull requests, but `quality` always runs. The `port` check remains as a compatibility aggregate of quality
-and the behavioral lanes, not as a separate build or migration phase. Times below are wall-clock on a
-loaded 7-core box.
+The [CI workflow](../../.github/workflows/ci.yml) runs production typechecking
+and static repository guards in `quality`. It runs the headless path probe in
+`bench` and golden parity in `e2e`. Behavioral lanes can skip inert pull
+requests. The `port` check aggregates the lanes.
 
-| Rule | Check | When | Time |
-| ---- | ----- | ---- | ---- |
-| Dependencies point down the layer table | `check-layers.mjs` | every commit | 4.1 s |
-| Only `session/` reads the log (`app/`, `clients/` ask the live session) | `check-layers.mjs` (log-reader guard) | every commit | in the above |
-| One projection: wire events are built only in `protocol/` | `check-rules.mjs` (one recorded exception: deferred web server) | every commit | 2.4 s |
-| Names are jobs (no service/adapter/orchestrator file or folder; grandfathered exceptions in `rule-baseline.json`) | `check-rules.mjs` | every commit | in the above |
-| No new unused runtime exports (recorded in `rule-baseline.json`, reported by `scripts/arch-report.mjs`) | `check-rules.mjs` | every commit | in the above |
-| File basenames are unique under `src/` unless recorded with a reason | `check-rules.mjs` | every commit | in the above |
-| Every runtime file is reached by value edges from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
-| Files stay under 500 lines, folders stay under 15 files unless a ceiling records why; layer edges within budget | `check-complexity.mjs` | every commit | 0.15 s |
-| A new exception or raised ceiling carries a reason, and the reviewer is shown each one | `check-baselines.mjs` | every commit | 0.2 s |
-| Terminal and web surfaces stay in parity across app wiring, `WireCommand`/`WireEvent`, and browse-tab settings unless recorded with a reason in `scripts/surface-parity-exceptions.json` | `check-surface-parity.mjs` | every commit | 0.2 s |
-| Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
-| A message's path stays short and runs through the production direct files | `bench/hops.mts` | integration lane | 5.8 s |
-| The engine waits instead of calling up | layer table above (no upward import); `check-engine-callbacks.mjs` for the callbacks that write facts (audit F1): every `TurnDeps`/`TurnBudget` callback that reaches the session writer must be recorded in `rule-baseline.json` (`engineCallbackWrites`) with a reason. It follows calls it can resolve to a body, interface members into the object literals and classes that implement them, and port signatures named `commit*`/`accept*`/`append`; a write reached only through a value the checker cannot resolve is not seen | every commit | 10 s |
-| One log: no second state to keep in sync | `check-layers.mjs` (`log-readers`: scans `app/` and `clients/` for calls matching seven log-reader function names); `check-rules.mjs` (`one-fold`: outside `session/fold-fact.ts`, `session/queue-replay.ts` and `session/queue.ts`, rejects import/export specifiers naming any of the five leaf reducers `reduceDirectCommandReceipts`, `reduceDirectNotifications`, `reduceDirectContext`, `reduceDirectQueue`, or `reduceDirectBackground`, plus default, namespace, `export *`, namespace re-export, or relative-literal dynamic `import()` of `command-receipts`, `notifications`, `context`, `queue-state`, `queue`, or `background-replay`); still does **not** check `host/`–`shared/` or direct file reads for log parsing, how those three allowed files combine reducers, extra calls to `foldFact`/replay, or duplicate state and inline reducers written without importing those names or relative basenames | every commit | in `check-layers.mjs` + `check-rules.mjs` |
-| Speed stays within 1.2x of legacy on a large session | queue job, run on each candidate at load under 9 | per candidate | minutes |
-| A fresh reader can explain how a message travels from this README and the `index.ts` files | queue job `measure-fresh-reader-review`, each milestone | per milestone | minutes |
+| Rule | Check |
+| ---- | ----- |
+| Dependency direction and log-reader boundaries | `check-layers.mjs` |
+| Event projection, one-fold boundary, job names, runtime exports and unique basenames | `check-rules.mjs` |
+| Runtime reachability from `app/cli.ts` | `check-reachability.mjs` |
+| File, folder and layer-edge budgets | `check-complexity.mjs` |
+| Reasons for new exceptions and raised ceilings | `check-baselines.mjs` |
+| Terminal and web parity across app wiring, wire types and browse-tab settings | `check-surface-parity.mjs` |
+| Allowlisted root directory entries | `check-root.mjs` |
+| Fact writes reached through portable-engine callbacks | `check-engine-callbacks.mjs` |
+| Hop and file budget for the in-process headless path | `bench/hops.mts` |
 
-A check that has a false positive or flakes is fixed or deleted the same day; never retry it through.
+The log-reader guard scans calls to known readers in `app/` and `clients/`.
+The one-fold guard restricts imports of the named leaf reducers and their
+modules to the owners in `session/`. Direct file reads or independent reducers
+can escape these checks. The callback guard follows resolvable calls from
+`TurnDeps` and `TurnBudget` into the session writer. The
+`engineCallbackWrites` entries in `scripts/rule-baseline.json` record the
+reviewed paths. Calls that cannot be resolved statically may need manual review.
 
 ## When a gate fails
 
@@ -147,11 +139,36 @@ their existing exports for callers. Moving the implementation does not change
 which values validate; in particular finite numbers and shared acyclic objects
 remain accepted, while ancestor cycles are rejected.
 
+## Host paths
+
+`createDirectApplication` in [application.ts](../../src/app/application.ts)
+constructs the native session store and direct host. The default launchers
+build that application in their own process. In daemon mode,
+`startTerm2Daemon` in [daemon.ts](../../src/app/daemon/daemon.ts) creates it
+once for the daemon. [daemon-unix.ts](../../src/host/daemon/daemon-unix.ts)
+accepts local Client API connections and [daemon-rpc.ts](../../src/host/daemon/daemon-rpc.ts)
+dispatches calls into the host. `createRemoteDirectHost` in
+[remote-direct-host.ts](../../src/host/daemon/remote-direct-host.ts) presents
+the same host interface to local Unix clients. See the
+[daemon ownership contract](../contracts/15-daemon-session-ownership.md) for
+launch values, disconnect and shutdown.
+
+| Surface | Entry point for the daemon path |
+| --- | --- |
+| TUI | `runDaemonTuiSession` in [daemon-tui-backend.ts](../../src/app/daemon/daemon-tui-backend.ts) |
+| Headless | `runHeadlessOverDaemon` in [launch-headless.ts](../../src/app/launch-headless.ts) |
+| ACP | `launchAcpOverDaemon` in [launch-acp-daemon.ts](../../src/app/acp/launch-acp-daemon.ts) |
+| HTTP and web | `DaemonServeLeaseManager` in [serve-lease.ts](../../src/app/daemon/leases/serve-lease.ts) wraps the daemon's host in the same [HTTP server](../../src/host/server.ts) used by the in-process launcher. |
+| Named control socket and Discord | `DaemonControlLeases` in [control-lease.ts](../../src/app/daemon/leases/control-lease.ts) owns the endpoint, with the TUI using `createDaemonControlBridge` in [control-bridge.ts](../../src/app/daemon/leases/control-bridge.ts). |
+
+For the wire boundary see the [Client API](../plans/daemon/spec/client-api.md)
+and [HTTP server contract](../contracts/14-agent-wire-v2-server.md).
+
 ## How a message travels
 
-This is the path `bench/hops.mts` measures for one headless prompt, from the
-client's submit to the provider's HTTP request. The TUI, ACP and the control
-socket attach to the same host the same way.
+This is the path `bench/hops.mts` measures for a headless prompt in the
+in-process lane. In the daemon lane, see [Host paths](#host-paths) for
+the additional transport before the same native command and session.
 
 1. `app/cli.ts` parses the command line and hands a headless run to
    `app/launch-headless.ts`. It resolves the workspace (local or SSH),
@@ -177,8 +194,7 @@ socket attach to the same host the same way.
 6. On the way back, each accepted fact and live delta reaches the host as a
    `DirectSessionUpdate`. `host/in-process-direct-attachment.ts` keeps one
    `DirectProjection` per session (`protocol/projection.ts`); it turns
-   the update into `WireEvent`s, which every connection to that session
-   receives in order.
+   the update into `WireEvent`s, which its attached connections receive in order.
 
 **Where an approval waits.** When a tool needs approval, the engine emits
 `interaction_required` and waits in memory. The session's `ApprovalReviews`
@@ -189,48 +205,24 @@ policy close. A human prompt is durable and reaches clients through the shared
 projection. The client replies with an `answer` command, which `commands.ts`
 turns into a session answer; `conversation-turn.ts` passes it to the waiting
 turn with `TurnHandle.answer`. The headless `--auto-approve` boolean controls
-execution separately from the four approval modes. Remaining unresolved
-requests use the configured headless decision policy;
-`clients/headless/approvals.ts` owns the client answer path. If the process dies while a turn waits,
-reopening records the turn as interrupted; nothing resumes on its own.
+execution separately from the four approval modes. For in-process headless runs,
+`clients/headless/approvals.ts` owns the client answer path. For daemon-backed
+headless runs, the daemon applies the headless policy inside the session. When a
+process dies with a waiting turn, reopening records the interruption.
 
 ## Keeping it readable
 
-The point of this rewrite is that a person can follow it. Three checks in CI,
-with budgets in `scripts/complexity-budget.json`, and one review step keep that
-measurable:
+`scripts/check-reachability.mjs` walks value imports, re-exports, literal
+dynamic imports and `require` calls from `src/app/cli.ts`. It checks the
+source graph. Type-only edges do not make runtime code reachable, and a
+reachable source file can still be removed by a bundler.
 
-- `scripts/check-complexity.mjs` fails when the layer-edge allowlist grows, or
-  when a file passes 500 lines. The line limit is a prompt to look for a second
-  job, not a target: split along a real seam, or, when a file reads better
-  whole, give it a ceiling with a one-line reason. When something gets smaller,
-  the check prints the new number to record.
-- `scripts/check-reachability.mjs` walks value imports, re-exports, literal
-  dynamic imports and `require` calls from `src/app/cli.ts`. Type-only edges do
-  not make runtime code reachable; modules containing only erased type
-  declarations/imports and explicit type re-exports need no runtime importer.
-  This is a source-graph check, not proof that a value import survives bundler
-  tree-shaking. A runtime file kept on purpose goes in
-  `scripts/reachability-allowlist.json` with the reason it stays.
-- `bench/hops.mts` runs the real entry in-process against a local fake
-  provider, sends one headless prompt, and records the chain of files active
-  when the provider's HTTP request goes out, starting at the client's submit.
-  It fails when that chain gets longer (hops) or touches more files. The portable
-  package's `src/engine` modules are classified as the engine layer; their package
-  location does not change the hop or file count. Today it is 14 hops through
-  14 files, each layer once: `clients/headless/direct.ts`,
-  `host/in-process-direct.ts`, `protocol/commands.ts`,
-  `session/session.ts`, `session/conversation-turn.ts`,
-  `agent-runtime/packages/core/src/engine/turn.ts`,
-  `agent-runtime/packages/core/src/engine/turn-model.ts`, `app/generation-guard.ts`,
-  `app/application-models.ts`, `model/provider.ts`, and four
-  `model/providers/` files. `app/` appears below `engine/` because the engine
-  calls the model registry the app injected, not because `engine/` imports
-  `app/`.
-- At the end of each phase, a fresh reader gets only this README and each
-  layer's `index.ts`, and explains how a message travels and where an approval
-  waits. Whatever they get wrong gets fixed in the structure or the docs before
-  the next phase starts.
+`bench/hops.mts` sends one headless prompt against a local fake provider and
+records the chain of active files up to its HTTP request. The hop and file
+budgets live in `scripts/complexity-budget.json`. The probe classifies the
+portable package's engine files as engine code. App files can appear further
+down the call stack because the harness calls back into the injected model
+registry.
 
 ## Parity
 
@@ -240,11 +232,6 @@ provider request and the workspace files against `parity/goldens/`. These review
 behavior snapshots began as old-engine parity evidence and now guard the current
 CLI contract. Never re-record them merely to make a run pass: intentional changes
 need review and the live `golden-change` pull-request label, enforced by `quality`.
-
-The feature tracker that gated the port (`parity/inventory.mjs` and
-`parity/features.json`) was retired at the flip (#87): it extracted features
-from `source/`, which no longer exists. Its last state, including the dropped
-and deferred entries described below, is in git history.
 
 `app/source-tools.ts` binds run-code to a concrete nested approval owner and
 session access/policy state. The native `tools/` contracts do not construct
@@ -261,31 +248,7 @@ On macOS and Windows, alternate-case spellings of that reserved path are also
 refused, including on case-sensitive volumes.
 `bench/headless.mjs` covers the headless path.
 
-For direct HTTP session configuration, the BFF's `session_update` assertion binds
-only `sessionId`, not `workspaceId`; session lookup is separate, and the gateway
-authorizes the session owner. An empty `{}` POST is read-only discovery, not a
-keyed mutation. Discovery does not activate the v2 hydration or mutation gates.
-
-```sh
-node parity/run.mjs check --cli dist/cli.js          # the built CLI against the goldens
-TERM2_TEST_CLI=dist/src/app/cli.js pnpm test:integration   # CLI-level suite, as the CI lanes run it
-```
-
-## Checks
-
-These use the root project's TypeScript options and dependencies, so run
-`pnpm install` at the repository root first. The build keeps repository-relative
-paths beneath `dist/` (`dist/src/...`).
-
-```sh
-pnpm exec tsc -p tsconfig.build.json --noEmit         # production typecheck
-node scripts/check-layers.mjs                  # production dependency direction
-node scripts/check-reachability.mjs            # every src file is reached from app/cli.ts
-node scripts/check-complexity.mjs              # long files carry a recorded reason
-node --import tsx bench/hops.mts               # one message's path stays short
-node scripts/build.mjs                         # production build
-node bench/headless.mjs                       # headless behaviour against the built CLI
-```
+## Build and probe details
 
 A profile-dependent probe needs an explicit profile rather than the
 application default: Bare omits `user-interaction`, so an unoffered
@@ -301,59 +264,6 @@ The production build config also explicitly includes
 emitted `.cjs` through a URL, not a static import, so transitive compilation
 alone misses it. Without that entry, built `run_code` workers fail at startup
 before executing any tool, even though the CLI and provider turn can complete.
-
-## Owner scope: dropped and deferred features
-
-Owner decisions on 2026-11-01 narrow current parity work to everyday Bare use
-(including `--lite`), control socket, Discord and SSH. Goldens stay unchanged;
-mentor-only catalog entries needed by Bare remain. Shared or ambiguous settings
-and dependencies stay until their consumers are traced. These scope decisions
-were made before the flip.
-
-"Dropped" below means no further parity work: the retired inventory marked the
-feature `dropped`, and no scenario has to prove it. It does not mean term2-next lacks
-the code. Each dropped feature is still wired in production, as noted, and
-behaves as it does today.
-
-- **MCP servers — dropped from parity work, still wired.** The headless run
-  (`app/launch-headless.ts`) and the TUI (`app/launch-tui.tsx`)
-  connect the configured servers through `app/application-mcp.ts` and
-  `app/mcp.ts`, which drive the MCP manager in `tools/mcp/`, and offer their tools
-  through `app/tool-surface.ts`. Fixing gaps against legacy would need the
-  catalog binding, connection lifecycle and approval policy together.
-- **Plan, pair, mentor and orchestrator profiles/modes, and
-  `run_agent_workflow` — dropped from parity work.** Explicit selections of
-  these profiles are rejected; saved selections fall back to Bare. The app has
-  one default experience and hides profile controls and labels. Their profile
-  definitions, workflow prompts and the model-family base prompts were deleted.
-  Profile backend, legacy aliases, subagent `ask_orchestrator` and the retained
-  mentor catalog remain.
-- **ACP — dropped from parity work, still wired.** `term2 acp` dispatches to
-  `app/acp/launch-acp.ts`, with `clients/acp/` as the adapter for session
-  attachment, rendering and permission/question mapping.
-- **Sandbox execution — dropped from parity work, still present.** The TUI's
-  `/sandbox` command and the tool surface's `allowUnsandboxed` posture
-  (`app/tool-surface.ts`) remain, and `term2 serve` and `term2 acp` warn when
-  the sandbox is unavailable. A real return needs shell policy in
-  `src/tools/shell/sandbox/`, approval rules and the sandboxed code-host
-  lifecycle together. Shared settings remain.
-- **Web server/browser and canonical v2 wire — deferred, not dropped.** Retain
-  candidate server/browser code, branches and the vendored wire artifact; gates
-  are open (`AGENT_WIRE_V2_RUNTIME_AVAILABLE` is `true` in `src/host/server-wire-v2.ts`), while HTTP/browser parity work remains deferred. Web is the
-  milestone after kept-core M6 and before the default flip, so there must be no
-  gap where neither CLI serves it. The existing `host/server*` and
-  browser/protocol seams still need the canonical gate,
-  branch/tool/approval browser paths, reconnect replay limits and aggregate cost
-  contract established. Reconnect replay is protocol-demanding, not a UI-only
-  plug-in. Run the existing real-browser plain-text turn exercise once at M6's
-  end, not per commit; no web repair work is authorized now. The flip went
-  ahead with web still deferred.
-
-The traced direct control/Discord runtime uses the in-process host and direct
-protocol plus the `clients/control-socket/` and `clients/discord/` modules,
-not the HTTP server or ACP backend. CLI argument parsing (`src/app/cli-args.ts`) still statically imports
-`src/host/gateway/serve-args.ts` and `src/app/serve-args.ts`; preserve those modules while the imports exist.
-No live SSH fixture was identified in that trace.
 
 ## Build receipts
 

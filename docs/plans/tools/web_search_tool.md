@@ -1,5 +1,10 @@
 # Web Search Tool Implementation Plan
 
+Status: shipped in `d14a285c8`. The current tool is
+[web-search.ts](../../../src/tools/web/web-search.ts), with backends in the
+[web-search registry](../../../src/model/providers/web-search/registry.ts).
+The original design and source references below are historical.
+
 ## Overview
 
 Add a `web_search` tool to the terminal-based AI assistant that uses the Tavily API for search functionality, with an architecture designed for easy provider swapping in the future.
@@ -731,8 +736,8 @@ import './serper.provider.js';
 
 ## Critical Files for Implementation
 
-1. [source/providers/web-search/types.ts](../source/providers/web-search/types.ts) - Core interfaces that all providers must implement
-2. [source/providers/web-search/tavily.provider.ts](../source/providers/web-search/tavily.provider.ts) - Primary provider implementation with Tavily API integration
-3. [source/tools/web-search.ts](../source/tools/web-search.ts) - Tool definition with markdown formatting
-4. [source/agent.ts](../source/agent.ts) - Integration point to add tool to agent's toolkit
-5. [source/services/settings-service.ts](../source/services/settings-service.ts) - Settings schema and environment variable support for API keys
+1. [source/providers/web-search/types.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/providers/web-search/types.ts) - Core interfaces that all providers must implement
+2. [source/providers/web-search/tavily.provider.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/providers/web-search/tavily.provider.ts) - Primary provider implementation with Tavily API integration
+3. [source/tools/web-search.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/tools/web-search.ts) - Tool definition with markdown formatting
+4. [source/agent.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/agent.ts) - Integration point to add tool to agent's toolkit
+5. [source/services/settings-service.ts](https://github.com/qduc/term2/blob/18b4d344960b5b9fdbe18e8737934147442b6eaf/source/services/settings-service.ts) - Settings schema and environment variable support for API keys

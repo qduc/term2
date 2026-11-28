@@ -448,12 +448,10 @@ Static typing alone cannot validate external error bodies. Existing retry logs
 made the mismatch observable once inspected; no additional broad mechanism is
 needed for this bounded repair.
 
-Opt-in workflow evolution decision admission is documented in
-[workflow-evolution.md](../../reference/workflow-evolution.md), with enforcement in
-`applyEvent` in `services/workflow-evolution/experiment.ts`. It retains the
-incumbent and all evidence when frozen comparison coverage is insufficient or
-uncertain, and rejects observed regressions. Its sample floors do not claim
-statistical confidence; it changes no execution, approval or recovery budget.
+The opt-in workflow evolution ledger was retired in `f782c5b1d`. Its
+`applyEvent` retained the incumbent and evidence when comparison coverage was
+insufficient or uncertain, and rejected observed regressions. See
+[the historical workflow evolution reference](../../reference/workflow-evolution.md).
 
 Current ordinary defaults are documented in [ordinary safe runs](../agent-runtime/ordinary-safe-runs.md).
 The October 7 change supersedes historical compaction-off/advisory defaults;
@@ -4211,15 +4209,15 @@ replacement, preventing a stale predecessor copy from replaying successor input.
 This is not an atomic transaction with the conversation writer or a power-loss
 claim. Existing persistence-failure recovery still applies.
 
-Red/green reproduction: `node docs/experiments/rollover-queue/verify.mjs` stages
-untracked temporary fixtures, drives real hooks/orchestration/runtime and an
-offline model's actual next requests, exercises failure/cancel/blocked recovery
-and ordinary controls, then removes the fixtures. Source base `3b611e52` fails
+The [historical red/green runner](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/experiments/rollover-queue/verify.mjs) staged
+untracked temporary fixtures, drove real hooks/orchestration/runtime and an
+offline model's next requests, exercised failure/cancel/blocked recovery
+and ordinary controls, then removed the fixtures. Source base `3b611e52` fails
 seven of eleven checks; the author patch passes eleven. Filesystem restoration
 also checks successor sidecar ownership and explicit-resume order. Existing
 queue snapshot/blocked-event/manual-retry diagnostics expose settlement without
-new user-content logging. Exact dirty-source identity, broader verification and
-limits are in `docs/experiments/rollover-queue/`. Independent acceptance belongs
+new user-content logging. The [experiment summary](../../experiments/rollover-queue/README.md)
+records the broader verification and limits. Independent acceptance belongs
 to the parent, not this author evidence. Rollback: the source patch as a unit;
 removing only the queue veto would reintroduce the dispatch race.
 
@@ -4229,9 +4227,9 @@ marks already-journaled queued entries; successor briefing acceptance journals
 those full accepted records after the briefing record and before newer input.
 Markers clear on transfer; ordinary queued starts still do not journal again.
 Unsettled steers keep their existing admission callback owner. Real writer
-rotation/replay and raw record counts are now in the retained author runner;
-independent recheck remains pending. No authority, retry, capacity or transaction
-policy is added. See `docs/experiments/rollover-queue/evidence/journal-repair/`.
+rotation/replay and raw record counts are in the
+[historical journal-repair evidence](https://github.com/qduc/term2/blob/c455d16c56dfa1d46664c0b3183873100942bf65/docs/experiments/rollover-queue/evidence/journal-repair/).
+Independent recheck was pending at this checkpoint.
 
 ## Explicit Discord notification admission (2026-10-25)
 

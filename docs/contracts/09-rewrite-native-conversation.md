@@ -1,11 +1,10 @@
-# Contract 09 — Rewrite native conversation session
-
-Status: **implementation-owned refactor boundary (2026-11-01).**
+# Native conversation session
 
 The rewrite session is a durable, single-writer conversation boundary. Its public
 surface is `createConversation` and `openConversation` in
 `src/session/conversation.ts`; callers do not receive the writer or an
-engine acceptance token.
+engine acceptance token. This is the conversation boundary used by both
+the in-process host and the [daemon](15-daemon-session-ownership.md).
 
 ## Ownership
 

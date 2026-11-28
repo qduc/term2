@@ -1,29 +1,18 @@
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-let tsxLoader;
-try {
-  tsxLoader = require.resolve('tsx');
-} catch (error) {
-  if (error.code !== 'MODULE_NOT_FOUND') throw error;
-  // The integration checkout may have no local dependencies; use the authorized
-  // read-only dependency root as a fallback without changing the checkout.
-  tsxLoader = '/home/qduc/term2/node_modules/tsx/dist/loader.mjs';
-}
 const result = spawnSync(
   process.execPath,
   [
     '--import',
-    tsxLoader,
+    'tsx',
     '-e',
     `
 const assert = require('node:assert/strict');
 const { LargeUncachedInputGuard } = require(${JSON.stringify(
-      resolve(here, '../../../rewrite/src/session/large-uncached-input-guard.ts'),
+      resolve(here, '../../../src/session/large-uncached-input-guard.ts'),
     )});
 const idle = 300000;
 const make = () => { const g = new LargeUncachedInputGuard({largePromptTokenThreshold: 1}); g.recordSuccessfulInput({provider:'p',model:'m',now:1,input:''}); return g; };

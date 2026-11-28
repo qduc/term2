@@ -1,14 +1,23 @@
 # Idle uncached-input confirmation removal
 
-The guard still accounts for payload size and still warns for provider/model/config changes and undo/rewind. Idle age alone no longer adds a warning; stale resumed-session age alone no longer adds one. Unknown resumed-session age remains a warning.
+The idle-age and known resumed-session age exceptions were removed in
+`6f473c19b`. A long wait alone provides too little evidence that a large
+request will be uncached. The guard still considers the payload size and
+signals such as provider changes, undo or rewind, and unknown resumed-session age.
 
-## Evidence
+After installing the workspace dependencies, run the focused decision probe from
+the repository root:
 
-Source identity: `4731459c44584c6e49854dac4a1d50cb849687dd` (working tree additionally contains the change). Production module exercised: `source/services/large-uncached-input-guard.ts`; entry point: `verify.mjs`.
+```sh
+node docs/experiments/idle-uncached-confirm/verify.mjs
+```
 
-Green command: `node docs/experiments/idle-uncached-confirm/verify.mjs`
-Output: `PASS: below/exact/above idle boundary; resumed session; provider-change warning preserved`
+It imports `LargeUncachedInputGuard` from
+[src/session/large-uncached-input-guard.ts](../../../src/session/large-uncached-input-guard.ts)
+and checks deterministic timestamps around the former idle threshold, a known
+stale resume, and a provider-change warning. The probe exercises the decision
+function. It uses synthetic inputs and makes no provider calls.
 
-The probe uses local TypeScript runtime support (`tsx`) and production `LargeUncachedInputGuard`, deterministic timestamps, and synthetic payloads. It exercises the guard decision layer rather than the full interactive renderer, keyboard/control-socket wiring, or provider. The input-admission workflow calls this shared guard preview before admission; other admission paths were not end-to-end exercised. Tool-approval controls are outside this guard and not directly exercised. No live provider or external effects.
-
-A before-change red run was not retained in this attempt. Independent verification was not performed. Full `pnpm lint` reports 4 errors (3 in this script before an import correction; remaining unrelated findings need separate baseline comparison); after correction scoped eslint passes. `pnpm typecheck` passes.
+The original repair included a separate independent check of admission paths,
+including control submit and steer. The [historical evidence](https://github.com/qduc/term2/tree/c455d16c56dfa1d46664c0b3183873100942bf65/docs/experiments/idle-uncached-confirm)
+summarizes that check and the formatting rework. Its raw logs were external.

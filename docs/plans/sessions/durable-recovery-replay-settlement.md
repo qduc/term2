@@ -1,10 +1,9 @@
 # Durable recovery — replay-time settlement of interrupted tool calls
 
-Status: **implemented and verified** (worktree `durable-recovery`, base
-`efeda93a`, commits `b4a67e26` + `db0b4e5f` + the final corrective commit).
-This document describes the implemented code (unreleased draft PR); the early draft that proposed
-replay-time `aborted` settlement was superseded during implementation and is
-recorded only under "Rejected approach" below.
+Status: shipped in `463e0ec20` (qduc/term2#19). Current replay runs
+`settleInterruptedToolEntries` in [conversation-replay.ts](../../../src/session/conversation/conversation-replay.ts).
+The early proposal for replay-time `aborted` settlement is recorded under
+[Rejected approach](#rejected-approach-superseded-draft).
 
 ## Final semantics
 
@@ -18,7 +17,7 @@ dispatched-but-unobserved shape; replay matches it with
 before this operation's result was recorded… Verify the current state before
 any retry, and do not re-run non-idempotent operations blindly.").
 
-Implementation (implemented, unreleased):
+Implementation at merge:
 
 - `conversation-replay.ts`: `settleInterruptedToolEntries` runs at the
   mid-turn crash block, class-wide (journal-backed calls and legacy

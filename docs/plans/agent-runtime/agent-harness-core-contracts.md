@@ -9,9 +9,9 @@ still undecided.
 ## Resume here
 
 - **Package name and home.** Decided 2026-11-10: `@qduc/agent-core`, graduated the same day to
-  `qduc/agent-runtime` `packages/core/`, which owns its source, import guard and tarball smoke. Term2 vendors
-  packed tarballs (`vendor/qduc-agent-core-*.tgz`, see `vendor/README.md`) and embeds the package in its
-  build, as it does wire. A harness change is made in agent-runtime, packed, and vendored here.
+  `qduc/agent-runtime` `packages/core/`, which owns its source, import guard and tarball smoke. Term2 pins the published npm package in `package.json` and `pnpm-lock.yaml`. Publish harness changes
+  from agent-runtime before updating Term2's exact pin. The current dependency is recorded in
+  [package.json](../../../package.json).
 - **First npm alpha.** `0.2.0-alpha.1`, published from `qduc/agent-runtime` through its manual
   `publish-agent-packages.yml` (input `package: core`), always on the `next` dist-tag. `0.1.0` was
   published on 2026-11-08 from the retired `qduc/agent-runtime` snapshot and then unpublished, so that

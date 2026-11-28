@@ -1,5 +1,8 @@
 # Lite merged into Bare
 
+This note records the October 2026 Bare 2.0.0 decision in `17e6e443f`.
+[Profile architecture and compatibility](README.md) describes the current surface.
+
 Lite and Bare were both short-prompt profiles. The code already treated them alike:
 `isLiteProfile()` matched any Profile with a markdown identity, so Bare received
 Lite's prompt and tool branches in `buildPromptSpec()` and `getAgentDefinition()`.
@@ -64,17 +67,10 @@ memory, and sessions not yet included.
 
 These are request-size measurements only. They say nothing about task quality.
 
-## Known gaps
+## What changed later
 
-- **Retained Bare tools:** The note 38 add-back of structured questions,
-  mentor access, and local worktree leasing is withheld by note 44's frozen
-  provider-surface contract. Use ordinary text questions; these tools remain
-  available only in profiles whose unchanged capability blocks include them.
-- **File tools:** Bare has no read, search, or edit tools, neither direct nor in
-  `run_code`. This is intended: the shell does all three. Edits lose the
-  editor diff display and edit-matching repair, and an outside-workspace
-  write fails at the sandbox instead of reaching an approval prompt.
-- **Task quality:** no model run has measured quality on the merged surface. The
-  add-back verification plan (`experiments/bare-profile/addback-verification-plan.md`,
-  untracked at merge time) was written against Bare 1.3.0, and its "no
-  production profile changes" scope predates this merge.
+The merge-time profile used shell for file reads and edits, which lost native
+diffs, edit-match repair, and approval prompts for writes outside the sandbox.
+Bare 3.0.0 restored native file tools in `317873590`. The current Bare prompt
+also loads project instructions again. The measurements above remain historical
+request-size evidence for the merge candidate.

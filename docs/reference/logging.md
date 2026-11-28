@@ -1,88 +1,40 @@
-# Runtime Logging Contract
+# Runtime logging
 
-## Canonical JSON schema
+Term2 writes daily JSON logs as `term2-YYYY-MM-DD.log` under the platform's
+Term2 log directory. Provider traffic envelopes live in the `provider-traffic`
+subdirectory and record the request and response at the provider boundary.
+Both are diagnostic files and can contain conversation data. Conversation
+persistence has its own [durability contract](../contracts/08-conversation-durability-and-recovery.md).
 
-All runtime logs are JSON records with required fields:
+## Reading application logs
 
-- `timestamp`
-- `level`
-- `eventType`
-- `traceId`
-- `sessionId`
-- `messageId`
-- `provider`
-- `model`
-- `phase`
+Structured runtime events carry `timestamp`, `level`, `eventType`, and
+`messageId`. Correlate with `traceId` and `sessionId` when present. Provider,
+model, and tool fields depend on the event. `RuntimeLogSchema` and
+`buildRuntimeLogRecord` describe the shape in
+[`logging-contract.ts`](../../src/session/logging/logging-contract.ts).
 
-Optional fields:
+For provider traffic, search for `provider.request.started`,
+`provider.response.received`, `provider.response.closed`, or
+`provider.response.failed`. The evaluator uses its own event prefix on
+request start, response receipt, and response close. The traffic envelope shape
+depends on the provider transport. Use its recorded transport metadata before
+interpreting the payload. See the
+[logging and traffic contract](../contracts/07-logging-and-provider-traffic.md)
+for the privacy boundary.
 
-- `toolName`
-- `toolCallId`
-- `retryType`
-- `retryAttempt`
-- `errorCode`
-- `errorMessage`
-- `payloadRef`
+## Logging controls
 
-## Event taxonomy
+| Setting or environment | Effect |
+| --- | --- |
+| `logging.disableLogging`, `DISABLE_LOGGING` | Turn off diagnostic file sinks at logger construction. |
+| `logging.logLevel`, `LOG_LEVEL` | Set the application log level. |
+| `LOG_CATEGORIES` | Filter on comma-separated categories: `provider`, `tool`, `stream`, `approval`, `retry`, or `general`. Warnings and errors bypass this filter. |
+| `LOG_SAMPLE_RATE` | Sample application events at a rate from 0 to 1. Warnings and errors bypass sampling. |
+| `LOG_VERBOSE_PAYLOADS` | Include verbose application log payload metadata. Errors can include verbose metadata by default. |
+| `TERM2_RAW_TRAFFIC` | Enable raw provider traffic sidecars when diagnostic file sinks are enabled. |
 
-- `provider.request.started`: provider request boundary
-- `provider.response.failed`: provider failure boundary
-- `stream.started`: conversation stream begin
-- `stream.failed`: conversation stream failure
-- `stream.aborted`: stream aborted by user
-- `approval.required`: tool call requires approval
-- `approval.granted`: approval accepted
-- `approval.rejected`: approval denied
-- `approval.aborted`: approval aborted during run
-- `tool_call.execution_started`: tool call execution begin
-- `tool_call.parse_failed`: invalid tool-call payload diagnostic packet
-- `retry.hallucination`: model hallucinated tool call retry
-- `retry.upstream`: upstream provider retry
-
-## Phases
-
-- `request_start`
-- `provider_response`
-- `normalization`
-- `validation`
-- `approval`
-- `execution`
-- `retry`
-- `abort`
-- `runtime`
-
-## Noise controls
-
-Environment variables:
-
-- `LOG_LEVEL`: minimum level
-- `LOG_CATEGORIES`: comma-separated categories (`provider,tool,stream,approval,retry,general`)
-- `LOG_VERBOSE_PAYLOADS`: `true|false`
-- `LOG_SAMPLE_RATE`: `0.0..1.0`
-
-Defaults:
-
-- compact single-line JSON output
-- payload bodies hidden unless `LOG_VERBOSE_PAYLOADS=true` or log level is `error`
-
-## Invalid tool-call diagnostic packet example
-
-```json
-{
-  "eventType": "tool_call.parse_failed",
-  "errorCode": "INVALID_TOOL_CALL_FORMAT",
-  "toolName": "shell",
-  "toolCallId": "call_abc",
-  "rawPayloadSnippet": "{\"command\":",
-  "normalizedToolCall": {
-    "toolName": "shell",
-    "toolCallId": "call_abc"
-  },
-  "validationErrors": ["arguments must be valid JSON"],
-  "traceId": "e1f9c8d0-75f0-4da2-b9ae-8fc7f2b3ebd8",
-  "retryContext": {
-    "sessionId": "default"
-  }
-}
-```
+For daemon sessions, use persisted logging settings or set the environment in
+the daemon process. Automatic daemon startup forwards `TERM2_*` variables
+such as `TERM2_RAW_TRAFFIC`. It omits the unprefixed `LOG_*` variables and
+`DISABLE_LOGGING`. See [local daemon operations](local-daemon.md).

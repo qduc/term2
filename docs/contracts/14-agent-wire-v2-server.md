@@ -1,11 +1,8 @@
 # Contract 14 — agent-wire v2 server transport
 
-**Status:** the root and browser/BFF pin the source-built vendored
-`@qduc/agent-wire` 0.2.3 artifact. `AGENT_WIRE_V2_RUNTIME_AVAILABLE` is **true**.
-Explicit v2 hydration, events and configuration mutations use the native
-Session contract below. Matching native/BFF/browser acceptance and independent
-activation review include background `ask_orchestrator` open/answer/close,
-pending and settled hydration, and accepted-cursor reconnect.
+The root and browser/BFF pin the vendored `@qduc/agent-wire` 0.2.3 artifact.
+`AGENT_WIRE_V2_RUNTIME_AVAILABLE` in [server-wire-v2.ts](../../src/host/server-wire-v2.ts)
+enables explicit v2 hydration, events and configuration mutations.
 
 Task descriptors preserve `pendingQuestion`, native tool tracking and the last
 activity observation. These fields are validated by the shared package, not
@@ -15,12 +12,16 @@ boundary. See [wire package ownership](../../vendor/README.md).
 
 ## Access and compatibility
 
-The HTTP host is a transport/access adapter over the native Session and protocol.
-It never drives turns, writes conversation state, or persists admission dedupe.
-Session owns original admissions and their `clientRequestId` replay.
+The HTTP host handles transport and access for the native Session.
+`createDirectServerHost` in [server.ts](../../src/host/server.ts) is used by both
+launch paths. With a [daemon listener lease](15-daemon-session-ownership.md), it
+adapts the daemon’s host. Session owns conversation writes, turn admission and
+`clientRequestId` replay.
 
-All 21 assertion purposes in `src/host/server-contracts.ts` bind to the methods
-and paths in `server-routes.ts`. The existing RS256 assertion validation, issuer,
+`ASSERTION_PURPOSES` in [server-contracts.ts](../../src/host/server-contracts.ts)
+names the assertion vocabulary. `matchPrivateRoute` in
+[server-routes.ts](../../src/host/server-routes.ts) binds those purposes to HTTP
+methods and paths. The existing RS256 assertion validation, issuer,
 audience, expiry, one-use replay ledger, route purpose/session binding, local-owner
 checks, native session ownership, canonical workspace admission and read/write
 posture remain authorities. Pairing registers the BFF key, not a browser key.
@@ -33,10 +34,8 @@ The compatibility aliases are `POST /` for creation and both GET/POST
 `/private/agent/v1/sessions/:sessionId`, including v2 hydration. The browser's
 public GET is translated to that POST by the BFF.
 
-There are two bounded wire exceptions: explicitly negotiated v2 atomic events
-and keyed/revisioned configuration receipts, including pending results. There is
-no v1 shim, automatic fallback, generated request key or revision rebasing.
-Same-root access conflict below is the separately named access exception.
+Clients explicitly select the stream format. Configuration mutations
+carry the caller’s request key and revision. A result can be pending.
 
 Unqualified events refuse with HTTP 400 `protocol_upgrade_required`,
 `retryable:false`, and `details.requiredFormat:'agent-wire-v2'`, after assertion
@@ -64,9 +63,11 @@ the conflict check; a denied write request can therefore retain its generic 403.
 A persisted or in-memory dynamic grant is changed in place with
 `PUT /private/agent/v1/workspaces/:workspaceId/access` or removed with
 `DELETE /private/agent/v1/workspaces/:workspaceId`; the web folder picker's
-saved-folder menu calls them. Contract 13, "Saved folder edits", has the
-status codes and live-session behavior. Stopping the server to hand-edit
-`direct-workspace-grants.json` is no longer needed.
+saved-folder menu calls them. After committing an edit,
+`serverWorkspaceAdministration` in [host-config-workspace.ts](../../src/app/host-config-workspace.ts)
+asks the host to close live sessions at that root. An uncommitted edit leaves
+the grant in place. [The saved-folder record](13-gateway-web-wire.md#saved-folder-edits-workspace-grants)
+explains the original status codes and recovery decisions.
 
 Existing direct sessions record the grant's workspace ID in their
 `session_started` binding and its access in `workspaceIdentity`. After an
@@ -85,17 +86,22 @@ dynamic grants; restarting clears those, not any static inputs.
 ## Negotiation
 
 V2 SSE, hydration and configuration use `?format=agent-wire-v2`. An optional
-`x-term2-event-format: agent-wire-v2` header must agree with query negotiation.
+`x-term2-event-format` header must agree with query negotiation. In SSE, this
+header also accepts `direct-wire-v2`.
 SSE/configuration reject unknown or conflicting formats. `format=direct` remains
 the explicit native snapshot/live transport; it is not a browser fallback.
 `format=direct-wire-v2` (SSE only) sends native `WireEvent`s unchanged, one
 `accepted`/`live`/`snapshot` frame per Session publication, for clients that fold
-with the shared fold (`src/protocol/fold/`). Its envelope and ordering rules are
-in `src/host/server-sse.ts` and the web transcript build spec, section 2.1.
+with the shared fold (`src/protocol/fold/`). The current web transcript uses this stream
+(`openDirectEvents` in [term2.ts](../../web-client/lib/api/term2.ts)).
+`directWireV2EventStream` in [server-sse.ts](../../src/host/server-sse.ts)
+defines its envelope and ordering.
 Unqualified events are refused, rather than automatically upgraded to v2.
 Older gated server builds refuse explicit v2 requests with `503 agent_wire_v2_unavailable`; use matching server and browser builds.
 
 ## Atomic events and reconnect
+
+This section describes `agent-wire-v2` events.
 
 An accepted frame is `event: accepted`, with exactly one real accepted FactLine
 boundary: `{schemaVersion:2,kind:'accepted',sessionId,seq,occurredAt,changes}`.
@@ -190,16 +196,11 @@ it as a new selection. Removed Plan/Mentor/Orchestrator profiles are not offered
 Native command/replay error codes retain their HTTP status through the BFF with
 fixed safe text, instead of being masked as generic gateway failures.
 
-## Migration and activation
+## Storage and operator setup
 
-The direct launcher uses a separate state directory and preserves old gateway and
-conversation data. Conversation migration is outside this contract (#148). Never
-restore the legacy runtime or point the native writer at old gateway data.
-
-Activation still requires a corrected artifact built by the shared-package owner,
-matching root/web pins, combined browser/native acceptance including background
-questions, and independent approval of the combined evidence. No deployment,
-npm publication, aggregate reconstruction, raw live-stream replay parity, branch
-queue support, or protocol support for unmapped native model-response/budget audit
-facts is implied. The operator topology is documented in the
-[web gateway setup](../../website/src/content/docs/remote/web-gateway.md).
+The direct HTTP launcher uses its own state directory and preserves old gateway
+and conversation data. The daemon listener also has HTTP state, separate from
+the native sessions owned by the daemon. See the
+[web gateway setup](../../website/src/content/docs/remote/web-gateway.md) for the
+operator topology and [wire package ownership](../../vendor/README.md) for
+updating the vendored artifact.

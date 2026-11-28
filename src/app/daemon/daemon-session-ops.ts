@@ -3,8 +3,10 @@
  * - `set_goal` with strict schema validation, host-managed attachment, and `expectedGeneration` CAS.
  * - Server-resolved `skill` injection against the session's workspace.
  * - `quota.get` projection via `subscriptionQuotaView`.
- * - `DaemonLaunchPolicies`: how each session was launched (approval policy, client mode, sandbox flag).
+ * - `DaemonLaunchPolicies`: how each session was launched (approval policy, client mode, sandbox flag),
+ *   scoped to the create or launch that starts it.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Principal } from '../../host/in-process-direct-types.js';
 import { ClientApiRpcError } from '../../host/daemon/daemon-rpc.js';
 import { DirectProtocolError } from '../../protocol/errors.js';
@@ -13,8 +15,17 @@ import { createDurableGoal } from '../../session/goal.js';
 import { injectSkillIntoTurn } from '../../shared/types/user-turn.js';
 import type { DirectApplication } from '../application.js';
 import { requireLocalCaller } from '../application-workspaces.js';
-import type { SessionApprovalPolicy } from '../../protocol/client-api/client-api-schema.js';
-import type { DaemonLaunchFlags } from './daemon-v11-ops.js';
+import type { SessionApprovalPolicy, SessionLaunchParams } from '../../protocol/client-api/client-api-schema.js';
+
+/** Launch-only surface flags; the daemon records them for the runtime the launch opens. */
+export type DaemonLaunchFlags = Pick<SessionLaunchParams, 'requireSandbox' | 'clientMode'>;
+
+/** What one create or launch hands the session it starts, and that session's id when it opens an existing one. */
+export type DaemonLaunchValues = {
+  readonly policy?: SessionApprovalPolicy;
+  readonly flags?: DaemonLaunchFlags;
+  readonly sessionId?: string;
+};
 
 const SET_GOAL_KEYS = new Set(['type', 'action', 'expectedGeneration', 'goal', 'proposalId']);
 const GOAL_PAYLOAD_KEYS = new Set(['text', 'successCriteria']);
@@ -148,38 +159,68 @@ export async function readDaemonSessionQuota(
   }
 }
 
+/** One create's or launch's values while it starts its session (see `DaemonLaunchPolicies.withLaunch`). */
+type LaunchFrame = {
+  readonly policy: SessionApprovalPolicy | undefined;
+  readonly flags: DaemonLaunchFlags | undefined;
+  /** The session these values belong to: named by a resume or fork, else the first one built in the frame. */
+  sessionId: string | undefined;
+  /** False once the create or open has returned. */
+  open: boolean;
+};
+
 /**
  * How each live session was launched, read by its tool surface and by control-socket admission.
- * A create or launch sets the pending policy and flags around its own session start; the first
- * surface build of a session without a record adopts them. The pending values are daemon-wide,
- * so a concurrent plain attach of a dormant session can adopt them too (see worth-revisiting.md).
+ * A create or launch runs its own session start inside `withLaunch`; the first surface build of
+ * that session, inside that call, adopts the launch's values. They live in an async-local frame,
+ * not on the daemon, so an attach that opens another session at the same time never sees them.
  */
 export class DaemonLaunchPolicies {
   readonly #policies = new Map<string, SessionApprovalPolicy>();
   readonly #flags = new Map<string, DaemonLaunchFlags>();
-  #pendingPolicy: SessionApprovalPolicy | undefined;
-  #pendingFlags: DaemonLaunchFlags | undefined;
+  readonly #launch = new AsyncLocalStorage<LaunchFrame>();
 
   /** `isHeldByAcp`: a session a live ACP client holds reopens only with the ACP surface, whoever reopens it. */
   constructor(private readonly isHeldByAcp: (sessionId: string) => boolean) {}
 
-  setPendingPolicy(policy: SessionApprovalPolicy | undefined): void {
-    this.#pendingPolicy = policy;
+  /**
+   * Runs `start`, the create or open that starts one launch's session, with that launch's values.
+   * `sessionId` names the session when the launch opens an existing one; a new session's id is
+   * not known until it is built, so the first session built inside `start` takes the values.
+   */
+  async withLaunch<T>(values: DaemonLaunchValues, start: () => Promise<T>): Promise<T> {
+    const frame: LaunchFrame = {
+      policy: values.policy,
+      flags: values.flags,
+      sessionId: values.sessionId,
+      open: true,
+    };
+    try {
+      return await this.#launch.run(frame, start);
+    } finally {
+      // Work `start` left behind (timers, listeners) keeps this async context; it must not adopt later.
+      frame.open = false;
+    }
   }
 
-  setPendingFlags(flags: DaemonLaunchFlags | undefined): void {
-    this.#pendingFlags = flags;
+  /** The launch frame `sessionId` is being built in, if it is that launch's session. */
+  #launchOf(sessionId: string): LaunchFrame | undefined {
+    const frame = this.#launch.getStore();
+    if (!frame?.open) return undefined;
+    frame.sessionId ??= sessionId;
+    return frame.sessionId === sessionId ? frame : undefined;
   }
 
-  /** The session's approval policy, adopting the pending launch values on first sight. */
+  /** The session's approval policy, adopting its own launch's values on first sight. */
   policyFor(sessionId: string): SessionApprovalPolicy | undefined {
     const held = this.isHeldByAcp(sessionId);
     if (held && !this.#flags.has(sessionId)) this.#flags.set(sessionId, { clientMode: 'acp' });
-    if (!held && this.#pendingPolicy !== undefined && !this.#policies.has(sessionId)) {
-      this.#policies.set(sessionId, this.#pendingPolicy);
+    const launch = held ? undefined : this.#launchOf(sessionId);
+    if (launch?.policy !== undefined && !this.#policies.has(sessionId)) {
+      this.#policies.set(sessionId, launch.policy);
     }
-    if (!held && this.#pendingFlags !== undefined && !this.#flags.has(sessionId)) {
-      this.#flags.set(sessionId, this.#pendingFlags);
+    if (launch?.flags !== undefined && !this.#flags.has(sessionId)) {
+      this.#flags.set(sessionId, launch.flags);
     }
     return this.#policies.get(sessionId);
   }

@@ -1114,4 +1114,208 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       }),
     ).toMatchObject({ ok: false, error: { code: 'unavailable' } });
   });
+
+  it("keeps a headless launch's approval policy on its own session when another client attaches a dormant session mid-launch", async () => {
+    const { root, stateDir, runtimeDir, socketPath } = makeSandboxRoot();
+    const conversationsDir = path.join(stateDir, 'conversations');
+    const settingsDir = path.join(root, 'settings');
+    const gateDir = path.join(root, 'gate');
+    const launchWs = path.join(root, 'ws-launch');
+    const dormantWs = path.join(root, 'ws-dormant');
+    for (const dir of [settingsDir, gateDir, launchWs, dormantWs]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const launchRoot = fs.realpathSync(launchWs);
+
+    // The model asks to `touch` the file the latest user message names (a shell write, which an interactive
+    // session asks about), then stops once it sees the result.
+    const provider = http.createServer((req, res) => {
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ object: 'list', data: [{ id: 'race-model' }] }));
+        return;
+      }
+      let body = '';
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString('utf8');
+      });
+      req.on('end', () => {
+        const messages = (JSON.parse(body) as { messages: Array<{ role: string; content?: unknown }> }).messages;
+        const last = messages.at(-1);
+        const target = /create ([\w.-]+\.txt)/.exec(JSON.stringify(last?.content ?? ''))?.[1];
+        const delta =
+          last?.role === 'user' && target
+            ? {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: `call_${target}`,
+                    type: 'function',
+                    function: {
+                      name: 'shell',
+                      arguments: JSON.stringify({ command: `touch ${target}`, description: 'Create a file' }),
+                    },
+                  },
+                ],
+              }
+            : { role: 'assistant', content: 'done' };
+        const finish = 'tool_calls' in delta ? 'tool_calls' : 'stop';
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(
+          [
+            `data: ${JSON.stringify({ id: 'c', choices: [{ delta }] })}`,
+            '',
+            `data: ${JSON.stringify({ id: 'c', choices: [{ delta: {}, finish_reason: finish }] })}`,
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
+    cleanups.push(() => new Promise<void>((resolve) => provider.close(() => resolve())));
+    const address = provider.address();
+    const baseUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'race', model: 'race-model' }, retryAttempts: 0 },
+        providers: [{ name: 'race', type: 'openai-compatible', baseUrl, apiKey: 'k' }],
+        sandbox: { enabled: false },
+      }),
+    );
+
+    // Holds the launch mid-start: a headless surface waits for its workspace's MCP servers to settle,
+    // and this one never answers `initialize`. It marks that it started, then exits once released.
+    const gate = path.join(gateDir, 'gate.mjs');
+    fs.writeFileSync(
+      gate,
+      [
+        "import fs from 'node:fs';",
+        "import path from 'node:path';",
+        'const dir = process.argv[2];',
+        "fs.writeFileSync(path.join(dir, `started-${process.pid}`), '');",
+        "setInterval(() => { if (fs.existsSync(path.join(dir, 'release'))) process.exit(1); }, 10);",
+      ].join('\n'),
+    );
+    fs.writeFileSync(
+      path.join(launchRoot, '.mcp.json'),
+      JSON.stringify({ mcpServers: { gate: { command: process.execPath, args: [gate, gateDir] } } }),
+    );
+    fs.writeFileSync(
+      path.join(settingsDir, 'mcp.json'),
+      JSON.stringify({ projectServers: { [launchRoot]: { gate: { enabled: true } } } }),
+    );
+    const gateStarted = () => fs.readdirSync(gateDir).some((name) => name.startsWith('started-'));
+    cleanups.push(() => fs.writeFileSync(path.join(gateDir, 'release'), ''));
+
+    const daemon = await startTerm2Daemon({
+      stateDir,
+      conversationsDir,
+      socketPath,
+      env: { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir },
+    });
+    expect(daemon.kind).toBe('started');
+    if (daemon.kind !== 'started') return;
+    cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
+
+    const open = async (clientKind: 'tui' | 'headless') => {
+      const client = new TestUnixRpcClient(await connectRaw(socketPath));
+      cleanups.push(() => client.close());
+      const hello = await client.request('protocol.hello', {
+        protocolVersion: '1.1',
+        minSupportedVersion: '1.1',
+        clientKind,
+        clientVersion: '1.1.0',
+      });
+      expect(hello.ok).toBe(true);
+      return client;
+    };
+    const tui = await open('tui');
+    const headless = await open('headless');
+    const sessionIdOf = (frame: UnixResponseFrame) => (frame.ok ? (frame.result['session'] as { id: string }).id : '');
+
+    // A stored session nobody has open.
+    const stored = await tui.request('session.launch', { cwd: dormantWs, selection: { kind: 'new' } });
+    expect(stored.ok).toBe(true);
+    const dormantId = sessionIdOf(stored);
+    expect(await tui.request('session.close', { sessionId: dormantId })).toMatchObject({ ok: true });
+    expect(gateStarted()).toBe(false);
+
+    // A headless auto-approve launch is held inside its own session start...
+    const launching = headless.request('session.launch', {
+      cwd: launchWs,
+      selection: { kind: 'new' },
+      clientMode: 'headless',
+      approvalPolicy: { mode: 'headless', autoApprove: true },
+    });
+    await expect.poll(gateStarted, { timeout: 10_000 }).toBe(true);
+    // ...while another client opens the dormant session.
+    const attached = await tui.request('session.attach', { sessionId: dormantId });
+    expect(attached.ok).toBe(true);
+    if (!attached.ok) return;
+    const dormantStream = CLIENT_API_SCHEMAS.unixSessionAttachResult.parse(attached.result).streamId;
+    fs.writeFileSync(path.join(gateDir, 'release'), '');
+    const launched = await launching;
+    expect(launched.ok).toBe(true);
+    const launchedId = sessionIdOf(launched);
+
+    type AcceptedEvent = { type?: string; payload?: Record<string, unknown> };
+    const accepted = (frame: UnixEventFrame, streamId: string): AcceptedEvent[] =>
+      frame.streamId === streamId && frame.event === 'session.accepted' && Array.isArray(frame.payload['events'])
+        ? (frame.payload['events'] as AcceptedEvent[])
+        : [];
+    const firstOfType = async (client: TestUnixRpcClient, streamId: string, type: string) => {
+      const frame = await client.waitForEvent((f) => accepted(f, streamId).some((e) => e.type === type), 15_000);
+      return accepted(frame, streamId).find((e) => e.type === type)?.payload ?? {};
+    };
+    /**
+     * Submits a turn whose model asks to `touch` `file`, and reports who resolved the approval it opens. With
+     * `answerAs`, the test answers as the person at the terminal. A session with no person (headless) has
+     * already resolved it by policy, and the policy's reason says whether the session holds auto-approve.
+     */
+    const approvalOutcome = async (
+      client: TestUnixRpcClient,
+      sessionId: string,
+      streamId: string,
+      file: string,
+      answerAs?: string,
+    ) => {
+      const submitted = await client.request('session.command', {
+        sessionId,
+        command: { type: 'submit', requestId: `race-${file}`, text: `Please create ${file}`, origin: { kind: 'cli' } },
+      });
+      expect(submitted.ok).toBe(true);
+      const opened = await firstOfType(client, streamId, 'interaction_opened');
+      const requestId = (opened['interaction'] as { requestId: string }).requestId;
+      if (answerAs) {
+        // Refused as stale when a policy resolved the request first; the resolution below says which won.
+        await client.request('session.command', {
+          sessionId,
+          command: { type: 'answer', requestId, decision: { kind: 'deny', reason: answerAs } },
+        });
+      }
+      const resolved = await firstOfType(client, streamId, 'interaction_resolved');
+      return {
+        source: (resolved['provenance'] as { source?: string } | undefined)?.source,
+        reason: (resolved['resolution'] as { reason?: string } | undefined)?.reason,
+      };
+    };
+
+    // The attached session keeps its interactive surface: the request waits for the person, who answers it.
+    const dormantOutcome = await approvalOutcome(tui, dormantId, dormantStream, 'dormant.txt', 'person declined');
+    expect(dormantOutcome.reason).toBe('person declined');
+    expect(dormantOutcome.source).not.toBe('policy');
+    expect(fs.existsSync(path.join(dormantWs, 'dormant.txt'))).toBe(false);
+
+    // The launch's own session did get its policy: nobody is asked, and the refusal is the auto-approve
+    // one (without auto-approve it would tell the run to use --auto-approve).
+    const own = await headless.request('session.attach', { sessionId: launchedId });
+    expect(own.ok).toBe(true);
+    if (!own.ok) return;
+    const ownStream = CLIENT_API_SCHEMAS.unixSessionAttachResult.parse(own.result).streamId;
+    expect(await approvalOutcome(headless, launchedId, ownStream, 'launched.txt')).toEqual({
+      source: 'policy',
+      reason: 'No person is available to approve this in a non-interactive run.',
+    });
+  });
 });

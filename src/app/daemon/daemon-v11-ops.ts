@@ -21,7 +21,6 @@ import { catalogDetails } from '../../model/providers/model-catalog/catalog-deta
 import type {
   ClientApiSessionListItem,
   ModelsListParamsV11,
-  SessionApprovalPolicy,
   SessionLaunchParams,
   SettingsUpdateParamsV11,
 } from '../../protocol/client-api/client-api-schema.js';
@@ -33,6 +32,7 @@ import { localGrant, requireLocalCaller } from '../application-workspaces.js';
 import type { DirectApprovalMode } from '../config-settings.js';
 import type { DirectGlobalConfiguration } from '../host-config.js';
 import type { SettingsService } from '../settings.js';
+import type { DaemonLaunchValues } from './daemon-session-ops.js';
 
 const FORBIDDEN_SETTING_KEYS = new Set<string>(['providers', 'hooks', 'hooks.commands', 'mcp', 'mcp.servers']);
 const URL_SETTING_KEYS = new Set<string>(['webSearch.firecrawl.baseUrl', 'webSearch.searxng.baseUrl']);
@@ -71,9 +71,6 @@ function sanitizeSettingProjectionValue(key: string, value: unknown): unknown {
   return value;
 }
 
-/** Launch-only surface flags; the daemon records them for the runtime the launch opens. */
-export type DaemonLaunchFlags = Pick<SessionLaunchParams, 'requireSandbox' | 'clientMode'>;
-
 export type DaemonV11Deps = {
   readonly app: DirectApplication;
   readonly sessionIndex: SessionIndex;
@@ -83,8 +80,8 @@ export type DaemonV11Deps = {
   readonly localWorkspaceIdForRoot: (root: string) => string;
   readonly recordLocalWorkspace: (root: string) => void;
   readonly resolveWorkspaceRoot: (workspaceId: string) => string;
-  readonly setPendingCreatePolicy: (policy: SessionApprovalPolicy | undefined) => void;
-  readonly setPendingLaunchFlags: (flags: DaemonLaunchFlags | undefined) => void;
+  /** Runs `start` so that only the session it starts takes `values` (`DaemonLaunchPolicies.withLaunch`). */
+  readonly withLaunchValues: <T>(values: DaemonLaunchValues, start: () => Promise<T>) => Promise<T>;
   /** Refuses a launch whose client mode the live session's surface does not match. */
   readonly admitLaunch?: (sessionId: string, params: SessionLaunchParams) => void | Promise<void>;
   readonly sessionItemOrFallback: (principal: Principal, sessionId: string) => Promise<ClientApiSessionListItem>;
@@ -145,20 +142,19 @@ async function launchDaemonSession(
   let forkedFrom: string | undefined;
   let conn: { readonly sessionId: string; close(): void };
   const createdFresh = params.selection.kind === 'new' || params.selection.kind === 'fork';
-  const withPending = async (open: () => Promise<typeof conn>): Promise<typeof conn> => {
-    deps.setPendingCreatePolicy(params.approvalPolicy);
-    deps.setPendingLaunchFlags(launchFlags);
-    try {
-      return await open();
-    } finally {
-      deps.setPendingCreatePolicy(undefined);
-      deps.setPendingLaunchFlags(undefined);
-    }
-  };
+  const withLaunch = (open: () => Promise<typeof conn>, target?: string): Promise<typeof conn> =>
+    deps.withLaunchValues(
+      {
+        ...(params.approvalPolicy ? { policy: params.approvalPolicy } : {}),
+        ...(launchFlags ? { flags: launchFlags } : {}),
+        ...(target ? { sessionId: target } : {}),
+      },
+      open,
+    );
 
   if (params.selection.kind === 'new') {
     deps.recordLocalWorkspace(root);
-    conn = await withPending(() => deps.app.host.createSession(principal, grant));
+    conn = await withLaunch(() => deps.app.host.createSession(principal, grant));
     sessionId = conn.sessionId;
   } else {
     const stored = await deps.app.listStoredSessions();
@@ -197,7 +193,8 @@ async function launchDaemonSession(
     } else {
       sessionId = targetSummary.id;
     }
-    conn = await withPending(() => deps.app.host.connect(principal, sessionId));
+    const target = sessionId;
+    conn = await withLaunch(() => deps.app.host.connect(principal, target), target);
   }
   try {
     await deps.admitLaunch?.(sessionId, params);

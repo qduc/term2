@@ -148,3 +148,28 @@ Each architectural, protocol, or operational decision made during the singleton 
   `TERM2_DAEMON_MODE`) is unchanged. Gaps that need a Client API change or an
   owner decision are worth-revisiting items 11–16.
 
+
+## D012 — Local daemon launch fixes found while preparing the flip (2026-11-28)
+
+Bugs on `main` that matter while daemon mode is still opt-in, split out of the
+Step 14f flip work. Each has a built-CLI case in
+`tests/host/daemon-local-launch.integration.test.ts` that fails on `d60623817`.
+
+- **State directory of a non-default store.** `resolveDaemonPaths` used the
+  parent of `TERM2_CONVERSATIONS_DIR` as the daemon's state directory, and
+  `ensureSecurePrivateDir` then made it 0700 and put `daemon.lock.sqlite` and
+  `run/` in it. With `TERM2_CONVERSATIONS_DIR=/tmp/convs` that chmods `/tmp`
+  (seen as root while running the e2e suite in daemon mode); with
+  `~/conversations` it chmods the home directory. Such a store now gets
+  `<xdg-state>/term2/stores/<sha256(store)[:12]>`.
+  - **Deviation from the frozen Unix binding §1.1** (paths only, no wire
+    schema): the spec still says "derived from `$TERM2_CONVERSATIONS_DIR`
+    parent". Update the text when the binding is next revised.
+  - **Existing opt-in users with a custom store:** the lock and the socket move
+    (the runtime directory is `<stateDir>/run`, or under `XDG_RUNTIME_DIR` named
+    after a digest of the state directory). A daemon started before the upgrade
+    keeps running on the old paths and a new client starts a second one on the
+    new paths; per-session writer locks still keep the two from writing one
+    session. Running `term2 daemon stop` with the old build (or ending the old
+    daemon) once avoids it. The old lock and `run/` stay in the parent and can
+    be deleted. The default store is unaffected by this change.

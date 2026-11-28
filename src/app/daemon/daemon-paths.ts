@@ -59,12 +59,20 @@ export function resolveDaemonPaths(
   const conversationsOverridden = Boolean(options.conversationsDir || env['TERM2_CONVERSATIONS_DIR']);
 
   let stateDir: string;
+  const xdgState = env['XDG_STATE_HOME']?.trim() || path.join(os.homedir(), '.local', 'state');
   if (options.stateDir) {
     stateDir = resolvedStorePath(options.stateDir);
   } else if (conversationsOverridden) {
-    stateDir = path.dirname(conversationsDir);
+    // A private directory per store, never the store's parent: the daemon makes its state directory
+    // 0700 and keeps its lock there, which would chmod a shared parent such as /tmp or the home
+    // directory (deviation from transport-unix.md §1.1, recorded in decisions.md).
+    stateDir = path.join(
+      xdgState,
+      'term2',
+      'stores',
+      createHash('sha256').update(conversationsDir).digest('hex').slice(0, 12),
+    );
   } else {
-    const xdgState = env['XDG_STATE_HOME']?.trim() || path.join(os.homedir(), '.local', 'state');
     stateDir = path.join(xdgState, 'term2');
   }
 

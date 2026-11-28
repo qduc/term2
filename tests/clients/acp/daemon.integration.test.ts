@@ -5,7 +5,9 @@
  * Unix `session.list`, the ACP-supplied MCP server must be a child of the daemon process,
  * and its process must end when the session closes and when the ACP process exits. The
  * daemon runs with a provider key and a PATH the ACP process does not have, so the MCP
- * server's environment shows which process it came from.
+ * server's environment shows which process it came from. A second ACP process checks
+ * the holder rules: refused while the first holds the session, takes it over in Ask
+ * after the first exits, and a foreign close reopens it only with the ACP surface.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -15,6 +17,7 @@ import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk';
+import { LOCAL_PRINCIPAL } from '../../../src/app/application-workspaces.js';
 import { connectRemoteDirectHost } from '../../../src/app/daemon/connect-daemon-host.js';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { integrationCliPath } from '../../helpers/integration-cli.js';
@@ -328,7 +331,10 @@ describe('term2 acp over the daemon (built CLI)', () => {
         configId: 'approval_mode',
         value: 'assisted',
       }),
-    ).rejects.toMatchObject({ code: -32010, message: expect.stringMatching(/not available over the term2 daemon/) });
+    ).rejects.toMatchObject({
+      code: -32010,
+      message: expect.stringMatching(/not available for ACP sessions over the term2 daemon/),
+    });
 
     // Replacement is atomic: a server that will not start leaves the working one installed.
     await expect(
@@ -373,16 +379,86 @@ describe('term2 acp over the daemon (built CLI)', () => {
       }),
     ).rejects.toMatchObject({ code: -32010 });
 
-    // Reopened with its servers, then the ACP process exits: the daemon ends them, the session stays.
+    // Reopened with its servers. No other client may weaken it, clear its servers or take it over.
     await first.context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers });
     expect(mcpPids()).toHaveLength(2);
     const reopenedMcp = mcpPids()[1]!;
+    const settingsRevision = ((await observer.host.readSettings({ view: 'tui', sessionId })) as { revision: string })
+      .revision;
+    await expect(
+      observer.host.updateScopedSettings({
+        sessionId,
+        expectedRevision: settingsRevision,
+        persist: false,
+        changes: [{ key: 'shell.autoApproveMode', value: 'auto' }],
+      }),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    await expect(
+      observer.host.launchSession({
+        cwd: workspace,
+        selection: { kind: 'resume', sessionId },
+        clientMode: 'interactive',
+        approvalMode: 'unattended',
+      }),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    await expect(observer.host.rpc.request('session.acp.set_mcp', { sessionId, servers: [] })).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+    const second = startAcp(cliPath, acpEnv, permissions);
+    await second.context.request(acp.methods.agent.initialize, {
+      protocolVersion: acp.PROTOCOL_VERSION,
+      clientInfo: { name: 'term2-acp-daemon-integration', version: '1' },
+    });
+    // As the writer lock refuses a second in-process ACP process.
+    await expect(
+      second.context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] }),
+    ).rejects.toMatchObject({ code: -32010 });
+
+    // The holder clears its servers and leaves Always behind, then exits: the daemon still
+    // ends every MCP process the session had, and the session stays.
+    await first.context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] });
     expect(alive(reopenedMcp)).toBe(true);
+    await first.context.request(acp.methods.agent.session.setConfigOption, {
+      sessionId,
+      configId: 'approval_mode',
+      value: 'always',
+    });
     first.child.stdin.end();
     await expect(first.exited).resolves.toEqual({ code: 0, signal: null });
     await expect.poll(() => alive(reopenedMcp), { timeout: 10_000 }).toBe(false);
     expect(await daemonSessions()).toContain(sessionId);
-    expect(savedSettings()).toBe(preferences);
     expect(first.stderr()).not.toContain('detach failed');
-  }, 90_000);
+
+    // A new ACP client takes over the still-live session in Ask, as a new in-process ACP process would.
+    const loaded = await second.context.request(acp.methods.agent.session.load, {
+      sessionId,
+      cwd: workspace,
+      mcpServers,
+    });
+    expect(option(loaded, 'approval_mode')).toMatchObject({ currentValue: 'ask' });
+    const asked = permissions.length;
+    await second.context.request(acp.methods.agent.session.prompt, {
+      sessionId,
+      prompt: [{ type: 'text', text: 'Call fixture MCP after takeover' }],
+    });
+    expect(permissions.length).toBe(asked + 1);
+
+    // Another client closes it under the ACP client: a configuration write reopens it with the
+    // ACP surface (Ask, sandbox), never the saved 'always' or the saved sandbox preference.
+    await observer.host.closeSession!(LOCAL_PRINCIPAL, sessionId);
+    const rewritten = await second.context.request(acp.methods.agent.session.setConfigOption, {
+      sessionId,
+      configId: 'thinking_level',
+      value: 'low',
+    });
+    expect(option(rewritten, 'approval_mode')).toMatchObject({ currentValue: 'ask' });
+    const reopened = (await observer.host.readSettings({ view: 'tui', sessionId })) as {
+      settings: { entries: Record<string, { value: unknown }> };
+    };
+    expect(reopened.settings.entries['shell.autoApproveMode']?.value).toBe('off');
+    expect(reopened.settings.entries['sandbox.enabled']?.value).toBe(true);
+    second.child.stdin.end();
+    await expect(second.exited).resolves.toEqual({ code: 0, signal: null });
+    expect(savedSettings()).toBe(preferences);
+  }, 120_000);
 });

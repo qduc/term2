@@ -164,7 +164,7 @@ export class DaemonRpc {
               retryable: true,
             });
           }
-          return await this.deps.v11!.launchSession!(principal, parsed);
+          return await this.deps.v11!.launchSession!(principal, parsed, context?.connection);
         };
         const targetId =
           parsed.selection.kind !== 'new' && parsed.selection.sessionId !== 'last'

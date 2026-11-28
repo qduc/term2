@@ -8,17 +8,25 @@
  * same `createAcpSessions` that in-process ACP uses, so validation, atomic replacement,
  * stdio environment and tool generations do not fork.
  *
- * An installation lives no longer than the session or the Unix connection that made it
- * (`local_leases`): connection EOF closes its MCP processes and rebuilds the session's
- * tools without them, as the end of an in-process ACP process would have.
+ * One Unix connection holds an ACP session from its ACP admission (`session.launch` with
+ * `clientMode: 'acp'`) until that connection ends, as one in-process ACP process holds
+ * the session's writer lock. Only the holder may admit it again or change its MCP
+ * servers (`local_leases`). The holder's EOF closes every MCP process the session ever
+ * had and rebuilds its tools without them; session close does the same. While a holder
+ * lives, the session reopens only with the ACP surface, whoever reopens it.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import type { DirectConnection, DirectHostLifecycleEvent, Principal } from '../../host/in-process-direct-types.js';
 import { ClientApiRpcError } from '../../host/daemon/daemon-errors.js';
-import type { DaemonRpcConnectionContext as DaemonConnection } from '../../host/daemon/daemon-rpc-v11.js';
+import type {
+  DaemonRpcConnectionContext as DaemonConnection,
+  DaemonV11ControlPort,
+} from '../../host/daemon/daemon-rpc-v11.js';
 import type { SessionIndex } from '../../host/daemon/session-index.js';
 import type { ModelRef } from '../../model/index.js';
+import type { SessionLaunchParams, SettingsUpdateParamsV11 } from '../../protocol/client-api/client-api-schema.js';
 import { createDirectMcpRefresh } from '../application-mcp.js';
 import type { DirectApplication } from '../application.js';
 import { LOCAL_PRINCIPAL, requireLocalCaller } from '../application-workspaces.js';
@@ -51,6 +59,14 @@ function rpcError(error: unknown): unknown {
   return new ClientApiRpcError(error.code === -32602 ? 'invalid_request' : 'unavailable', error.message);
 }
 
+const weakerApproval = (mode: unknown) => mode === 'auto' || mode === 'unattended';
+const unreviewed = () =>
+  new ClientApiRpcError(
+    'unavailable',
+    'Assisted and Unattended approval are not available for ACP sessions over the term2 daemon yet; run term2 acp with TERM2_IN_PROCESS=1 to use them.',
+  );
+const sandboxRequired = () => new ClientApiRpcError('invalid_request', 'ACP sessions require the sandbox.');
+
 export type DaemonAcpDeps = {
   readonly app: DirectApplication;
   /** The daemon's own settings: they decide which models an ACP session may move to. */
@@ -68,9 +84,13 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
     return root;
   };
   const sessions = createAcpSessions();
-  const owners = new Map<string, string>();
+  /** Session id to the connection holding it as its ACP client. */
+  const holders = new Map<string, string>();
+  /** Sessions given MCP servers since they opened, retired managers included. */
+  const installed = new Set<string>();
   const watched = new Set<string>();
   const chains = new Map<string, Promise<unknown>>();
+  const launching = new AsyncLocalStorage<DaemonConnection | undefined>();
   const catalogListeners = new Set<() => void>();
   const refresh = createDirectMcpRefresh(
     {
@@ -98,7 +118,7 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
 
   const connect = (sessionId: string) => async (): Promise<DirectConnection> => {
     const connection = await deps.app.host.connect(LOCAL_PRINCIPAL, sessionId);
-    // A session closed meanwhile reopens without the ACP surface; never install into it.
+    // A session closed meanwhile may have reopened without its holder; never install into it.
     if (!deps.isAcpSession(sessionId)) {
       connection.close();
       throw new ClientApiRpcError('not_found', 'Session is not open as an ACP session.');
@@ -106,11 +126,11 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
     return connection;
   };
 
-  /** Close one session's MCP processes; a session that stays open rebuilds its tools without them when idle. */
+  /** Close every MCP process the session had; a session that stays open rebuilds its tools without them when idle. */
   const release = async (sessionId: string, open: boolean): Promise<void> => {
-    owners.delete(sessionId);
+    const had = installed.delete(sessionId);
     await sessions.close(sessionId);
-    if (open) for (const listener of catalogListeners) listener();
+    if (open && had) for (const listener of catalogListeners) listener();
   };
 
   const watch = (connection: DaemonConnection): void => {
@@ -118,13 +138,50 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
     watched.add(connection.connectionId);
     connection.onDisconnect(() => {
       watched.delete(connection.connectionId);
-      for (const [sessionId, owner] of owners) {
-        if (owner !== connection.connectionId) continue;
-        void serialize(sessionId, async () => {
-          if (owners.get(sessionId) === connection.connectionId) await release(sessionId, true);
-        }).catch((error: unknown) => warn(`ACP MCP cleanup for ${sessionId} failed: ${String(error)}`));
+      for (const [sessionId, holder] of holders) {
+        if (holder !== connection.connectionId) continue;
+        holders.delete(sessionId);
+        void serialize(sessionId, () => release(sessionId, true)).catch((error: unknown) =>
+          warn(`ACP MCP cleanup for ${sessionId} failed: ${String(error)}`),
+        );
       }
     });
+  };
+
+  /**
+   * Runs after a launch opened or found its session, before any configuration applies.
+   * A live session keeps the surface it opened with, so ACP never drives another
+   * client's, and one ACP client holds a session at a time (in-process: the writer
+   * lock). A new holder starts in Ask, as a new in-process ACP process does. Assisted and
+   * Unattended rely on ACP v1's sandboxed-shell review, which a launch cannot ask for
+   * (`clientMode` has no ACP version); without it they would run mutating sandboxed
+   * commands unreviewed, so no client may put an ACP session in them.
+   */
+  const admitLaunch = async (sessionId: string, params: SessionLaunchParams): Promise<void> => {
+    const acpSession = deps.isAcpSession(sessionId);
+    if (params.clientMode !== 'acp') {
+      if (acpSession && weakerApproval(params.approvalMode)) throw unreviewed();
+      if (acpSession && params.sandboxEnabled === false) throw sandboxRequired();
+      return;
+    }
+    if (!acpSession)
+      throw new ClientApiRpcError('busy', 'Session is open for another client; close it before resuming it over ACP.');
+    if (weakerApproval(params.approvalMode)) throw unreviewed();
+    if (params.sandboxEnabled === false) throw sandboxRequired();
+    const connection = launching.getStore();
+    if (!connection) throw new ClientApiRpcError('invalid_request', 'ACP sessions need a connection-bound launch.');
+    const holder = holders.get(sessionId);
+    if (holder === connection.connectionId) return;
+    if (holder !== undefined) throw new ClientApiRpcError('busy', 'Session is open in another ACP client.');
+    if ((await deps.app.sessionConfiguration(sessionId)).approvalMode !== 'off') {
+      try {
+        await deps.app.applyLaunchConfiguration(sessionId, {}, 'off');
+      } catch (error) {
+        throw new ClientApiRpcError('busy', error instanceof Error ? error.message : String(error));
+      }
+    }
+    holders.set(sessionId, connection.connectionId);
+    watch(connection);
   };
 
   return {
@@ -138,26 +195,28 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
         dispose: async () => refresh.untrack(sessionId),
       };
     },
+    /** A live ACP client holds this session: it reopens only with the ACP surface. */
+    holds: (sessionId: string) => holders.has(sessionId),
     authorizeModel: (next: ModelRef, previous: ModelRef) => authorizeAcpModel(deps.selection.settings, next, previous),
-    /**
-     * Runs after a launch opened or found its session, before any configuration applies.
-     * A live session keeps the surface it opened with, so ACP never drives another
-     * client's (in-process: the writer lock). Assisted and Unattended rely on ACP v1's
-     * sandboxed-shell review, which a launch cannot ask for (`clientMode` has no ACP
-     * version); without it they would run mutating sandboxed commands unreviewed.
-     */
-    admitLaunch(sessionId: string, params: { readonly clientMode?: string; readonly approvalMode?: string }): void {
-      if (params.clientMode !== 'acp') return;
-      if (!deps.isAcpSession(sessionId))
-        throw new ClientApiRpcError(
-          'busy',
-          'Session is open for another client; close it before resuming it over ACP.',
-        );
-      if (params.approvalMode === 'auto' || params.approvalMode === 'unattended')
-        throw new ClientApiRpcError(
-          'unavailable',
-          'Assisted and Unattended approval are not available over the term2 daemon yet; run term2 acp with TERM2_IN_PROCESS=1 to use them.',
-        );
+    admitLaunch,
+    /** Launches carry their connection to `admitLaunch`; a settings write may not weaken an ACP session. */
+    guardV11(port: DaemonV11ControlPort): Pick<DaemonV11ControlPort, 'launchSession' | 'updateScopedSettings'> {
+      return {
+        launchSession: (principal, params, connection) =>
+          launching.run(connection, () => port.launchSession!(principal, params)),
+        updateScopedSettings(principal, params: SettingsUpdateParamsV11) {
+          if (params.sessionId && deps.isAcpSession(params.sessionId)) {
+            for (const change of params.changes) {
+              // A reset restores the saved preference, which may be either.
+              const value = 'reset' in change ? undefined : change.value;
+              if (change.key === 'shell.autoApproveMode' && (value === undefined || weakerApproval(value)))
+                throw unreviewed();
+              if (change.key === 'sandbox.enabled' && value !== true) throw sandboxRequired();
+            }
+          }
+          return port.updateScopedSettings!(principal, params);
+        },
+      };
     },
     async setMcp(
       principal: Principal,
@@ -171,7 +230,15 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
         if (!deps.isAcpSession(sessionId)) {
           throw new ClientApiRpcError('not_found', 'Session is not open as an ACP session.');
         }
-        if (mcpServers.length === 0 && !owners.has(sessionId)) return;
+        if (holders.get(sessionId) !== connection.connectionId) {
+          throw new ClientApiRpcError(
+            'forbidden',
+            'Only the ACP client holding this session may change its MCP servers.',
+          );
+        }
+        if (mcpServers.length === 0 && !installed.has(sessionId)) return;
+        // Marked first: a holder that disconnects mid-install still releases whatever this starts.
+        installed.add(sessionId);
         try {
           const opened = await sessions.open(
             { cwd: await sessionRoot(sessionId), sessionId, mcpServers },
@@ -181,12 +248,6 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
         } catch (error) {
           throw rpcError(error);
         }
-        if (mcpServers.length === 0) {
-          owners.delete(sessionId);
-          return;
-        }
-        owners.set(sessionId, connection.connectionId);
-        watch(connection);
       });
     },
     observeLifecycle(event: DirectHostLifecycleEvent): void {
@@ -198,7 +259,7 @@ export function createDaemonAcp(deps: DaemonAcpDeps) {
     async close(): Promise<void> {
       refresh.close();
       await sessions.shutdown();
-      owners.clear();
+      holders.clear();
     },
   };
 }

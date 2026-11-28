@@ -444,13 +444,21 @@ opened with the ACP flag that policy through `DirectRuntimeOptions.sessionPolicy
 the ACP model rule, and only the MCP servers its ACP client supplies, never the
 daemon's per-workspace pool. `session.acp.set_mcp` runs them through
 `createAcpSessions`, so validation, atomic replacement and tool generations are
-the in-process ones. The calling connection owns an installation: its EOF, like
-session close, closes the servers, and a session that stays open rebuilds its
-tools without them. The ACP client sends stdio servers its own default MCP
+the in-process ones.
+
+The Unix connection whose ACP launch admitted a session holds it until that
+connection ends, as one in-process ACP process holds the writer lock: another
+ACP launch onto it is refused (`busy`), only the holder may change its MCP
+servers (`forbidden` for anyone else), and a new holder starts in Ask. The
+holder's EOF closes every MCP process the session had, including servers it
+cleared or replaced, and a session that stays open rebuilds its tools without
+them; session close closes them too. While a holder lives, the session reopens
+only with the ACP surface, whoever reopens it (`holds`, read by the daemon's
+`policyForSession`). The ACP client sends stdio servers its own default MCP
 environment (HOME, PATH, USER and the rest that the MCP SDK passes on), so the
-daemon's environment never reaches them. `admitLaunch` refuses an ACP launch onto
-a session live under another client's surface, and Assisted or Unattended
-approval, which need ACP v1's sandboxed-shell review that a launch cannot request.
+daemon's environment never reaches them. No client may put an ACP session in
+Assisted or Unattended (launch or `settings.update`), which need ACP v1's
+sandboxed-shell review that a launch cannot request, or turn its sandbox off.
 
 ## Serve workspace grants
 

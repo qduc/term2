@@ -164,10 +164,13 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     let pendingCreatePolicy: SessionApprovalPolicy | undefined;
     let pendingLaunchFlags: DaemonLaunchFlags | undefined;
     const policyForSession = (sessionId: string): SessionApprovalPolicy | undefined => {
-      if (pendingCreatePolicy !== undefined && !sessionPolicies.has(sessionId)) {
+      // A session a live ACP client holds reopens only with the ACP surface, whoever reopens it.
+      const held = daemonAcp?.holds(sessionId) === true;
+      if (held && !sessionLaunchFlags.has(sessionId)) sessionLaunchFlags.set(sessionId, { clientMode: 'acp' });
+      if (!held && pendingCreatePolicy !== undefined && !sessionPolicies.has(sessionId)) {
         sessionPolicies.set(sessionId, pendingCreatePolicy);
       }
-      if (pendingLaunchFlags !== undefined && !sessionLaunchFlags.has(sessionId)) {
+      if (!held && pendingLaunchFlags !== undefined && !sessionLaunchFlags.has(sessionId)) {
         sessionLaunchFlags.set(sessionId, pendingLaunchFlags);
       }
       return sessionPolicies.get(sessionId);
@@ -353,24 +356,26 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       return shutdownPromise;
     };
 
+    const baseV11Port = createDaemonV11Port({
+      app: localOwnerApp,
+      sessionIndex,
+      mutations,
+      configuration,
+      productSettings: product.service,
+      localWorkspaceIdForRoot,
+      recordLocalWorkspace,
+      resolveWorkspaceRoot,
+      setPendingCreatePolicy: (policy) => {
+        pendingCreatePolicy = policy;
+      },
+      setPendingLaunchFlags: (flags) => {
+        pendingLaunchFlags = flags;
+      },
+      admitLaunch: (sessionId, params) => activeDaemonAcp.admitLaunch(sessionId, params),
+    });
     const v11Port = {
-      ...createDaemonV11Port({
-        app: localOwnerApp,
-        sessionIndex,
-        mutations,
-        configuration,
-        productSettings: product.service,
-        localWorkspaceIdForRoot,
-        recordLocalWorkspace,
-        resolveWorkspaceRoot,
-        setPendingCreatePolicy: (policy) => {
-          pendingCreatePolicy = policy;
-        },
-        setPendingLaunchFlags: (flags) => {
-          pendingLaunchFlags = flags;
-        },
-        admitLaunch: (sessionId, params) => activeDaemonAcp.admitLaunch(sessionId, params),
-      }),
+      ...baseV11Port,
+      ...activeDaemonAcp.guardV11(baseV11Port),
       serveStart: activeServeLeases.startLease.bind(activeServeLeases),
       serveStop: activeServeLeases.stopLease.bind(activeServeLeases),
       acpSetMcp: activeDaemonAcp.setMcp,

@@ -86,7 +86,7 @@ export type DaemonV11Deps = {
   readonly setPendingCreatePolicy: (policy: SessionApprovalPolicy | undefined) => void;
   readonly setPendingLaunchFlags: (flags: DaemonLaunchFlags | undefined) => void;
   /** Refuses a launch whose client mode the live session's surface does not match. */
-  readonly admitLaunch?: (sessionId: string, params: SessionLaunchParams) => void;
+  readonly admitLaunch?: (sessionId: string, params: SessionLaunchParams) => void | Promise<void>;
   readonly sessionItemOrFallback: (principal: Principal, sessionId: string) => Promise<ClientApiSessionListItem>;
   readonly recentSettingsReceipts: Map<string, Record<string, unknown>>;
 };
@@ -200,7 +200,7 @@ async function launchDaemonSession(
     conn = await withPending(() => deps.app.host.connect(principal, sessionId));
   }
   try {
-    deps.admitLaunch?.(sessionId, params);
+    await deps.admitLaunch?.(sessionId, params);
     if (approvalMode !== undefined || Object.keys(launchConfig).length > 0) {
       try {
         await deps.app.applyLaunchConfiguration(sessionId, launchConfig, approvalMode);

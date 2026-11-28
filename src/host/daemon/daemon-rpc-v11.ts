@@ -28,7 +28,11 @@ export type DaemonRpcConnectionContext = {
 };
 
 export type DaemonV11ControlPort = {
-  launchSession?(principal: Principal, params: SessionLaunchParams): Promise<Record<string, unknown>>;
+  launchSession?(
+    principal: Principal,
+    params: SessionLaunchParams,
+    connection?: DaemonRpcConnectionContext,
+  ): Promise<Record<string, unknown>>;
   canonicalizeCwd?(principal: Principal, cwd: string): string;
   handoffSessionV11?(
     principal: Principal,

@@ -6,6 +6,16 @@ base (`f59ad21`). It is kept only as WIP commit `d00c42abc` on branch
 `step14e-part2b-acp`, and is not for landing. Everything below was re-applied and
 re-verified on main's layout.
 
+**Round 2 (after verifier reject of `d5b001030`).** Fixed D1 (MCP processes outlived
+their owner after a clear; a foreign client could clear another's servers), D2 (a new
+ACP client inherited a live session's approval mode; a second ACP client was admitted
+onto a held session) and D3 (a configuration write after a foreign close reopened the
+session under the default surface and persisted defaults), plus the minor findings
+(Assisted/Unattended and sandbox-off via `settings.update` or a non-ACP launch on an
+ACP session; `sandboxEnabled:false` on an ACP launch). All with one model: **an ACP
+holder** (decision 2 below). The verifier's probes T1 to T9 now all show the fixed
+behaviour against the rebuilt bundle (summarized under "Verifier probes").
+
 ## What changed, by file
 
 - `src/app/acp/launch-acp.ts`: with `TERM2_DAEMON_MODE=1` and no `TERM2_IN_PROCESS=1`,
@@ -39,11 +49,15 @@ re-verified on main's layout.
   - `createDaemonAcp` wraps the in-process `createAcpSessions`, so validation, atomic
     replacement, retired generations and stdio spawning do not fork.
   - It adds strict zod parsing of the frozen `servers: Record<string, unknown>[]` into
-    the ACP v1 `McpServer` union, per-session serialization, and connection ownership
-    (`onDisconnect`).
-  - It adds release on session close and on owner EOF; EOF also rebuilds the still-open
-    session's tools through a `createDirectMcpRefresh` tracker.
-  - It provides the ACP model rule and `admitLaunch`.
+    the ACP v1 `McpServer` union and per-session serialization.
+  - It keeps the ACP **holder** of each session: the Unix connection whose ACP launch
+    admitted it, recorded in `admitLaunch` from the launch's connection, which an
+    `AsyncLocalStorage` set in `guardV11().launchSession` carries.
+  - It releases every MCP process a session had (current and retired) on session close
+    and on holder EOF; EOF also rebuilds the still-open session's tools through a
+    `createDirectMcpRefresh` tracker.
+  - It provides the ACP model rule, `admitLaunch`, `holds`, and `guardV11` (launch
+    connection plumbing plus the `settings.update` guard for ACP sessions).
 - `src/app/acp/acp-sessions.ts`: exports the existing validator as
   `resolveAcpMcpServers`; it was renamed only.
 - `src/app/application-runtime.ts`: new optional
@@ -59,16 +73,21 @@ re-verified on main's layout.
   - `prepareSurface` sends ACP sessions to `daemonAcp.prepare` instead of the
     per-workspace pool.
   - `surface.mcp` is the ACP source for ACP sessions.
-  - The lifecycle hook, v11 port `acpSetMcp` and `admitLaunch` are wired in.
+  - The lifecycle hook, v11 port `acpSetMcp`, `admitLaunch` and `guardV11` are wired in.
+  - `policyForSession`: a session a live ACP holder holds reopens with the ACP flag and
+    no pending local policy or flags, whoever reopens it.
   - Shutdown closes `daemonAcp`.
   - The launch-flag type is deduplicated as `DaemonLaunchFlags`.
 - `src/app/daemon/daemon-v11-ops.ts`:
   - exports `DaemonLaunchFlags`;
-  - adds an optional `admitLaunch(sessionId, params)` dep, called after the launch has
-    its session and before any configuration applies;
+  - adds an optional async `admitLaunch(sessionId, params)` dep, awaited after the
+    launch has its session and before any configuration applies;
   - folds the two copies of the pending-policy/flags bracket into one `withPending`
     helper. That keeps the file at 500 lines; it was already at the 500 limit.
-- `src/host/daemon/daemon-rpc-v11.ts` (shared, additive): `DaemonV11ControlPort.acpSetMcp?`.
+- `src/host/daemon/daemon-rpc.ts`: `session.launch` passes its connection to
+  `launchSession` (one argument added on an existing line; the file stays at 500).
+- `src/host/daemon/daemon-rpc-v11.ts` (shared, additive): `DaemonV11ControlPort.acpSetMcp?`
+  and an optional `connection` argument on `launchSession`.
   `handleLocalLeaseMethod` now backs `session.acp.set_mcp`, with strict schema parsing
   and a required connection. `session.control.*` still answers `unavailable`, for the
   control agent.
@@ -91,12 +110,19 @@ re-verified on main's layout.
    - Editor-supplied servers carry editor-supplied env, headers and cwd, so they must
      not leak to other sessions in the same workspace. The in-process test already
      asserts sibling isolation.
-2. **`set_mcp` is bound to the calling connection, and cleaned up on session close.**
+2. **One connection holds an ACP session; `set_mcp` is bound to it and cleaned up on
+   session close.**
+   - The connection whose ACP `session.launch` admitted a session holds it until that
+     connection ends, as one in-process ACP process holds the writer lock. Another ACP
+     launch onto it is refused (`busy`, v1 -32010). Only the holder may call `set_mcp`
+     for it (`forbidden` for anyone else: the caller is authenticated, just not the
+     holder). The holder may re-launch it (approval changes) without losing it.
    - D010 lists `session.acp.set_mcp` among the connection-bound local leases. The spec
-     line says "cleanup on session close", and both hold. An installation is owned by
-     the connection whose `set_mcp` last succeeded. Its EOF closes the servers (current
-     and retired managers) and rebuilds the session's tools without them once idle.
-     Session close does the same.
+     line says "cleanup on session close", and both hold. Holder EOF closes every MCP
+     process the session had since it opened, whatever clear or replace sequence came
+     before (retired managers included), and rebuilds the session's tools without them
+     once idle. Session close does the same, but keeps the holder: while the holder
+     lives, the session reopens only with the ACP surface (decision 4).
    - Without the binding, MCP processes that carry the editor's env would outlive the
      editor and stay callable from any later client of that session. That is wider
      than in-process, where the processes die with the ACP process.
@@ -116,8 +142,22 @@ re-verified on main's layout.
      refused with `busy`, which v1 reports as -32010. In-process, the writer lock
      refuses the same case; in the daemon, accepting it would let ACP drive a session
      built with TUI posture (unsandboxed allowed, possibly `always`).
-   - Assisted and Unattended are refused (`unavailable`, see gap G1); they are never
-     accepted with weaker review.
+   - A new holder starts in Ask. If the session is live in another mode (left by a
+     previous holder), admission applies Ask before any requested configuration, as a
+     new in-process ACP process reopens at Ask. If background work makes that change
+     impossible, the admission is refused (`busy`) rather than handing over a weaker
+     mode.
+   - Assisted and Unattended are refused (`unavailable`, see gap G1) for ACP sessions
+     from every daemon path: an ACP launch, a non-ACP resume launch, and
+     `settings.update` (`shell.autoApproveMode` auto, unattended or reset). Turning the
+     sandbox off is refused the same way (`sandboxEnabled:false` on any launch,
+     `sandbox.enabled` false or reset through `settings.update`).
+   - While a holder lives, a reopened session (for example after another client's
+     `session.close`) gets the ACP flag in `policyForSession`, so it reopens with the
+     ACP surface and `sessionPolicy` (Ask, sandbox, no saved-default writes), never the
+     default local surface, whoever reopens it. That closes D3: an ACP configuration
+     read or write after a foreign close reopens the session under ACP posture. Its MCP
+     servers are gone (closed with the session) until the client reloads them.
 5. **MCP process environment.** The daemon spawns stdio servers through the same
    `McpConnectionManager`, and the MCP SDK passes only HOME, LOGNAME, PATH, SHELL,
    TERM and USER plus the server's own env. The client fills those six from its own
@@ -159,16 +199,20 @@ re-verified on main's layout.
     resume them until they are closed. In-process the lock is released at exit.
   - Owner question: close idle sessions when their last client detaches, or rebuild
     the surface per client mode?
-- **G4. Residual race.** Only `session/new` and `session/load`/`resume` re-admit through
-  `session.launch`. Re-admitting on every attach would cost a store scan each time.
-  Configuration reads and writes attach plainly. If another local client closes an ACP
-  session while ACP still shows it, a later ACP configuration read reopens it under the
-  daemon's default local surface. It needs the same local user acting from another
-  client. Owner question: should the daemon remember `clientMode` across close?
-- **G5. A resumed live ACP session keeps its current approval mode.** In-process, a new
-  ACP process reopens at Ask. The current mode is visible to the client in config
-  options. A resume launch does not force Ask: `applyLaunchConfiguration` refuses any
-  approval change while background work runs, so forcing it would break resume.
+- **G4 (closed in round 2).** A foreign close no longer lets an ACP configuration
+  read or write reopen the session under the default surface (decision 4).
+- **G5 (closed in round 2).** A new holder starts in Ask (decision 4).
+- **Holder after the ACP client's own `session/close`.** The holder is kept until its
+  connection ends, so while that ACP process lives, another ACP process cannot load the
+  session it closed. In-process, the closed session's lock is released at once. This
+  only ever refuses; the daemon cannot tell who closed a session.
+- **`pendingLaunchFlags` stays daemon-wide (not fixed).** Launches are serialized
+  (`DaemonRpc` `#createLock`), so only a concurrent plain `session.attach` that opens a
+  dormant session during a launch can pick up the launch's flags. That makes the other
+  session stricter (an ACP flag) or causes a spurious `busy`; a session a live ACP
+  holder holds ignores pending flags. Keying per launch needs the new session's id
+  before `createSession` returns it, which means a store change, so it is not
+  straightforward.
 - **Model catalog.** The ACP process still lists models itself (local settings,
   disk-cached catalog), exactly as in-process. The daemon authorizes moves against the
   same shared disk cache. That is thinner-client debt, not a posture change. A
@@ -182,8 +226,8 @@ re-verified on main's layout.
 
 `tests/clients/acp/daemon.integration.test.ts`, one journey. It uses the built CLI: a
 foreground `term2 daemon start`, whose env has a provider key and a marker PATH, and
-one `term2 acp` (v1). Vitest time is about 3.1 s; it makes 2 built-CLI launches. The
-journey checks:
+two `term2 acp` (v1) processes. Vitest time is about 4.7 s; it makes 3 built-CLI
+launches. The journey checks:
 
 - the session is in the daemon's Unix `session.list`;
 - the MCP server's parent pid is the daemon;
@@ -197,8 +241,17 @@ journey checks:
 - cancel resolves `cancelled`;
 - session close kills the MCP process;
 - an ACP load of a live interactive session is refused;
-- reopen, then ACP exit (code 0): the MCP process is gone, the session is still in the
-  daemon, and `settings.json` is unchanged.
+- on the reopened session, all of these are refused: `settings.update` to Auto
+  (`unavailable`), an interactive resume launch with Unattended (`unavailable`), a
+  foreign `set_mcp` clear (`forbidden`), and a second ACP process's load (-32010);
+- the holder clears its servers (`session/load` with `[]`), sets Always, and exits
+  (code 0): the cleared MCP process is gone (D1) and the session stays in the daemon;
+- the second ACP process then loads the still-live session: it is in Ask, and its next
+  `run_code` asks for permission (D2);
+- an observer closes the session under the second client; the client's configuration
+  write reopens it with Ask and `sandbox.enabled` true, not the saved `always`/`false`
+  (D3);
+- `settings.json` is unchanged at the end.
 
 Each red proof below was made by patching `dist/src/app/cli.bundle.cjs` on the new
 base and restoring it afterwards (`cmp` confirmed the restore). Every one went red:
@@ -215,6 +268,37 @@ base and restoring it afterwards (`cmp` confirmed the restore). Every one went r
 | client stdio default env | MCP saw the daemon's PATH |
 | ACP sessions bypass the workspace pool | user `mcp.json` server started |
 
+Round 2 used the same method (private bundle backup, `cmp` after restore) on the bundle
+rebuilt from the round-2 code. The nine proofs above were rerun on it and all went red
+(the EOF proof now disables the holder-EOF release). These were added:
+
+| Disabled | Failing assertion |
+| --- | --- |
+| D1: old design reintroduced (a clear drops the installation marker; release skips unmarked sessions) | cleared MCP pid alive after holder exit |
+| D2: reset to Ask for a new holder | second client sees Always |
+| T4: one ACP holder per session | second client's load resolved |
+| T5: holder-only `set_mcp` | foreign clear resolved |
+| D3: holder precedence in `policyForSession` | reopened session not in Ask |
+| `settings.update` guard | Auto accepted |
+| non-ACP launch guard | interactive Unattended resume accepted |
+
+## Verifier probes (rerun by the author against the round-2 bundle)
+
+The probe file was read from the verifier's folder; nothing was written there.
+
+- T1: the cleared pid is dead 4 s after ACP exit.
+- T2/T2b: `settings.update` to auto is refused (`unavailable`).
+- T3: an interactive Unattended resume is refused. An ACP resume with
+  `sandboxEnabled:false` is refused (`invalid_request`); the sandbox stays on and
+  outside writes are refused.
+- T4: a second ACP load is refused (-32010).
+- T5: a foreign clear is refused (`forbidden`); the old pid dies when its owner exits.
+- T6: a config write after a foreign close reopens the session in Ask with the sandbox
+  on; the `settings.json` diff is empty; outside writes are refused.
+- T7b: the second client sees Ask, and `run_code` asks for one permission.
+- T8: the MCP process is gone after daemon shutdown.
+- T9: the MCP process is gone after an ACP SIGKILL mid-`set_mcp`.
+
 There is also a temporary, uncommitted check. The existing `v1.integration` and
 `spec.integration` suites were rerun under `TERM2_DAEMON_MODE=1` with isolated
 daemons. 24 of 30 passed: all v2 cases (lifecycle, cancellation, questions, signals),
@@ -222,7 +306,7 @@ and in v1 the MCP stdio/http/sse cases, redirect, the cold-cache model selector,
 updates and provider failure. The 6 failures are G2 (title, 1) and G1 (5 shell or
 Assisted cases). The copies were deleted and their daemons stopped.
 
-## Commands and results (new base, built after the last code edit)
+## Commands and results (round 2, built after the last code edit)
 
 - `pnpm build`: OK.
 - `npx tsc --noEmit`: clean.

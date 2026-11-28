@@ -19,8 +19,21 @@ Tracks every step of [the singleton daemon plan](README.md), its status, key art
 | 13 | Prototype session-list stream (web sidebar) & feed back into review | Done | `SessionIndex`, `GET /sessions/events`, BFF + web sidebar live push (17/17 browser flows pass) | `3c37277` |
 | 12 | Recheck draft spec & freeze Client API v1.0 | Done | Frozen 2026-11-27 (D008) | `3c37277` |
 | 14a | Daemon core (Unix socket + lifecycle + headless policy + sandbox lease fix) | Done | `DaemonUnixServer`, `DaemonRpc`, `GlobalMutationCoordinator`, `startTerm2Daemon`, `connectOrStartDaemon`, `term2 daemon [start\|status\|stop]`, D003 session-owned headless approvals, scoped sandbox leases | `bf0ef68` |
-| 14b | Remote `DirectConnection` over Unix socket | Done | `UnixRpcClient`, `createRemoteDirectHost`, `connectRemoteDirectHost`, `remote-direct-host.integration.test.ts` | pending PR |
-| 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | pending PR |
-| 14d | TUI zoom-in + TUI client over daemon | Next | Depends on Step 14c | — |
-| 14e | Control socket, Discord (and ACP) clients over daemon | Pending | Depends on Step 14d | — |
+| 14b | Remote `DirectConnection` over Unix socket | Done | `UnixRpcClient`, `createRemoteDirectHost`, `connectRemoteDirectHost`, `remote-direct-host.integration.test.ts` | `7a2c636c0` |
+| 14c | Headless client over daemon | Done | Opt-in `TERM2_DAEMON_MODE=1` in `launch-headless.ts` + built-CLI headless-over-daemon integration test | `7a2c636c0` |
+| 14d | TUI zoom-in + TUI client over daemon | In progress | [TUI design and migration order](zoom/tui.md) | — |
+| 14e | Control socket, Discord, ACP, and web clients over daemon | Pending | Depends on Step 14d | — |
 | 14f | Default flip to daemon mode + in-process escape hatch + full verification | Pending | Depends on Step 14e | — |
+
+### Step 14d workspace and discovery
+
+The Unix catalog's local workspace IDs work for creation across daemon
+restarts. Skills and file reads accept session or workspace scope and reject
+malformed scope instead of using the daemon's working directory. These are
+implementations of existing v1.0 operations.
+
+The independent verifier reproduced create-by-alias failure on `7a2c636c0`.
+It also found that malformed skill requests had silently defaulted to the
+daemon's working directory. The corrected candidate passed independent Unix
+socket checks for the restart, scoped discovery, and malformed requests, and
+the three daemon and Client API integration suites.

@@ -54,3 +54,16 @@ Each architectural, protocol, or operational decision made during the singleton 
 - **Choice:** Freeze Client API `1.0` (`docs/plans/daemon/spec/{client-api,transport-unix,transport-http-sse}.md`, `src/protocol/client-api/client-api-schema.ts`, `docs/plans/daemon/spec/client-api.schema.json`). Any subsequent contract change MUST reopen design/review/freeze and negotiate via connect-time versioning per the standing rules.
 - **Why:** All Step 5 freeze gates passed with zero open blocking findings and live end-to-end confirmation across both transport and browser boundaries.
 
+## D009 — Stage TUI migration behind the existing application integration (2026-11-28)
+
+- **Context:** The [TUI zoom-in](zoom/tui.md) found that the terminal UI's app
+  adapter reads live runtime settings and owns several lifecycle operations.
+  Client API v1.0 alone cannot express every operation the TUI uses today.
+- **Choice:** Repair the existing workspace and attachment seams first. Keep
+  Ink and terminal input behavior shared. Change the app adapter to consume an
+  explicit backend, and reopen the Client API for the missing operations before
+  routing TUI traffic through the daemon.
+- **Why:** Side-by-side verification can exercise the same TUI in both modes.
+  Smaller changes keep the existing entry point usable while the daemon backend
+  gains parity.
+

@@ -265,6 +265,65 @@ describe('RemoteDirectHost over Unix Daemon (Step 14b)', () => {
     expect(statusAfterDispose.daemonId).toBe(daemonHandle.daemonId);
   });
 
+  it('round-trips local workspace aliases after restart and resolves skills and files in the session workspace', async () => {
+    const { stateDir, runtimeDir, socketPath, workspace, settingsDir } = makeSandboxRoot();
+    const skillDirectory = path.join(workspace, '.term2', 'skills', 'daemon-project-scope');
+    fs.mkdirSync(skillDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDirectory, 'SKILL.md'),
+      '---\nname: daemon-project-scope\ndescription: Test daemon workspace discovery.\n---\nPrivate skill instructions.\n',
+    );
+    fs.writeFileSync(path.join(workspace, 'daemon-project-file.txt'), 'workspace file');
+
+    const env = { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir };
+    const conversationsDir = path.join(stateDir, 'conversations');
+    const options = { stateDir, conversationsDir, socketPath, env };
+    const start = async () => {
+      const daemon = await startTerm2Daemon(options);
+      if (daemon.kind !== 'started') throw new Error('Expected an isolated test daemon.');
+      cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
+      const { host } = await connectRemoteDirectHost({ ...options, clientKind: 'test', allowAutoStart: false });
+      cleanups.push(() => host.dispose());
+      return { daemon, host };
+    };
+
+    const first = await start();
+    const connection = await first.host.createSession(LOCAL_PRINCIPAL, localGrant(workspace));
+    const { sessionId } = connection;
+    connection.close();
+    const { sessions } = await first.host.rpc.request<{ sessions: { id: string; workspaceId: string }[] }>(
+      'session.list',
+    );
+    const workspaceId = sessions.find(({ id }) => id === sessionId)?.workspaceId;
+    expect(workspaceId).toMatch(/^local_[a-f0-9]+$/);
+    await first.host.dispose();
+    await first.daemon.shutdown({ mode: 'immediate' });
+
+    const { host } = await start();
+    const reopened = await host.createSession(LOCAL_PRINCIPAL, { workspaceId: workspaceId!, access: 'read_write' });
+    expect(reopened.sessionId).not.toBe(sessionId);
+    reopened.close();
+    const expectedSkill = {
+      name: 'daemon-project-scope',
+      description: 'Test daemon workspace discovery.',
+      isProjectLevel: true,
+    };
+    expect(await host.listSkills({ sessionId })).toContainEqual(expectedSkill);
+    expect(await host.listSkills({ workspaceId })).toContainEqual(expectedSkill);
+    const bySession = await host.listSessionFiles(sessionId);
+    expect(bySession.entries).toContainEqual(expect.objectContaining({ path: 'daemon-project-file.txt' }));
+    expect(await host.rpc.request('workspaces.files', { workspaceId, refresh: true })).toEqual(bySession);
+    await expect(host.listSkills({ workspaceId: 'absent' })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(host.listSkills({ sessionId: 'conv_00000000-0000-4000-8000-000000000001' })).rejects.toMatchObject({
+      code: 'not_found',
+    });
+    for (const method of ['skills.list', 'workspaces.files']) {
+      for (const invalid of [{ sessionId: 42 }, { workspaceId: '' }, { typo: 'misspelled scope' }]) {
+        await expect(host.rpc.request(method, invalid)).rejects.toMatchObject({ code: 'invalid_request' });
+      }
+    }
+  });
+
   it('runs a real built-CLI headless turn through TERM2_DAEMON_MODE=1 with auto-started daemon and clean stop', async () => {
     const { root, stateDir, runtimeDir, socketPath, workspace } = makeSandboxRoot();
     const conversationsDir = path.join(stateDir, 'conversations');

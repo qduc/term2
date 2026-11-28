@@ -4,18 +4,22 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–14a merged (`65db33e`, `3c37277`, `bf0ef68`) and Steps 14b–14c (multiplexed `UnixRpcClient`, `RemoteDirectHost`/`DirectConnection` over Unix socket, `connectRemoteDirectHost`, and opt-in `TERM2_DAEMON_MODE=1` headless client over daemon) complete; next is Step 14d (TUI zoom-in + TUI client over daemon).
+- **Current phase:** Steps 0–14c merged (last PR [#470](https://github.com/qduc/term2/pull/470), `7a2c636c0`). Step 14d is in progress. The TUI zoom-in and its independent design review are complete.
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
   - [Step 8 scenario validation](step8-scenarios.md)
   - [Step 9 Client API inventory](step9-client-api-inventory.md)
   - [Client API v1.0 Core Spec (Frozen)](spec/client-api.md) · [Unix Binding](spec/transport-unix.md) · [HTTP+SSE Binding](spec/transport-http-sse.md) · [JSON Schema](spec/client-api.schema.json)
-  - [Step 11 Host & Runtime Zoom-In](zoom/host-and-runtime.md) · [Web Client Zoom-In](zoom/web-client.md)
+  - [Step 11 Host & Runtime Zoom-In](zoom/host-and-runtime.md) · [Web Client Zoom-In](zoom/web-client.md) · [TUI Zoom-In](zoom/tui.md)
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Step 14d (TUI zoom-in + TUI client over daemon), Step 14e (control socket + Discord + ACP + web over daemon), Step 14f (flip daemon mode to default + full verification + smoke runs).
+- **Next concrete actions:** Finish Step 14d's attachment and workspace seams,
+  review the needed Client API revision, then wire the daemon TUI backend and
+  verify it against the in-process entry point. Continue with Step 14e (control
+  socket, Discord, ACP, and web) and Step 14f (default flip, full verification,
+  and smoke runs).
 
 
 ## Goal

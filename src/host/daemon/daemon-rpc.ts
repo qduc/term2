@@ -27,6 +27,8 @@ import { openDaemonStream, type StreamRegistration } from './daemon-streams.js';
 
 export { ClientApiRpcError } from './daemon-errors.js';
 
+type WorkspaceScope = { readonly workspaceId?: string; readonly sessionId?: string };
+
 export type DaemonControlPort = {
   readonly daemonId: string;
   readonly daemonVersion: string;
@@ -53,7 +55,7 @@ export type DaemonControlPort = {
     principal: Principal,
     input: { readonly serverId: string; readonly workspaceId?: string },
   ): Promise<Record<string, unknown>>;
-  sessionFiles?(principal: Principal, sessionId: string): Promise<Record<string, unknown>>;
+  files?(principal: Principal, scope: WorkspaceScope): Promise<Record<string, unknown>>;
 };
 
 export type DaemonRpcDeps = {
@@ -66,7 +68,7 @@ export type DaemonRpcDeps = {
   readonly models?: () => readonly ModelCatalogEntry[] | Promise<readonly ModelCatalogEntry[]>;
   readonly skills?: (
     principal: Principal,
-    workspaceId?: string,
+    scope: WorkspaceScope,
   ) => readonly SkillSummary[] | Promise<readonly SkillSummary[]>;
 };
 
@@ -241,8 +243,8 @@ export class DaemonRpc {
       case 'workspaces.access':
         return await this.#handleWorkspaceAccess('changeAccess', principal, params);
       case 'skills.list': {
-        const workspaceId = typeof params['workspaceId'] === 'string' ? params['workspaceId'] : undefined;
-        return { skills: this.deps.skills ? await this.deps.skills(principal, workspaceId) : [] };
+        const scope = parseStrict(CLIENT_API_SCHEMAS.skillsListParams, params, 'skills.list');
+        return { skills: (await this.deps.skills?.(principal, scope)) ?? [] };
       }
       case 'mcp.status':
         return this.deps.control.mcpStatus
@@ -367,16 +369,13 @@ export class DaemonRpc {
   }
 
   async #handleWorkspaceFiles(principal: Principal, params: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (typeof params['workspaceId'] === 'string') {
-      if (!this.deps.workspaces?.listFiles) {
-        throw new ClientApiRpcError('unavailable', 'Workspace file listing unavailable.');
-      }
-      return (await this.deps.workspaces.listFiles(principal, params['workspaceId'])) as Record<string, unknown>;
+    const { workspaceId, sessionId } = parseStrict(CLIENT_API_SCHEMAS.workspaceFilesParams, params, 'workspaces.files');
+    if (!workspaceId && !sessionId) {
+      throw new ClientApiRpcError('invalid_request', 'Provide workspaceId or sessionId.');
     }
-    if (typeof params['sessionId'] === 'string' && this.deps.control.sessionFiles) {
-      return await this.deps.control.sessionFiles(principal, params['sessionId']);
-    }
-    throw new ClientApiRpcError('invalid_request', 'Provide workspaceId or sessionId.');
+    if (workspaceId && this.deps.workspaces?.listFiles) return this.deps.workspaces.listFiles(principal, workspaceId);
+    if (this.deps.control.files) return this.deps.control.files(principal, { workspaceId, sessionId });
+    throw new ClientApiRpcError('unavailable', 'Workspace file listing unavailable.');
   }
 
   async #handleWorkspaceAccess(

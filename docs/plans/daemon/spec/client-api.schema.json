@@ -1146,6 +1146,39 @@
       "required": ["revision", "settings"],
       "additionalProperties": {}
     },
+    "skillsListParams": {
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "workspaceFilesParams": {
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,256}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1F\\x7F]+$"
+        },
+        "refresh": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "unixSessionAttachResult": {
       "type": "object",
       "properties": {

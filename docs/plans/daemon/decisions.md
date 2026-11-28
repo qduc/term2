@@ -122,9 +122,24 @@ Each architectural, protocol, or operational decision made during the singleton 
     launch policy, which could otherwise hand a web session a headless
     auto-approve policy during a concurrent local create.
   - One lease per daemon; a second `daemon.serve.start` answers `busy`. Releasing a
-    lease (stop, EOF, shutdown) stops the listener; live web sessions keep running
-    in the daemon and are reachable again only through a later lease whose grants
-    admit them.
+    lease (stop, EOF, shutdown) stops the listener and then closes every live
+    web-bound session, even one a terminal is attached to. The first design left
+    them running; the independent verifier showed a session opened under an
+    `--allow-write` lease kept its write tools under a later read-only lease,
+    because an open session keeps the tools its grant gave it and the HTTP
+    authorize checks only that a grant exists with the same root. Closing them
+    makes a later lease reopen them through its own grants, as an in-process
+    restart does.
+  - The first serve state directory a daemon store is used with is recorded in
+    `<daemon state dir>/serve-state-dir`; a lease naming another one is refused.
+    Web-bound sessions record only `{ owner, grant id }` and every state directory
+    has a `host` grant, so without the pin a lease with other keys or trusted
+    devices could reach another state directory's `host` sessions. In-process serve
+    kept them apart with a conversation directory per state directory. Removing
+    the file moves the store's web sessions to the next state directory used.
+  - Web-bound sessions keep in-process serve's model catalog check:
+    `authorizeModel` now receives the session id, and the daemon asserts the model
+    against the catalog for bound sessions only.
   - `local_leases` is now advertised, although `session.control.*` (Part 2) still
     answers `unavailable`. **Deviation** from `transport-unix.md` §5's "MUST NOT be
     advertised … until backed by the Host": the token covers serve and control

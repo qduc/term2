@@ -99,6 +99,13 @@ the three daemon and Client API integration suites.
   `daemon/status` names the Unix daemon; a terminal session is listed but 404s
   over HTTP; a web turn runs in the daemon and logs into its store with the
   owner binding; a second lease is refused; SIGTERM and SIGKILL both release the
-  listener and state-dir lock while the daemon lives on; OTP reaches stderr). All
-  13 `tests/host` integration suites pass, including the in-process
+  listener and state-dir lock while the daemon lives on; releasing a lease closes
+  the web session under an attached terminal, and a later read-only lease reopens
+  it without write tools; another state directory is refused; OTP reaches stderr).
+  All 13 `tests/host` integration suites pass, including the in-process
   `serve.integration.test.ts`.
+- The independent verifier rejected the first candidate (`719babb`): web sessions
+  carried write tools across leases, the test failed `pnpm typecheck`, and web
+  model changes skipped the catalog check. It also flagged a shutdown race during
+  `serve.start` and cross-state-dir `host` grants. All five are fixed; the
+  carry-over check was confirmed red with the session close disabled in the bundle.

@@ -14,6 +14,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
+import { LOCAL_PRINCIPAL } from '../../../src/app/application-workspaces.js';
+import { connectRemoteDirectHost } from '../../../src/app/daemon/connect-daemon-host.js';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createGatewayAssertion } from '../../../src/host/server-assertion.js';
 import type { AssertionPurpose } from '../../../src/host/server-contracts.js';
@@ -111,21 +113,33 @@ function openEvents(socketPath: string, sessionId: string) {
       await expect.poll(() => frames.some(predicate), { timeout }).toBe(true);
       return frames.find(predicate)!;
     },
-    close: () => req.destroy(),
+    close: () => {
+      req.destroy();
+    },
   };
 }
 
-async function startProvider(): Promise<{ baseUrl: string; requests: () => number; close: () => Promise<void> }> {
+async function startProvider(): Promise<{
+  baseUrl: string;
+  requests: () => number;
+  /** Tool names offered on each chat request, in order. */
+  tools: () => string[][];
+  close: () => Promise<void>;
+}> {
   let count = 0;
+  const tools: string[][] = [];
   const server = http.createServer((req, res) => {
     if (req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ object: 'list', data: [{ id: 'daemon-serve-model' }] }));
       return;
     }
-    req.resume();
+    let body = '';
+    req.on('data', (chunk: Buffer | string) => (body += String(chunk)));
     req.on('end', () => {
       count += 1;
+      const parsed = JSON.parse(body) as { tools?: Array<{ function?: { name?: string } }> };
+      tools.push((parsed.tools ?? []).map((tool) => tool.function?.name ?? ''));
       const id = `chatcmpl-${count}`;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.write(
@@ -141,6 +155,7 @@ async function startProvider(): Promise<{ baseUrl: string; requests: () => numbe
   return {
     baseUrl: `http://127.0.0.1:${port}/v1`,
     requests: () => count,
+    tools: () => tools.map((names) => [...names]),
     close: () =>
       new Promise((resolve) => {
         server.closeAllConnections();
@@ -319,18 +334,76 @@ describe('term2 serve over the daemon (built CLI)', () => {
     expect(refusedCode).toBe(1);
     expect(refusedStderr).toContain('already active');
 
-    // SIGTERM stops the lease cleanly; the daemon and its sessions live on.
+    // The --allow-write host grant gave the web session write tools.
+    expect(provider.tools()[1]).toContain('create_file');
+
+    // A terminal attached to the web session keeps it live in the daemon across the lease.
+    const peer = await connectRemoteDirectHost({
+      clientKind: 'control',
+      conversationsDir,
+      protocolVersion: '1.1',
+      minSupportedVersion: '1.1',
+      allowAutoStart: false,
+      env,
+    });
+    cleanups.push(() => peer.host.dispose());
+    const keepAlive = await peer.host.connect(LOCAL_PRINCIPAL, webId);
+    let keepAliveEnded = false;
+    void (async () => {
+      for await (const _event of keepAlive.events) {
+        // Drained only to see the stream end.
+      }
+      keepAliveEnded = true;
+    })();
+
+    // SIGTERM stops the lease cleanly; the daemon lives on.
     serve.child.kill('SIGTERM');
     expect(await serve.exited).toBe(0);
     expect(fs.existsSync(httpSocket)).toBe(false);
     expect(fs.existsSync(path.join(serveState, 'serve.lock.pid'))).toBe(false);
     expect(JSON.parse((await daemonCli('status')).stdout)).toMatchObject({ daemonId: unixStatus.daemonId });
+    // Releasing the lease closed the web session under the terminal too: a later lease must reopen it
+    // through its own grants rather than inherit the tools this grant gave it.
+    await expect.poll(() => keepAliveEnded, { timeout: 10_000 }).toBe(true);
 
-    // Pairing OTPs reach only the lease holder; a killed client releases the lease by EOF.
-    const paired = await startServe(cliPath, ['--state-dir', serveState, '--local-owner', 'user-1', '--pairing'], env);
-    expect(paired.stderr()).toMatch(/PAIRING OTP: \d{6}/);
-    paired.child.kill('SIGKILL');
-    await paired.exited;
+    // This store's web sessions belong to the first state directory; another one is refused.
+    const otherState = spawn(
+      process.execPath,
+      [cliPath, 'serve', '--state-dir', path.join(root, 'other-state'), '--local-owner', 'user-1', '--pairing'],
+      { env },
+    );
+    let otherStderr = '';
+    otherState.stderr.on('data', (chunk: Buffer | string) => (otherStderr += String(chunk)));
+    expect(await new Promise<number | null>((resolve) => otherState.on('close', resolve))).toBe(1);
+    expect(otherStderr).toContain(`belong to --state-dir ${serveState}`);
+
+    // A later lease without --allow-write reopens the web session read-only: releasing the first
+    // lease closed it, so it does not keep the write tools its old grant gave it. Pairing OTPs
+    // reach only the lease holder.
+    const readOnly = await startServe(
+      cliPath,
+      ['--state-dir', serveState, '--local-owner', 'user-1', '--bff-key', `${KID}=${pemPath}`, '--pairing'],
+      env,
+    );
+    expect(readOnly.stderr()).toMatch(/PAIRING OTP: \d{6}/);
+    const reopened = openEvents(httpSocket, webId);
+    cleanups.push(reopened.close);
+    await reopened.waitFor((event) => event.type === 'configuration');
+    const again = await request(
+      httpSocket,
+      'POST',
+      `/private/agent/v1/sessions/${webId}/messages`,
+      { text: 'write something', clientRequestId: 'daemon-serve-2' },
+      sign('message_submit', { sessionId: webId }),
+    );
+    expect(again.json.accepted).toBe(true);
+    await reopened.waitFor((event) => event.type === 'turn_ended' && event.turnId === again.json.turnId);
+    expect(provider.tools()[2]).not.toContain('create_file');
+    reopened.close();
+
+    // A killed client releases the lease by EOF.
+    readOnly.child.kill('SIGKILL');
+    await readOnly.exited;
     await expect.poll(() => fs.existsSync(httpSocket), { timeout: 10_000 }).toBe(false);
     await expect.poll(() => fs.existsSync(path.join(serveState, 'serve.lock.pid')), { timeout: 10_000 }).toBe(false);
   }, 180_000);

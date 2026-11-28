@@ -11,6 +11,7 @@
  * under a covering grant (D007).
  */
 import { randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { DaemonServeStartParams } from '../../protocol/client-api/client-api-schema-v11.js';
 import { DirectProtocolError } from '../../protocol/errors.js';
@@ -21,6 +22,7 @@ import type { DirectHostLifecycleEvent, Principal } from '../../host/in-process-
 import { ClientApiRpcError } from '../../host/daemon/daemon-errors.js';
 import type { DaemonConnection, DaemonLeasePort } from '../../host/daemon/daemon-rpc.js';
 import type { GlobalMutationCoordinator } from '../../host/daemon/global-mutations.js';
+import type { ModelRef } from '../../model/index.js';
 import type { DirectLocalStore } from '../../session/store.js';
 import type { DirectBinding } from '../../session/facade-types.js';
 import type { Workspace } from '../../tools/index.js';
@@ -53,23 +55,54 @@ type ServeLease = {
   readonly grants: DirectWorkspaceAuthority;
   readonly access: ServeSessionAccess;
   readonly authority: DirectAuthority;
+  /** Set once release begins; a start still in flight checks it and backs out. */
+  closing: boolean;
   bundle?: ServeSessionIndexBundle;
   transport?: DirectServerTransport;
   ledger?: SqliteReplayLedger;
   releaseLock?: () => void;
   unregisterClose?: () => void;
-  released?: Promise<void>;
 };
+
+/**
+ * The first serve state directory a daemon store is used with. Web-bound sessions
+ * record only `{ owner, grant id }`, and every state directory has a `host` grant,
+ * so a lease from another state directory (other keys, other trusted devices) could
+ * otherwise reach them. In-process serve kept them apart with a conversation
+ * directory per state directory.
+ */
+function claimServeStateDir(pinPath: string, stateDir: string): void {
+  let pinned: string | undefined;
+  try {
+    pinned = readFileSync(pinPath, 'utf8').trim() || undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  if (pinned === undefined) {
+    writeFileSync(pinPath, `${stateDir}\n`, { mode: 0o600 });
+    return;
+  }
+  if (pinned !== stateDir) {
+    throw new ServeRefused(
+      `this daemon's web sessions belong to --state-dir ${pinned}; use it, or remove ${pinPath} to move them to ${stateDir}.`,
+    );
+  }
+}
 
 export class DaemonServeLeases implements DaemonLeasePort {
   #store: DirectLocalStore | undefined;
   #app: DirectApplication | undefined;
   #lease: ServeLease | undefined;
   #starting = false;
+  #closed = false;
 
   constructor(
     private readonly deps: {
       readonly conversationsDir: string;
+      /** Records the serve state directory this daemon's web sessions belong to. */
+      readonly stateDirPinPath: string;
+      /** The catalog check in-process serve applies to a web session's model change. */
+      readonly assertModel: (provider: string, model: string) => Promise<void>;
       readonly product: ProductPorts;
       readonly mutations: GlobalMutationCoordinator;
       readonly daemon: { readonly id: string; readonly version: string; readonly startedAt: string };
@@ -111,6 +144,23 @@ export class DaemonServeLeases implements DaemonLeasePort {
     this.#app = app;
   }
 
+  /** Whether a session records a web owner. Unknown counts as web, so closing errs toward closing. */
+  isWebBound(sessionId: string): boolean {
+    try {
+      return this.#app?.sessionDetails(sessionId).binding !== undefined;
+    } catch {
+      return true;
+    }
+  }
+
+  /** Web-bound sessions keep in-process serve's catalog check on a model change; local ones keep none. */
+  async authorizeModel(next: ModelRef, previous: ModelRef, sessionId: string | undefined): Promise<void> {
+    if (sessionId === undefined || !this.isWebBound(sessionId)) return;
+    // A same-selection refresh/rollover does not depend on a fresh catalog.
+    if (next.provider === previous.provider && next.model === previous.model) return;
+    await this.deps.assertModel(next.provider, next.model);
+  }
+
   /** The surface for a web-bound session; never consults local launch policies. */
   surface(binding: DirectBinding) {
     return serveSessionSurface(this.#lease?.grants, binding.id);
@@ -133,7 +183,9 @@ export class DaemonServeLeases implements DaemonLeasePort {
     requireLocalCaller(principal);
     const app = this.#app;
     const store = this.#store;
-    if (!app || !store) throw new ClientApiRpcError('unavailable', 'The daemon application is not ready.');
+    if (!app || !store || this.#closed) {
+      throw new ClientApiRpcError('unavailable', 'The daemon application is not accepting serve leases.');
+    }
     // One listener at a time: two grant sets would make web authority ambiguous (worth-revisiting.md).
     if (this.#lease || this.#starting) {
       throw new ClientApiRpcError('busy', 'A term2 serve lease is already active on this daemon.', {
@@ -142,6 +194,11 @@ export class DaemonServeLeases implements DaemonLeasePort {
     }
     this.#starting = true;
     let lease: ServeLease | undefined;
+    const backOutIfReleased = (current: ServeLease) => {
+      if (current.closing || this.#closed) {
+        throw new ClientApiRpcError('closed', 'The serve lease was released while starting.', { retryable: true });
+      }
+    };
     try {
       let stateDir: string;
       let keys: Map<string, string>;
@@ -154,6 +211,7 @@ export class DaemonServeLeases implements DaemonLeasePort {
           throw new ServeRefused('provide at least one --bff-key <kid>=<pem path> or enable --pairing');
         }
         transportOptions = serveTransportOptions(params.transport);
+        claimServeStateDir(this.deps.stateDirPinPath, stateDir);
         releaseLock = acquireServeStateDirLock(stateDir);
       } catch (error) {
         if (error instanceof ServeRefused) throw new ClientApiRpcError('invalid_request', error.message);
@@ -176,10 +234,14 @@ export class DaemonServeLeases implements DaemonLeasePort {
         grants,
         access,
         authority: serveSessionAuthority(access, params.localOwnerUserId),
+        closing: false,
         releaseLock,
       };
+      const current = lease;
+      // Bound to the connection before any await, so EOF mid-start releases what exists so far.
+      current.unregisterClose = connection.onClose(() => void this.#release(current));
       // Installed before seeding: listing web-bound sessions resolves them through this lease.
-      this.#lease = lease;
+      this.#lease = current;
       const { product } = this.deps;
       const configuration = new DirectGlobalConfiguration(
         product.settings,
@@ -192,27 +254,21 @@ export class DaemonServeLeases implements DaemonLeasePort {
       );
       const closeWorkspaceSessions = app.host.closeWorkspaceSessions?.bind(app.host);
       if (!closeWorkspaceSessions) throw new Error('The direct host cannot close workspace sessions.');
-      // A grant edit closes the web sessions it governed, never a local client's session in the same root.
-      const webBound = (sessionId: string): boolean => {
-        try {
-          return app.sessionDetails(sessionId).binding !== undefined;
-        } catch {
-          return true;
-        }
-      };
-      lease.bundle = createServeSessionIndex({
+      current.bundle = createServeSessionIndex({
         app,
         grants,
         ownerUserId: params.localOwnerUserId,
-        closeWorkspaceSessions: (root) => closeWorkspaceSessions(root, webBound),
+        // A grant edit closes the web sessions it governed, never a local client's session in the same root.
+        closeWorkspaceSessions: (root) => closeWorkspaceSessions(root, (id) => this.isWebBound(id)),
       });
-      await lease.bundle.index.seed();
-      lease.ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));
-      lease.transport = createServeHttpTransport({
+      await current.bundle.index.seed();
+      backOutIfReleased(current);
+      current.ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));
+      current.transport = createServeHttpTransport({
         app,
         grants,
         configuration,
-        sessionIndexBundle: lease.bundle,
+        sessionIndexBundle: current.bundle,
         stateDir,
         localOwnerUserId: params.localOwnerUserId,
         allowWrite: params.allowWrite,
@@ -220,7 +276,7 @@ export class DaemonServeLeases implements DaemonLeasePort {
         issuer: DEFAULT_SERVE_ISSUER,
         audience: DEFAULT_SERVE_AUDIENCE,
         publicKeys: keys,
-        replayLedger: lease.ledger,
+        replayLedger: current.ledger,
         pairing: params.pairing,
         // Only the lease holder's connection sees the OTP (transport-unix.md §5.1).
         printOtp: (otp, expiresAt) =>
@@ -233,14 +289,14 @@ export class DaemonServeLeases implements DaemonLeasePort {
         daemon: this.deps.daemon,
       });
       try {
-        await lease.transport.start();
+        await current.transport.start();
       } catch (error) {
         throw new ClientApiRpcError('unavailable', `server failed to start: ${messageOf(error)}`);
       }
-      const active = lease;
-      active.unregisterClose = connection.onClose(() => void this.#release(active));
+      backOutIfReleased(current);
       return { leaseId };
     } catch (error) {
+      // Re-entrant: tears down whatever was created after an earlier release began.
       if (lease) await this.#release(lease);
       throw error;
     } finally {
@@ -257,30 +313,44 @@ export class DaemonServeLeases implements DaemonLeasePort {
     await this.#release(lease);
   }
 
-  /** Daemon shutdown releases every listener before sessions close. */
+  /** Daemon shutdown releases every listener before sessions close, and refuses starts still in flight. */
   async closeAll(): Promise<void> {
+    this.#closed = true;
     if (this.#lease) await this.#release(this.#lease);
   }
 
   /**
-   * Stops the listener; live web sessions keep running in the daemon, reachable again
-   * only through a later lease whose grants still admit them.
+   * Stops the listener, then closes every live web-bound session, so a later lease
+   * reopens them through its own grants (as an in-process serve restart would)
+   * rather than inheriting the tools an earlier grant gave them. Re-entrant: each
+   * resource is taken once, so a second call releases only what was created since.
    */
-  #release(lease: ServeLease): Promise<void> {
-    lease.released ??= (async () => {
-      lease.unregisterClose?.();
+  async #release(lease: ServeLease): Promise<void> {
+    lease.closing = true;
+    lease.unregisterClose?.();
+    lease.unregisterClose = undefined;
+    const transport = lease.transport;
+    lease.transport = undefined;
+    try {
+      await transport?.stop();
+    } finally {
       try {
-        await lease.transport?.stop();
+        // Still the active lease while sessions close, so no new lease can start under it.
+        await this.#app?.host.closeSessionsWhere?.((id) => this.isWebBound(id));
       } finally {
         lease.bundle?.index.dispose();
+        lease.bundle = undefined;
         if (this.#lease === lease) this.#lease = undefined;
+        const ledger = lease.ledger;
+        lease.ledger = undefined;
+        const releaseLock = lease.releaseLock;
+        lease.releaseLock = undefined;
         try {
-          lease.ledger?.close();
+          ledger?.close();
         } finally {
-          lease.releaseLock?.();
+          releaseLock?.();
         }
       }
-    })();
-    return lease.released;
+    }
   }
 }

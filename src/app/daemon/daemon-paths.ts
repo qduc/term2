@@ -37,7 +37,7 @@ export type DaemonAdvertisement = {
   readonly protocolVersion: string;
 };
 
-export class DaemonLockBusyError extends Error {
+class DaemonLockBusyError extends Error {
   constructor(lockPath: string, cause?: unknown) {
     super(`Daemon lock is already held: ${lockPath}`, { cause });
     this.name = 'DaemonLockBusyError';
@@ -153,7 +153,7 @@ export function verifySocketOwnership(socketPath: string): void {
 }
 
 /** Exclusive SQLite `BEGIN IMMEDIATE` singleton lock (`transport-unix.md` §1.2 step 2). */
-export function acquireDaemonLock(lockPath: string): () => void {
+function acquireDaemonLock(lockPath: string): () => void {
   ensureSecurePrivateDir(path.dirname(lockPath));
   let database: Database.Database | undefined;
   try {
@@ -261,5 +261,43 @@ export function removeFileIfPresent(filePath: string): void {
     fs.unlinkSync(filePath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
+
+const LOCK_CONTENTION_TIMEOUT_MS = 3_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/** Takes the singleton lock, or reports a live peer daemon that holds it (`transport-unix.md` §1.2). */
+export async function acquireLockOrDetectPeer(
+  lockPath: string,
+  socketPath: string,
+): Promise<{ readonly kind: 'acquired'; readonly release: () => void } | { readonly kind: 'already_running' }> {
+  const deadline = Date.now() + LOCK_CONTENTION_TIMEOUT_MS;
+  let attempt = 0;
+  for (;;) {
+    try {
+      return { kind: 'acquired', release: acquireDaemonLock(lockPath) };
+    } catch (error) {
+      if (!(error instanceof DaemonLockBusyError)) throw error;
+      if (await probeSocketConnectable(socketPath, 250)) {
+        return { kind: 'already_running' };
+      }
+      if (Date.now() >= deadline) {
+        if (await probeSocketConnectable(socketPath, 500)) {
+          return { kind: 'already_running' };
+        }
+        throw new Error(
+          `Daemon lock ${lockPath} remained busy for ${LOCK_CONTENTION_TIMEOUT_MS}ms without a live socket.`,
+        );
+      }
+      const backoff = Math.min(200, 25 * Math.pow(2, attempt));
+      attempt += 1;
+      await sleep(backoff);
+    }
   }
 }

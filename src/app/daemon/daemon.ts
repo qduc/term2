@@ -40,12 +40,10 @@ import { DaemonServeLeases } from '../serve/daemon-serve-lease.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import { createDaemonV11Port } from './daemon-v11-ops.js';
 import {
-  acquireDaemonLock,
+  acquireLockOrDetectPeer,
   checkConversationsDirectory,
-  DaemonLockBusyError,
   ensureSecurePrivateDir,
   prepareSocketForBind,
-  probeSocketConnectable,
   readCurrentProcStartTime,
   removeFileIfPresent,
   resolveDaemonPaths,
@@ -53,7 +51,6 @@ import {
   type DaemonPaths,
 } from './daemon-paths.js';
 
-const LOCK_CONTENTION_TIMEOUT_MS = 3_000;
 const DEFAULT_GRACEFUL_SHUTDOWN_MS = 10_000;
 
 export type StartTerm2DaemonOptions = {
@@ -83,35 +80,6 @@ function sleep(ms: number): Promise<void> {
 
 function localWorkspaceIdForRoot(root: string): string {
   return `local_${createHash('sha256').update(root).digest('hex').slice(0, 12)}`;
-}
-
-async function acquireLockOrDetectPeer(
-  lockPath: string,
-  socketPath: string,
-): Promise<{ readonly kind: 'acquired'; readonly release: () => void } | { readonly kind: 'already_running' }> {
-  const deadline = Date.now() + LOCK_CONTENTION_TIMEOUT_MS;
-  let attempt = 0;
-  for (;;) {
-    try {
-      return { kind: 'acquired', release: acquireDaemonLock(lockPath) };
-    } catch (error) {
-      if (!(error instanceof DaemonLockBusyError)) throw error;
-      if (await probeSocketConnectable(socketPath, 250)) {
-        return { kind: 'already_running' };
-      }
-      if (Date.now() >= deadline) {
-        if (await probeSocketConnectable(socketPath, 500)) {
-          return { kind: 'already_running' };
-        }
-        throw new Error(
-          `Daemon lock ${lockPath} remained busy for ${LOCK_CONTENTION_TIMEOUT_MS}ms without a live socket.`,
-        );
-      }
-      const backoff = Math.min(200, 25 * Math.pow(2, attempt));
-      attempt += 1;
-      await sleep(backoff);
-    }
-  }
 }
 
 export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): Promise<Term2DaemonHandle> {
@@ -205,6 +173,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     const activeDaemonMcp = daemonMcp;
     const leases = new DaemonServeLeases({
       conversationsDir: paths.conversationsDir,
+      stateDirPinPath: path.join(paths.stateDir, 'serve-state-dir'),
+      assertModel: (provider, model) => configuration.assertModel(provider, model),
       product,
       mutations,
       daemon: { id: daemonId, version: daemonVersion, startedAt },
@@ -215,7 +185,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       conversationsDir: paths.conversationsDir,
       selection,
       resolveDefaultModel: () => configuration.currentModelSelection(),
-      authorizeModel: () => undefined,
+      authorizeModel: (next, previous, sessionId) => leases.authorizeModel(next, previous, sessionId),
       // A web-bound session is never handed a local client's pending launch policy.
       prepareSurface: (sessionId, context) =>
         context.binding

@@ -157,6 +157,32 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     };
     return result as DirectConnection | DirectReplayConnection;
   }
+  async function closeWhere(matches: (sessionId: string, session: DirectSession) => boolean): Promise<number> {
+    open();
+    // Sessions already open start closing now, so none admits a turn under the old
+    // grant while the in-flight work below is awaited.
+    const early = [...attachments.entries()]
+      .filter(([sessionId, pending]) => {
+        const attached = settled.get(pending);
+        return attached !== undefined && matches(sessionId, attached.session);
+      })
+      .map(([sessionId]) => sessionId);
+    const releases = early.map((sessionId) => release(sessionId));
+    // A create or open that began under the old grant settles into `attachments`; wait for it.
+    await Promise.allSettled([...creates]);
+    const pending = [...attachments.entries()].filter(([sessionId]) => !early.includes(sessionId));
+    const opened = await Promise.allSettled(pending.map(([, attached]) => attached));
+    const matching = pending.filter(([sessionId, attached], index) => {
+      const result = opened[index]!;
+      return result.status === 'fulfilled' && attachments.get(sessionId) === attached
+        ? matches(sessionId, result.value.session)
+        : false;
+    });
+    // One failed cleanup must not keep the others open; release() drops the attachment either way.
+    releases.push(...matching.map(([sessionId]) => release(sessionId)));
+    const closed = await Promise.allSettled(releases);
+    return closed.length;
+  }
   async function release(sessionId: string): Promise<void> {
     const existing = closingSessions.get(sessionId);
     if (existing) return await existing;
@@ -193,33 +219,11 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       await deps.authorize(principal, { kind: 'write', sessionId });
       await release(sessionId);
     },
-    async closeWorkspaceSessions(root, include = () => true) {
-      open();
-      // Sessions already open start closing now, so none admits a turn under the old
-      // grant while the in-flight work below is awaited.
-      const early = [...attachments.entries()]
-        .filter(([sessionId, pending]) => {
-          const attached = settled.get(pending);
-          return attached !== undefined && workspaceRoot(attached.session) === root && include(sessionId);
-        })
-        .map(([sessionId]) => sessionId);
-      const releases = early.map((sessionId) => release(sessionId));
-      // A create or open that began under the old grant settles into `attachments`; wait for it.
-      await Promise.allSettled([...creates]);
-      const pending = [...attachments.entries()].filter(
-        ([sessionId]) => !early.includes(sessionId) && include(sessionId),
-      );
-      const opened = await Promise.allSettled(pending.map(([, attached]) => attached));
-      const matching = pending.filter(([, attached], index) => {
-        const result = opened[index]!;
-        return result.status === 'fulfilled' && attachments.get(pending[index]![0]) === attached
-          ? workspaceRoot(result.value.session) === root
-          : false;
-      });
-      // One failed cleanup must not keep the others open; release() drops the attachment either way.
-      releases.push(...matching.map(([sessionId]) => release(sessionId)));
-      const closed = await Promise.allSettled(releases);
-      return closed.length;
+    closeWorkspaceSessions(root, include = () => true) {
+      return closeWhere((sessionId, session) => workspaceRoot(session) === root && include(sessionId));
+    },
+    closeSessionsWhere(include) {
+      return closeWhere((sessionId) => include(sessionId));
     },
     async listSessions(principal, cursor) {
       open();

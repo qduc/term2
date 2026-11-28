@@ -299,6 +299,11 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   tests must isolate persisted config/task storage and inherited `XDG_STATE_HOME`.
   macOS fixtures also exposed `/tmp` canonicalization, Linux-only XDG paths,
   `/dev/full` assumptions, Yoga headless startup and wrapped terminal text.
+- **The built CLI runs from a bundle:** `dist/src/app/cli.js` loads
+  `dist/src/app/cli.bundle.cjs`, and so does a daemon it auto-starts. To prove a
+  built-CLI test red by disabling a line, patch the bundle and restore it
+  afterwards. Patching `dist/src/**/*.js` changes nothing the child runs, so the
+  test stays green and reads as "the check does not catch the bug".
 - **Shared build-output race:** `pnpm test:provider-black-box` rebuilds the CLI
   before testing. Do not run that command concurrently with integration/e2e
   readers in the same worktree: the build moves `dist` aside, so readers can

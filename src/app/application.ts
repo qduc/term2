@@ -369,7 +369,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       const state = stateOf(session);
       if (state.activeTurnId !== null) throw new DirectProtocolError('rejected', 'Stop the running turn first.');
       const target = model ?? state.model;
-      await runtimes.authorizeModel(target, state.model);
+      await runtimes.authorizeModel(target, state.model, sessionId);
       const next = await successor(store, runtimes, options.conversationsDir, session, state, target);
       const admission = await next.submitWithDelivery({
         clientRequestId: randomUUID(),

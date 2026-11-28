@@ -59,14 +59,11 @@ Decisions, trade-offs, security questions, and deferred items logged during auto
     - Two leases would mean two grant sets authorizing one application. If several
       listeners are wanted (say a socket for the BFF and TLS for a LAN), they should
       share one grant set rather than each carry their own.
+    - Related: a daemon store's web sessions are pinned to the first serve state
+      directory (`<daemon state dir>/serve-state-dir`). Recording the issuing state
+      directory in each session's binding would let one store serve several.
 
-13. **Model catalog check for web sessions in the daemon** *(D011)*:
-    - In-process serve's `authorizeModel` refuses a model switch to a model missing
-      from the catalog; the daemon's application has no such check for any session,
-      web-bound ones included. It is input validation rather than authority, but a
-      per-session hook would restore serve's behaviour.
-
-14. **Web sessions without a lease** *(D011)*:
+13. **Web sessions without a lease** *(D011)*:
     - With no lease active, the daemon cannot resolve web-bound sessions (their
       grants live in the serve state directory), so they drop out of local listings
       and cannot be opened from the terminal. The TUI resume picker can still list

@@ -468,4 +468,7 @@ sessions are refused. Unbound sessions stay closed to web callers, as
 in-process serve never held them, though the serve session index lists them
 under a covering grant (D007). A grant edit closes only bound sessions in that
 root (`closeWorkspaceSessions(root, include)`), and a bound session's surface
-never reads the daemon's pending local launch policy.
+never reads the daemon's pending local launch policy. Releasing a lease closes
+every live bound session (`closeSessionsWhere`), so a later lease reopens them
+through its own grants; a lease is refused unless it names the serve state
+directory recorded in `<daemon state dir>/serve-state-dir` (decisions.md D011).

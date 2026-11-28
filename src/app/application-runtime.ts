@@ -92,7 +92,7 @@ export type DirectRuntimeOptions = {
     readonly dispose?: () => Promise<void>;
   }>;
   /** Decides whether a session may move to another model. Without it, none may. */
-  readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void | Promise<void>;
+  readonly authorizeModel?: (next: ModelRef, previous: ModelRef, sessionId?: string) => void | Promise<void>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
@@ -119,7 +119,7 @@ export type DirectRuntimes = {
   launching: ReturnType<typeof createLaunchConfigurationScope>['run'];
   withApprovalMode: ReturnType<typeof createLaunchConfigurationScope>['withApprovalMode'];
   /** Throws unless this application lets a session move from `previous` to `next`. */
-  authorizeModel(next: ModelRef, previous: ModelRef): void | Promise<void>;
+  authorizeModel(next: ModelRef, previous: ModelRef, sessionId?: string): void | Promise<void>;
   /** An open session's runtime, for app-owned policy and commands. */
   get(sessionId: string): DirectRuntimeRecord | undefined;
   /** A session created during `operation` starts with this session's profile and effort, not the launch defaults. */

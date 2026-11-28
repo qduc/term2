@@ -3,7 +3,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ModelRef } from '../model/index.js';
 import type { DirectAppConfiguration } from './config-settings.js';
 
-type AuthorizeModel = (next: ModelRef, previous: ModelRef) => void | Promise<void>;
+/** `sessionId` names the session that would move, when the caller knows it. */
+type AuthorizeModel = (next: ModelRef, previous: ModelRef, sessionId?: string) => void | Promise<void>;
 
 /** Effort and temperature are session-local; changing the model can change who gets billed. */
 function sameModelOnly(next: ModelRef, previous: ModelRef): void {
@@ -41,7 +42,7 @@ export function createLaunchConfigurationScope(authorizeModel: AuthorizeModel = 
       const launch = context.getStore();
       const selected = launch?.sessionId === sessionId && launch.isLaunch ? launch.configuration.model : undefined;
       if (selected && selected.provider === next.provider && selected.model === next.model) return;
-      return authorizeModel(next, previous);
+      return authorizeModel(next, previous, sessionId);
     },
   };
 }

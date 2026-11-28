@@ -47,6 +47,8 @@ export interface DirectHost {
    */
   /** `include` narrows which sessions in `root` close; omitted, all of them do. */
   closeWorkspaceSessions?(root: string, include?: (sessionId: string) => boolean): Promise<number>;
+  /** As `closeWorkspaceSessions`, for every live Session `include` accepts, whatever its root. */
+  closeSessionsWhere?(include: (sessionId: string) => boolean): Promise<number>;
   /** Host shutdown owns runtime/store disposal; no persisted domain-close is implied. */
   dispose(): Promise<void>;
 }

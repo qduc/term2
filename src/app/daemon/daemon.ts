@@ -39,6 +39,7 @@ import { createDaemonMcp } from './daemon-mcp.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import { createDaemonV11Port } from './daemon-v11-ops.js';
 import { DaemonServeLeaseManager } from './leases/serve-lease.js';
+import { DaemonControlLeases } from './leases/control-lease.js';
 import {
   acquireLockOrDetectPeer,
   checkConversationsDirectory,
@@ -111,6 +112,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
   let app: Awaited<ReturnType<typeof createDirectApplication>> | null = null;
   let daemonMcp: ReturnType<typeof createDaemonMcp> | null = null;
   let serveLeases: DaemonServeLeaseManager | null = null;
+  const controlLeases = new DaemonControlLeases();
   let unixServer: DaemonUnixServer | null = null;
 
   try {
@@ -173,6 +175,12 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       }
       return sessionPolicies.get(sessionId);
     };
+    /** How a session was launched; read by its tool surface and by control-socket admission. */
+    const launchMode = (sessionId: string, policy = sessionPolicies.get(sessionId)) => {
+      const flags = sessionLaunchFlags.get(sessionId);
+      const isAcp = flags?.clientMode === 'acp';
+      return { flags, isAcp, isHeadless: policy?.mode === 'headless' || flags?.clientMode === 'headless' };
+    };
     const lifecycleObserver: { current?: (event: DirectHostLifecycleEvent) => void } = {};
     daemonMcp = createDaemonMcp({
       conversationsDir: paths.conversationsDir,
@@ -193,15 +201,15 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         const serveSurface = activeServeLeases.serveSurfaceOptions(sessionId, ctx);
         if (serveSurface) return serveSurface;
         const policy = policyForSession(sessionId);
-        const flags = sessionLaunchFlags.get(sessionId);
-        const isHeadless = policy?.mode === 'headless' || flags?.clientMode === 'headless';
-        const isAcp = flags?.clientMode === 'acp';
+        const { flags, isHeadless, isAcp } = launchMode(sessionId, policy);
         const allowUnsandboxed = !flags?.requireSandbox && !isAcp;
         activeServeLeases.recordSessionPosture(sessionId, {
           workspaceAccess: ctx?.workspace.access ?? 'read_write',
           allowUnsandboxed,
         });
         return {
+          // As an in-process TUI gives its sessions: Discord send through a control socket bound to the session.
+          ...(isHeadless || isAcp ? {} : controlLeases.outbound(sessionId)),
           autoApprove: policy?.mode === 'headless' ? policy.autoApprove : false,
           interactive: !isHeadless,
           sessionBrowser: !isHeadless && !isAcp,
@@ -254,6 +262,10 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     activeServeLeases.bindRuntime(localOwnerApp, sessionIndex);
     lifecycleObserver.current = (event) => sessionIndex.observeLifecycle(event);
     await sessionIndex.seed();
+    controlLeases.attach(localOwnerApp, sessionIndex, resolveWorkspaceRoot, (sessionId) => {
+      const { isHeadless, isAcp } = launchMode(sessionId);
+      return !isHeadless && !isAcp;
+    });
     const discoveryRoot = async (
       principal: Principal,
       { workspaceId, sessionId }: { workspaceId?: string; sessionId?: string },
@@ -312,6 +324,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           } finally {
             try {
               await serveLeases?.closeAll();
+              await controlLeases.closeAll();
               sessionIndex.dispose();
               await app?.close();
               await daemonMcp?.close();
@@ -354,6 +367,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       }),
       serveStart: activeServeLeases.startLease.bind(activeServeLeases),
       serveStop: activeServeLeases.stopLease.bind(activeServeLeases),
+      controlBind: controlLeases.controlBind.bind(controlLeases),
+      controlRebind: controlLeases.controlRebind.bind(controlLeases),
+      controlUnbind: controlLeases.controlUnbind.bind(controlLeases),
     };
     const advertisedCapabilities = [...CLIENT_API_CAPABILITIES];
     const rpc = new DaemonRpc({
@@ -463,7 +479,13 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     advertisementWritten = true;
     return { kind: 'started', daemonId, paths, status, shutdown: performShutdown, closed };
   } catch (error) {
-    await Promise.allSettled([unixServer?.close(), serveLeases?.closeAll(), app?.close(), daemonMcp?.close()]);
+    await Promise.allSettled([
+      unixServer?.close(),
+      serveLeases?.closeAll(),
+      controlLeases.closeAll(),
+      app?.close(),
+      daemonMcp?.close(),
+    ]);
     if (advertisementWritten) removeFileIfPresent(paths.advertisementPath);
     if (socketBound) removeFileIfPresent(paths.socketPath);
     releaseLock();

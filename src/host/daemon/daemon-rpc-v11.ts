@@ -11,6 +11,7 @@ import {
   type SessionLaunchParams,
   type SettingsUpdateParamsV11,
 } from '../../protocol/client-api/client-api-schema.js';
+import type { SessionControlBindParams } from '../../protocol/client-api/client-api-schema-v11.js';
 import { isClientApiVersionAtLeast } from '../../protocol/client-api/version-negotiation.js';
 import type { Principal } from '../in-process-direct-types.js';
 import type { ProviderWriteInput, SafeSettingValue, ServerConfiguration } from '../server-contracts.js';
@@ -53,6 +54,22 @@ export type DaemonV11ControlPort = {
     leaseId: string,
     connection: DaemonRpcConnectionContext,
   ): Promise<Record<string, unknown>>;
+  /** Named control socket leases (`transport-unix.md` §5.2). Absent: `session.control.*` answers `unavailable`. */
+  controlBind?(
+    principal: Principal,
+    params: SessionControlBindParams,
+    connection: DaemonRpcConnectionContext,
+  ): Promise<Record<string, unknown>>;
+  controlRebind?(
+    principal: Principal,
+    params: { readonly leaseId: string; readonly sessionId: string },
+    connection: DaemonRpcConnectionContext,
+  ): Promise<Record<string, unknown>>;
+  controlUnbind?(
+    principal: Principal,
+    params: { readonly leaseId: string; readonly pauseForHandoff?: boolean },
+    connection: DaemonRpcConnectionContext,
+  ): Promise<void>;
 };
 
 export function isV11(protocolVersion?: string): boolean {
@@ -300,12 +317,29 @@ export async function handleLocalLeaseMethod(
     const parsed = parseStrict(CLIENT_API_SCHEMAS.daemonServeStopParams, params, 'daemon.serve.stop');
     return await v11.serveStop(principal, parsed.leaseId, connection);
   }
-  if (
-    method === 'session.control.bind' ||
-    method === 'session.control.rebind' ||
-    method === 'session.control.unbind' ||
-    method === 'session.acp.set_mcp'
-  ) {
+  if (method === 'session.control.bind') {
+    if (!v11?.controlBind || !connection) {
+      throw new ClientApiRpcError('unavailable', 'Daemon control socket leases are unavailable.');
+    }
+    const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionControlBindParams, params, method);
+    return await v11.controlBind(principal, parsed, connection);
+  }
+  if (method === 'session.control.rebind') {
+    if (!v11?.controlRebind || !connection) {
+      throw new ClientApiRpcError('unavailable', 'Daemon control socket leases are unavailable.');
+    }
+    const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionControlRebindParams, params, method);
+    return await v11.controlRebind(principal, parsed, connection);
+  }
+  if (method === 'session.control.unbind') {
+    if (!v11?.controlUnbind || !connection) {
+      throw new ClientApiRpcError('unavailable', 'Daemon control socket leases are unavailable.');
+    }
+    const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionControlUnbindParams, params, method);
+    await v11.controlUnbind(principal, parsed, connection);
+    return {};
+  }
+  if (method === 'session.acp.set_mcp') {
     throw new ClientApiRpcError('unavailable', `Local lease method "${method}" is unavailable.`);
   }
   return undefined;

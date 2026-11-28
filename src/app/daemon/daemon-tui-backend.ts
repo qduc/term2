@@ -18,6 +18,8 @@ import type { McpStatusView } from '../../tools/mcp/mcp-status.js';
 import type { McpServerSnapshot } from '../../tools/mcp/mcp-tool-source.js';
 import { LOCAL_PRINCIPAL } from '../application-workspaces.js';
 import type { DirectControlBridge } from '../launch-control.js';
+import { createDaemonControlBridge, type DaemonControlBridge } from './leases/control-bridge.js';
+import type { UnixRpcClient } from '../../host/daemon/unix-rpc-client.js';
 import type { DirectLaunchRequest } from '../launch-types.js';
 import type { TuiBackend, TuiSkillEntry } from '../lib/tui-backend.js';
 import { connectRemoteDirectHost } from './connect-daemon-host.js';
@@ -120,30 +122,15 @@ type OpenedDaemonTui = {
   readonly backend: TuiBackend;
   readonly initial: DirectConnection;
   readonly launched: SessionLaunchResult;
+  /** The current daemon connection; reconnecting replaces it. */
+  readonly rpc: () => UnixRpcClient;
 };
 
-function createDaemonNoOpControlBridge(): DirectControlBridge {
-  return {
-    server: undefined,
-    isStartup: false,
-    outbound: () => ({
-      discordSend: async () => {
-        throw new Error('Control bridge is unavailable on this daemon TUI session.');
-      },
-      isDiscordInputEnabled: () => false,
-    }),
-    attachAtStartup: async () => '',
-    connect: async () => {
-      throw new Error('Runtime control sockets over daemon require Step 14e control leases.');
-    },
-    rebind: async () => undefined,
-    disconnect: async () => undefined,
-    hold: () => undefined,
-    close: async () => undefined,
-  };
-}
-
-async function openDaemonTuiSession(request: InteractiveRequest, root: string): Promise<OpenedDaemonTui> {
+async function openDaemonTuiSession(
+  request: InteractiveRequest,
+  root: string,
+  onReconnected: (sessionId: string) => Promise<void>,
+): Promise<OpenedDaemonTui> {
   const connect = () =>
     connectRemoteDirectHost({
       clientKind: 'tui',
@@ -222,6 +209,8 @@ async function openDaemonTuiSession(request: InteractiveRequest, root: string): 
           await store.hydrateGlobal();
           const attached = await host.connect(LOCAL_PRINCIPAL, sessionId);
           await prepareSession(sessionId);
+          // A control socket leased on the old connection was released with it.
+          await onReconnected(sessionId).catch(() => undefined);
           return attached;
         } catch (error) {
           lastError = error;
@@ -405,7 +394,7 @@ async function openDaemonTuiSession(request: InteractiveRequest, root: string): 
     };
 
     void connected;
-    return { backend, initial, launched };
+    return { backend, initial, launched, rpc: () => host.rpc };
   } catch (error) {
     await store.close().catch(() => undefined);
     await host.dispose().catch(() => undefined);
@@ -426,7 +415,7 @@ export async function runDaemonTuiSession(
   }) => Promise<number>,
 ): Promise<number> {
   const root = fs.realpathSync(process.cwd());
-  const bridge = createDaemonNoOpControlBridge();
+  const reconnected: { bridge?: DaemonControlBridge } = {};
   let unmount: (() => void) | null = null;
   let exitCode = 0;
   const onSignal = (signal: NodeJS.Signals): void => {
@@ -435,7 +424,11 @@ export async function runDaemonTuiSession(
   };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
-  const { backend, initial, launched } = await openDaemonTuiSession(request, root);
+  const { backend, initial, launched, rpc } = await openDaemonTuiSession(request, root, async (sessionId) => {
+    await reconnected.bridge?.reattach(sessionId);
+  });
+  const bridge = createDaemonControlBridge(rpc);
+  reconnected.bridge = bridge;
   try {
     if (launched.forkedFrom) {
       stderr.write(
@@ -461,6 +454,10 @@ export async function runDaemonTuiSession(
   } finally {
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
-    await backend.close();
+    try {
+      await bridge.close();
+    } finally {
+      await backend.close();
+    }
   }
 }

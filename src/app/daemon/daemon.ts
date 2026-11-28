@@ -175,6 +175,12 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       }
       return sessionPolicies.get(sessionId);
     };
+    /** How a session was launched; read by its tool surface and by control-socket admission. */
+    const launchMode = (sessionId: string, policy = sessionPolicies.get(sessionId)) => {
+      const flags = sessionLaunchFlags.get(sessionId);
+      const isAcp = flags?.clientMode === 'acp';
+      return { flags, isAcp, isHeadless: policy?.mode === 'headless' || flags?.clientMode === 'headless' };
+    };
     const lifecycleObserver: { current?: (event: DirectHostLifecycleEvent) => void } = {};
     daemonMcp = createDaemonMcp({
       conversationsDir: paths.conversationsDir,
@@ -195,9 +201,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         const serveSurface = activeServeLeases.serveSurfaceOptions(sessionId, ctx);
         if (serveSurface) return serveSurface;
         const policy = policyForSession(sessionId);
-        const flags = sessionLaunchFlags.get(sessionId);
-        const isHeadless = policy?.mode === 'headless' || flags?.clientMode === 'headless';
-        const isAcp = flags?.clientMode === 'acp';
+        const { flags, isHeadless, isAcp } = launchMode(sessionId, policy);
         const allowUnsandboxed = !flags?.requireSandbox && !isAcp;
         activeServeLeases.recordSessionPosture(sessionId, {
           workspaceAccess: ctx?.workspace.access ?? 'read_write',
@@ -258,15 +262,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     activeServeLeases.bindRuntime(localOwnerApp, sessionIndex);
     lifecycleObserver.current = (event) => sessionIndex.observeLifecycle(event);
     await sessionIndex.seed();
-    // A control socket binds only a session this daemon knows; a vanished root just leaves `workspaceRoot` empty.
-    controlLeases.attach(localOwnerApp, async (sessionId) => {
-      const session = await sessionIndex.get(LOCAL_PRINCIPAL, sessionId);
-      if (!session) throw new DirectProtocolError('not_found', 'Unknown local session.');
-      try {
-        return resolveWorkspaceRoot(session.workspaceId);
-      } catch {
-        return null;
-      }
+    controlLeases.attach(localOwnerApp, sessionIndex, resolveWorkspaceRoot, (sessionId) => {
+      const { isHeadless, isAcp } = launchMode(sessionId);
+      return !isHeadless && !isAcp;
     });
     const discoveryRoot = async (
       principal: Principal,

@@ -23,7 +23,8 @@ import { DirectProtocolError } from '../../../protocol/errors.js';
 import { ClientApiRpcError, type DaemonRpcConnectionContext } from '../../../host/daemon/daemon-rpc.js';
 import type { Principal } from '../../../host/in-process-direct-types.js';
 import type { DirectApplication } from '../../application.js';
-import { requireLocalCaller } from '../../application-workspaces.js';
+import { LOCAL_PRINCIPAL, requireLocalCaller } from '../../application-workspaces.js';
+import type { SessionIndex } from '../../../host/daemon/session-index.js';
 import { controlMetadataFor } from '../../launch-control.js';
 
 /**
@@ -61,6 +62,8 @@ type ControlLease = {
   /** Mutations paused for a handoff; released when a replacement claims the socket. */
   hold?: { readonly drained: Promise<void>; release(): void };
   handoffTimer?: ReturnType<typeof setTimeout>;
+  /** `rebind` and `unbind` run one at a time, so a pause can never be lifted by a move already in flight. */
+  operations?: Promise<void>;
 };
 
 function messageOf(error: unknown): string {
@@ -69,7 +72,9 @@ function messageOf(error: unknown): string {
 
 export class DaemonControlLeases {
   #app: DirectApplication | undefined;
-  #rootFor: ((sessionId: string) => Promise<string | null>) | undefined;
+  #sessions: Pick<SessionIndex, 'get'> | undefined;
+  #resolveWorkspaceRoot: ((workspaceId: string) => string) | undefined;
+  #isTerminalSession: (sessionId: string) => boolean = () => true;
   readonly #leases = new Map<string, ControlLease>();
   /** Names are reserved before the first await, so two binds cannot race for one name. */
   readonly #names = new Map<string, ControlLease>();
@@ -77,10 +82,39 @@ export class DaemonControlLeases {
 
   constructor(private readonly options: { readonly handoffWindowMs?: number } = {}) {}
 
-  /** `rootFor` rejects an unknown session and resolves `null` for a root it cannot resolve. */
-  attach(app: DirectApplication, rootFor: (sessionId: string) => Promise<string | null>): void {
+  /**
+   * `sessions` and `resolveWorkspaceRoot` are the daemon's session index and local workspace
+   * resolver. `isTerminalSession` is false for a session launched headless or for ACP: in
+   * process only a terminal ever has a control socket, so those sessions never get one here.
+   */
+  attach(
+    app: DirectApplication,
+    sessions: Pick<SessionIndex, 'get'>,
+    resolveWorkspaceRoot: (workspaceId: string) => string,
+    isTerminalSession: (sessionId: string) => boolean,
+  ): void {
     this.#app = app;
-    this.#rootFor = rootFor;
+    this.#sessions = sessions;
+    this.#resolveWorkspaceRoot = resolveWorkspaceRoot;
+    this.#isTerminalSession = isTerminalSession;
+  }
+
+  #requireTerminalSession(sessionId: string): void {
+    if (!this.#isTerminalSession(sessionId)) {
+      throw new ClientApiRpcError(
+        'forbidden',
+        'Control sockets attach only to terminal sessions, not to headless or ACP sessions.',
+      );
+    }
+  }
+
+  #serial<T>(lease: ControlLease, operation: () => Promise<T>): Promise<T> {
+    const next = (lease.operations ?? Promise.resolve()).then(operation);
+    lease.operations = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
   }
 
   /**
@@ -120,6 +154,7 @@ export class DaemonControlLeases {
     if (!isControlSocketName(params.name)) {
       throw new ClientApiRpcError('invalid_request', 'Invalid control socket name. Use 1–64 letters, digits, _ or -.');
     }
+    this.#requireTerminalSession(params.sessionId);
     const holder = this.#names.get(params.name);
     if (holder) {
       throw new ClientApiRpcError(
@@ -183,15 +218,26 @@ export class DaemonControlLeases {
   ): Promise<ControlLeaseResult> {
     requireLocalCaller(principal);
     const lease = this.#leases.get(params.leaseId);
-    const socket = lease?.socket;
+    if (!lease) throw new ClientApiRpcError('not_found', 'No such control lease for this connection.');
+    return this.#serial(lease, () => this.#rebind(lease, params, connection));
+  }
+
+  async #rebind(
+    lease: ControlLease,
+    params: { readonly leaseId: string; readonly sessionId: string },
+    connection: DaemonRpcConnectionContext,
+  ): Promise<ControlLeaseResult> {
+    const socket = lease.socket;
     if (
-      !lease ||
       !socket ||
       lease.closing ||
       (lease.connectionId !== undefined && lease.connectionId !== connection.connectionId)
     ) {
       throw new ClientApiRpcError('not_found', 'No such control lease for this connection.');
     }
+    const moving = socket.socket.binding.sessionId !== params.sessionId;
+    // Refused before anything changes, so the socket stays where it is.
+    if (moving) this.#requireTerminalSession(params.sessionId);
     if (lease.connectionId === undefined) {
       clearTimeout(lease.handoffTimer);
       lease.handoffTimer = undefined;
@@ -200,7 +246,6 @@ export class DaemonControlLeases {
       lease.unregisterClose = connection.onDisconnect(() => void this.#release(lease));
     }
     try {
-      const moving = socket.socket.binding.sessionId !== params.sessionId;
       const root = moving ? await this.#root(params.sessionId) : lease.root;
       this.#backOutIfReleased(lease);
       const hold = lease.hold;
@@ -230,7 +275,16 @@ export class DaemonControlLeases {
   ): Promise<void> {
     requireLocalCaller(principal);
     const lease = this.#leases.get(params.leaseId);
-    if (!lease || lease.closing || lease.connectionId !== connection.connectionId) {
+    if (!lease) throw new ClientApiRpcError('not_found', 'No such control lease for this connection.');
+    await this.#serial(lease, () => this.#unbind(lease, params, connection));
+  }
+
+  async #unbind(
+    lease: ControlLease,
+    params: { readonly leaseId: string; readonly pauseForHandoff?: boolean },
+    connection: DaemonRpcConnectionContext,
+  ): Promise<void> {
+    if (lease.closing || lease.connectionId !== connection.connectionId) {
       throw new ClientApiRpcError('not_found', 'No such control lease for this connection.');
     }
     const socket = lease.socket;
@@ -255,9 +309,15 @@ export class DaemonControlLeases {
     await Promise.allSettled([...this.#leases.values()].map((lease) => this.#release(lease)));
   }
 
-  /** The session's workspace root; an unknown session rejects with its protocol error. */
+  /** A socket binds only a session this daemon knows; a vanished root just leaves `workspaceRoot` empty. */
   async #root(sessionId: string): Promise<string | null> {
-    return (await this.#rootFor?.(sessionId)) ?? null;
+    const session = await this.#sessions?.get(LOCAL_PRINCIPAL, sessionId);
+    if (!session) throw new DirectProtocolError('not_found', 'Unknown local session.');
+    try {
+      return this.#resolveWorkspaceRoot?.(session.workspaceId) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   #backOutIfReleased(lease: ControlLease): void {

@@ -469,7 +469,10 @@ the lease id reaches the replacement process in `TERM2_CONTROL_HANDOFF_LEASE`;
 its startup `rebind` claims the socket and resumes it. A socket nobody claims
 closes after 30 s, and a late replacement then binds the name afresh. A failed
 `rebind` closes the socket, as in-process. If the TUI's connection drops and it
-reconnects, it binds the name again.
+reconnects, it binds the name again. `rebind` and `unbind` on one lease run one
+at a time, so a move in flight cannot lift a handoff pause. Only terminal
+sessions get a socket: binding, or moving one, to a session launched headless
+or for ACP answers `forbidden`, since in-process only a TUI ever has one.
 
 Discord send for a daemon session's tools comes from the daemon's surface
 (`DaemonControlLeases.outbound`, interactive local sessions only, as

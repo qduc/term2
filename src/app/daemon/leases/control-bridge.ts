@@ -59,6 +59,8 @@ export function createDaemonControlBridge(rpc: () => UnixRpcClient): DaemonContr
   let handingOff = false;
   /** A socket released by the daemon because our connection dropped; re-bound on reconnect. */
   let lost: { readonly name: string; readonly discordInput: boolean } | undefined;
+  /** Only the current lease's connection is watched, so `/bridge connect` cycles add no listeners. */
+  let stopWatching: (() => void) | undefined;
 
   const adopt = (result: LeaseResult, client: UnixRpcClient, sessionId: string): Lease => {
     const next: Lease = { ...result, rpc: client };
@@ -66,7 +68,8 @@ export function createDaemonControlBridge(rpc: () => UnixRpcClient): DaemonContr
     boundSession = sessionId;
     lost = undefined;
     // The daemon releases a lease on EOF; reflect that instead of advertising a dead socket.
-    client.onClose(() => {
+    stopWatching?.();
+    stopWatching = client.onClose(() => {
       if (lease !== next || handingOff) return;
       lease = undefined;
       lost = { name: next.name, discordInput: next.discordInputEnabled };

@@ -3,6 +3,79 @@
 Branch `claude/step14e-part2a-control-v2`, based on `origin/main` `93be5b603`
 (Step 14e Part 1 as merged in #475). Not pushed; no PR.
 
+## Follow-ups after independent verification (commit after `960da4159`)
+
+The independent verifier accepted `960da4159` with no confirmed defects and
+asked for three follow-ups, all done:
+
+1. **Headless and ACP sessions get no control socket.** `session.control.bind`
+   to a session launched headless or for ACP, and a `rebind` that would move a
+   socket onto one, answer `forbidden` ("Control sockets attach only to terminal
+   sessions"). In process only a TUI ever has a socket; before this, the verifier
+   bound a `discordInput: true` socket to a headless session and
+   `term2 control submit` started a turn. The refused move happens before any
+   change, so the socket stays bound where it was. `daemon.ts` gains one
+   `launchMode(sessionId)` reading of launch policy and flags, used by both the
+   session surface and this admission check (`forbidden` because the caller is
+   allowed to bind sockets, just not to that kind of session).
+2. **A move in flight can no longer lift a handoff pause.** `rebind` and
+   `unbind` on one lease now run one at a time (`#serial`, a per-lease promise
+   chain); each re-checks the lease when its turn comes. Before, a moving
+   `rebind` in flight when `unbind { pauseForHandoff }` arrived released the
+   pause, leaving the lease detached from every connection yet admitting
+   mutations.
+3. **Conformance test.** New case in
+   `tests/host/daemon-unix-conformance.integration.test.ts`: headless and ACP
+   binds are `forbidden` and leave no socket; another connection's `rebind`,
+   `unbind` and `unbind { pauseForHandoff }` on the holder's lease are
+   `not_found` and its bind of the same name is `busy`; moving the lease onto a
+   headless session is `forbidden` and keeps it bound; a concurrent move plus
+   pause leaves the socket refusing `submit` (`unavailable`) on its own v1 wire.
+   It runs the daemon in-process from source, with a private `XDG_RUNTIME_DIR`.
+
+Also, because `daemon.ts` crossed the 500-line gate with the new wiring, the
+session/root lookup for control sockets moved into the lease module that owns
+that rule: `attach(app, sessionIndex, resolveWorkspaceRoot, isTerminalSession)`
+(was a `rootFor` closure in `daemon.ts`). Behaviour unchanged.
+
+Optional items:
+
+- **Fixed:** the bridge's `adopt` kept one `onClose` listener per `/bridge
+  connect` cycle; it now unsubscribes the previous one (`stopWatching`).
+- **Left alone:** `/clear` while the connection is down. The bridge's lease is
+  already dropped then, so its `rebind` is a no-op; the re-bind after reconnect
+  uses whatever session the reconnect attaches, which may not be the one the
+  `/clear` produced. Not reproduced or tested; left for a later change.
+
+Red proofs for items 1 and 2, against the rebuilt bundle (sha256
+`d93658942e76d912484dcf4f278252fc769c8c1badb89535c9ed537ec20c8fbf`): a
+temporary copy of the new conformance case that starts the **built** daemon
+(`node dist/src/app/cli.js daemon start`) instead of the source one passed on
+the clean bundle and failed under each mutation; the bundle was
+restored from a private backup and checked with `cmp` after every run. The
+same mutations applied to `control-lease.ts` source make the committed
+conformance case fail (source restored and `cmp`-checked). The temporary copy
+was deleted.
+
+| Mutation | Built-daemon probe | Committed conformance case (source) |
+| --- | --- | --- |
+| `noterminal`: `#isTerminalSession` check disabled | fails: headless bind answers `ok` | fails: same |
+| `noserial`: `#serial` runs operations at once | fails: `submit` admitted on the detached socket (also 3 of 3 runs on the previous build, before the `attach` refactor; clean probe passed 4 of 4 there) | fails: same |
+
+The six earlier mutations were re-run on the rebuilt bundle; all still fail
+the daemon TUI e2e case, restores `cmp`-checked. (`nohandoff` this time kept the
+inode and changed only the ctime, so the inode+ctime identity check is
+load-bearing.)
+
+Commands on the follow-up revision (working tree on `960da4159`, same source as
+the commit): typecheck, eslint and prettier pass; every `scripts/check-*.mjs`
+gate passes except `check-ci-runtime` (CI-only) and `check-release-identity`
+(release gate); `pnpm test` 22/22; `pnpm test:e2e
+tests/cli/daemon-tui.e2e.test.ts` 3/3; `pnpm test:integration tests/host
+tests/clients/control-socket tests/clients/discord` 19 files, 57 tests pass
+(includes the new conformance case). The full lanes were not re-run for these
+follow-ups; the sections below record them on `960da4159`.
+
 **Port note.** This work was first written on `f59ad21` (PR #476's Part 1,
 which will not land) as `eefbfb532` on `claude/step14e-part2a-control`. This
 branch re-applies it to main's structure; it does not merge #476. What changed

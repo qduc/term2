@@ -91,3 +91,19 @@ export function negotiateCapabilities(hostSupported: readonly string[], clientRe
   }
   return out;
 }
+
+const METHOD_CAPABILITIES = new Map<string, string>([
+  ['daemon.status', 'daemon_control'],
+  ['daemon.shutdown', 'daemon_control'],
+  ['session.list.subscribe', 'session_list_stream'],
+  ['session.list.unsubscribe', 'session_list_stream'],
+  ['settings.subscribe', 'settings_stream'],
+  ['settings.unsubscribe', 'settings_stream'],
+  ['mcp.status', 'mcp'],
+  ['mcp.login', 'mcp'],
+]);
+
+/** Optional capability required for a post-handshake request, on any binding. */
+export function requiredClientApiCapability(method: string): string | undefined {
+  return METHOD_CAPABILITIES.get(method);
+}

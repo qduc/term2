@@ -136,7 +136,8 @@ function eventStream<U>(
       'x-term2-event-format': encoding.format,
       'x-term2-event-mode': replay ? 'replay-live' : encoding.snapshot ? 'snapshot-live' : 'live',
       'x-term2-replay': resumable ? 'atomic' : 'unavailable',
-      ...(replay ? { 'x-term2-replay-from': String(replay.fromSeq), 'x-term2-replay-to': String(replay.toSeq) } : {}),
+      ...(replay ? { 'x-term2-replay-from': String(replay.fromSeq) } : {}),
+      ...(replay?.toSeq != null ? { 'x-term2-replay-to': String(replay.toSeq) } : {}),
     },
     stream: {
       close: () => connection.close(),

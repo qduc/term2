@@ -110,7 +110,12 @@ export function createSessionSettings(
 ): SettingsService {
   const continued = continuedSettings.getStore();
   const defaults = continued ?? selection.settings;
-  const settings = new SessionSettingsService({ env: buildEnvOverrides(), loggingService: selection.logger });
+  const settingsDir = selection.settings instanceof SettingsService ? selection.settings.settingsDir : undefined;
+  const settings = new SessionSettingsService({
+    ...(settingsDir ? { settingsDir } : {}),
+    env: buildEnvOverrides(),
+    loggingService: selection.logger,
+  });
   // `/clear` must not undo what someone changed, least of all a tightened approval
   // mode. Only real differences: rewriting a default would change what it means.
   if (continued) {

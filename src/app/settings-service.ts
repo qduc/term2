@@ -134,7 +134,7 @@ function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Arra
 export class SettingsService {
   private settings: SettingsData;
   private sources: Map<string, SettingSource>;
-  private settingsDir: string;
+  readonly settingsDir: string;
   private disableLogging: boolean;
   private disableFilePersistence: boolean;
   private listeners: Set<(key?: string) => void> = new Set();

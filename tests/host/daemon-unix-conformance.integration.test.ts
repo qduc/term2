@@ -453,6 +453,45 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(okWrite.ok).toBe(true);
     const setChanged = await clientA.waitForEvent((e) => e.streamId === setStreamId && e.event === 'settings.changed');
     CLIENT_API_SCHEMAS.settingsStateEvent.parse(setChanged.payload);
+
+    // Connection-scoped capability enforcement: a client that does not negotiate a capability gets `unavailable`.
+    const limitedClient = new TestUnixRpcClient(await connectRaw(socketPath));
+    cleanups.push(() => limitedClient.close());
+    const limitedHello = await limitedClient.request('protocol.hello', {
+      protocolVersion: '1.0',
+      minSupportedVersion: '1.0',
+      clientKind: 'tui',
+      clientVersion: '1.0.0',
+      capabilities: ['daemon_control'],
+    });
+    expect(limitedHello.ok).toBe(true);
+    if (limitedHello.ok) {
+      expect(limitedHello.result['capabilities']).toEqual(['daemon_control']);
+    }
+    expect(await limitedClient.request('daemon.status')).toMatchObject({ ok: true });
+    expect(await limitedClient.request('mcp.status')).toMatchObject({ ok: false, error: { code: 'unavailable' } });
+    expect(await limitedClient.request('settings.subscribe')).toMatchObject({
+      ok: false,
+      error: { code: 'unavailable' },
+    });
+    expect(await limitedClient.request('session.list.subscribe')).toMatchObject({
+      ok: false,
+      error: { code: 'unavailable' },
+    });
+
+    // Mismatched stream close (`session.detach` on a `session.list.subscribe` streamId) must not retire the list stream.
+    const listSubRes = await clientA.request('session.list.subscribe');
+    expect(listSubRes.ok).toBe(true);
+    const listSubId = listSubRes.ok ? String(listSubRes.result['streamId']) : '';
+    await clientA.waitForEvent((e) => e.streamId === listSubId && e.event === 'session.list.snapshot');
+    expect(await clientA.request('session.detach', { streamId: listSubId })).toMatchObject({ ok: true });
+    const afterDetachCreate = await clientA.request('session.create', { cwd: workspace });
+    expect(afterDetachCreate.ok).toBe(true);
+    const afterDetachUpsert = await clientA.waitForEvent(
+      (e) => e.streamId === listSubId && e.event === 'session.list.upsert',
+    );
+    expect(afterDetachUpsert.event).toBe('session.list.upsert');
+    expect(await clientA.request('session.list.unsubscribe', { streamId: listSubId })).toMatchObject({ ok: true });
   });
 
   it('auto-starts one singleton daemon across concurrent clients and stops cleanly via CLI subcommands', async () => {

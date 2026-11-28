@@ -23,6 +23,7 @@ import {
   CLIENT_API_VERSION,
   negotiateCapabilities,
   negotiateProtocolVersion,
+  requiredClientApiCapability,
 } from '../../protocol/client-api/version-negotiation.js';
 import type { Principal } from '../in-process-direct-types.js';
 import { ClientApiRpcError, toClientApiError } from './daemon-errors.js';
@@ -42,7 +43,11 @@ const MAX_SUBSCRIPTIONS = 32;
 const MAX_STREAM_QUEUE = 256;
 
 const STREAM_OPEN_METHODS = new Set(['session.list.subscribe', 'session.attach', 'settings.subscribe']);
-const STREAM_CLOSE_METHODS = new Set(['session.list.unsubscribe', 'session.detach', 'settings.unsubscribe']);
+const STREAM_CLOSE_OPEN_MAP = new Map<string, string>([
+  ['session.list.unsubscribe', 'session.list.subscribe'],
+  ['session.detach', 'session.attach'],
+  ['settings.unsubscribe', 'settings.subscribe'],
+]);
 
 type ActiveStream = {
   readonly streamId: string;
@@ -55,7 +60,7 @@ type ActiveStream = {
 
 type ClientConnection = {
   readonly socket: net.Socket;
-  handshaken: boolean;
+  negotiation?: { readonly version: string; readonly capabilities: ReadonlySet<string> };
   closed: boolean;
   inFlight: number;
   pendingStreams: number;
@@ -104,7 +109,7 @@ export class DaemonUnixServer {
   attachedClientCount(): number {
     let count = 0;
     for (const client of this.#clients) {
-      if (!client.closed && client.handshaken) count += 1;
+      if (!client.closed && client.negotiation) count += 1;
     }
     return count;
   }
@@ -136,7 +141,7 @@ export class DaemonUnixServer {
   broadcastDraining(payload: DaemonDrainingEvent): void {
     const frame: UnixEventFrame = { kind: 'event', event: 'daemon.draining', payload };
     for (const client of [...this.#clients]) {
-      if (!client.closed && client.handshaken) {
+      if (!client.closed && client.negotiation) {
         this.#writeFrame(client, frame);
       }
     }
@@ -157,7 +162,6 @@ export class DaemonUnixServer {
   #onConnection(socket: net.Socket): void {
     const client: ClientConnection = {
       socket,
-      handshaken: false,
       closed: false,
       inFlight: 0,
       pendingStreams: 0,
@@ -169,20 +173,16 @@ export class DaemonUnixServer {
       backpressured: false,
     };
     this.#clients.add(client);
-
     client.handshakeTimer = setTimeout(() => {
-      if (!client.handshaken && !client.closed) {
+      if (!client.negotiation && !client.closed) {
         this.#cleanupClient(client);
         socket.destroy();
       }
     }, this.#preHandshakeTimeoutMs);
     client.handshakeTimer.unref?.();
-
     client.stopReader = attachIncrementalLineReader(socket, {
       maxLineBytes: this.#maxInboundLineBytes,
-      onLine: (line) => {
-        void this.#handleLine(client, line);
-      },
+      onLine: (line) => void this.#handleLine(client, line),
       onOverflow: () => {
         this.#cleanupClient(client);
         socket.destroy();
@@ -192,10 +192,8 @@ export class DaemonUnixServer {
     socket.on('drain', () => {
       if (client.closed) return;
       client.backpressured = false;
-      if (client.drainTimer) {
-        clearTimeout(client.drainTimer);
-        client.drainTimer = null;
-      }
+      if (client.drainTimer) clearTimeout(client.drainTimer);
+      client.drainTimer = null;
       this.#flushStreams(client);
     });
 
@@ -209,17 +207,11 @@ export class DaemonUnixServer {
     client.closed = true;
     this.#clients.delete(client);
     client.stopReader();
-    if (client.handshakeTimer) {
-      clearTimeout(client.handshakeTimer);
-      client.handshakeTimer = null;
-    }
-    if (client.drainTimer) {
-      clearTimeout(client.drainTimer);
-      client.drainTimer = null;
-    }
-    for (const stream of [...client.streams.values()]) {
-      this.#retireStream(client, stream);
-    }
+    if (client.handshakeTimer) clearTimeout(client.handshakeTimer);
+    if (client.drainTimer) clearTimeout(client.drainTimer);
+    client.handshakeTimer = null;
+    client.drainTimer = null;
+    for (const stream of [...client.streams.values()]) this.#retireStream(client, stream);
     client.streams.clear();
   }
 
@@ -268,7 +260,7 @@ export class DaemonUnixServer {
 
     client.inFlight += 1;
     try {
-      if (!client.handshaken) {
+      if (!client.negotiation) {
         await this.#handlePreHandshake(client, id, method, params);
         return;
       }
@@ -279,15 +271,22 @@ export class DaemonUnixServer {
         });
         return;
       }
+      const requiredCap = requiredClientApiCapability(method);
+      if (requiredCap && !client.negotiation.capabilities.has(requiredCap)) {
+        throw new ClientApiRpcError('unavailable', `Capability "${requiredCap}" was not negotiated.`);
+      }
       if (STREAM_OPEN_METHODS.has(method)) {
         await this.#handleStreamOpen(client, id, method, params);
         return;
       }
-      if (STREAM_CLOSE_METHODS.has(method)) {
-        this.#handleStreamClose(client, id, params);
+      const expectedOpen = STREAM_CLOSE_OPEN_MAP.get(method);
+      if (expectedOpen) {
+        this.#handleStreamClose(client, id, expectedOpen, params);
         return;
       }
-      const result = await this.options.rpc.invoke(this.options.localOwnerPrincipal, method, params);
+      const result = await this.options.rpc.invoke(this.options.localOwnerPrincipal, method, params, {
+        protocolVersion: client.negotiation.version,
+      });
       if (!client.closed) this.#sendOk(client, id, result);
     } catch (error) {
       if (!client.closed) this.#sendError(client, id, toClientApiError(error));
@@ -332,12 +331,7 @@ export class DaemonUnixServer {
       return;
     }
 
-    const negotiated = negotiateProtocolVersion(
-      hello.data.minSupportedVersion,
-      hello.data.protocolVersion,
-      CLIENT_API_MIN_SUPPORTED_VERSION,
-      CLIENT_API_VERSION,
-    );
+    const negotiated = negotiateProtocolVersion(hello.data.minSupportedVersion, hello.data.protocolVersion);
     if (!negotiated.ok) {
       this.#sendError(client, id, {
         code: 'protocol_incompatible',
@@ -355,12 +349,10 @@ export class DaemonUnixServer {
       return;
     }
 
-    client.handshaken = true;
-    if (client.handshakeTimer) {
-      clearTimeout(client.handshakeTimer);
-      client.handshakeTimer = null;
-    }
     const capabilities = negotiateCapabilities(this.options.capabilities, hello.data.capabilities);
+    client.negotiation = { version: negotiated.version, capabilities: new Set(capabilities) };
+    if (client.handshakeTimer) clearTimeout(client.handshakeTimer);
+    client.handshakeTimer = null;
     this.#sendOk(client, id, {
       protocolVersion: negotiated.version,
       daemonId: this.options.daemonId,
@@ -384,7 +376,9 @@ export class DaemonUnixServer {
     client.pendingStreams += 1;
     let registration: Awaited<ReturnType<DaemonRpc['openStream']>>;
     try {
-      registration = await this.options.rpc.openStream(this.options.localOwnerPrincipal, method, params);
+      registration = await this.options.rpc.openStream(this.options.localOwnerPrincipal, method, params, {
+        protocolVersion: client.negotiation?.version,
+      });
     } finally {
       client.pendingStreams -= 1;
     }
@@ -415,13 +409,18 @@ export class DaemonUnixServer {
     });
   }
 
-  #handleStreamClose(client: ClientConnection, id: string, params: Record<string, unknown> | undefined): void {
+  #handleStreamClose(
+    client: ClientConnection,
+    id: string,
+    expectedOpen: string,
+    params: Record<string, unknown> | undefined,
+  ): void {
     const parsed = CLIENT_API_SCHEMAS.unixStreamUnsubscribeParams.safeParse(params ?? {});
     if (!parsed.success) {
       throw new ClientApiRpcError('invalid_request', `Invalid unsubscribe params: ${parsed.error.message}`);
     }
     const stream = client.streams.get(parsed.data.streamId);
-    if (stream) this.#retireStream(client, stream);
+    if (stream && stream.method === expectedOpen) this.#retireStream(client, stream);
     this.#sendOk(client, id, {});
   }
 

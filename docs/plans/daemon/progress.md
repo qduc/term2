@@ -37,3 +37,18 @@ It also found that malformed skill requests had silently defaulted to the
 daemon's working directory. The corrected candidate passed independent Unix
 socket checks for the restart, scoped discovery, and malformed requests, and
 the three daemon and Client API integration suites.
+
+### Step 14d attachment seam, capability enforcement, and v1.0 runtime operations
+
+- Repaired `RemoteDirectHost` attachment/replay seam (`remote-direct-attachment.ts`,
+  `daemon-streams.ts`, `DirectEventQueue.finish()`): `cut()` now pairs the
+  folded snapshot with its exact batch ordinal, empty-event accepted facts
+  advance `seq`, state-sync snapshots stay non-transient under slow-consumer
+  backpressure, and `DirectReplayConnection.replay.toSeq` is `number | null`.
+- Enforced connection-scoped negotiated capabilities and matching stream-close
+  methods in `DaemonUnixServer` (`requiredClientApiCapability`).
+- Wired daemon-owned per-workspace MCP (`daemon-mcp.ts`), `quota.get`,
+  `set_goal` (host-attached with strict validation and `expectedGeneration`
+  CAS), server-resolved `skill` on `submit`/`preview`, settings fanout on
+  provider/credential/OAuth commits, and `SettingsService.settingsDir`
+  forwarding in `createSessionSettings`.

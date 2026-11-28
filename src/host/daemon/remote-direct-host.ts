@@ -6,13 +6,7 @@
  * for daemon-level control, session-list streaming, and global settings/catalog RPCs.
  */
 import path from 'node:path';
-import type {
-  WireCommand,
-  WireCommandErrorCode,
-  WireCommandResult,
-  WireEvent,
-  WireSnapshot,
-} from '../../protocol/wire.js';
+import type { WireCommand, WireCommandErrorCode, WireCommandResult } from '../../protocol/wire.js';
 import { DirectProtocolError } from '../../protocol/errors.js';
 import type {
   ClientApiErrorCode,
@@ -30,8 +24,8 @@ import type {
   Principal,
   WorkspaceGrant,
 } from '../in-process-direct-types.js';
-import { DirectEventQueue } from '../in-process-direct-queue.js';
 import { ClientApiRpcError } from './daemon-errors.js';
+import { attachRemoteDirectSession } from './remote-direct-attachment.js';
 import type { UnixRpcClient } from './unix-rpc-client.js';
 
 type ProtocolFailureCode = Exclude<WireCommandErrorCode, 'command_rejected' | 'command_interrupted'>;
@@ -66,6 +60,14 @@ export interface RemoteDirectHost extends DirectHost {
     changes: readonly { readonly key: string; readonly value: unknown }[],
   ): Promise<Record<string, unknown>>;
   listModels(): Promise<readonly Record<string, unknown>[]>;
+  listProviderPresets(): Promise<Record<string, unknown>>;
+  upsertProvider(params: Record<string, unknown>): Promise<Record<string, unknown>>;
+  deleteProvider(providerId: string): Promise<Record<string, unknown>>;
+  setCredential(provider: string, value: string): Promise<Record<string, unknown>>;
+  deleteCredential(provider: string): Promise<Record<string, unknown>>;
+  oauthLogin(provider: 'codex' | 'grok'): Promise<Record<string, unknown>>;
+  oauthSelect(provider: 'codex' | 'grok', accountId: string): Promise<Record<string, unknown>>;
+  oauthDelete(provider: 'codex' | 'grok', accountId?: string): Promise<Record<string, unknown>>;
   listSkills(scope?: {
     readonly workspaceId?: string;
     readonly sessionId?: string;
@@ -178,164 +180,13 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
     fromSeq?: number,
   ): Promise<DirectConnection | DirectReplayConnection> {
     ensureOpen();
-    let streamId = '';
-    let retired = false;
-    let ordinal = 0;
-    let currentSnapshot: WireSnapshot | null = null;
-    let snapshotSettled = fromSeq !== undefined;
-    let resolveInitialSnapshot: ((snapshot: WireSnapshot) => void) | null = null;
-    let rejectInitialSnapshot: ((error: Error) => void) | null = null;
-
-    const initialSnapshotPromise =
-      fromSeq === undefined
-        ? new Promise<WireSnapshot>((resolve, reject) => {
-            const timer = setTimeout(() => {
-              if (snapshotSettled) return;
-              snapshotSettled = true;
-              reject(new DirectProtocolError('unavailable', `Timed out waiting for initial snapshot of ${sessionId}.`));
-            }, snapshotTimeoutMs);
-            timer.unref?.();
-            resolveInitialSnapshot = (snap) => {
-              if (snapshotSettled) return;
-              snapshotSettled = true;
-              clearTimeout(timer);
-              resolve(snap);
-            };
-            rejectInitialSnapshot = (err) => {
-              if (snapshotSettled) return;
-              snapshotSettled = true;
-              clearTimeout(timer);
-              reject(err);
-            };
-          })
-        : null;
-
-    const detachFromDaemon = () => {
-      if (retired) return;
-      retired = true;
-      if (streamId && !rpc.closed) {
-        void rpc.request('session.detach', { streamId }).catch(() => undefined);
-      }
-    };
-
-    const queue = new DirectEventQueue(detachFromDaemon);
-
-    const handleEvent = (frame: UnixEventFrame) => {
-      if (frame.event === 'session.snapshot') {
-        const snapshot = frame.payload['snapshot'] as WireSnapshot | undefined;
-        if (!snapshot) return;
-        currentSnapshot = snapshot;
-        if (!snapshotSettled && resolveInitialSnapshot) {
-          resolveInitialSnapshot(snapshot);
-          return;
-        }
-        queue.push({
-          kind: 'snapshot',
-          seq: snapshot.seq,
-          occurredAt: null,
-          events: [
-            {
-              sessionId,
-              turnId: null,
-              type: 'snapshot',
-              seq: snapshot.seq,
-              occurredAt: new Date().toISOString(),
-              payload: { snapshot },
-            },
-          ],
-          ordinal: ++ordinal,
-        });
-        return;
-      }
-      if (frame.event === 'session.accepted') {
-        const events = (frame.payload['events'] as WireEvent[] | undefined) ?? [];
-        const seq = typeof frame.payload['seq'] === 'number' ? frame.payload['seq'] : null;
-        const occurredAt = typeof frame.payload['occurredAt'] === 'string' ? frame.payload['occurredAt'] : null;
-        if (events.length > 0) {
-          queue.push({ kind: 'accepted', seq, occurredAt, events, ordinal: ++ordinal });
-        }
-        return;
-      }
-      if (frame.event === 'session.live') {
-        const events = (frame.payload['events'] as WireEvent[] | undefined) ?? [];
-        if (events.length > 0) {
-          queue.push({ kind: 'live', seq: null, occurredAt: null, events, ordinal: ++ordinal });
-        }
-        return;
-      }
-      if (frame.event === 'session.resync_required') {
-        retired = true;
-        const err = new DirectProtocolError('replay_unavailable', 'Daemon stream requires resync.');
-        rejectInitialSnapshot?.(err);
-        queue.fail(err);
-        return;
-      }
-      if (frame.event === 'session.closed') {
-        retired = true;
-        rejectInitialSnapshot?.(new DirectProtocolError('closed', `Session ${sessionId} closed before snapshot.`));
-        queue.close();
-      }
-    };
-
-    const handleSocketClose = (error?: Error) => {
-      retired = true;
-      const err = new DirectProtocolError('closed', error?.message ?? 'Daemon connection closed.');
-      rejectInitialSnapshot?.(err);
-      if (error) queue.fail(err);
-      else queue.close();
-    };
-
-    let handle: Awaited<ReturnType<UnixRpcClient['subscribe']>>;
     try {
-      handle = await rpc.subscribe(
-        'session.attach',
-        fromSeq !== undefined ? { sessionId, fromSeq, sessionEpoch: sessionId } : { sessionId },
-        { onEvent: handleEvent, onClose: handleSocketClose },
+      return await attachRemoteDirectSession(rpc, sessionId, fromSeq, snapshotTimeoutMs, (command) =>
+        dispatchCommand(sessionId, command),
       );
     } catch (error) {
-      const rejectSnap = rejectInitialSnapshot as ((err: Error) => void) | null;
-      rejectSnap?.(error instanceof Error ? error : new Error(String(error)));
-      initialSnapshotPromise?.catch(() => undefined);
       rethrowAsProtocolError(error);
     }
-    streamId = handle.streamId;
-
-    const closeConnection = () => {
-      handle.retireLocal();
-      queue.close();
-    };
-
-    if (fromSeq !== undefined) {
-      const replayConnection: DirectReplayConnection = {
-        sessionId,
-        snapshot: null,
-        replay: { fromSeq, toSeq: fromSeq },
-        events: queue,
-        batches: () => queue.batches(),
-        send: (command) => dispatchCommand(sessionId, command),
-        close: closeConnection,
-      };
-      return replayConnection;
-    }
-
-    let snapshot: WireSnapshot;
-    try {
-      snapshot = await initialSnapshotPromise!;
-    } catch (error) {
-      closeConnection();
-      rethrowAsProtocolError(error);
-    }
-
-    const connection: DirectConnection = {
-      sessionId,
-      snapshot,
-      events: queue,
-      batches: () => queue.batches(),
-      cut: () => ({ snapshot: currentSnapshot ?? snapshot, ordinal }),
-      send: (command) => dispatchCommand(sessionId, command),
-      close: closeConnection,
-    };
-    return connection;
   }
 
   async function listSessions(_principal: Principal, cursor?: string): ReturnType<DirectSessionStore['list']> {
@@ -384,6 +235,14 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
     createSession,
     connect,
     sendCommand: (_principal, sessionId, command) => dispatchCommand(sessionId, command),
+    async closeSession(_principal, sessionId) {
+      ensureOpen();
+      try {
+        await rpc.request('session.close', { sessionId });
+      } catch (error) {
+        rethrowAsProtocolError(error);
+      }
+    },
     async dispose() {
       disposed = true;
       rpc.close();
@@ -454,6 +313,38 @@ export function createRemoteDirectHost(rpc: UnixRpcClient, options: RemoteDirect
       ensureOpen();
       const res = await rpc.request<{ readonly models: readonly Record<string, unknown>[] }>('models.list');
       return res.models;
+    },
+    async listProviderPresets() {
+      ensureOpen();
+      return await rpc.request('providers.presets');
+    },
+    async upsertProvider(params) {
+      ensureOpen();
+      return await rpc.request('providers.upsert', params);
+    },
+    async deleteProvider(providerId) {
+      ensureOpen();
+      return await rpc.request('providers.delete', { providerId });
+    },
+    async setCredential(provider, value) {
+      ensureOpen();
+      return await rpc.request('credentials.set', { provider, value });
+    },
+    async deleteCredential(provider) {
+      ensureOpen();
+      return await rpc.request('credentials.delete', { provider });
+    },
+    async oauthLogin(provider) {
+      ensureOpen();
+      return await rpc.request('oauth.login', { provider });
+    },
+    async oauthSelect(provider, accountId) {
+      ensureOpen();
+      return await rpc.request('oauth.select', { provider, accountId });
+    },
+    async oauthDelete(provider, accountId) {
+      ensureOpen();
+      return await rpc.request('oauth.delete', accountId ? { provider, accountId } : { provider });
     },
     async listSkills(scope) {
       ensureOpen();

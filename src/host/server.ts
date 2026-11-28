@@ -359,7 +359,13 @@ async function listSessions(
       ...(cursor ? { cursor } : {}),
       ...(workspaceId ? { workspaceId } : {}),
     });
-    return { status: 200, body: page };
+    return {
+      status: 200,
+      body: {
+        ...page,
+        sessions: page.sessions.map(({ messageCount: _m, workspaceRoot: _w, ...rest }) => rest),
+      },
+    };
   }
   const presentation = dependencies.presentation;
   if (!presentation) return unavailable('direct session list metadata');

@@ -23,6 +23,11 @@ export type SessionListSseOptions = {
   ) => () => void;
 };
 
+function stripV11SessionFields<T extends Record<string, unknown>>(item: T): Omit<T, 'messageCount' | 'workspaceRoot'> {
+  const { messageCount: _m, workspaceRoot: _w, ...rest } = item;
+  return rest;
+}
+
 function encodeSseFrame(eventName: string, payload: Record<string, unknown>): string {
   return `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
@@ -152,6 +157,15 @@ export function sessionListEventStream(
 
         const handleEvent = (event: SessionListStreamEvent) => {
           if (closed) return;
+          if (event.event === 'session.list.snapshot') {
+            const { event: eventName, sessions, ...rest } = event;
+            enqueue(encodeSseFrame(eventName, { ...rest, sessions: sessions.map(stripV11SessionFields) }));
+            return;
+          }
+          if (event.event === 'session.list.upsert') {
+            enqueue(encodeSseFrame(event.event, { session: stripV11SessionFields(event.session) }));
+            return;
+          }
           const { event: eventName, ...payload } = event;
           enqueue(encodeSseFrame(eventName, payload));
         };

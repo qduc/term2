@@ -190,9 +190,9 @@ export function createSessionIndex(deps: SessionIndexDeps): SessionIndex {
     latestSequence: record.latestSequence,
     ...(record.title ? { title: record.title } : {}),
     ...(record.model ? { model: { provider: record.model.provider, model: record.model.model } } : {}),
-    ...(record.messageCount !== undefined ? { messageCount: record.messageCount } : {}),
     ...(includeCounts
       ? {
+          ...(record.messageCount !== undefined ? { messageCount: record.messageCount } : {}),
           pendingInteractionCount: record.pendingInteractionCount,
           activeBackgroundTaskCount: record.activeBackgroundTaskCount,
         }

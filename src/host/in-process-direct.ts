@@ -193,20 +193,22 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       await deps.authorize(principal, { kind: 'write', sessionId });
       await release(sessionId);
     },
-    async closeWorkspaceSessions(root) {
+    async closeWorkspaceSessions(root, include = () => true) {
       open();
       // Sessions already open start closing now, so none admits a turn under the old
       // grant while the in-flight work below is awaited.
       const early = [...attachments.entries()]
-        .filter(([, pending]) => {
+        .filter(([sessionId, pending]) => {
           const attached = settled.get(pending);
-          return attached !== undefined && workspaceRoot(attached.session) === root;
+          return attached !== undefined && workspaceRoot(attached.session) === root && include(sessionId);
         })
         .map(([sessionId]) => sessionId);
       const releases = early.map((sessionId) => release(sessionId));
       // A create or open that began under the old grant settles into `attachments`; wait for it.
       await Promise.allSettled([...creates]);
-      const pending = [...attachments.entries()].filter(([sessionId]) => !early.includes(sessionId));
+      const pending = [...attachments.entries()].filter(
+        ([sessionId]) => !early.includes(sessionId) && include(sessionId),
+      );
       const opened = await Promise.allSettled(pending.map(([, attached]) => attached));
       const matching = pending.filter(([, attached], index) => {
         const result = opened[index]!;

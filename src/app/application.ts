@@ -150,7 +150,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
   );
   const nativeStore = createDirectSessionStore({
     directory: options.conversationsDir,
-    resolveWorkspace: (root, identity) => authority.resolveStored(root, identity),
+    resolveWorkspace: (root, identity, binding) => authority.resolveStored(root, identity, binding),
     createRuntime: (context) => runtimes.create(context),
     // A built-in profile's version and digest change with its prompt, and the
     // runtime restores today's identity for the stored ID (application-runtime.ts).

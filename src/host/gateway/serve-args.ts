@@ -7,8 +7,8 @@ import path from 'node:path';
  * files or binds sockets; `runServe` owns the effectful composition.
  */
 
-const DEFAULT_SERVE_ISSUER = 'chatforge-bff';
-const DEFAULT_SERVE_AUDIENCE = 'term2-gateway';
+export const DEFAULT_SERVE_ISSUER = 'chatforge-bff';
+export const DEFAULT_SERVE_AUDIENCE = 'term2-gateway';
 
 export type ServeSocketTransport = { kind: 'socket'; socketPath: string };
 export type ServeTlsTransport = { kind: 'tls'; host: string; port: number; certPath: string; keyPath: string };

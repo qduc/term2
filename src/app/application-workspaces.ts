@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import { DirectProtocolError } from '../protocol/errors.js';
 import type { DirectAccess, Principal, WorkspaceGrant } from '../host/in-process-direct-types.js';
+import type { DirectBinding } from '../session/facade-types.js';
 import type { DirectLocalStore } from '../session/store.js';
 import type { Workspace } from '../tools/index.js';
 
@@ -14,8 +15,9 @@ export type DirectAuthority = {
    * The current grant for a stored session. `identity` is what the session recorded:
    * a hint to compare with, never authority. The store refuses a result wider than
    * it and runs the session with a narrower one; `canRun` still decides whether it runs.
+   * `binding` is the owner the session recorded at its start, when the caller knows it.
    */
-  resolveStored(root: string, identity?: Workspace): Workspace | Promise<Workspace>;
+  resolveStored(root: string, identity?: Workspace, binding?: DirectBinding): Workspace | Promise<Workspace>;
   /** May a stored session actually run here, rather than only be listed. */
   canRun(workspace: Workspace): boolean;
   /** For an authority that records who owns a session. Replaces the store's own create. */

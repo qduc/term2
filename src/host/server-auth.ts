@@ -23,7 +23,8 @@ export type ServerAuthenticationOptions = AssertionVerifierOptions & {
     trustFilePath: string;
     otpTtlMs?: number;
     maxAttempts?: number;
-    printOtp?: (otp: string) => void;
+    /** `expiresAt` is epoch milliseconds. */
+    printOtp?: (otp: string, expiresAt: number) => void;
   };
 };
 /** Uses the gateway RS256/issuer/audience/purpose/60-second/replay contract and first-key OTP flow. */

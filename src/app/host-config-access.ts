@@ -61,6 +61,8 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
   ): Promise<void>;
   resolveWorkspace(principal: Principal, grant: WorkspaceGrant): Workspace;
   resolveStoredRoot(root: string, identity?: Workspace): Workspace;
+  /** True inside a create this access admitted (after `resolveWorkspace`), so a shared host can route it. */
+  ownsCreation(): boolean;
 } {
   const directory = path.resolve(options.directory);
   const sessions: DirectBoundSessionStore<TCreated, TOpened> = {
@@ -139,6 +141,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       const current = sameFrameRoot ? frame.workspace : options.authority.resolveStoredRoot(root, identity);
       return identity?.access === 'read' ? { ...current, access: 'read' } : current;
     },
+    ownsCreation: () => creation.getStore() !== undefined,
   };
 }
 

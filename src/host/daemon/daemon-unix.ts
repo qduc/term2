@@ -29,7 +29,7 @@ import {
 } from '../../protocol/client-api/version-negotiation.js';
 import type { Principal } from '../in-process-direct-types.js';
 import { ClientApiRpcError, toClientApiError } from './daemon-errors.js';
-import type { DaemonRpc } from './daemon-rpc.js';
+import type { DaemonConnection, DaemonRpc } from './daemon-rpc.js';
 import { buildSlowConsumerFrame, type StreamEventFrame } from './daemon-streams.js';
 import {
   attachIncrementalLineReader,
@@ -61,7 +61,10 @@ type ActiveStream = {
 };
 
 type ClientConnection = {
+  readonly id: string;
   readonly socket: net.Socket;
+  readonly closeListeners: Set<() => void>;
+  context?: DaemonConnection;
   negotiation?: { readonly version: string; readonly capabilities: ReadonlySet<string> };
   closed: boolean;
   inFlight: number;
@@ -98,6 +101,7 @@ export class DaemonUnixServer {
   readonly #drainTimeoutMs: number;
   readonly #maxStreamQueue: number;
   #listening = false;
+  #nextConnectionSeq = 0;
 
   constructor(private readonly options: DaemonUnixServerOptions) {
     this.#preHandshakeTimeoutMs = options.preHandshakeTimeoutMs ?? PRE_HANDSHAKE_TIMEOUT_MS;
@@ -155,7 +159,9 @@ export class DaemonUnixServer {
 
   #onConnection(socket: net.Socket): void {
     const client: ClientConnection = {
+      id: `conn-${++this.#nextConnectionSeq}`,
       socket,
+      closeListeners: new Set(),
       closed: false,
       inFlight: 0,
       pendingStreams: 0,
@@ -207,6 +213,35 @@ export class DaemonUnixServer {
     client.drainTimer = null;
     for (const stream of [...client.streams.values()]) this.#retireStream(client, stream);
     client.streams.clear();
+    // Leases bound to this connection release on EOF (transport-unix.md §5).
+    for (const listener of [...client.closeListeners]) {
+      try {
+        listener();
+      } catch {
+        // Lease cleanup must never crash the server.
+      }
+    }
+    client.closeListeners.clear();
+  }
+
+  #connectionContext(client: ClientConnection): DaemonConnection {
+    client.context ??= {
+      id: client.id,
+      onClose: (listener) => {
+        if (client.closed) {
+          queueMicrotask(listener);
+          return () => undefined;
+        }
+        client.closeListeners.add(listener);
+        return () => {
+          client.closeListeners.delete(listener);
+        };
+      },
+      emit: (event, payload) => {
+        if (client.negotiation) this.#writeFrame(client, { kind: 'event', event, payload });
+      },
+    };
+    return client.context;
   }
 
   #retireStream(client: ClientConnection, stream: ActiveStream): void {
@@ -286,6 +321,7 @@ export class DaemonUnixServer {
       }
       const result = await this.options.rpc.invoke(this.options.localOwnerPrincipal, method, params, {
         protocolVersion: client.negotiation.version,
+        connection: this.#connectionContext(client),
       });
       if (!client.closed) this.#sendOk(client, id, result);
     } catch (error) {

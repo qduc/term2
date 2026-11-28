@@ -45,7 +45,8 @@ export interface DirectHost {
    * grant changes, so a reopen re-derives authority from the grant. No principal:
    * the caller has already authorized the grant change. Returns how many closed.
    */
-  closeWorkspaceSessions?(root: string): Promise<number>;
+  /** `include` narrows which sessions in `root` close; omitted, all of them do. */
+  closeWorkspaceSessions?(root: string, include?: (sessionId: string) => boolean): Promise<number>;
   /** Host shutdown owns runtime/store disposal; no persisted domain-close is implied. */
   dispose(): Promise<void>;
 }

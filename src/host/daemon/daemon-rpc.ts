@@ -18,6 +18,7 @@ import type { GlobalMutationCoordinator } from './global-mutations.js';
 import type { SessionIndex } from './session-index.js';
 import { asRecord, ClientApiRpcError, mapCommandFailure, parseStrict, requireString } from './daemon-errors.js';
 import { openDaemonStream, type StreamRegistration } from './daemon-streams.js';
+import { handleLeaseMethod, type DaemonConnection, type DaemonLeasePort } from './daemon-rpc-leases.js';
 import {
   handleMcpLogin,
   handleModelsList,
@@ -32,11 +33,13 @@ import {
 
 export { ClientApiRpcError } from './daemon-errors.js';
 export type { DaemonV11ControlPort } from './daemon-rpc-v11.js';
+export type { DaemonConnection, DaemonLeasePort } from './daemon-rpc-leases.js';
 
 type WorkspaceScope = { readonly workspaceId?: string; readonly sessionId?: string };
 
 export type DaemonRpcContext = {
   readonly protocolVersion?: string;
+  readonly connection?: DaemonConnection;
 };
 
 export type DaemonControlPort = {
@@ -76,6 +79,7 @@ export type DaemonRpcDeps = {
   readonly mutations: GlobalMutationCoordinator;
   readonly control: DaemonControlPort;
   readonly v11?: DaemonV11ControlPort;
+  readonly leases?: DaemonLeasePort;
   readonly configuration?: ServerConfiguration;
   readonly workspaces?: ServerWorkspaces;
   readonly models?: () => readonly ModelCatalogEntry[] | Promise<readonly ModelCatalogEntry[]>;
@@ -313,6 +317,12 @@ export class DaemonRpc {
       }
       case 'mcp.login':
         return await handleMcpLogin(this.deps.control.mcpLogin, this.deps.v11, principal, params, allowV11);
+      case 'daemon.serve.start':
+      case 'daemon.serve.stop':
+      case 'session.control.bind':
+      case 'session.control.rebind':
+      case 'session.control.unbind':
+        return await handleLeaseMethod(this.deps.leases, principal, method, params, context, this.#draining);
       case 'session.acp.set_mcp':
         throw new ClientApiRpcError('unavailable', 'ACP per-session MCP configuration is unavailable.');
       default:

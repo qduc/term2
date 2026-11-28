@@ -50,9 +50,15 @@ export type DirectSessionStoreOptions = {
   /**
    * Obtain a CURRENT grant. Stored identity is a comparison hint, never authority.
    * The result may be narrower than the stored identity (read for a read_write
-   * session), never wider; the session then runs with the result.
+   * session), never wider; the session then runs with the result. `binding` is the
+   * owner the session recorded at its start (none for local sessions), so a host that
+   * serves several kinds of client can pick whose rules apply.
    */
-  readonly resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>;
+  readonly resolveWorkspace: (
+    root: string,
+    identity?: Workspace,
+    binding?: DirectBinding,
+  ) => Workspace | Promise<Workspace>;
   /** App-owned retired-profile fallback for restore validation only. Never changes stored facts.
    * Omitted means exact identity/version/digest restoration, as before. */
   readonly restoreProfile?: (stored: SessionStartedFact['profile']) => SessionStartedFact['profile'];
@@ -133,8 +139,8 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   const assertOpen = (): void => {
     if (closed) throw new Error('direct Session store is closed');
   };
-  const resolveWorkspace = async (root: string, identity?: Workspace): Promise<Workspace> => {
-    const workspace = await options.resolveWorkspace(root, identity);
+  const resolveWorkspace = async (root: string, identity?: Workspace, binding?: DirectBinding): Promise<Workspace> => {
+    const workspace = await options.resolveWorkspace(root, identity, binding);
     if (identity) {
       if (identity.root !== root || !withinIdentity(workspace, identity))
         throw new Error('current workspace grant does not match the stored/requested identity');
@@ -284,7 +290,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       try {
         // A shared directory is a catalogue, not a grant. Foreign workspaces
         // are invisible here; selecting an ID still uses strict open above.
-        workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity);
+        workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity, metadata.binding);
       } catch {
         continue;
       }
@@ -321,7 +327,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       workspace = { ...workspace };
       model = { ...model };
       validateBinding(binding);
-      const authority = await resolveWorkspace(workspace.root, workspace);
+      const authority = await resolveWorkspace(workspace.root, workspace, binding);
       if (!sameWorkspace(authority, workspace))
         throw new Error('requested workspace does not match resolved authority');
       // Inspect names before mkdir or parsing anything. An old directory is never imported.
@@ -366,7 +372,11 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
           const currentConfiguration = latestDirectConfiguration(currentFacts);
           validateExpectedBinding(currentMetadata.binding, binding);
           replay(currentFacts);
-          const workspace = await resolveWorkspace(currentMetadata.workspace, currentMetadata.workspaceIdentity);
+          const workspace = await resolveWorkspace(
+            currentMetadata.workspace,
+            currentMetadata.workspaceIdentity,
+            currentMetadata.binding,
+          );
           handedOff = true;
           return await construct(
             {

@@ -681,7 +681,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       }),
     ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
 
-    // 2. v1.1 client negotiates 1.1; unbacked `local_leases` is NOT advertised.
+    // 2. v1.1 client negotiates 1.1 and sees `local_leases`; unbacked lease methods answer `unavailable`.
     const v11 = new TestUnixRpcClient(await connectRaw(socketPath));
     cleanups.push(() => v11.close());
     const hello11 = await v11.request('protocol.hello', {
@@ -693,12 +693,21 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(hello11.ok).toBe(true);
     if (hello11.ok) {
       expect(hello11.result['protocolVersion']).toBe('1.1');
-      expect(hello11.result['capabilities']).not.toContain('local_leases');
+      // Advertised since Step 14e Part 1 backs serve leases (decisions.md D011).
+      expect(hello11.result['capabilities']).toContain('local_leases');
     }
     expect(await v11.request('daemon.serve.start', {})).toMatchObject({
       ok: false,
-      error: { code: 'unavailable' },
+      error: { code: 'invalid_request' },
     });
+    expect(await v11.request('daemon.serve.stop', { leaseId: 'lease_unknown' })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+    // Control-socket leases are advertised with the same token but land in Part 2.
+    expect(
+      await v11.request('session.control.bind', { sessionId: 'conv_1', name: 'x', discordInput: false }),
+    ).toMatchObject({ ok: false, error: { code: 'unavailable' } });
     expect(await v11.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [] })).toMatchObject({
       ok: false,
       error: { code: 'unavailable' },

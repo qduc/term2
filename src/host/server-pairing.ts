@@ -12,7 +12,7 @@ type PairingOptions = {
   maxAttempts?: number;
   trustStore: TrustedClientsStore;
   now?: () => number;
-  printOtp?: (otp: string) => void;
+  printOtp?: (otp: string, expiresAt: number) => void;
 };
 
 export class PairingError extends Error {
@@ -31,7 +31,7 @@ export class GatewayPairing {
   readonly #maxAttempts: number;
   readonly #trustStore: TrustedClientsStore;
   readonly #now: () => number;
-  readonly #printOtp: (otp: string) => void;
+  readonly #printOtp: (otp: string, expiresAt: number) => void;
   #otp?: { value: string; expiresAt: number; attemptsRemaining: number };
   #mutation: Promise<void> = Promise.resolve();
 
@@ -99,8 +99,9 @@ export class GatewayPairing {
 
   #issueOtp(): void {
     const otp = randomInt(0, 1_000_000).toString().padStart(OTP_LENGTH, '0');
-    this.#otp = { value: otp, expiresAt: this.#now() + this.#ttlMs, attemptsRemaining: this.#maxAttempts };
-    this.#printOtp(otp);
+    const expiresAt = this.#now() + this.#ttlMs;
+    this.#otp = { value: otp, expiresAt, attemptsRemaining: this.#maxAttempts };
+    this.#printOtp(otp, expiresAt);
   }
 }
 

@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { installationVersion } from '../../model/providers/fetch/logging-middleware.js';
 import {
-  CLIENT_API_HTTP_CAPABILITIES,
+  CLIENT_API_CAPABILITIES,
   type DaemonShutdownParams,
   type DaemonStatusResult,
   type SessionApprovalPolicy,
@@ -36,6 +36,7 @@ import { scanDirectoryEntries } from '../file-service.js';
 import { SessionContextService } from '../../model/traffic-context.js';
 import { buildEnvOverrides } from '../../config/settings/settings-env.js';
 import { createDaemonMcp } from './daemon-mcp.js';
+import { DaemonServeLeases } from '../serve/daemon-serve-lease.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
 import { createDaemonV11Port } from './daemon-v11-ops.js';
 import {
@@ -142,6 +143,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
   let app: Awaited<ReturnType<typeof createDirectApplication>> | null = null;
   let daemonMcp: ReturnType<typeof createDaemonMcp> | null = null;
   let unixServer: DaemonUnixServer | null = null;
+  let serveLeases: DaemonServeLeases | null = null;
 
   try {
     // Step 3: While holding lock, verify & clean any stale socket.
@@ -201,15 +203,26 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       onWarning: (message) => selection.logger.warn(message),
     });
     const activeDaemonMcp = daemonMcp;
+    const leases = new DaemonServeLeases({
+      conversationsDir: paths.conversationsDir,
+      product,
+      mutations,
+      daemon: { id: daemonId, version: daemonVersion, startedAt },
+    });
+    serveLeases = leases;
 
     app = await createDirectApplication({
       conversationsDir: paths.conversationsDir,
       selection,
       resolveDefaultModel: () => configuration.currentModelSelection(),
       authorizeModel: () => undefined,
-      prepareSurface: (sessionId, { workspace }) =>
-        activeDaemonMcp.prepare(sessionId, workspace, policyForSession(sessionId)?.mode !== 'headless'),
-      surface: (sessionId) => {
+      // A web-bound session is never handed a local client's pending launch policy.
+      prepareSurface: (sessionId, context) =>
+        context.binding
+          ? leases.prepareSurface(context)
+          : activeDaemonMcp.prepare(sessionId, context.workspace, policyForSession(sessionId)?.mode !== 'headless'),
+      surface: (sessionId, context) => {
+        if (context?.binding) return leases.surface(context.binding);
         const policy = policyForSession(sessionId);
         const flags = sessionLaunchFlags.get(sessionId);
         const isHeadless = policy?.mode === 'headless' || flags?.clientMode === 'headless';
@@ -233,11 +246,13 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           sessionLaunchFlags.delete(event.sessionId);
         }
         lifecycleObserver.current?.(event);
+        leases.observeLifecycle(event);
       },
-      authority: createLocalAuthority(() => true),
+      authority: leases.authority(createLocalAuthority(() => true)),
     });
 
     const localOwnerApp = app;
+    leases.attach(localOwnerApp);
     const knownWorkspaceRoots = new Map<string, string>();
     const recordLocalWorkspace = (root: string) => knownWorkspaceRoots.set(localWorkspaceIdForRoot(root), root);
     const resolveWorkspaceRoot = (workspaceId: string): string => {
@@ -325,6 +340,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
             await unixServer?.close();
           } finally {
             try {
+              await serveLeases?.closeAll();
               sessionIndex.dispose();
               await app?.close();
               await daemonMcp?.close();
@@ -364,7 +380,8 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         pendingLaunchFlags = flags;
       },
     });
-    const advertisedCapabilities = [...CLIENT_API_HTTP_CAPABILITIES];
+    // local_leases is advertised once serve leases are backed (D011); control/ACP leases follow in Part 2.
+    const advertisedCapabilities = [...CLIENT_API_CAPABILITIES];
     const rpc = new DaemonRpc({
       host: localOwnerApp.host,
       sessionIndex,
@@ -380,6 +397,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         }));
       },
       v11: v11Port,
+      leases,
       control: {
         daemonId,
         daemonVersion,
@@ -474,7 +492,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
 
     return { kind: 'started', daemonId, paths, status, shutdown: performShutdown, closed };
   } catch (error) {
-    await Promise.allSettled([unixServer?.close(), app?.close(), daemonMcp?.close()]);
+    await Promise.allSettled([unixServer?.close(), serveLeases?.closeAll(), app?.close(), daemonMcp?.close()]);
     if (advertisementWritten) removeFileIfPresent(paths.advertisementPath);
     if (socketBound) removeFileIfPresent(paths.socketPath);
     releaseLock();

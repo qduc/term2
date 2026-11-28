@@ -296,6 +296,14 @@
     "web-client/lib/term2/present.ts": {
       "lines": 512,
       "reason": "The single view-projection module allowed by web-fold-imports to read WireSnapshot types (was 497 lines). Fifteen lines project subscription quota (provider, subscription flag, and fiveHour/weekly windows) from the folded snapshot so Term2UsagePopover reads live SSE state instead of polling /quota; splitting snapshot projection into a second file would violate web-fold-imports. Remove the ceiling if turn presentation and session-fact projection are ever separated behind a sanctioned boundary."
+    },
+    "src/host/daemon/daemon-rpc.ts": {
+      "lines": 509,
+      "reason": "One switch over the Client API methods, each case a few lines that delegate; v1.1 handlers (daemon-rpc-v11.ts), streams (daemon-streams.ts) and local leases (daemon-rpc-leases.ts) already live in their own modules. Splitting the switch itself would scatter one dispatch table. Revisit when Step 14e Part 2 adds the control-socket cases: move session-lifecycle cases (create/launch/close/fork/handoff) into their own handler module then."
+    },
+    "src/host/daemon/daemon-unix.ts": {
+      "lines": 532,
+      "reason": "One job: the lifecycle of a local Unix connection (handshake, request admission, stream registration, per-connection backpressure and EOF cleanup, now including lease close hooks). The stream queue/backpressure code reads its connection state directly; splitting it out would pass that state across a module boundary for no reader benefit. Revisit if another connection-scoped feature is added."
     }
   },
   "messagePath": {

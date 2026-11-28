@@ -4,22 +4,21 @@ Status: in progress. Started 2026-11-27.
 
 ## Resume here
 
-- **Current phase:** Steps 0–14c merged; Step 14d is in progress. TUI zoom-in, workspace discovery (#471), attachment/replay seam, connection capability enforcement, and v1.0 daemon runtime implementations (`mcp`, `quota`, `set_goal`, server-resolved skills) are complete.
+- **Current phase:** Steps 0–14c merged; Step 14d is in progress. TUI zoom-in, workspace discovery (#471), attachment/replay seam + v1.0 runtime ops (#472), and Client API v1.1 freeze (D010) are complete.
 - **State files:**
   - [Threat model, acceptance criteria & Step 6 comparison rubric](criteria-and-threat-model.md)
   - [Step 7 ownership comparison (Branch A vs Branch B)](step7-ownership-comparison.md)
   - [Step 8 scenario validation](step8-scenarios.md)
   - [Step 9 Client API inventory](step9-client-api-inventory.md)
-  - [Client API v1.0 Core Spec (Frozen)](spec/client-api.md) · [Unix Binding](spec/transport-unix.md) · [HTTP+SSE Binding](spec/transport-http-sse.md) · [JSON Schema](spec/client-api.schema.json)
+  - [Client API v1.1 Core Spec (Frozen)](spec/client-api.md) · [Unix Binding (v1.1)](spec/transport-unix.md) · [HTTP+SSE Binding (v1.0)](spec/transport-http-sse.md) · [JSON Schema](spec/client-api.schema.json)
   - [Step 11 Host & Runtime Zoom-In](zoom/host-and-runtime.md) · [Web Client Zoom-In](zoom/web-client.md) · [TUI Zoom-In](zoom/tui.md)
   - [Decision log](decisions.md)
   - [Progress ledger](progress.md)
   - [Worth revisiting (owner review list)](worth-revisiting.md)
-- **Next concrete actions:** Draft, independently review, and freeze Client API
-  v1.1 (Unix minor bump covering TUI launch/scoped settings/catalog/provider
-  edits + Step 14e local serve/control leases), then wire the daemon TUI backend
-  (Step 14d), serve/web/control/Discord/ACP (Step 14e), and default flip +
-  full verification (Step 14f).
+- **Next concrete actions:** Wire the daemon TUI backend (`launch-tui.tsx` behind
+  an explicit backend seam, Step 14d), then `term2 serve` + web UI over daemon
+  and control socket / Discord / ACP over daemon (Step 14e), then default flip +
+  full verification and smoke runs (Step 14f).
 
 
 ## Goal

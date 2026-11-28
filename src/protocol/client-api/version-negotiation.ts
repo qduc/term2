@@ -3,7 +3,8 @@
  * Self-contained (zero Term2-internal imports) for graduation into @qduc/agent-wire (Decision D006).
  */
 
-export const CLIENT_API_VERSION = '1.0' as const;
+export const CLIENT_API_VERSION = '1.1' as const;
+export const CLIENT_API_HTTP_VERSION = '1.0' as const;
 export const CLIENT_API_MIN_SUPPORTED_VERSION = '1.0' as const;
 
 export type ParsedProtocolVersion = {
@@ -101,9 +102,38 @@ const METHOD_CAPABILITIES = new Map<string, string>([
   ['settings.unsubscribe', 'settings_stream'],
   ['mcp.status', 'mcp'],
   ['mcp.login', 'mcp'],
+  ['daemon.serve.start', 'local_leases'],
+  ['daemon.serve.stop', 'local_leases'],
+  ['session.control.bind', 'local_leases'],
+  ['session.control.rebind', 'local_leases'],
+  ['session.control.unbind', 'local_leases'],
+  ['session.acp.set_mcp', 'local_leases'],
+]);
+
+const METHOD_MIN_VERSIONS = new Map<string, string>([
+  ['session.launch', '1.1'],
+  ['daemon.serve.start', '1.1'],
+  ['daemon.serve.stop', '1.1'],
+  ['session.control.bind', '1.1'],
+  ['session.control.rebind', '1.1'],
+  ['session.control.unbind', '1.1'],
+  ['session.acp.set_mcp', '1.1'],
 ]);
 
 /** Optional capability required for a post-handshake request, on any binding. */
 export function requiredClientApiCapability(method: string): string | undefined {
   return METHOD_CAPABILITIES.get(method);
+}
+
+/** Minimum negotiated Client API version required for a method (default `1.0`). */
+export function minimumClientApiVersion(method: string): string {
+  return METHOD_MIN_VERSIONS.get(method) ?? CLIENT_API_MIN_SUPPORTED_VERSION;
+}
+
+/** Returns true iff `actual` and `minVersion` are valid protocol versions and `actual >= minVersion`. */
+export function isClientApiVersionAtLeast(actual: string, minVersion: string): boolean {
+  const a = parseProtocolVersion(actual);
+  const b = parseProtocolVersion(minVersion);
+  if (!a || !b) return false;
+  return compareVersions(a, b) >= 0;
 }

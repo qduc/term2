@@ -21,6 +21,8 @@ import {
 import {
   CLIENT_API_MIN_SUPPORTED_VERSION,
   CLIENT_API_VERSION,
+  isClientApiVersionAtLeast,
+  minimumClientApiVersion,
   negotiateCapabilities,
   negotiateProtocolVersion,
   requiredClientApiCapability,
@@ -108,9 +110,7 @@ export class DaemonUnixServer {
 
   attachedClientCount(): number {
     let count = 0;
-    for (const client of this.#clients) {
-      if (!client.closed && client.negotiation) count += 1;
-    }
+    for (const client of this.#clients) if (!client.closed && client.negotiation) count += 1;
     return count;
   }
 
@@ -140,11 +140,7 @@ export class DaemonUnixServer {
 
   broadcastDraining(payload: DaemonDrainingEvent): void {
     const frame: UnixEventFrame = { kind: 'event', event: 'daemon.draining', payload };
-    for (const client of [...this.#clients]) {
-      if (!client.closed && client.negotiation) {
-        this.#writeFrame(client, frame);
-      }
-    }
+    for (const client of [...this.#clients]) if (!client.closed && client.negotiation) this.#writeFrame(client, frame);
   }
 
   async close(): Promise<void> {
@@ -154,9 +150,7 @@ export class DaemonUnixServer {
     }
     if (!this.#listening) return;
     this.#listening = false;
-    await new Promise<void>((resolve) => {
-      this.#server.close(() => resolve());
-    });
+    await new Promise<void>((resolve) => this.#server.close(() => resolve()));
   }
 
   #onConnection(socket: net.Socket): void {
@@ -247,7 +241,6 @@ export class DaemonUnixServer {
       });
       return;
     }
-
     const { id, method, params } = parsed.data;
     if (client.inFlight >= MAX_IN_FLIGHT_REQUESTS) {
       this.#sendError(client, id, {
@@ -270,6 +263,13 @@ export class DaemonUnixServer {
           message: 'protocol.hello already completed on this connection.',
         });
         return;
+      }
+      const minVersion = minimumClientApiVersion(method);
+      if (!isClientApiVersionAtLeast(client.negotiation.version, minVersion)) {
+        throw new ClientApiRpcError(
+          'invalid_request',
+          `Method "${method}" requires Client API ${minVersion} (negotiated ${client.negotiation.version}).`,
+        );
       }
       const requiredCap = requiredClientApiCapability(method);
       if (requiredCap && !client.negotiation.capabilities.has(requiredCap)) {

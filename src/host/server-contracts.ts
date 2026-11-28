@@ -193,6 +193,8 @@ export type ProviderWriteInput =
       type: string;
       baseUrl?: string;
       apiKey?: string;
+      keepApiKey?: boolean;
+      keepBaseUrl?: boolean;
     };
 export type SkillSummary = { name: string; description: string; isProjectLevel: boolean };
 export type WorkspaceFileEntry = { path: string; type: 'file' | 'directory' };

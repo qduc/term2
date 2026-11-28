@@ -39,13 +39,24 @@ import { createDirectAccountPorts } from './cli-account-commands.js';
 import type { DirectSettingsBackend } from './host-config-settings.js';
 
 /** Compose global ports around one settings owner; never opens a Session or conversation log. */
-export function createDirectProductPorts(options: { settingsDir?: string } = {}): {
+export function createDirectProductPorts(
+  options: {
+    settingsDir?: string;
+    env?: NonNullable<Parameters<typeof createSettingsService>[0]>['env'];
+    loggingServiceOptions?: NonNullable<Parameters<typeof createSettingsService>[0]>['loggingServiceOptions'];
+  } = {},
+): {
+  readonly service: ReturnType<typeof createSettingsService>;
   readonly settings: DirectSettingsBackend;
 } & ReturnType<typeof createDirectAccountPorts> {
-  const service = createSettingsService(
-    options.settingsDir ? { settingsDir: options.settingsDir, disableFilePersistence: false } : {},
-  );
+  const service = createSettingsService({
+    ...(options.settingsDir ? { settingsDir: options.settingsDir } : {}),
+    ...(options.env ? { env: options.env } : {}),
+    ...(options.loggingServiceOptions ? { loggingServiceOptions: options.loggingServiceOptions } : {}),
+    disableFilePersistence: false,
+  });
   return {
+    service,
     settings: {
       get: (key) => service.getDynamic(key),
       getSource: (key) => service.getSource(key),

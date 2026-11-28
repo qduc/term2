@@ -57,6 +57,8 @@ const FORWARDED_DAEMON_ENV_KEYS = [
 export type DaemonBootstrapOptions = {
   readonly clientKind: string;
   readonly clientVersion?: string;
+  readonly protocolVersion?: string;
+  readonly minSupportedVersion?: string;
   readonly capabilities?: readonly string[];
   readonly socketPath?: string;
   readonly conversationsDir?: string;
@@ -296,8 +298,8 @@ export async function connectOrStartDaemon(options: DaemonBootstrapOptions): Pro
     });
     try {
       const response = await sendSingleRpc(socket, 'hello-1', 'protocol.hello', {
-        protocolVersion: CLIENT_API_VERSION,
-        minSupportedVersion: CLIENT_API_MIN_SUPPORTED_VERSION,
+        protocolVersion: options.protocolVersion ?? CLIENT_API_VERSION,
+        minSupportedVersion: options.minSupportedVersion ?? CLIENT_API_MIN_SUPPORTED_VERSION,
         clientKind: options.clientKind,
         clientVersion,
         capabilities: [...capabilities],

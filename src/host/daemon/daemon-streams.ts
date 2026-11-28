@@ -5,6 +5,7 @@
 import type { WireSnapshot } from '../../protocol/wire.js';
 import { DirectProtocolError } from '../../protocol/errors.js';
 import { CLIENT_API_SCHEMAS } from '../../protocol/client-api/client-api-schema.js';
+import { isClientApiVersionAtLeast } from '../../protocol/client-api/version-negotiation.js';
 import type { DirectConnection, DirectHost, DirectReplayConnection, Principal } from '../in-process-direct-types.js';
 import type { ServerConfiguration } from '../server-contracts.js';
 import type { GlobalMutationCoordinator } from './global-mutations.js';
@@ -29,6 +30,7 @@ export type DaemonStreamDeps = {
   readonly sessionIndex: SessionIndex;
   readonly mutations: GlobalMutationCoordinator;
   readonly configuration?: ServerConfiguration;
+  readonly readTuiSettings?: (principal: Principal, sessionId?: string) => Promise<Record<string, unknown>>;
   readonly serializeSession: <T>(sessionId: string, operation: () => Promise<T>) => Promise<T>;
   readonly shutdownReason: () => 'closed' | 'daemon_shutdown';
 };
@@ -181,8 +183,10 @@ export async function openDaemonStream(
   principal: Principal,
   method: string,
   rawParams: unknown,
+  protocolVersion?: string,
 ): Promise<StreamRegistration> {
   const params = rawParams === undefined ? {} : asRecord(rawParams, method);
+  const allowV11 = isClientApiVersionAtLeast(protocolVersion ?? '1.0', '1.1');
   if (method === 'session.list.subscribe') {
     const parsed = parseStrict(CLIENT_API_SCHEMAS.sessionListSubscribeParams, params, 'session.list.subscribe');
     let capturedEmit: ((frame: StreamEventFrame) => void) | null = null;
@@ -210,13 +214,52 @@ export async function openDaemonStream(
   }
 
   if (method === 'settings.subscribe') {
+    if (!allowV11) {
+      const keys = Object.keys(params);
+      if (keys.length > 0) {
+        throw new ClientApiRpcError('invalid_request', `Unrecognized key "${keys[0]}" in settings.subscribe.`);
+      }
+    }
+    const parsed = allowV11
+      ? parseStrict(CLIENT_API_SCHEMAS.settingsSubscribeParamsV11, params, 'settings.subscribe')
+      : {};
+    const tuiMode = parsed.view === 'tui' || parsed.sessionId !== undefined;
+    if (tuiMode && !deps.readTuiSettings) {
+      throw new ClientApiRpcError('unavailable', 'Scoped TUI settings stream unavailable.', { retryable: true });
+    }
     const read = deps.configuration?.read;
-    if (!read) throw new ClientApiRpcError('unavailable', 'Settings configuration unavailable.', { retryable: true });
+    if (!tuiMode && !read) {
+      throw new ClientApiRpcError('unavailable', 'Settings configuration unavailable.', { retryable: true });
+    }
     const buffered: StreamEventFrame[] = [];
     let capturedEmit: ((frame: StreamEventFrame) => void) | null = null;
-    const { projection, unsubscribe } = await deps.mutations.runSettings(async () => {
-      const current = await read.call(deps.configuration);
+    let streamClosed = false;
+    let pendingTuiRead: Promise<void> = Promise.resolve();
+    const { initial, unsubscribe } = await deps.mutations.runSettings(async () => {
+      const snap = tuiMode
+        ? await deps.readTuiSettings!(principal, parsed.sessionId)
+        : (() => read!.call(deps.configuration))();
+      const resolvedSnap = await snap;
       const unsub = deps.mutations.subscribeSettings((update) => {
+        if (streamClosed) return;
+        if (tuiMode) {
+          pendingTuiRead = pendingTuiRead.then(async () => {
+            if (streamClosed) return;
+            try {
+              const next = await deps.readTuiSettings!(principal, parsed.sessionId);
+              if (streamClosed) return;
+              const frame: StreamEventFrame = {
+                event: 'settings.changed',
+                payload: { revision: next['revision'], settings: next['settings'] },
+              };
+              if (capturedEmit) capturedEmit(frame);
+              else buffered.push(frame);
+            } catch {
+              // Session closed or settings temporarily unavailable; keep stream alive without resurrecting.
+            }
+          });
+          return;
+        }
         const frame: StreamEventFrame = {
           event: 'settings.changed',
           payload: { revision: update.revision, settings: update.settings },
@@ -224,11 +267,16 @@ export async function openDaemonStream(
         if (capturedEmit) capturedEmit(frame);
         else buffered.push(frame);
       });
-      return { projection: current, unsubscribe: unsub };
+      return {
+        initial: tuiMode
+          ? { revision: resolvedSnap['revision'], settings: resolvedSnap['settings'] }
+          : { revision: (resolvedSnap as { revision: string }).revision, settings: { ...resolvedSnap } },
+        unsubscribe: unsub,
+      };
     });
     const initialEvent: StreamEventFrame = {
       event: 'settings.snapshot',
-      payload: { revision: projection.revision, settings: { ...projection } },
+      payload: initial as Record<string, unknown>,
     };
     return {
       result: {},
@@ -236,7 +284,10 @@ export async function openDaemonStream(
       start(emit) {
         capturedEmit = emit;
         for (const frame of buffered.splice(0)) emit(frame);
-        return unsubscribe;
+        return () => {
+          streamClosed = true;
+          unsubscribe();
+        };
       },
     };
   }

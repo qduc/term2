@@ -23,12 +23,12 @@ import { mapServerError, publicError, ServerHttpError, unavailable } from './ser
 import * as validate from './server-validation.js';
 import { sessionListEventStream } from './daemon/session-list-sse.js';
 import {
+  CLIENT_API_HTTP_VERSION,
   CLIENT_API_MIN_SUPPORTED_VERSION,
-  CLIENT_API_VERSION,
   negotiateCapabilities,
   negotiateSingleProtocolVersion,
 } from '../protocol/client-api/version-negotiation.js';
-import { CLIENT_API_CAPABILITIES } from '../protocol/client-api/client-api-schema.js';
+import { CLIENT_API_HTTP_CAPABILITIES } from '../protocol/client-api/client-api-schema.js';
 
 export type {
   ServerHostDependencies,
@@ -141,7 +141,7 @@ function createDirectServerHandler(
             startedAt: daemonStartedAt,
             ...counts,
             attachedClientCount: 0,
-            supportedCapabilities: [...CLIENT_API_CAPABILITIES],
+            supportedCapabilities: [...CLIENT_API_HTTP_CAPABILITIES],
           },
         };
       }
@@ -176,13 +176,17 @@ function negotiateRequestVersion(
     return { error: publicError(400, 'protocol_conflict', 'client API version header and query do not match') };
   }
   const requested = rawHeader ?? queryVersion;
-  if (requested === null || requested === undefined) return { version: CLIENT_API_VERSION };
-  const negotiated = negotiateSingleProtocolVersion(requested);
+  if (requested === null || requested === undefined) return { version: CLIENT_API_HTTP_VERSION };
+  const negotiated = negotiateSingleProtocolVersion(
+    requested,
+    CLIENT_API_MIN_SUPPORTED_VERSION,
+    CLIENT_API_HTTP_VERSION,
+  );
   if (!negotiated.ok) {
     const counts = isOwner ? dependencies.sessionIndex?.counts() : undefined;
     return {
       error: publicError(400, 'protocol_incompatible', negotiated.reason, false, {
-        daemonProtocolVersion: CLIENT_API_VERSION,
+        daemonProtocolVersion: CLIENT_API_HTTP_VERSION,
         daemonMinSupportedVersion: CLIENT_API_MIN_SUPPORTED_VERSION,
         daemonVersion,
         ...(counts ? { activeTurnCount: counts.activeTurnCount } : {}),
@@ -355,7 +359,13 @@ async function listSessions(
       ...(cursor ? { cursor } : {}),
       ...(workspaceId ? { workspaceId } : {}),
     });
-    return { status: 200, body: page };
+    return {
+      status: 200,
+      body: {
+        ...page,
+        sessions: page.sessions.map(({ messageCount: _m, workspaceRoot: _w, ...rest }) => rest),
+      },
+    };
   }
   const presentation = dependencies.presentation;
   if (!presentation) return unavailable('direct session list metadata');

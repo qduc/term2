@@ -51,4 +51,19 @@ the three daemon and Client API integration suites.
   `set_goal` (host-attached with strict validation and `expectedGeneration`
   CAS), server-resolved `skill` on `submit`/`preview`, settings fanout on
   provider/credential/OAuth commits, and `SettingsService.settingsDir`
-  forwarding in `createSessionSettings`.
+  forwarding in `createSessionSettings` (PR #472).
+
+### Step 14d Client API v1.1 freeze (D010)
+
+- Reopened, independently reviewed across Security (Lens 1) and Protocol/Conformance
+  (Lens 2) through two rounds (both returned PASS), and froze Client API `1.1`
+  on the Unix binding while keeping HTTP+SSE pinned to `1.0` (`CLIENT_API_HTTP_VERSION`).
+- Implemented version-gated v1.1 schemas, generated `client-api.schema.json`,
+  `session.launch`, `session.list { cwd }` + `messageCount` + scoped cursors,
+  `session.handoff { model }`, scoped TUI `settings.get`/`subscribe`/`update`
+  (redacting `SENSITIVE_SETTING_KEYS` and URL userinfo/query/hash, non-resurrecting
+  live inspection, unified durable `SettingsService`, `requestId` idempotency,
+  and live `settings.changed` fanout), per-provider `models.list`, `providers.upsert`
+  key/baseUrl retention, and `local_leases` gating (unadvertised until Step 14e).
+- Verified with `daemon-unix-conformance.integration.test.ts` and all 4 host
+  conformance integration suites (13/13 passed) plus all repository quality gates.

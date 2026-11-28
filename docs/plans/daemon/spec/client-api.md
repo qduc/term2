@@ -1,8 +1,8 @@
-# Term2 Client API — Core Protocol Specification (v1.0)
+# Term2 Client API — Core Protocol Specification (v1.1)
 
-- **Protocol Version:** `1.0`
-- **Status:** Frozen (2026-11-27; passed independent Review Rounds 1 & 2b across all four lenses, Step 11 Host/Web/Runtime zoom-ins, Step 13 session-list stream prototype, and `tests/host/client-api-conformance.integration.test.ts` under Step 5)
-- **Schema Source:** `src/protocol/client-api/client-api-schema.ts` (staged for graduation to `@qduc/agent-wire`, Decision D006)
+- **Protocol Version:** `1.1` (backward-compatible minor revision of `1.0`; HTTP+SSE binding remains at `1.0` ceiling until web clients need v1.1 additive behavior)
+- **Status:** Frozen (v1.1 frozen 2026-11-28 under D010; v1.0 frozen 2026-11-27 under D008)
+- **Schema Source:** `src/protocol/client-api/client-api-schema.ts` + `client-api-schema-v11.ts` (staged for graduation to `@qduc/agent-wire`, Decision D006)
 - **Generated JSON Schema:** `docs/plans/daemon/spec/client-api.schema.json`
 - **Transport Bindings:**
   - [Unix Domain Socket Binding](transport-unix.md)
@@ -159,6 +159,7 @@ Every session summary returned by `session.list` or pushed on the session-list s
 - `latestSequence`: `NonNegativeInt` (`0` for a newly created session with no durable facts yet)
 - `title`: optional `ControlFreeString` (UTF-16 length `1..120`, first non-empty user message line; omitted when empty)
 - `model`: optional `{ provider: string, model: string }`
+- `messageCount`: optional `NonNegativeInt` (additive in v1.1; total transcript messages for empty-conversation filtering in resume menus)
 - `pendingInteractionCount`: optional `NonNegativeInt` (sum of pending approvals/questions + pending budget pauses)
 - `activeBackgroundTaskCount`: optional `NonNegativeInt` (count of active background tasks)
 
@@ -179,7 +180,9 @@ Every session summary returned by `session.list` or pushed on the session-list s
 - When an uncleanly terminated session is later opened/attached, the Host MUST durably commit its terminal `"interrupted"` recovery facts BEFORE computing `session.snapshot` or serving `fromSeq` replay.
 
 ### 5.3 Operations and Stream Events
-- **`session.list` (`C -> H`):** Params `{ limit?: PositiveInt (1..100, default 20), cursor?: string, workspaceId?: OpaqueId }`. Invalid/tampered `cursor` MUST return `invalid_request`. Returns `{ sessions: SessionListItem[], nextCursor: string | null }`.
+- **`session.list` (`C -> H`):** Params `{ limit?: PositiveInt (1..100, default 20), cursor?: string, workspaceId?: OpaqueId }` (v1.1 Unix `owner` adds optional `cwd?: ControlFreeString`, mutually exclusive with `workspaceId`, resolving canonical workspace identity WITHOUT admitting a workspace; rejected on `1.0` connections). Invalid/tampered `cursor` MUST return `invalid_request`. Returns `{ sessions: SessionListItem[], nextCursor: string | null }`.
+- **`session.launch` (`C -> H`, `owner`, Unix v1.1 ONLY):** Resolves CLI workspace (`cwd`, `workspaceId`, or `ssh`), selection (`new`, `resume`, or `fork` by exact ID, bare UUID, or `"last"`), explicit launch overrides (`model`, `reasoning`, `profileId`, `profileExplicit`, `approvalMode`, `showReview`, `sandboxEnabled`, `requireSandbox`, `approvalPolicy`, `goal`, `persistSessionConfiguration`, `clientMode`) BEFORE attach without mutating global defaults. Enforces workspace boundary (`forbidden` with `{ sessionId, sessionWorkspace, requestedWorkspace }`) and returns `{ session, workspace, profileMetadata?, forkedFrom? }`. Clients MUST NOT retry a launch with unknown settlement.
+- **`session.handoff` (`C -> H`):** Params `{ sourceSessionId: string, name?: string, text?: string }` (v1.1 adds optional `model: { provider, model }`, validated and installed on the successor before admitting handoff text; rejected on `1.0` connections). Returns `{ session: SessionListItem }`.
 - **`session.list.subscribe` (`C -> H`):** Params `{ workspaceId?: OpaqueId, limit?: PositiveInt (1..500, default 200) }`.
   - **Atomic snapshot-to-live cut:** Host MUST capture the in-memory index snapshot and register the subscriber atomically (no `await` gap between snapshot cut and live registration, or strictly filtered by a monotonic `catalogVersion`) so zero events are dropped or applied out of order.
   - Emits:
@@ -190,7 +193,6 @@ Every session summary returned by `session.list` or pushed on the session-list s
 - **`session.list.unsubscribe` (`C -> H`):** Stops the subscription (`{}` on success).
 - **`session.create` (`C -> H`):** Params carry **exclusively** either `workspaceId: OpaqueId` OR `cwd: ControlFreeString` (passing both or neither MUST fail with `invalid_request`), plus optional `model`, `approvalPolicy?: SessionApprovalPolicy`, and `includeSnapshot?: boolean`. Local `cwd` auto-admission is strictly scoped to `owner` and MUST NOT create or widen grants visible to `scoped` principals. Returns `{ session: SessionListItem, snapshot?: WireSnapshot }` (`snapshot` included when `includeSnapshot === true` or on HTTP compatibility projection).
 - **`session.fork` (`C -> H`):** Params `{ sourceSessionId: string }`. Returns `{ session: SessionListItem }`.
-- **`session.handoff` (`C -> H`):** Params `{ sourceSessionId: string, name?: string, text?: string }`. Returns `{ session: SessionListItem }`.
 - **`session.close` (`C -> H`):** Params `{ sessionId: string, force?: boolean }`. Serialized per session with `session.attach`. Rejects with `busy` when turns or background tasks are active unless `force === true`. Releases the live session and writer lock and emits `session.closed { sessionId, reason: "closed" }` to attached clients.
 
 ---
@@ -249,11 +251,11 @@ Supported `command.type` values (Client API `1.0` command set, extending `src/pr
 ## 8. Global Configuration, Models, Providers, Credentials & Quota
 
 All mutations in this section are serialized by the Host.
-- **`settings.get` (`C -> H`, `owner`):** Returns `{ revision: string, settings: SettingsProjection, schema?: SettingsFieldMeta[] }` (secrets redacted).
-- **`settings.update` (`C -> H`, `owner`):** Params `{ expectedRevision: string, changes: Array<{ key: string, value: unknown }> }`. Stale revision returns `stale_revision` with current projection in `details`. On commit, broadcasts `settings.changed { revision, settings }`.
-- **`settings.subscribe` / `settings.unsubscribe` (`C -> H`, `owner`):** Atomically emits initial `settings.snapshot { revision, settings }` followed by `settings.changed { revision, settings }`.
-- **`models.list` (`C -> H`):** Returns `{ models: ModelCatalogEntry[], favorites?: string[], nicknames?: Record<string, string> }`.
-- **`providers.presets` / `providers.upsert` / `providers.delete` (`C -> H`, `owner`):** Serialized custom provider management (last-writer-wins within serialized lane; never returns secrets).
+- **`settings.get` (`C -> H`, `owner`):** Returns `{ revision: string, settings: SettingsProjection, schema?: SettingsFieldMeta[] }` (secrets redacted). In v1.1 on Unix, accepts optional `{ sessionId?, view?: "web" | "tui" }`: `view: "tui"` (or explicit `sessionId`) returns allowlisted effective values, defaults, sources, startup overrides, runtime-modifiable metadata, rebuilt/profile state, and secret-free provider/credential/account summaries (NEVER raw secrets, raw `providers` entries, OAuth tokens, or hook bodies).
+- **`settings.update` (`C -> H`, `owner`):** Params `{ expectedRevision: string, changes: Array<{ key: string, value: unknown }> }` (v1.1 Unix adds optional `sessionId?`, `view?: "web" | "tui"`, `persist?: boolean`, `requestId?`, and `{ key: string, reset: true }` change action). Stale revision returns `stale_revision` with current projection in `details`. On commit, broadcasts `settings.changed { revision, settings }`.
+- **`settings.subscribe` / `settings.unsubscribe` (`C -> H`, `owner`):** Atomically emits initial `settings.snapshot { revision, settings }` followed by `settings.changed { revision, settings }` (v1.1 Unix accepts optional `{ sessionId?, view?: "web" | "tui" }`).
+- **`models.list` (`C -> H`):** Returns `{ models: ModelCatalogEntry[], favorites?: string[], nicknames?: Record<string, string> }` (v1.1 Unix accepts optional `{ provider?, refresh?, sessionId? }` for independent per-provider loading without one slow provider blocking others).
+- **`providers.presets` / `providers.upsert` / `providers.delete` (`C -> H`, `owner`):** Serialized custom provider management (last-writer-wins within serialized lane; never returns secrets). In v1.1 Unix, `providers.upsert` accepts optional `keepApiKey?: boolean` and `keepBaseUrl?: boolean` alongside `originalId` so edits and renames retain stored credentials/endpoints without sending them to the client.
 - **`credentials.set` / `credentials.delete` (`C -> H`, `owner`):** Write-only credential mutations.
 - **`oauth.login` / `oauth.select` / `oauth.delete` (`C -> H`, `owner`):** Serialized per provider. `oauth.login` MAY return `{ authUrl, state }` for client display/open and MUST NEVER return PKCE `code_verifier`, `client_secret`, or raw tokens.
 - **`quota.get` (`C -> H`):** Params `{ sessionId?: string }`. Returns latest observed subscription quota snapshot (also pushed via `session.live`).
@@ -269,7 +271,8 @@ All mutations in this section are serialized by the Host.
 - **`workspaces.files` (`C -> H`):** Params `{ workspaceId?: OpaqueId, sessionId?: string, refresh?: boolean }`.
 - **`skills.list` (`C -> H`, `owner`):** Params `{ workspaceId?: OpaqueId, sessionId?: string }`.
 - **`mcp.status` (`C -> H`):** Params `{ workspaceId?: OpaqueId, sessionId?: string }`. Returns server statuses and tool counts (no secrets).
-- **`mcp.login` (`C -> H`, `owner`):** Params `{ serverId: string, workspaceId?: OpaqueId }`. Initiates OAuth login and MUST NEVER return raw secrets or PKCE verifiers.
+- **`mcp.login` (`C -> H`, `owner`):** Params `{ serverId: string, workspaceId?: OpaqueId }` (v1.1 Unix adds optional `handoffUrl?: boolean` returning `{ authUrl?, attemptId? }` for client URL display when browser opening is unavailable). Initiates OAuth login and MUST NEVER return raw secrets or PKCE verifiers.
+- **`session.acp.set_mcp` (`C -> H`, `owner`, Unix v1.1 ONLY, capability `local_leases`):** Params `{ sessionId: string, servers: Record<string, unknown>[] }`. Atomically installs or clears per-session ACP MCP servers inside the daemon runtime with cleanup on session close.
 
 ---
 

@@ -173,9 +173,6 @@ export const saveProvider = (
 
     if (isEdit && originalName) {
       updatedList = list.filter((p: unknown) => resolveProviderId(p) !== originalName);
-      if (originalName !== providerIdentifier) {
-        unregisterProvider(originalName);
-      }
     } else {
       updatedList = [...list];
     }
@@ -189,7 +186,18 @@ export const saveProvider = (
     if (draft.apiKey) newEntry.apiKey = draft.apiKey;
 
     updatedList.push(newEntry);
-    settingsService?.setPersistentDynamic('providers', updatedList);
+    const writeResult: unknown = settingsService?.setPersistentDynamic('providers', updatedList);
+    if (
+      typeof writeResult === 'object' &&
+      writeResult !== null &&
+      'status' in writeResult &&
+      (writeResult as { status?: unknown }).status !== 'saved'
+    ) {
+      return { success: false, errorMessage: 'Failed to persist provider configuration.' };
+    }
+    if (isEdit && originalName && originalName !== providerIdentifier) {
+      unregisterProvider(originalName);
+    }
 
     const def = createOpenAICompatibleProviderDefinition({
       name: providerIdentifier,

@@ -19,7 +19,11 @@ import type { AssertionPurpose } from '../../src/host/server-contracts.js';
 import type { DirectHost } from '../../src/host/in-process-direct-types.js';
 import { createSessionIndex } from '../../src/host/daemon/session-index.js';
 import { CLIENT_API_SCHEMAS } from '../../src/protocol/client-api/client-api-schema.js';
-import { negotiateSingleProtocolVersion } from '../../src/protocol/client-api/version-negotiation.js';
+import {
+  CLIENT_API_HTTP_VERSION,
+  CLIENT_API_MIN_SUPPORTED_VERSION,
+  negotiateSingleProtocolVersion,
+} from '../../src/protocol/client-api/version-negotiation.js';
 import type { WireSnapshot } from '../../src/protocol/wire.js';
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -160,7 +164,12 @@ describe('Client API v1.0 conformance', () => {
   it('keeps committed client-api.schema.json in sync with client-api-schema.ts and version rules', () => {
     execFileSync(process.execPath, ['--import', 'tsx', 'scripts/generate-client-api-schema.mjs', '--check']);
     expect(negotiateSingleProtocolVersion('1.0')).toEqual({ ok: true, version: '1.0' });
-    expect(negotiateSingleProtocolVersion('1.2')).toEqual({ ok: true, version: '1.0' });
+    expect(negotiateSingleProtocolVersion('1.1')).toEqual({ ok: true, version: '1.1' });
+    expect(negotiateSingleProtocolVersion('1.2')).toEqual({ ok: true, version: '1.1' });
+    expect(negotiateSingleProtocolVersion('1.2', CLIENT_API_MIN_SUPPORTED_VERSION, CLIENT_API_HTTP_VERSION)).toEqual({
+      ok: true,
+      version: '1.0',
+    });
     expect(negotiateSingleProtocolVersion('2.0').ok).toBe(false);
   });
 

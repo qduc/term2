@@ -195,7 +195,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     const ad = JSON.parse(fs.readFileSync(started.paths.advertisementPath, 'utf8'));
     expect(ad.daemonId).toBe(started.daemonId);
     expect(ad.pid).toBe(process.pid);
-    expect(ad.protocolVersion).toBe('1.0');
+    expect(ad.protocolVersion).toBe('1.1');
 
     // Second daemon candidate detects live peer and yields cleanly.
     const second = await startTerm2Daemon({ stateDir, conversationsDir, socketPath, env });
@@ -227,7 +227,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     expect(badHello.ok).toBe(false);
     if (!badHello.ok) {
       expect(badHello.error.code).toBe('protocol_incompatible');
-      expect(badHello.error.details?.['daemonProtocolVersion']).toBe('1.0');
+      expect(badHello.error.details?.['daemonProtocolVersion']).toBe('1.1');
       expect(badHello.error.details?.['daemonMinSupportedVersion']).toBe('1.0');
       expect(badHello.error.details?.['activeTurnCount']).toBe(0);
     }
@@ -536,7 +536,7 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
     // Both clients must land on the EXACT same singleton daemon!
     expect(c1.welcome.daemonId).toBe(c2.welcome.daemonId);
     expect(c1.welcome.pid).toBe(c2.welcome.pid);
-    expect(c1.welcome.protocolVersion).toBe('1.0');
+    expect(c1.welcome.protocolVersion).toBe('1.1');
 
     // `term2 daemon status` reports the live daemon with 2 attached clients.
     const statusOut = await execFileAsync(
@@ -558,5 +558,399 @@ describe('Singleton Unix Daemon Conformance (Client API v1.0)', () => {
       { env },
     );
     await expect.poll(() => fs.existsSync(socketPath), { timeout: 5_000 }).toBe(false);
+  });
+
+  it('negotiates Client API v1.0 vs v1.1 strictly, gates v1.1 methods/fields, and runs v1.1 launch/settings/provider/model flows', async () => {
+    const { root, stateDir, runtimeDir, socketPath } = makeSandboxRoot();
+    const conversationsDir = path.join(stateDir, 'conversations');
+    const settingsDir = path.join(root, 'settings');
+    const wsA = path.join(root, 'ws-a');
+    const wsB = path.join(root, 'ws-b');
+    fs.mkdirSync(settingsDir, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(wsA, { recursive: true });
+    fs.mkdirSync(wsB, { recursive: true });
+
+    const mock = await startMockOpenAiProvider('v11 reply');
+    cleanups.push(() => mock.close());
+
+    const SENTINEL_SECRET = 'sk-sentinel-never-leak-v11-998877';
+    const URL_SECRET = 'https://user:pass-sentinel@firecrawl.example.test/v1?token=url-secret-1#frag-secret';
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'mock-v11', model: 'daemon-test-model' } },
+        webSearch: { firecrawl: { baseUrl: URL_SECRET } },
+        providers: [
+          {
+            name: 'mock-v11',
+            type: 'openai-compatible',
+            baseUrl: mock.baseUrl,
+            apiKey: SENTINEL_SECRET,
+          },
+          {
+            name: 'mock-v11-alt',
+            type: 'openai-compatible',
+            baseUrl: mock.baseUrl,
+            apiKey: SENTINEL_SECRET,
+          },
+        ],
+        sandbox: { enabled: false },
+      }),
+    );
+
+    const daemon = await startTerm2Daemon({
+      stateDir,
+      conversationsDir,
+      socketPath,
+      env: { ...process.env, TERM2_DAEMON_DIR: runtimeDir, TERM2_SETTINGS_DIR: settingsDir },
+    });
+    expect(daemon.kind).toBe('started');
+    if (daemon.kind !== 'started') return;
+    cleanups.push(() => daemon.shutdown({ mode: 'immediate' }));
+
+    // 1. v1.0 client negotiates 1.0 and has EVERY v1.1 method & additive request field strictly rejected.
+    const v10 = new TestUnixRpcClient(await connectRaw(socketPath));
+    cleanups.push(() => v10.close());
+    const hello10 = await v10.request('protocol.hello', {
+      protocolVersion: '1.0',
+      minSupportedVersion: '1.0',
+      clientKind: 'tui',
+      clientVersion: '1.0.0',
+    });
+    expect(hello10.ok).toBe(true);
+    if (hello10.ok) expect(hello10.result['protocolVersion']).toBe('1.0');
+
+    expect(await v10.request('session.launch', { cwd: wsA, selection: { kind: 'new' } })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(await v10.request('session.list', { cwd: wsA })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(await v10.request('settings.get', { view: 'tui' })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(await v10.request('settings.subscribe', { view: 'tui' })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(await v10.request('models.list', { provider: 'mock-v11' })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(
+      await v10.request('providers.upsert', {
+        name: 'mock-v11',
+        type: 'openai-compatible',
+        originalId: 'mock-v11',
+        keepApiKey: true,
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
+    expect(await v10.request('mcp.login', { serverId: 'x', handoffUrl: true })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(
+      await v10.request('session.handoff', {
+        sourceSessionId: 'conv_00000000-0000-4000-8000-000000000001',
+        model: { provider: 'mock-v11-alt', model: 'daemon-test-model' },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
+    expect(
+      await v10.request('settings.update', {
+        expectedRevision: 'r0',
+        sessionId: 'conv_00000000-0000-4000-8000-000000000001',
+        persist: false,
+        changes: [{ key: 'ui.displayMode', value: 'standard' }],
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
+    expect(await v10.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [] })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(await v10.request('daemon.serve.start', {})).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_request' },
+    });
+    expect(
+      await v10.request('session.control.bind', {
+        sessionId: 'conv_1',
+        socketPath: path.join(runtimeDir, 'ctl.sock'),
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
+
+    // 2. v1.1 client negotiates 1.1; unbacked `local_leases` is NOT advertised.
+    const v11 = new TestUnixRpcClient(await connectRaw(socketPath));
+    cleanups.push(() => v11.close());
+    const hello11 = await v11.request('protocol.hello', {
+      protocolVersion: '1.1',
+      minSupportedVersion: '1.1',
+      clientKind: 'tui',
+      clientVersion: '1.1.0',
+    });
+    expect(hello11.ok).toBe(true);
+    if (hello11.ok) {
+      expect(hello11.result['protocolVersion']).toBe('1.1');
+      expect(hello11.result['capabilities']).not.toContain('local_leases');
+    }
+    expect(await v11.request('daemon.serve.start', {})).toMatchObject({
+      ok: false,
+      error: { code: 'unavailable' },
+    });
+    expect(await v11.request('session.acp.set_mcp', { sessionId: 'conv_1', servers: [] })).toMatchObject({
+      ok: false,
+      error: { code: 'unavailable' },
+    });
+
+    // 3. `session.launch` new + explicit overrides (without mutating global defaults) + workspace boundary checks.
+    const launched = await v11.request('session.launch', {
+      cwd: wsA,
+      selection: { kind: 'new' },
+      approvalMode: 'auto',
+      showReview: true,
+      goal: { text: 'Verify v1.1 launch' },
+    });
+    expect(launched.ok).toBe(true);
+    if (!launched.ok) return;
+    const sessionId = (launched.result['session'] as { id: string }).id;
+    expect(launched.result['workspace']).toMatchObject({ root: fs.realpathSync(wsA), target: 'local' });
+
+    // `session.launch` resume via 'last' and bare UUID, plus fork with approvalPolicy.
+    const resumedLast = await v11.request('session.launch', {
+      cwd: wsA,
+      selection: { kind: 'resume', sessionId: 'last' },
+    });
+    expect(resumedLast.ok).toBe(true);
+    if (resumedLast.ok) expect((resumedLast.result['session'] as { id: string }).id).toBe(sessionId);
+
+    const bareId = sessionId.replace(/^conv_/, '');
+    const resumedBare = await v11.request('session.launch', {
+      cwd: wsA,
+      selection: { kind: 'resume', sessionId: bareId },
+    });
+    expect(resumedBare.ok).toBe(true);
+    if (resumedBare.ok) expect((resumedBare.result['session'] as { id: string }).id).toBe(sessionId);
+
+    const forked = await v11.request('session.launch', {
+      cwd: wsA,
+      selection: { kind: 'fork', sessionId },
+      approvalPolicy: { mode: 'interactive' },
+    });
+    expect(forked.ok).toBe(true);
+    if (!forked.ok) return;
+    const forkedId = (forked.result['session'] as { id: string }).id;
+    expect(forkedId).not.toBe(sessionId);
+    expect(forked.result['forkedFrom']).toBe(sessionId);
+
+    // Workspace mismatch on resume returns forbidden with structured workspace details; missing returns not_found.
+    const mismatch = await v11.request('session.launch', {
+      cwd: wsB,
+      selection: { kind: 'resume', sessionId },
+    });
+    expect(mismatch).toMatchObject({
+      ok: false,
+      error: {
+        code: 'forbidden',
+        details: {
+          sessionId,
+          sessionWorkspace: { root: fs.realpathSync(wsA) },
+          requestedWorkspace: { root: fs.realpathSync(wsB) },
+        },
+      },
+    });
+    expect(
+      await v11.request('session.launch', {
+        cwd: wsA,
+        selection: { kind: 'resume', sessionId: 'conv_00000000-0000-4000-8000-000000000099' },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'not_found' } });
+
+    // `session.list` with `cwd` filters accurately, paginates, and rejects cross-scope cursors with `invalid_request`.
+    const listWsA = await v11.request('session.list', { cwd: wsA, limit: 1 });
+    expect(listWsA.ok).toBe(true);
+    if (listWsA.ok) {
+      const items = listWsA.result['sessions'] as Array<{ id: string; messageCount?: number }>;
+      expect(items.length).toBe(1);
+      expect(items[0]?.messageCount).toBe(0);
+      const nextCursor = listWsA.result['nextCursor'] as string | undefined;
+      expect(typeof nextCursor).toBe('string');
+      if (nextCursor) {
+        const page2 = await v11.request('session.list', { cwd: wsA, limit: 1, cursor: nextCursor });
+        expect(page2.ok).toBe(true);
+        if (page2.ok) expect((page2.result['sessions'] as unknown[]).length).toBe(1);
+        expect(await v11.request('session.list', { cwd: wsB, cursor: nextCursor })).toMatchObject({
+          ok: false,
+          error: { code: 'invalid_request' },
+        });
+        expect(await v11.request('session.list', { cursor: nextCursor })).toMatchObject({
+          ok: false,
+          error: { code: 'invalid_request' },
+        });
+      }
+    }
+    const listWsB = await v11.request('session.list', { cwd: wsB });
+    expect(listWsB.ok).toBe(true);
+    if (listWsB.ok) expect((listWsB.result['sessions'] as unknown[]).length).toBe(0);
+
+    // `session.handoff` with explicit target model succeeds on v1.1 and binds the new session to that model.
+    const handoffRes = await v11.request('session.handoff', {
+      sourceSessionId: sessionId,
+      model: { provider: 'mock-v11-alt', model: 'daemon-test-model' },
+      text: 'Continue verifying v1.1 handoff.',
+    });
+    expect(handoffRes.ok).toBe(true);
+    if (handoffRes.ok) {
+      const handoffSession = handoffRes.result['session'] as {
+        id: string;
+        model?: { provider: string; model: string };
+      };
+      expect(handoffSession.id).not.toBe(sessionId);
+      expect(handoffSession.model).toEqual({ provider: 'mock-v11-alt', model: 'daemon-test-model' });
+    }
+
+    // 4. Scoped TUI settings projection redacts secrets & URL credentials/query/hash, streams live updates, and persists.
+    const globalTui = await v11.request('settings.get', { view: 'tui' });
+    expect(globalTui.ok).toBe(true);
+    const globalJson = JSON.stringify(globalTui);
+    expect(globalJson).not.toContain(SENTINEL_SECRET);
+    expect(globalJson).not.toContain('pass-sentinel');
+    expect(globalJson).not.toContain('url-secret-1');
+    expect(globalJson).not.toContain('frag-secret');
+
+    const tuiSub = await v11.request('settings.subscribe', { sessionId, view: 'tui' });
+    expect(tuiSub.ok).toBe(true);
+    if (!tuiSub.ok) return;
+    const tuiStreamId = String(tuiSub.result['streamId']);
+    const tuiSnapEvent = await v11.waitForEvent((e) => e.streamId === tuiStreamId && e.event === 'settings.snapshot');
+    expect(JSON.stringify(tuiSnapEvent)).not.toContain(SENTINEL_SECRET);
+
+    const sessionTui = await v11.request('settings.get', { sessionId, view: 'tui' });
+    expect(sessionTui.ok).toBe(true);
+    expect(JSON.stringify(sessionTui)).not.toContain(SENTINEL_SECRET);
+    if (globalTui.ok && sessionTui.ok) {
+      const gEntries = (globalTui.result['settings'] as { entries: Record<string, { value: unknown }> }).entries;
+      const sEntries = (sessionTui.result['settings'] as { entries: Record<string, { value: unknown }> }).entries;
+      expect(gEntries['webSearch.firecrawl.baseUrl']?.value).toBeNull();
+      expect(gEntries['shell.autoApproveMode']?.value).toBe('off');
+      expect(sEntries['shell.autoApproveMode']?.value).toBe('auto');
+      expect(sEntries['shell.showReview']?.value).toBe(true);
+
+      // Temporary session-scoped write emits settings.changed, honors requestId idempotency, does not mutate global default.
+      const sRev = String(sessionTui.result['revision']);
+      const priorChangedCount = v11.events.filter(
+        (e) => e.streamId === tuiStreamId && e.event === 'settings.changed',
+      ).length;
+      const tempUpdate = await v11.request('settings.update', {
+        expectedRevision: sRev,
+        sessionId,
+        persist: false,
+        requestId: 'req-tui-idempotent-1',
+        changes: [{ key: 'ui.displayMode', value: 'standard' }],
+      });
+      expect(tempUpdate.ok).toBe(true);
+      const tempReplay = await v11.request('settings.update', {
+        expectedRevision: sRev,
+        sessionId,
+        persist: false,
+        requestId: 'req-tui-idempotent-1',
+        changes: [{ key: 'ui.displayMode', value: 'standard' }],
+      });
+      expect(tempReplay).toMatchObject({
+        ok: true,
+        result: { revision: tempUpdate.ok ? tempUpdate.result['revision'] : '' },
+      });
+      await v11.waitForEvent(
+        (e) =>
+          e.streamId === tuiStreamId &&
+          e.event === 'settings.changed' &&
+          v11.events.filter((ev) => ev.streamId === tuiStreamId && ev.event === 'settings.changed').length >
+            priorChangedCount,
+      );
+
+      expect(
+        await v11.request('settings.update', {
+          expectedRevision: sRev,
+          sessionId,
+          persist: false,
+          changes: [{ key: 'ui.displayMode', value: 'concise' }],
+        }),
+      ).toMatchObject({ ok: false, error: { code: 'stale_revision' } });
+      expect(
+        await v11.request('settings.update', {
+          expectedRevision: tempUpdate.ok ? String(tempUpdate.result['revision']) : sRev,
+          sessionId,
+          persist: false,
+          changes: [{ key: 'providers.openai.apiKey', value: 'leaked' }],
+        }),
+      ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
+
+      // Persisted session-scoped write persists to settings.json and notifies subscribers.
+      const persistUpdate = await v11.request('settings.update', {
+        expectedRevision: tempUpdate.ok ? String(tempUpdate.result['revision']) : sRev,
+        sessionId,
+        persist: true,
+        changes: [{ key: 'agent.maxTurns', value: 77 }],
+      });
+      expect(persistUpdate.ok).toBe(true);
+      expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8'))['agent']['maxTurns']).toBe(
+        77,
+      );
+
+      const resetUpdate = await v11.request('settings.update', {
+        expectedRevision: persistUpdate.ok ? String(persistUpdate.result['revision']) : sRev,
+        sessionId,
+        persist: false,
+        changes: [{ key: 'ui.displayMode', reset: true }],
+      });
+      expect(resetUpdate.ok).toBe(true);
+    }
+
+    // Closing the session leaves it closed: settings.get returns not_found and global updates do NOT resurrect it.
+    expect(await v11.request('session.close', { sessionId })).toMatchObject({ ok: true });
+    expect(await v11.request('settings.get', { sessionId, view: 'tui' })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+    const globalNow = await v11.request('settings.get', { view: 'tui' });
+    if (globalNow.ok) {
+      expect(
+        await v11.request('settings.update', {
+          expectedRevision: String(globalNow.result['revision']),
+          view: 'tui',
+          changes: [{ key: 'agent.maxTurns', value: 78 }],
+        }),
+      ).toMatchObject({ ok: true });
+    }
+    expect(await v11.request('settings.get', { sessionId, view: 'tui' })).toMatchObject({
+      ok: false,
+      error: { code: 'not_found' },
+    });
+
+    // 5. `providers.upsert` with `apiKey: ""` + `keepApiKey` + `keepBaseUrl` renames custom provider while retaining stored secret on disk!
+    const renamed = await v11.request('providers.upsert', {
+      action: 'save',
+      originalId: 'mock-v11',
+      name: 'mock-v11-renamed',
+      type: 'openai-compatible',
+      apiKey: '',
+      keepApiKey: true,
+      keepBaseUrl: true,
+    });
+    expect(renamed).toMatchObject({ ok: true, result: { ok: true } });
+    expect(JSON.stringify(renamed)).not.toContain(SENTINEL_SECRET);
+    const savedOnDisk = fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8');
+    expect(savedOnDisk).toContain('mock-v11-renamed');
+    expect(savedOnDisk).toContain(SENTINEL_SECRET);
+
+    // 6. Per-provider `models.list` loads single provider independently with favorites/nicknames.
+    const modelsRes = await v11.request('models.list', { provider: 'mock-v11-renamed', refresh: true });
+    expect(modelsRes.ok).toBe(true);
+    if (modelsRes.ok) {
+      expect(modelsRes.result['provider']).toBe('mock-v11-renamed');
+      expect(modelsRes.result['models']).toContainEqual(expect.objectContaining({ id: 'daemon-test-model' }));
+      expect(Array.isArray(modelsRes.result['favorites'])).toBe(true);
+    }
   });
 });

@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { installationVersion } from '../../model/providers/fetch/logging-middleware.js';
 import {
-  CLIENT_API_CAPABILITIES,
+  CLIENT_API_HTTP_CAPABILITIES,
   type DaemonShutdownParams,
   type DaemonStatusResult,
   type SessionApprovalPolicy,
@@ -35,9 +35,9 @@ import { createDirectProductPorts, DirectGlobalConfiguration } from '../host-con
 import { scanDirectoryEntries } from '../file-service.js';
 import { SessionContextService } from '../../model/traffic-context.js';
 import { buildEnvOverrides } from '../../config/settings/settings-env.js';
-import { createSettingsService } from '../settings.js';
 import { createDaemonMcp } from './daemon-mcp.js';
 import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } from './daemon-session-ops.js';
+import { createDaemonV11Port } from './daemon-v11-ops.js';
 import {
   acquireDaemonLock,
   checkConversationsDirectory,
@@ -150,14 +150,13 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     // Step 4: Compose ONE product/settings/app/index/RPC/UnixServer graph.
     const effectiveEnv = options.env ?? process.env;
     const settingsDir = effectiveEnv['TERM2_SETTINGS_DIR']?.trim() || undefined;
-    const product = createDirectProductPorts(settingsDir ? { settingsDir } : {});
     const sessionContext = new SessionContextService();
-    const settings = createSettingsService({
-      env: buildEnvOverrides(),
+    const product = createDirectProductPorts({
       ...(settingsDir ? { settingsDir } : {}),
-      disableFilePersistence: true,
+      env: buildEnvOverrides(),
       loggingServiceOptions: { sessionContextService: sessionContext },
     });
+    const settings = product.service;
     const selection = { settings, logger: settings.getLoggingService(), sessionContext };
     const capabilities = {
       sessionBrowser: true,
@@ -178,10 +177,20 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     );
     const mutations = new GlobalMutationCoordinator();
     const sessionPolicies = new Map<string, SessionApprovalPolicy>();
+    const sessionLaunchFlags = new Map<
+      string,
+      { readonly requireSandbox?: boolean; readonly clientMode?: 'interactive' | 'headless' | 'acp' }
+    >();
     let pendingCreatePolicy: SessionApprovalPolicy | undefined;
+    let pendingLaunchFlags:
+      | { readonly requireSandbox?: boolean; readonly clientMode?: 'interactive' | 'headless' | 'acp' }
+      | undefined;
     const policyForSession = (sessionId: string): SessionApprovalPolicy | undefined => {
       if (pendingCreatePolicy !== undefined && !sessionPolicies.has(sessionId)) {
         sessionPolicies.set(sessionId, pendingCreatePolicy);
+      }
+      if (pendingLaunchFlags !== undefined && !sessionLaunchFlags.has(sessionId)) {
+        sessionLaunchFlags.set(sessionId, pendingLaunchFlags);
       }
       return sessionPolicies.get(sessionId);
     };
@@ -197,17 +206,20 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       conversationsDir: paths.conversationsDir,
       selection,
       resolveDefaultModel: () => configuration.currentModelSelection(),
+      authorizeModel: () => undefined,
       prepareSurface: (sessionId, { workspace }) =>
         activeDaemonMcp.prepare(sessionId, workspace, policyForSession(sessionId)?.mode !== 'headless'),
       surface: (sessionId) => {
         const policy = policyForSession(sessionId);
-        const isHeadless = policy?.mode === 'headless';
+        const flags = sessionLaunchFlags.get(sessionId);
+        const isHeadless = policy?.mode === 'headless' || flags?.clientMode === 'headless';
+        const isAcp = flags?.clientMode === 'acp';
         return {
-          autoApprove: isHeadless ? policy.autoApprove : false,
+          autoApprove: policy?.mode === 'headless' ? policy.autoApprove : false,
           interactive: !isHeadless,
-          sessionBrowser: true,
-          allowUnsandboxed: true,
-          shellEscapeApproval: true,
+          sessionBrowser: !isHeadless && !isAcp,
+          allowUnsandboxed: !flags?.requireSandbox && !isAcp,
+          shellEscapeApproval: !isAcp,
           preserveSandboxedShellApproval: true,
           mcp: undefined,
         };
@@ -216,7 +228,10 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       hooks: null,
       autoDrainBackgroundNotifications: true,
       onSessionLifecycle: (event) => {
-        if (event.kind === 'closed') sessionPolicies.delete(event.sessionId);
+        if (event.kind === 'closed') {
+          sessionPolicies.delete(event.sessionId);
+          sessionLaunchFlags.delete(event.sessionId);
+        }
         lifecycleObserver.current?.(event);
       },
       authority: createLocalAuthority(() => true),
@@ -333,6 +348,23 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       return shutdownPromise;
     };
 
+    const v11Port = createDaemonV11Port({
+      app: localOwnerApp,
+      sessionIndex,
+      mutations,
+      configuration,
+      productSettings: product.service,
+      localWorkspaceIdForRoot,
+      recordLocalWorkspace,
+      resolveWorkspaceRoot,
+      setPendingCreatePolicy: (policy) => {
+        pendingCreatePolicy = policy;
+      },
+      setPendingLaunchFlags: (flags) => {
+        pendingLaunchFlags = flags;
+      },
+    });
+    const advertisedCapabilities = [...CLIENT_API_HTTP_CAPABILITIES];
     const rpc = new DaemonRpc({
       host: localOwnerApp.host,
       sessionIndex,
@@ -347,12 +379,13 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           isProjectLevel,
         }));
       },
+      v11: v11Port,
       control: {
         daemonId,
         daemonVersion,
         startedAt,
         pid: process.pid,
-        capabilities: [...CLIENT_API_CAPABILITIES],
+        capabilities: advertisedCapabilities,
         status,
         async shutdown(params) {
           if (params.whenIdle === true) {
@@ -369,21 +402,10 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
           }
           rpcHolder.current?.markShuttingDown();
           // Defer teardown one tick so the RPC response flushes cleanly to the caller first.
-          setImmediate(() => {
-            void performShutdown(params);
-          });
+          setImmediate(() => void performShutdown(params));
         },
         async resolveCwdGrant(principal, cwd) {
-          requireLocalCaller(principal);
-          let resolved: string;
-          try {
-            resolved = fs.realpathSync(cwd);
-          } catch {
-            throw new DirectProtocolError('invalid_command', `Workspace directory does not exist: ${cwd}`);
-          }
-          if (!fs.statSync(resolved).isDirectory()) {
-            throw new DirectProtocolError('invalid_command', `Workspace path is not a directory: ${cwd}`);
-          }
+          const resolved = v11Port.canonicalizeCwd!(principal, cwd);
           recordLocalWorkspace(resolved);
           return localGrant(resolved);
         },
@@ -394,12 +416,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         setPendingCreatePolicy(policy) {
           pendingCreatePolicy = policy;
         },
-        async forkSession(_principal, sourceSessionId) {
-          return await localOwnerApp.forkSession(sourceSessionId);
-        },
-        async handoffSession(_principal, sourceSessionId, input) {
-          return await localOwnerApp.handoff(sourceSessionId, undefined, input.text ?? '');
-        },
+        forkSession: (_principal, sourceSessionId) => localOwnerApp.forkSession(sourceSessionId),
+        handoffSession: (_principal, sourceSessionId, input) =>
+          localOwnerApp.handoff(sourceSessionId, undefined, input.text ?? ''),
         setGoal: (principal, sessionId, command) => applyDaemonSetGoal(localOwnerApp, principal, sessionId, command),
         async prepareSkillText(principal, sessionId, skillName, text) {
           const root = await discoveryRoot(principal, { sessionId });
@@ -434,7 +453,7 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
       daemonId,
       daemonVersion,
       pid: process.pid,
-      capabilities: [...CLIENT_API_CAPABILITIES],
+      capabilities: advertisedCapabilities,
       activeTurnCount: () => getCounts().activeTurnCount,
     });
 
@@ -453,30 +472,9 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
     });
     advertisementWritten = true;
 
-    return {
-      kind: 'started',
-      daemonId,
-      paths,
-      status,
-      shutdown: performShutdown,
-      closed,
-    };
+    return { kind: 'started', daemonId, paths, status, shutdown: performShutdown, closed };
   } catch (error) {
-    try {
-      await unixServer?.close();
-    } catch {
-      // Best-effort cleanup on startup failure.
-    }
-    try {
-      await app?.close();
-    } catch {
-      // Best-effort cleanup on startup failure.
-    }
-    try {
-      await daemonMcp?.close();
-    } catch {
-      // Best-effort cleanup on startup failure.
-    }
+    await Promise.allSettled([unixServer?.close(), app?.close(), daemonMcp?.close()]);
     if (advertisementWritten) removeFileIfPresent(paths.advertisementPath);
     if (socketBound) removeFileIfPresent(paths.socketPath);
     releaseLock();

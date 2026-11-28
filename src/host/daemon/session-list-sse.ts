@@ -6,7 +6,7 @@
 import type { Principal } from '../in-process-direct-types.js';
 import type { ServerResult } from '../server-contracts.js';
 import type { SessionIndex, SessionListStreamEvent } from './session-index.js';
-import { CLIENT_API_VERSION } from '../../protocol/client-api/version-negotiation.js';
+import { CLIENT_API_HTTP_VERSION } from '../../protocol/client-api/version-negotiation.js';
 import { CLIENT_API_SCHEMAS } from '../../protocol/client-api/client-api-schema.js';
 
 const HEARTBEAT_MS = 15_000;
@@ -23,6 +23,11 @@ export type SessionListSseOptions = {
   ) => () => void;
 };
 
+function stripV11SessionFields<T extends Record<string, unknown>>(item: T): Omit<T, 'messageCount' | 'workspaceRoot'> {
+  const { messageCount: _m, workspaceRoot: _w, ...rest } = item;
+  return rest;
+}
+
 function encodeSseFrame(eventName: string, payload: Record<string, unknown>): string {
   return `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
@@ -32,7 +37,7 @@ export function sessionListEventStream(
   principal: Principal,
   options: SessionListSseOptions = {},
 ): ServerResult {
-  const version = options.negotiatedVersion ?? CLIENT_API_VERSION;
+  const version = options.negotiatedVersion ?? CLIENT_API_HTTP_VERSION;
   let stopStream: (() => void) | null = null;
   return {
     status: 200,
@@ -152,6 +157,15 @@ export function sessionListEventStream(
 
         const handleEvent = (event: SessionListStreamEvent) => {
           if (closed) return;
+          if (event.event === 'session.list.snapshot') {
+            const { event: eventName, sessions, ...rest } = event;
+            enqueue(encodeSseFrame(eventName, { ...rest, sessions: sessions.map(stripV11SessionFields) }));
+            return;
+          }
+          if (event.event === 'session.list.upsert') {
+            enqueue(encodeSseFrame(event.event, { session: stripV11SessionFields(event.session) }));
+            return;
+          }
           const { event: eventName, ...payload } = event;
           enqueue(encodeSseFrame(eventName, payload));
         };

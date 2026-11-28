@@ -17,6 +17,7 @@ import {
   type DirectGlobalConfiguration,
   type DirectWorkspaceAuthority,
 } from '../host-config.js';
+import { findMatchingLocalGrant } from '../host-config-access.js';
 
 export type ServePresentationOptions = {
   readonly app: DirectApplication;
@@ -49,17 +50,8 @@ export function createServePresentation(options: ServePresentationOptions): Dire
     }
     if (options.allowUnboundLocal && options.ownerUserId === principal.userId) {
       const root = options.resolveSessionRoot?.(sessionId);
-      if (root) {
-        for (const alias of grants.list(principal)) {
-          try {
-            const grant = grants.resolveGrant(principal, alias.workspaceId);
-            const { workspace } = grants.resolveWorkspace(principal, grant);
-            if (workspace.target === 'local' && workspace.root === root) return { grant };
-          } catch {
-            // Skip inaccessible grants.
-          }
-        }
-      }
+      const matched = root ? findMatchingLocalGrant(grants, principal, root) : null;
+      if (matched) return { grant: matched.grant };
     }
     throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
   };

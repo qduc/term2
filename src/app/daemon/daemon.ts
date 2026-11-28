@@ -40,12 +40,10 @@ import { applyDaemonSetGoal, prepareDaemonSkillText, readDaemonSessionQuota } fr
 import { createDaemonV11Port } from './daemon-v11-ops.js';
 import { DaemonServeLeaseManager } from './leases/serve-lease.js';
 import {
-  acquireDaemonLock,
+  acquireLockOrDetectPeer,
   checkConversationsDirectory,
-  DaemonLockBusyError,
   ensureSecurePrivateDir,
   prepareSocketForBind,
-  probeSocketConnectable,
   readCurrentProcStartTime,
   removeFileIfPresent,
   resolveDaemonPaths,
@@ -53,7 +51,6 @@ import {
   type DaemonPaths,
 } from './daemon-paths.js';
 
-const LOCK_CONTENTION_TIMEOUT_MS = 3_000;
 const DEFAULT_GRACEFUL_SHUTDOWN_MS = 10_000;
 
 export type StartTerm2DaemonOptions = {
@@ -83,35 +80,6 @@ function sleep(ms: number): Promise<void> {
 
 function localWorkspaceIdForRoot(root: string): string {
   return `local_${createHash('sha256').update(root).digest('hex').slice(0, 12)}`;
-}
-
-async function acquireLockOrDetectPeer(
-  lockPath: string,
-  socketPath: string,
-): Promise<{ readonly kind: 'acquired'; readonly release: () => void } | { readonly kind: 'already_running' }> {
-  const deadline = Date.now() + LOCK_CONTENTION_TIMEOUT_MS;
-  let attempt = 0;
-  for (;;) {
-    try {
-      return { kind: 'acquired', release: acquireDaemonLock(lockPath) };
-    } catch (error) {
-      if (!(error instanceof DaemonLockBusyError)) throw error;
-      if (await probeSocketConnectable(socketPath, 250)) {
-        return { kind: 'already_running' };
-      }
-      if (Date.now() >= deadline) {
-        if (await probeSocketConnectable(socketPath, 500)) {
-          return { kind: 'already_running' };
-        }
-        throw new Error(
-          `Daemon lock ${lockPath} remained busy for ${LOCK_CONTENTION_TIMEOUT_MS}ms without a live socket.`,
-        );
-      }
-      const backoff = Math.min(200, 25 * Math.pow(2, attempt));
-      attempt += 1;
-      await sleep(backoff);
-    }
-  }
 }
 
 export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): Promise<Term2DaemonHandle> {
@@ -222,17 +190,22 @@ export async function startTerm2Daemon(options: StartTerm2DaemonOptions = {}): P
         activeServeLeases.prepareServeSurface(ctx) ??
         activeDaemonMcp.prepare(sessionId, ctx.workspace, policyForSession(sessionId)?.mode !== 'headless'),
       surface: (sessionId, ctx) => {
-        const serveSurface = activeServeLeases.serveSurfaceOptions(ctx);
+        const serveSurface = activeServeLeases.serveSurfaceOptions(sessionId, ctx);
         if (serveSurface) return serveSurface;
         const policy = policyForSession(sessionId);
         const flags = sessionLaunchFlags.get(sessionId);
         const isHeadless = policy?.mode === 'headless' || flags?.clientMode === 'headless';
         const isAcp = flags?.clientMode === 'acp';
+        const allowUnsandboxed = !flags?.requireSandbox && !isAcp;
+        activeServeLeases.recordSessionPosture(sessionId, {
+          workspaceAccess: ctx?.workspace.access ?? 'read_write',
+          allowUnsandboxed,
+        });
         return {
           autoApprove: policy?.mode === 'headless' ? policy.autoApprove : false,
           interactive: !isHeadless,
           sessionBrowser: !isHeadless && !isAcp,
-          allowUnsandboxed: !flags?.requireSandbox && !isAcp,
+          allowUnsandboxed,
           shellEscapeApproval: !isAcp,
           preserveSandboxedShellApproval: true,
           mcp: undefined,

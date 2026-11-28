@@ -31,6 +31,7 @@ import {
   DirectWorkspaceAuthority,
   serverWorkspaceAdministration,
 } from '../../host-config.js';
+import type { LiveSessionPosture } from '../../host-config-access.js';
 import { prepareServeSshSurface } from '../../remote-context.js';
 import { createServePresentation } from '../serve-presentation.js';
 import {
@@ -39,6 +40,7 @@ import {
   messageOf,
   prepareServeStateDir,
   readLockOwnerPid,
+  readPrincipalServeLease,
   resolveGrantVisibilityForRecord,
   resolveServeTransport,
   wrapHostWithLease,
@@ -63,8 +65,10 @@ export type DaemonServeLeaseDeps = {
 
 export class DaemonServeLeaseManager {
   readonly #leases = new Map<string, ActiveServeLease>();
+  readonly #closingLeases = new Set<Promise<void>>();
   readonly #context = new AsyncLocalStorage<ActiveServeLease>();
   readonly #sessionRoots = new Map<string, string>();
+  readonly #liveSessionPosture = new Map<string, LiveSessionPosture>();
   #baseStore: DirectLocalStore | null = null;
   #app: DirectApplication | null = null;
   #sessionIndex: SessionIndex | null = null;
@@ -94,23 +98,30 @@ export class DaemonServeLeaseManager {
     this.#sessionRoots.set(sessionId, root);
   }
 
+  recordSessionPosture(sessionId: string, posture: LiveSessionPosture): void {
+    this.#liveSessionPosture.set(sessionId, posture);
+  }
+
   observeLifecycle(event: DirectHostLifecycleEvent): void {
     if (event.workspace.target === 'local') {
       this.#sessionRoots.set(event.sessionId, event.workspace.root);
     }
+    if (event.kind === 'closed') {
+      this.#liveSessionPosture.delete(event.sessionId);
+      return;
+    }
+    const existing = this.#liveSessionPosture.get(event.sessionId);
+    if (existing) {
+      this.#liveSessionPosture.set(event.sessionId, {
+        workspaceAccess: event.workspace.access,
+        allowUnsandboxed: existing.allowUnsandboxed,
+      });
+    }
   }
 
-  activeLeaseFor(ctx?: {
-    readonly binding?: { readonly client: string; readonly id: string };
-  }): ActiveServeLease | null {
+  activeLease(): ActiveServeLease | null {
     const scoped = this.#context.getStore();
-    if (scoped && !scoped.stopped) return scoped;
-    if (ctx?.binding) {
-      for (const lease of this.#leases.values()) {
-        if (!lease.stopped && lease.ownerUserId === ctx.binding.client) return lease;
-      }
-    }
-    return null;
+    return scoped && !scoped.stopped ? scoped : null;
   }
 
   createUnifiedAuthority(): DirectAuthorityFactory {
@@ -120,33 +131,33 @@ export class DaemonServeLeaseManager {
       return {
         authorize: async (principal, request) => {
           if (principal.via === 'local') return await local.authorize(principal, request);
-          const lease = this.#context.getStore();
-          if (!lease || lease.stopped || principal.userId !== lease.ownerUserId) {
+          const lease = this.activeLease();
+          if (!lease || principal.userId !== lease.ownerUserId) {
             throw new DirectProtocolError('forbidden', 'Only the local owner may use this server.');
           }
           await lease.access.authorize(principal, request);
         },
         resolveGrant: (principal, grant) => {
           if (principal.via === 'local') return local.resolveGrant(principal, grant);
-          const lease = this.#context.getStore();
-          if (!lease || lease.stopped) {
+          const lease = this.activeLease();
+          if (!lease) {
             throw new DirectProtocolError('forbidden', 'Only the local owner may use this server.');
           }
           return lease.access.resolveWorkspace(principal, grant);
         },
         resolveStored: (root, identity) => {
-          const lease = this.#context.getStore();
-          if (lease && !lease.stopped) return lease.access.resolveStoredRoot(root, identity);
+          const lease = this.activeLease();
+          if (lease) return lease.access.resolveStoredRoot(root, identity);
           return local.resolveStored(root, identity);
         },
         canRun: (workspace) => {
-          const lease = this.#context.getStore();
-          if (lease && !lease.stopped) return true;
+          const lease = this.activeLease();
+          if (lease) return true;
           return local.canRun(workspace);
         },
         createSession: (workspace, model, binding) => {
-          const lease = this.#context.getStore();
-          if (lease && !lease.stopped) return lease.access.sessions.create(workspace, model, binding);
+          const lease = this.activeLease();
+          if (lease) return lease.access.sessions.create(workspace, model, binding);
           return store.create(workspace, model, binding);
         },
       };
@@ -157,8 +168,8 @@ export class DaemonServeLeaseManager {
     next: { readonly provider: string; readonly model: string },
     previous: { readonly provider: string; readonly model: string },
   ): Promise<void> {
-    const lease = this.#context.getStore();
-    if (!lease || lease.stopped) return;
+    const lease = this.activeLease();
+    if (!lease) return;
     if (next.provider === previous.provider && next.model === previous.model) return;
     await lease.configuration.assertModel(next.provider, next.model);
   }
@@ -166,19 +177,27 @@ export class DaemonServeLeaseManager {
   prepareServeSurface(
     ctx: Parameters<typeof prepareServeSshSurface>[1],
   ): ReturnType<typeof prepareServeSshSurface> | undefined {
-    const lease = this.activeLeaseFor(ctx);
+    const lease = this.activeLease();
     if (!lease) return undefined;
     return prepareServeSshSurface(lease.grants, ctx);
   }
 
-  serveSurfaceOptions(ctx?: { readonly binding?: { readonly client: string; readonly id: string } }) {
-    const lease = this.activeLeaseFor(ctx);
+  serveSurfaceOptions(
+    sessionId: string,
+    ctx?: {
+      readonly workspace: { readonly access: 'read' | 'read_write' };
+      readonly binding?: { readonly client: string; readonly id: string };
+    },
+  ) {
+    const lease = this.activeLease();
     if (!lease) return null;
+    const allowUnsandboxed = ctx?.binding ? lease.grants.kindOf(ctx.binding.id) === 'host' : false;
+    if (ctx) this.recordSessionPosture(sessionId, { workspaceAccess: ctx.workspace.access, allowUnsandboxed });
     return {
       autoApprove: false,
       interactive: true,
       sessionBrowser: true,
-      allowUnsandboxed: ctx?.binding ? lease.grants.kindOf(ctx.binding.id) === 'host' : false,
+      allowUnsandboxed,
       shellEscapeApproval: true,
       preserveSandboxedShellApproval: true,
       mcp: undefined,
@@ -193,14 +212,9 @@ export class DaemonServeLeaseManager {
         workspaceRoot: record.workspaceRoot,
       };
     }
-    const scoped = this.#context.getStore();
-    if (scoped && !scoped.stopped) return resolveGrantVisibilityForRecord(scoped, principal, record);
-    for (const lease of this.#leases.values()) {
-      if (lease.stopped || lease.ownerUserId !== principal.userId) continue;
-      const result = resolveGrantVisibilityForRecord(lease, principal, record);
-      if (result.visible) return result;
-    }
-    return { visible: false };
+    const lease = readPrincipalServeLease(principal) ?? this.activeLease();
+    if (!lease || lease.stopped) return { visible: false };
+    return resolveGrantVisibilityForRecord(lease, principal, record);
   }
 
   async startLease(
@@ -233,6 +247,7 @@ export class DaemonServeLeaseManager {
     const releaseLock = acquireServeStateDirLock(stateDir);
     let ledger: SqliteReplayLedger | null = null;
     let transport: ReturnType<typeof createDirectServerHost> | null = null;
+    let pendingLease: ActiveServeLease | null = null;
     const leaseId = `srv_${randomUUID().replace(/-/g, '')}`;
 
     try {
@@ -276,6 +291,8 @@ export class DaemonServeLeaseManager {
         directory: this.deps.conversationsDir,
         allowUnboundLocal: true,
         ownerUserId: params.localOwnerUserId,
+        allowWrite: params.allowWrite,
+        liveSessionPosture: (sessionId) => this.#liveSessionPosture.get(sessionId),
       });
       ledger = new SqliteReplayLedger(path.join(stateDir, 'replay.sqlite'));
       const app = this.#app;
@@ -283,16 +300,6 @@ export class DaemonServeLeaseManager {
       const closeWorkspaceSessions = app.host.closeWorkspaceSessions?.bind(app.host);
       if (!closeWorkspaceSessions) throw new Error('The direct host cannot close workspace sessions.');
 
-      const leaseRef: { current?: ActiveServeLease } = {};
-      const workspaces = serverWorkspaceAdministration(grants, closeWorkspaceSessions, {
-        onRevoked: (root) => sessionIndex.notifyWorkspaceRevoked(root),
-        onGranted: (grantPrincipal, root) => {
-          const active = leaseRef.current;
-          return active
-            ? this.#context.run(active, () => sessionIndex.notifyWorkspaceGranted(grantPrincipal, root))
-            : sessionIndex.notifyWorkspaceGranted(grantPrincipal, root);
-        },
-      });
       const rawPresentation = createServePresentation({
         app,
         grants,
@@ -305,7 +312,7 @@ export class DaemonServeLeaseManager {
       });
       const auditPath = path.join(stateDir, 'server-audit.jsonl');
 
-      const pendingLease: ActiveServeLease = {
+      pendingLease = {
         leaseId,
         connectionId: connection.connectionId,
         stateDir,
@@ -320,11 +327,13 @@ export class DaemonServeLeaseManager {
         unregisterDisconnect: () => undefined,
         stopped: false,
       };
-      leaseRef.current = pendingLease;
-
       const scopedHost = wrapHostWithLease(app.host, this.#context, pendingLease);
       const scopedIndex = wrapSessionIndexWithLease(sessionIndex, this.#context, pendingLease);
       const scopedPresentation = wrapPresentationWithLease(rawPresentation, this.#context, pendingLease);
+      const workspaces = serverWorkspaceAdministration(grants, closeWorkspaceSessions, {
+        onRevoked: (root) => scopedIndex.notifyWorkspaceRevoked(root),
+        onGranted: (grantPrincipal, root) => scopedIndex.notifyWorkspaceGranted(grantPrincipal, root),
+      });
 
       transport = createDirectServerHost(
         {
@@ -376,28 +385,38 @@ export class DaemonServeLeaseManager {
         },
       );
       pendingLease.transport = transport;
-      pendingLease.unregisterDisconnect = connection.onDisconnect(() => this.#releaseLease(leaseId));
-
       this.#leases.set(leaseId, pendingLease);
-      await transport.start();
+      // Start listener and register disconnect cleanup so EOF mid-start awaits startPromise before stopping.
+      pendingLease.startPromise = transport.start();
+      pendingLease.unregisterDisconnect = connection.onDisconnect(() => this.#releaseLease(leaseId));
+      await pendingLease.startPromise;
+      if (pendingLease.stopped) {
+        await Promise.allSettled([...this.#closingLeases]);
+        throw new ClientApiRpcError('closed', 'Client disconnected while starting serve lease.');
+      }
       const endpoint =
         params.transport.kind === 'socket'
           ? `transport=socket path=${params.transport.socketPath}`
           : `transport=tls host=${params.transport.host} port=${params.transport.port}`;
       return { leaseId, stateDir, endpoint };
     } catch (error) {
-      this.#leases.delete(leaseId);
-      try {
-        await transport?.stop();
-      } catch {
-        // Best-effort cleanup on start failure.
+      if (pendingLease?.stopped) {
+        await Promise.allSettled([...this.#closingLeases]);
+      } else {
+        this.#leases.delete(leaseId);
+        pendingLease?.unregisterDisconnect();
+        try {
+          await transport?.stop();
+        } catch {
+          // Best-effort cleanup on start failure.
+        }
+        try {
+          ledger?.close();
+        } catch {
+          // Best-effort cleanup on start failure.
+        }
+        releaseLock();
       }
-      try {
-        ledger?.close();
-      } catch {
-        // Best-effort cleanup on start failure.
-      }
-      releaseLock();
       if (error instanceof ClientApiRpcError) throw error;
       throw new ClientApiRpcError('unavailable', messageOf(error));
     }
@@ -420,22 +439,34 @@ export class DaemonServeLeaseManager {
 
   async closeAll(): Promise<void> {
     await Promise.allSettled([...this.#leases.keys()].map((id) => this.#releaseLease(id)));
+    await Promise.allSettled([...this.#closingLeases]);
   }
 
-  async #releaseLease(leaseId: string): Promise<void> {
+  #releaseLease(leaseId: string): Promise<void> {
     const lease = this.#leases.get(leaseId);
-    if (!lease || lease.stopped) return;
+    if (!lease || lease.stopped) return Promise.resolve();
     lease.stopped = true;
     this.#leases.delete(leaseId);
     lease.unregisterDisconnect();
-    try {
-      await lease.transport.stop();
-    } finally {
+    const cleanup = (async () => {
       try {
-        lease.ledger.close();
+        await lease.startPromise?.catch(() => undefined);
       } finally {
-        lease.releaseLock();
+        try {
+          await lease.transport.stop();
+        } finally {
+          try {
+            lease.ledger.close();
+          } finally {
+            lease.releaseLock();
+          }
+        }
       }
-    }
+    })();
+    this.#closingLeases.add(cleanup);
+    void cleanup.finally(() => {
+      this.#closingLeases.delete(cleanup);
+    });
+    return cleanup;
   }
 }

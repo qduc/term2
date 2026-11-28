@@ -14,11 +14,8 @@ import { ClientApiRpcError } from '../../../host/daemon/daemon-rpc.js';
 import type { SessionIndex, SessionIndexRecord } from '../../../host/daemon/session-index.js';
 import type { DaemonServeStartParams } from '../../../protocol/client-api/client-api-schema.js';
 import type { DirectLocalStore } from '../../../session/store.js';
-import type {
-  bindDirectSessionAccess,
-  DirectGlobalConfiguration,
-  DirectWorkspaceAuthority,
-} from '../../host-config.js';
+import { findMatchingLocalGrant, type bindDirectSessionAccess } from '../../host-config-access.js';
+import type { DirectGlobalConfiguration, DirectWorkspaceAuthority } from '../../host-config.js';
 import type { DirectServeSessionPresentation } from '../serve-presentation.js';
 
 export type BoundLocalSessionAccess = ReturnType<
@@ -39,6 +36,7 @@ export type ActiveServeLease = {
   readonly access: BoundLocalSessionAccess;
   readonly ledger: SqliteReplayLedger;
   transport: ReturnType<typeof createDirectServerHost>;
+  startPromise?: Promise<void>;
   readonly releaseLock: () => void;
   unregisterDisconnect: () => void;
   stopped: boolean;
@@ -172,7 +170,12 @@ export function wrapHostWithLease(
     });
   return {
     listSessions: (principal, cursor) => run(() => host.listSessions(principal, cursor)),
-    createSession: (principal, grant) => run(() => host.createSession(principal, grant)),
+    createSession: async (principal, grant) =>
+      wrapConnection(
+        (await run(() => host.createSession(principal, grant))) as unknown as {
+          send: (command: never) => Promise<unknown>;
+        },
+      ) as unknown as ReturnType<DirectHost['createSession']>,
     connect: (async (principal: Principal, sessionId: string, fromSeq?: number) =>
       wrapConnection(
         (await run(() =>
@@ -192,21 +195,29 @@ export function wrapHostWithLease(
   };
 }
 
+const SERVE_LEASE_SYMBOL = Symbol('term2.serveLease');
+
+export function readPrincipalServeLease(principal: Principal): ActiveServeLease | undefined {
+  return (principal as unknown as Record<symbol, ActiveServeLease | undefined>)[SERVE_LEASE_SYMBOL];
+}
+
 export function wrapSessionIndexWithLease(
   index: SessionIndex,
   storage: AsyncLocalStorage<ActiveServeLease>,
   lease: ActiveServeLease,
 ): SessionIndex {
   const run = <T>(fn: () => T): T => storage.run(lease, fn);
+  const tag = (principal: Principal): Principal =>
+    Object.assign({ ...principal }, { [SERVE_LEASE_SYMBOL]: lease }) as Principal;
   return {
     seed: () => index.seed(),
     observeLifecycle: (event) => index.observeLifecycle(event),
     notifyWorkspaceRevoked: (root) => index.notifyWorkspaceRevoked(root),
-    notifyWorkspaceGranted: (principal, root) => run(() => index.notifyWorkspaceGranted(principal, root)),
+    notifyWorkspaceGranted: (principal, root) => run(() => index.notifyWorkspaceGranted(tag(principal), root)),
     refresh: (sessionId) => index.refresh(sessionId),
-    list: (principal, options) => run(() => index.list(principal, options)),
-    get: (principal, sessionId) => run(() => index.get(principal, sessionId)),
-    subscribe: (principal, options, listener) => run(() => index.subscribe(principal, options, listener)),
+    list: (principal, options) => run(() => index.list(tag(principal), options)),
+    get: (principal, sessionId) => run(() => index.get(tag(principal), sessionId)),
+    subscribe: (principal, options, listener) => run(() => index.subscribe(tag(principal), options, listener)),
     counts: () => index.counts(),
     dispose: () => undefined,
   };
@@ -248,20 +259,6 @@ export function resolveGrantVisibilityForRecord(
       return { visible: false };
     }
   }
-  const canonicalRecord = path.resolve(record.workspaceRoot);
-  const aliases = lease.grants.list(principal);
-  // Prefer explicit directory grants over the static `host` grant when both share a root.
-  const ordered = [...aliases].sort((a, b) => (a.kind === 'host' ? 1 : 0) - (b.kind === 'host' ? 1 : 0));
-  for (const alias of ordered) {
-    try {
-      const grant = lease.grants.resolveGrant(principal, alias.workspaceId);
-      const { workspace } = lease.grants.resolveWorkspace(principal, grant);
-      if (workspace.target === 'local' && path.resolve(workspace.root) === canonicalRecord) {
-        return { visible: true, workspaceId: alias.workspaceId };
-      }
-    } catch {
-      // Skip invalid or inaccessible grants.
-    }
-  }
-  return { visible: false };
+  const matched = findMatchingLocalGrant(lease.grants, principal, record.workspaceRoot);
+  return matched ? { visible: true, workspaceId: matched.grant.workspaceId } : { visible: false };
 }

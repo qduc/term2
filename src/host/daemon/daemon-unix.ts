@@ -291,6 +291,7 @@ export class DaemonUnixServer {
         client.connectionId,
         client.disconnectCleanups,
         (event, payload) => this.#writeFrame(client, { kind: 'event', event, payload }),
+        () => client.closed,
       );
       const result = await this.options.rpc.invoke(this.options.localOwnerPrincipal, method, params, {
         protocolVersion: client.negotiation.version,
@@ -358,7 +359,10 @@ export class DaemonUnixServer {
       return;
     }
 
-    const capabilities = negotiateCapabilities(this.options.capabilities, hello.data.capabilities);
+    const eligibleCapabilities = isClientApiVersionAtLeast(negotiated.version, '1.1')
+      ? this.options.capabilities
+      : this.options.capabilities.filter((cap) => cap !== 'local_leases');
+    const capabilities = negotiateCapabilities(eligibleCapabilities, hello.data.capabilities);
     client.negotiation = { version: negotiated.version, capabilities: new Set(capabilities) };
     if (client.handshakeTimer) clearTimeout(client.handshakeTimer);
     client.handshakeTimer = null;

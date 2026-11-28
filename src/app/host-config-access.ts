@@ -46,12 +46,46 @@ const creation = new AsyncLocalStorage<Frame>();
  * for `sessions.create` on that call; a create outside that check fails closed.
  * Create and open keep the store's own result types.
  */
+export type LiveSessionPosture = {
+  readonly workspaceAccess: 'read' | 'read_write';
+  readonly allowUnsandboxed: boolean;
+};
+
+/**
+ * Match an unbound local session's canonical root against the principal's active
+ * local grants, preferring explicit directory grants over the static `host` grant
+ * (matching `DirectWorkspaceAuthority.resolveStoredRoot`).
+ */
+export function findMatchingLocalGrant(
+  authority: DirectWorkspaceAuthority,
+  principal: Principal,
+  root: string,
+): { readonly grant: WorkspaceGrant; readonly workspace: Workspace } | null {
+  const canonicalRoot = path.resolve(root);
+  const aliases = authority.list(principal);
+  const ordered = [...aliases].sort((a, b) => (a.kind === 'host' ? 1 : 0) - (b.kind === 'host' ? 1 : 0));
+  for (const alias of ordered) {
+    try {
+      const grant = authority.resolveGrant(principal, alias.workspaceId);
+      const { workspace } = authority.resolveWorkspace(principal, grant);
+      if (workspace.target === 'local' && path.resolve(workspace.root) === canonicalRoot) {
+        return { grant, workspace };
+      }
+    } catch {
+      // Skip invalid or inaccessible grants.
+    }
+  }
+  return null;
+}
+
 export function bindDirectSessionAccess<TCreated, TOpened>(options: {
   readonly authority: DirectWorkspaceAuthority;
   readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   readonly directory: string;
   readonly allowUnboundLocal?: boolean;
   readonly ownerUserId?: string;
+  readonly allowWrite?: boolean;
+  readonly liveSessionPosture?: (sessionId: string) => LiveSessionPosture | undefined;
 }): {
   readonly sessions: DirectBoundSessionStore<TCreated, TOpened>;
   authorize(
@@ -110,19 +144,21 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
         if (!options.allowUnboundLocal || !options.ownerUserId || principal.userId !== options.ownerUserId) {
           throw forbidden();
         }
-        const matched = options.authority.list(principal).some((alias) => {
-          try {
-            const grant = options.authority.resolveGrant(principal, alias.workspaceId);
-            const resolved = options.authority.resolveWorkspace(principal, grant);
-            return (
-              resolved.workspace.target === 'local' &&
-              path.resolve(resolved.workspace.root) === path.resolve(started!.root)
-            );
-          } catch {
-            return false;
-          }
-        });
+        const matched = findMatchingLocalGrant(options.authority, principal, started.root);
         if (!matched) throw forbidden();
+        if (access.kind === 'write') {
+          const live = options.liveSessionPosture?.(access.sessionId);
+          if (live) {
+            const grantAllowsWrite = matched.workspace.access === 'read_write' && options.allowWrite !== false;
+            const grantAllowsUnsandboxed = options.authority.kindOf(matched.grant.workspaceId) === 'host';
+            if (
+              (live.workspaceAccess === 'read_write' && !grantAllowsWrite) ||
+              (live.allowUnsandboxed && !grantAllowsUnsandboxed)
+            ) {
+              throw forbidden();
+            }
+          }
+        }
         return;
       }
       if (started.binding.client !== principal.userId) throw forbidden();

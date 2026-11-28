@@ -150,6 +150,7 @@ function openSessionListSse(
   socketPath: string,
   assertion: string,
 ): {
+  frames: () => readonly { event: string; data: Record<string, unknown> }[];
   waitFor: (predicate: (frame: { event: string; data: Record<string, unknown> }) => boolean) => Promise<{
     event: string;
     data: Record<string, unknown>;
@@ -206,6 +207,7 @@ function openSessionListSse(
   });
   req.end();
   return {
+    frames: () => [...frames],
     waitFor: (predicate) =>
       new Promise((resolve, reject) => {
         const check = () => {
@@ -508,5 +510,285 @@ describe('Daemon serve lease (Step 14e Part 1)', () => {
       });
       expect(fs.existsSync(gatewaySocket)).toBe(false);
     }
+  }, 60_000);
+
+  it('enforces read-only posture on live local sessions, isolates concurrent leases, cleans up EOF mid-start, and gates v1.0 capabilities', async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 't2-srvsec-')));
+    cleanups.push(() => fs.rmSync(root, { recursive: true, force: true }));
+    const daemonStateDir = path.join(root, 'daemon-state');
+    const stateA = path.join(root, 'state-a');
+    const stateB = path.join(root, 'state-b');
+    const stateAbort = path.join(root, 'state-abort');
+    const runtimeDir = path.join(root, 'run');
+    const settingsDir = path.join(root, 'settings');
+    const conversationsDir = path.join(daemonStateDir, 'conversations');
+    const daemonSocket = path.join(runtimeDir, 'daemon.sock');
+    const sockA = path.join(stateA, 'gateway.sock');
+    const sockB = path.join(stateB, 'gateway.sock');
+    const sockAbort = path.join(stateAbort, 'gateway.sock');
+    const wsA = path.join(root, 'ws-a');
+    const wsB = path.join(root, 'ws-b');
+    const wsShared = path.join(root, 'ws-shared');
+    fs.mkdirSync(wsA, { recursive: true });
+    fs.mkdirSync(wsB, { recursive: true });
+    fs.mkdirSync(wsShared, { recursive: true });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { modelSelection: { provider: 'mock-serve', model: 'mock-model' } },
+        providers: [{ name: 'mock-serve', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'k' }],
+      }),
+    );
+
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const publicKeyPath = path.join(root, 'bff.pub.pem');
+    fs.writeFileSync(publicKeyPath, publicKey);
+    const sign = (
+      purpose: Parameters<typeof createGatewayAssertion>[0]['purpose'],
+      ids: { workspaceId?: string; sessionId?: string } = {},
+    ) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: 'sec-kid',
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject: 'local-owner',
+        purpose,
+        ...ids,
+      });
+
+    const env = {
+      ...process.env,
+      HOME: root,
+      TERM2_DAEMON_DIR: runtimeDir,
+      TERM2_CONVERSATIONS_DIR: conversationsDir,
+      TERM2_SETTINGS_DIR: settingsDir,
+    };
+    const started = await startTerm2Daemon({
+      stateDir: daemonStateDir,
+      conversationsDir,
+      socketPath: daemonSocket,
+      env,
+    });
+    expect(started.kind).toBe('started');
+    if (started.kind !== 'started') return;
+    cleanups.push(() => started.shutdown({ mode: 'immediate' }));
+
+    // 1. Unix v1.0 welcome MUST NOT advertise `local_leases` even when omitted or explicitly requested.
+    for (const caps of [undefined, ['local_leases', 'daemon_control']]) {
+      const sock = await new Promise<net.Socket>((resolve, reject) => {
+        const s = net.createConnection({ path: daemonSocket });
+        s.once('error', reject);
+        s.once('connect', () => resolve(s));
+      });
+      const v10 = new UnixTestClient(sock);
+      cleanups.push(() => v10.close());
+      const hello = await v10.request('protocol.hello', {
+        protocolVersion: '1.0',
+        minSupportedVersion: '1.0',
+        clientKind: 'legacy-v10',
+        clientVersion: '1.0.0',
+        ...(caps ? { capabilities: caps } : {}),
+      });
+      expect(hello.ok).toBe(true);
+      if (hello.ok) expect(hello.result['capabilities']).not.toContain('local_leases');
+      v10.close();
+    }
+
+    // 2. Client EOF mid-`daemon.serve.start` must never leak an orphaned gateway socket.
+    for (let i = 0; i < 4; i += 1) {
+      const doomed = await connectUnixV11(daemonSocket);
+      void doomed
+        .request('daemon.serve.start', {
+          stateDir: stateAbort,
+          localOwnerUserId: 'local-owner',
+          allowWrite: false,
+          pairing: false,
+          bffKeys: [{ kid: 'sec-kid', pemPath: publicKeyPath }],
+          transport: { kind: 'socket', socketPath: sockAbort },
+        })
+        .catch(() => undefined);
+      doomed.close();
+    }
+    const probe = await connectUnixV11(daemonSocket);
+    cleanups.push(() => probe.close());
+    await expect
+      .poll(
+        async () => {
+          const res = await probe.request('daemon.serve.start', {
+            stateDir: stateAbort,
+            localOwnerUserId: 'local-owner',
+            allowWrite: false,
+            pairing: false,
+            bffKeys: [{ kid: 'sec-kid', pemPath: publicKeyPath }],
+            transport: { kind: 'socket', socketPath: sockAbort },
+          });
+          if (!res.ok) return false;
+          await probe.request('daemon.serve.stop', { leaseId: String(res.result['leaseId']) });
+          return true;
+        },
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+    expect(fs.existsSync(sockAbort)).toBe(false);
+
+    // 3. Start Lease A (read-only: wsA + wsShared) and Lease B (read-write: wsB + wsShared + explicit ~ grant).
+    const clientA = await connectUnixV11(daemonSocket);
+    cleanups.push(() => clientA.close());
+    const clientB = await connectUnixV11(daemonSocket);
+    cleanups.push(() => clientB.close());
+
+    const startA = await clientA.request('daemon.serve.start', {
+      stateDir: stateA,
+      localOwnerUserId: 'local-owner',
+      allowWrite: false,
+      pairing: false,
+      bffKeys: [{ kid: 'sec-kid', pemPath: publicKeyPath }],
+      transport: { kind: 'socket', socketPath: sockA },
+    });
+    expect(startA.ok).toBe(true);
+    const startB = await clientB.request('daemon.serve.start', {
+      stateDir: stateB,
+      localOwnerUserId: 'local-owner',
+      allowWrite: true,
+      pairing: false,
+      bffKeys: [{ kid: 'sec-kid', pemPath: publicKeyPath }],
+      transport: { kind: 'socket', socketPath: sockB },
+    });
+    expect(startB.ok).toBe(true);
+
+    const admit = async (socketPath: string, folder: string, access: 'read' | 'read_write') => {
+      const val = await httpUnixRequest(
+        socketPath,
+        'POST',
+        '/private/agent/v1/workspace/candidates/validate',
+        { absolutePath: folder },
+        sign('workspace_candidate_validate'),
+      );
+      expect(val.status).toBe(200);
+      const sel = await httpUnixRequest(
+        socketPath,
+        'POST',
+        '/private/agent/v1/workspace/candidates/select',
+        { candidateId: val.body['candidateId'], access },
+        sign('workspace_candidate_select'),
+      );
+      expect(sel.status).toBe(200);
+      return String(sel.body['workspaceId']);
+    };
+
+    const wsIdA = await admit(sockA, wsA, 'read');
+    const wsIdSharedA = await admit(sockA, wsShared, 'read');
+    const wsIdB = await admit(sockB, wsB, 'read_write');
+    await admit(sockB, wsShared, 'read_write');
+
+    // Subscribe both Lease A and Lease B to /sessions/events.
+    const sseA = openSessionListSse(sockA, sign('session_list_events'));
+    cleanups.push(() => sseA.close());
+    const sseB = openSessionListSse(sockB, sign('session_list_events'));
+    cleanups.push(() => sseB.close());
+    await sseA.waitFor((f) => f.event === 'session.list.snapshot');
+    await sseB.waitFor((f) => f.event === 'session.list.snapshot');
+
+    // Launch a live local read_write session in wsA: read-only Lease A sees it, CANNOT write to it, and Lease B NEVER sees it.
+    const localA = await probe.request('session.launch', { cwd: wsA, selection: { kind: 'new' } });
+    expect(localA.ok).toBe(true);
+    if (!localA.ok) return;
+    const localAId = (localA.result['session'] as { id: string }).id;
+    await sseA.waitFor(
+      (f) => f.event === 'session.list.upsert' && (f.data['session'] as { id?: string } | undefined)?.id === localAId,
+    );
+
+    const writeOnLiveLocal = await httpUnixRequest(
+      sockA,
+      'POST',
+      `/private/agent/v1/sessions/${localAId}/messages`,
+      { text: 'must not execute write tools', clientRequestId: 'ro-live-local-1' },
+      sign('message_submit', { sessionId: localAId }),
+    );
+    expect(writeOnLiveLocal.status).toBe(404);
+
+    // Lease A creates a bound web session in wsA; Lease B launches a session in wsB as a causal barrier.
+    const webA = await httpUnixRequest(
+      sockA,
+      'POST',
+      '/private/agent/v1/sessions',
+      { workspaceId: wsIdA },
+      sign('session_create', { workspaceId: wsIdA }),
+    );
+    expect(webA.status).toBe(201);
+    const webAId = (webA.body['session'] as { id: string }).id;
+    await sseA.waitFor(
+      (f) => f.event === 'session.list.upsert' && (f.data['session'] as { id?: string } | undefined)?.id === webAId,
+    );
+
+    const webB = await httpUnixRequest(
+      sockB,
+      'POST',
+      '/private/agent/v1/sessions',
+      { workspaceId: wsIdB },
+      sign('session_create', { workspaceId: wsIdB }),
+    );
+    expect(webB.status).toBe(201);
+    const webBId = (webB.body['session'] as { id: string }).id;
+    await sseB.waitFor(
+      (f) => f.event === 'session.list.upsert' && (f.data['session'] as { id?: string } | undefined)?.id === webBId,
+    );
+
+    // Neither localAId nor webAId leaked onto Lease B's SSE stream.
+    const leakedToB = sseB
+      .frames()
+      .filter((f) => f.event === 'session.list.upsert')
+      .map((f) => (f.data['session'] as { id?: string } | undefined)?.id)
+      .filter((id) => id === localAId || id === webAId);
+    expect(leakedToB).toEqual([]);
+
+    // Revoking wsShared on Lease A emits `session.list.remove` on Lease A even while Lease B still grants wsShared.
+    const localShared = await probe.request('session.launch', { cwd: wsShared, selection: { kind: 'new' } });
+    expect(localShared.ok).toBe(true);
+    if (!localShared.ok) return;
+    const sharedId = (localShared.result['session'] as { id: string }).id;
+    await sseA.waitFor(
+      (f) => f.event === 'session.list.upsert' && (f.data['session'] as { id?: string } | undefined)?.id === sharedId,
+    );
+    await sseB.waitFor(
+      (f) => f.event === 'session.list.upsert' && (f.data['session'] as { id?: string } | undefined)?.id === sharedId,
+    );
+    const delShared = await httpUnixRequest(
+      sockA,
+      'DELETE',
+      `/private/agent/v1/workspaces/${wsIdSharedA}`,
+      undefined,
+      sign('workspace_remove', { workspaceId: wsIdSharedA }),
+    );
+    expect(delShared.status).toBe(200);
+    await sseA.waitFor((f) => f.event === 'session.list.remove' && f.data['sessionId'] === sharedId);
+
+    // Explicit directory grant on `~` takes precedence over static `host` in both GET /sessions and POST /sessions/:id.
+    const homeDir = fs.realpathSync(os.homedir());
+    const homeGrantId = await admit(sockB, homeDir, 'read');
+    const localHome = await probe.request('session.launch', { cwd: homeDir, selection: { kind: 'new' } });
+    expect(localHome.ok).toBe(true);
+    if (!localHome.ok) return;
+    const localHomeId = (localHome.result['session'] as { id: string }).id;
+    const listB = await httpUnixRequest(sockB, 'GET', '/private/agent/v1/sessions', undefined, sign('session_list'));
+    const homeRow = (listB.body['sessions'] as Array<{ id: string; workspaceId: string }>).find(
+      (s) => s.id === localHomeId,
+    );
+    expect(homeRow?.workspaceId).toBe(homeGrantId);
+    const readHome = await httpUnixRequest(
+      sockB,
+      'POST',
+      `/private/agent/v1/sessions/${localHomeId}`,
+      {},
+      sign('session_read', { sessionId: localHomeId }),
+    );
+    expect(readHome.status).toBe(200);
+    expect((readHome.body['session'] as { workspaceId?: string } | undefined)?.workspaceId).toBe(homeGrantId);
   }, 60_000);
 });

@@ -304,6 +304,7 @@ export function createDaemonConnectionContext(
   connectionId: string,
   cleanups: Set<() => void | Promise<void>>,
   emit: (event: string, payload: Record<string, unknown>) => void,
+  isClosed: () => boolean,
 ): {
   readonly connectionId: string;
   emitEvent(event: string, payload: Record<string, unknown>): void;
@@ -313,6 +314,10 @@ export function createDaemonConnectionContext(
     connectionId,
     emitEvent: emit,
     onDisconnect(cleanup) {
+      if (isClosed()) {
+        void Promise.resolve(cleanup()).catch(() => undefined);
+        return () => undefined;
+      }
       cleanups.add(cleanup);
       return () => {
         cleanups.delete(cleanup);
